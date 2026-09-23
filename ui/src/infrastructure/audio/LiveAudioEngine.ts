@@ -3,44 +3,97 @@
  *
  * Worker NOT used: Web Audio API is main-thread only (browser limitation).
  *
- * Как это работает в Strudel v1:
- *   1. Импортируем core/mini/tonal/webaudio модули
- *   2. Их exports пробрасываем на globalThis — это создаёт глобалы
- *      s(), n(), stack(), slow() и т.д., которые использует юзер-код
- *   3. Юзер-код eval'ится через Function() с globalThis-scope
- *   4. Получившийся Pattern передаётся в webaudioOutput() для воспроизведения
+ * Audio pipeline:
+ *   1. Импортируем core/mini/tonal/webaudio
+ *   2. Их exports → globalThis (bootstrap)
+ *   3. На user-eval: создаём Pattern через Function() wrapper
+ *   4. Cyclist (scheduler) тикает каждые ~50ms, вызывает webaudioOutput
+ *      для каждого hap → superdough → AudioContext → speakers
  *
- * Источник: https://codeberg.org/uzu/strudel/src/branch/main/website/src/...
- * (REPL реализация использует тот же подход)
+ * NB: @strudel/transpiler сломан (peer-dep @kabelsalat/web) — не используем.
+ *
+ * Если в будущем парсинг станет узким местом — выделяем только transpile
+ * в Worker через new Worker(new URL(...)). Audio playback всегда в main thread.
  */
 
 import { Effect, Layer, type Context } from 'effect';
 import { AudioEngine } from '~/domain/services';
 
 type WebAudioModule = {
-  webaudioOutput: (pattern: unknown, ...rest: unknown[]) => unknown;
+  webaudioOutput: (hap: unknown, currentTime: number, cps: number, duration: number, ...rest: unknown[]) => unknown;
   hush: () => void;
 };
 
+type CoreModule = {
+  Pattern: new (...args: unknown[]) => unknown;
+  Cyclist: new (config: CyclistConfig) => CyclistInstance;
+};
+
+type CyclistConfig = {
+  interval: number;
+  onTrigger: (hap: unknown, currentTime: number, cps: number, duration: number, ...rest: unknown[]) => unknown;
+  onToggle?: (started: boolean) => void;
+  onError?: (err: unknown) => void;
+  getTime: () => number;
+  latency?: number;
+  setInterval: (cb: () => void, ms: number) => unknown;
+  clearInterval: (handle: unknown) => void;
+  beforeStart?: () => Promise<void> | void;
+};
+
+type CyclistInstance = {
+  setPattern(pattern: unknown, autostart: boolean): Promise<void>;
+  start(): Promise<void>;
+  pause(): void;
+  stop(): void;
+  setCps(cps: number): void;
+  pause_on_error?: boolean;
+};
+
 let webaudioCache: WebAudioModule | null = null;
+let coreCache: CoreModule | null = null;
+let audioContextRef: AudioContext | null = null;
 let bootstrapped = false;
+let cyclist: CyclistInstance | null = null;
 
-const ensureLoaded = async (): Promise<WebAudioModule> => {
-  if (webaudioCache && bootstrapped) return webaudioCache;
+const ensureLoaded = async (): Promise<{
+  webaudio: WebAudioModule;
+  core: CoreModule;
+}> => {
+  if (webaudioCache && coreCache && bootstrapped) {
+    return { webaudio: webaudioCache, core: coreCache };
+  }
 
-  // Load only the modules we need: webaudio (for output+hush) and core/mini/tonal
-  // (for s/n/stack/slow/etc. primitives exposed to user code).
-  // NB: NOT @strudel/transpiler — broken peer-dep in v1.x browser bundle.
-  const [webaudio, core, mini, tonal] = await Promise.all([
+  // Load core (s/n/stack/slow + Cyclist) + webaudio (webaudioOutput, hush) +
+  // mini/tonal (pattern primitives) + superdough (synth registration).
+  const [webaudio, core, mini, tonal, superdough] = await Promise.all([
     import('@strudel/webaudio'),
     import('@strudel/core'),
     import('@strudel/mini'),
     import('@strudel/tonal'),
+    import('superdough'),
   ]);
 
   webaudioCache = webaudio;
+  coreCache = core;
+
+  // Use superdough (we already imported it; this just keeps the ref).
+  void superdough;
 
   if (!bootstrapped) {
+    // Ensure AudioContext exists (lazy — first user gesture triggers resume).
+    if (!audioContextRef) {
+      audioContextRef = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
+    }
+
+    // Register built-in synth sounds (sawtooth/square/triangle/sine).
+    // Without this, s("sawtooth") fails with "sound not found".
+    const superdough = await import('superdough');
+    if (typeof superdough.registerSynthSounds === 'function') {
+      superdough.registerSynthSounds();
+    }
+
+    // Expose pattern primitives as globals.
     for (const mod of [core, mini, tonal, webaudio]) {
       for (const [name, value] of Object.entries(mod)) {
         (globalThis as unknown as Record<string, unknown>)[name] = value;
@@ -49,43 +102,86 @@ const ensureLoaded = async (): Promise<WebAudioModule> => {
     bootstrapped = true;
   }
 
-  return webaudio;
+  return { webaudio, core };
 };
 
 /**
- * Evaluate user code in globalThis scope (where s, n, stack etc. live).
- * Returns the Pattern object (or undefined).
+ * Evaluate user code via @strudel/core's `evaluate` function.
+ * Returns `{ pattern, meta }` — pattern is the Pattern object.
  *
- * Используем wrap-стратегию как @strudel/core:
- *   user snippet → `(async () => { <snippet> })()` → return result.
- * Это позволяет коду содержать комментарии, объявления переменных, и
- * возвращать значение последнего expression-statement.
- *
- * NB: мы НЕ используем @strudel/transpiler (сломан peer-dep в browser bundle),
- * просто компилируем snippet через Function(). Наш default score не требует
- * транспиляции — это plain JS: `stack(n(...).s(...), n(...).s(...)).slow(2)`.
+ * Why not `new Function()`: core's `evaluate` properly sets up the scope
+ * (controls, pattern proxies, register() injects), while a raw `new Function`
+ * doesn't — it returns undefined because s/n/etc. globals aren't properly bound.
  */
 const evaluateSnippet = async (snippet: string): Promise<unknown> => {
-  const fn = new Function(
-    `"use strict";return (async () => { ${snippet} })()`,
-  );
-  return fn();
+  const coreMod = await import('@strudel/core');
+  const result = await coreMod.evaluate(snippet);
+  return (result as { pattern?: unknown }).pattern;
 };
+
+/**
+ * Build the Cyclist (scheduler) lazily on first eval.
+ * The Cyclist fires onTrigger for each hap, which is forwarded to
+ * webaudioOutput → superdough → AudioContext.
+ */
+const ensureCyclist = async (webaudio: WebAudioModule, core: CoreModule): Promise<CyclistInstance> => {
+  if (cyclist) return cyclist;
+
+  const audioCtx = audioContextRef ?? new AudioContext();
+
+  cyclist = new core.Cyclist({
+    interval: 0.05,
+    onTrigger: (hap, currentTime, cps, duration) => {
+      return webaudio.webaudioOutput(hap, currentTime, cps, duration);
+    },
+    onToggle: (started) => {
+      // eslint-disable-next-line no-console
+      console.info('[wavecode audio] scheduler:', started ? 'started' : 'stopped');
+    },
+    onError: (err) => {
+      // eslint-disable-next-line no-console
+      console.error('[wavecode audio] scheduler error:', err);
+    },
+    getTime: () => audioCtx.currentTime,
+    latency: 0.1,
+    setInterval: (cb, ms) => window.setInterval(cb, ms),
+    clearInterval: (handle) => window.clearInterval(handle as number),
+  });
+
+  return cyclist;
+};
+
+/* eslint-disable @typescript-eslint/no-unused-vars */
 
 const impl: Context.Tag.Service<typeof AudioEngine> = {
   eval: (snippet: string) =>
     Effect.gen(function* () {
-      const webaudio = yield* Effect.tryPromise(() => ensureLoaded());
+      const { webaudio, core } = yield* Effect.tryPromise(() => ensureLoaded());
 
-      // Stop any existing patterns first (avoid layering).
-      try { webaudio.hush(); } catch { /* ignore */ }
+      // Resume AudioContext (user gesture required first time).
+      const audioCtx = audioContextRef;
+      if (audioCtx && audioCtx.state === 'suspended') {
+        yield* Effect.tryPromise({
+          try: () => audioCtx.resume() as Promise<void>,
+          catch: () => new Error('AudioContext resume failed'),
+        }).pipe(Effect.catchAll(() => Effect.void));
+      }
+
+      const sched = yield* Effect.tryPromise(() => ensureCyclist(webaudio, core));
+
+      // Stop previous pattern.
+      yield* Effect.sync(() => {
+        try { sched.stop(); } catch { /* ignore */ }
+      });
 
       yield* Effect.tryPromise({
         try: async () => {
           const pattern = await evaluateSnippet(snippet);
-          if (pattern && typeof pattern === 'object') {
-            webaudio.webaudioOutput(pattern);
+          if (!pattern || typeof pattern !== 'object') {
+            throw new Error(`Eval produced no pattern (got ${typeof pattern})`);
           }
+          // setPattern(pattern, true) → starts the scheduler
+          await sched.setPattern(pattern, true);
         },
         catch: (err) => {
           // eslint-disable-next-line no-console
@@ -95,17 +191,12 @@ const impl: Context.Tag.Service<typeof AudioEngine> = {
       });
     }),
   stop: () =>
-    Effect.tryPromise({
-      try: async () => {
-        const webaudio = await ensureLoaded();
-        webaudio.hush();
-      },
-      catch: (err) => {
-        // eslint-disable-next-line no-console
-        console.warn('[wavecode audio] stop failed:', err);
-        return null as null;
-      },
-    }).pipe(Effect.catchAll(() => Effect.void)),
+    Effect.gen(function* () {
+      if (!cyclist) return;
+      yield* Effect.sync(() => {
+        try { cyclist!.stop(); } catch { /* ignore */ }
+      });
+    }),
 };
 
 export const LiveAudioEngine: Layer.Layer<AudioEngine, never, never> = Layer.succeed(

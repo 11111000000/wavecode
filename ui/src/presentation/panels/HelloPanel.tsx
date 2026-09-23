@@ -6,7 +6,6 @@ const statusClass = (s: string): string => `status-${s}`;
 export function HelloPanel() {
   return (
     <div>
-      <h2>Status</h2>
       <dl class="status-grid">
         <dt>agent</dt>
         <dd class={statusClass(appStore.agent.status)}>{appStore.agent.status}</dd>
