@@ -189,25 +189,29 @@ export function ChatPanel() {
 ### 2.2. AudioEngine (Strudel + Tone.js)
 
 ```
-┌──────────────────┐
-│ Strudel runtime  │  Web Worker (eval, scheduler)
-│ @strudel/core    │
-│ @strudel/webaudio│
-└────────┬─────────┘
-         │ pattern events (gain, freq, time)
-         ▼
-┌──────────────────┐
-│ Tone.js effects  │  Main thread (reverb, delay, filter)
-│ tone.Reverb      │
-│ tone.FeedbackDelay│
-└────────┬─────────┘
-         ▼
-   Web Audio API → speakers
+┌──────────────────────────────────────────────┐
+│ Main thread                                  │
+│                                              │
+│  ┌──────────────────┐                        │
+│  │ LiveAudioEngine  │  Layer.effect +        │
+│  │ (Effect-TS)      │  dynamic import        │
+│  └────────┬─────────┘                        │
+│           │                                  │
+│  ┌────────▼─────────┐   ┌────────────────┐  │
+│  │ @strudel/webaudio│──►│ AudioContext   │  │
+│  │ evalScope +      │   │ (browser API)  │  │
+│  │ hush             │   └───────┬────────┘  │
+│  └──────────────────┘           │           │
+│                                  ▼           │
+│                          speakers            │
+└──────────────────────────────────────────────┘
 ```
 
-**Почему Worker**: Strudel scheduler и eval не блокируют UI и LLM-stream.
-**Почему Tone.js в main thread**: AudioContext живёт в main thread (ограничение
-Web Audio API в браузерах), Tone.js управляет эффектами через него.
+**Почему НЕ Worker**: Web Audio API живёт только в main thread (browser
+limitation), а `@strudel/webaudio` пакет привязан к `AudioContext`. Паттерн-eval
+сам по себе быстрый (<10ms для типичных snippets), main thread не блокируется.
+Если в будущем парсинг станет узким местом — выделяем только `transpile` в
+Worker через `new Worker(new URL(...))`, `Pattern` остаётся в main.
 
 ### 2.3. Persistence
 

@@ -31,7 +31,7 @@ export class LLMClient extends Context.Tag('LLMClient')<
 export class AudioEngine extends Context.Tag('AudioEngine')<
   AudioEngine,
   {
-    readonly eval: (snippet: string) => Effect.Effect<void, never, never>;
+    readonly eval: (snippet: string) => Effect.Effect<void, Error, never>;
     readonly stop: () => Effect.Effect<void, never, never>;
   }
 >() {}
