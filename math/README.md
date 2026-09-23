@@ -21,3 +21,4 @@
 | Пакет | Статус | Substrate | Решение |
 |---|---|---|---|
 | `wavecode-scope` | draft | none | wavecode — чистофронтовый SPA, без backend |
+| `wavecode-stack-performance` | draft | none | UI на Solid.js вместо React для max performance |

@@ -15,15 +15,15 @@
 ## 0. Принципы
 
 1. **Domain — чистые данные и функции.** Никаких `fetch`, `AudioContext`,
-   `document`, `react`, никаких побочных эффектов.
+   `document`, `solid-js`, никаких побочных эффектов.
 2. **Эффекты — на границе, описаны как данные.** Все внешние вызовы (LLM,
    Strudel eval, IndexedDB) — типизированные `Effect` из Effect-TS.
 3. **Зависимости инжектятся через `Layer`.** Никаких глобальных синглтонов,
    никакого `import { strudel } from "./audio"`.
 4. **Инструменты агента — декларативные схемы.** Агент не вызывает функции
    напрямую; он возвращает план вызова, runtime исполняет.
-5. **UI-state отдельно от domain-state.** Zustand хранит только то, что
-   связано с экраном. Бизнес-state проходит через reducer в `application/`.
+5. **UI-state отдельно от domain-state.** `solid-js/store` хранит только то,
+   что связано с экраном. Бизнес-state проходит через reducer в `application/`.
 6. **Тесты пишутся против domain/application** (без DOM, без LLM, без Web Audio).
    `infrastructure` тестируется с моками Layer.
 
@@ -33,7 +33,7 @@
 
 ```
 ┌────────────────────────────────────────────────────────┐
-│ presentation/   React-компоненты, темы, роутинг         │
+│ presentation/   Solid-компоненты, темы, роутинг          │
 │                 импорт: domain, application (через DI)  │
 ├────────────────────────────────────────────────────────┤
 │ application/    use-cases: agentStep, editScore,        │
@@ -67,7 +67,7 @@
   mini-notation.
 
 Запрещено:
-- `import "react"`
+- `import "solid-js"`
 - `import "@strudel/*"` (только типы из effect)
 - `import "tone"`
 - любой `fetch`, `AudioContext`, `localStorage`, `indexedDB`
@@ -118,22 +118,36 @@ RPC-протокол — JSON-сообщения через `postMessage`.
 
 ### 1.4. `presentation/`
 
-React-компоненты. Получают данные через `useStore` (Zustand) для UI-state
-или через `useAppDispatch` (reducer) для бизнес-state.
+Solid-компоненты (JSX из `solid-js`). Получают данные через `solid-js/store`
+(`createStore`) для UI-state или через сигналы от `application/`.
 
 ```tsx
 // presentation/panels/ChatPanel.tsx
+import { createSignal, Show } from 'solid-js';
+import { uiStore } from '../state/uiStore';
+import { submitMessage } from '../../application/actions';
+
 export function ChatPanel() {
-  const open = useUIStore(s => s.chatOpen);     // UI-state
-  const dispatch = useAppDispatch();             // reducer bridge
-  return <form onSubmit={dispatch.submitMsg}>...</form>;
+  const [text, setText] = createSignal('');
+  const onSubmit = (e: SubmitEvent) => {
+    e.preventDefault();
+    submitMessage(text());
+    setText('');
+  };
+  return (
+    <Show when={uiStore.chatOpen}>
+      <form onSubmit={onSubmit}>
+        <input value={text()} onInput={e => setText(e.currentTarget.value)} />
+      </form>
+    </Show>
+  );
 }
 ```
 
 Запрещено:
 - вызывать `fetch` или `@ai-sdk/*` напрямую
 - импортировать `@strudel/*` или `tone`
-- держать бизнес-state в `useState`
+- держать бизнес-state в `createSignal` (только UI-state, бизнес-state в `solid-js/store`)
 
 ---
 
@@ -289,33 +303,49 @@ Lint: `@codemirror/lint` с диагностиками из `application/lint/*`
 
 ## 5. State
 
-### 5.1. UI-state (Zustand)
+### 5.1. UI-state (solid-js/store)
 
 ```ts
-// presentation/state/ui.ts
+// presentation/state/uiStore.ts
+import { createStore } from 'solid-js/store';
+
 type UIState = {
   leftPanelOpen: boolean;
   rightPanelOpen: boolean;
   theme: 'dark' | 'light';
   chatOpen: boolean;
 };
+
+export const uiStore = createStore<UIState>({
+  leftPanelOpen: true,
+  rightPanelOpen: true,
+  theme: 'dark',
+  chatOpen: true,
+});
 ```
 
-### 5.2. Domain-state (reducer)
+### 5.2. Domain-state (solid-js/store + reducer)
 
-Хранится в Zustand, **но** reducer — pure-функция в `application/reducer.ts`,
-а Zustand используется только как контейнер.
+Хранится в `solid-js/store`, **но** reducer — pure-функция в `application/reducer.ts`,
+а store используется только как контейнер.
 
 ```ts
-type AppState = {
-  score: Score;
-  messages: Message[];
-  agent: AgentState;     // idle | streaming | awaiting-tool
-  audio: AudioState;     // stopped | playing | error
-};
+// presentation/state/appStore.ts
+import { createStore } from 'solid-js/store';
+import type { AppState } from '../../domain/types';
+
+export const [appStore, setAppStore] = createStore<AppState>({
+  score: { snippets: [], cursor: 0 },
+  messages: [],
+  agent: { status: 'idle' },
+  audio: { status: 'stopped' },
+});
+
+// Все мутации — через reducer (pure fn):
+// setAppStore(produce(s => reduceAgentEvent(s, event)));
 ```
 
-Преимущество: тестировать reducer можно без React и без Zustand.
+Преимущество: тестировать reducer можно без Solid и без store.
 
 ---
 
@@ -326,7 +356,7 @@ type AppState = {
 | `domain/` | чистые функции: parse, validate, schema | `vitest` (никаких моков) |
 | `application/` | reducer + use-cases | `vitest` + `TestClock`, mock Layer |
 | `infrastructure/` | формат запроса/ответа | `vitest` + `Layer.succeed` моки |
-| `presentation/` | рендер, взаимодействие | `@testing-library/react` |
+| `presentation/` | рендер, взаимодействие | `@solidjs/testing-library` |
 | e2e | полный flow: напечатал → LLM ответил → eval → звук | `@playwright/test` |
 
 Цель — 80%+ покрытие `domain` и `application`.
@@ -350,9 +380,9 @@ type AppState = {
 ```
 
 Плюс `no-restricted-imports`:
-- `domain/**` не может импортить `react`, `@effect/platform-browser`,
+- `domain/**` не может импортить `solid-js`, `@effect/platform-browser`,
   `idb-keyval`, `@strudel/*`, `tone`, `@ai-sdk/*`.
-- `infrastructure/**` не может импортить `react`.
+- `infrastructure/**` не может импортить `solid-js`.
 - `presentation/**` не может импортить `@strudel/*`, `tone`, `@ai-sdk/*`.
 
 ---
