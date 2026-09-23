@@ -62,7 +62,7 @@ body {
 .app-body {
   flex: 1;
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: minmax(0, 1fr) 320px;
   gap: 1px;
   background: var(--border);
 }
@@ -142,10 +142,12 @@ code {
 /* CodeMirror host styling */
 .cm-host {
   font-size: 13px;
+  height: 100%;
 }
 
 .cm-host .cm-editor {
   background: var(--bg-elev);
+  height: 100%;
 }
 
 .cm-host .cm-scroller {

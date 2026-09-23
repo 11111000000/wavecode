@@ -58,7 +58,13 @@ export function CodeMirrorEditor(props: Props) {
     <div
       ref={containerRef}
       class="cm-host"
-      style={{ border: '1px solid var(--border)', 'border-radius': '4px', overflow: 'hidden' }}
+      style={{
+        border: '1px solid var(--border)',
+        'border-radius': '4px',
+        overflow: 'hidden',
+        height: '320px',
+        'min-height': '320px',
+      }}
     />
   );
 }
