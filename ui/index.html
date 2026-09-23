@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#0a0a0a" />
+    <title>wavecode — live-coding with AI</title>
+    <link rel="icon" href="data:," />
+    <style>
+      :root {
+        --bg: #0a0a0a;
+        --fg: #e4e4e4;
+        --accent: #ff6b6b;
+        --border: #2a2a2a;
+      }
+      * { box-sizing: border-box; }
+      html, body {
+        margin: 0;
+        padding: 0;
+        height: 100%;
+        background: var(--bg);
+        color: var(--fg);
+        font-family: -apple-system, BlinkMacSystemFont, 'SF Pro', system-ui, sans-serif;
+        font-size: 14px;
+        overflow: hidden;
+      }
+      #root { height: 100%; }
+      .loading {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        height: 100%;
+        color: var(--accent);
+        font-size: 13px;
+        letter-spacing: 0.05em;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root">
+      <div class="loading">wavecode loading...</div>
+    </div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
