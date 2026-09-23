@@ -5,6 +5,10 @@
  * `@strudel/webaudio` is bound to AudioContext. Pattern eval is fast
  * (<10ms for typical snippets); main thread is not blocked.
  *
+ * Используем `webaudioRepl(snippet)` — это eval + auto-play через WebAudio.
+ * (Раньше использовался `evalScope` из `@strudel/webaudio`, но он там не
+ * экспортируется — `evalScope` живёт в `@strudel/core`.)
+ *
  * If pattern parsing becomes a bottleneck later, split:
  *   - Main: AudioContext + audio playback
  *   - Worker: snippet transpile + AST validation
@@ -15,8 +19,7 @@ import { Effect, Layer, type Context } from 'effect';
 import { AudioEngine } from '~/domain/services';
 
 type WebAudioModule = {
-  evalScope: (code: string, evalFn?: unknown) => Promise<unknown>;
-  webaudio: unknown;
+  webaudioRepl: (code: string) => Promise<unknown>;
   hush: () => void;
 };
 
@@ -26,8 +29,7 @@ const ensureLoaded = async (): Promise<WebAudioModule> => {
   if (cached) return cached;
   const mod = await import('@strudel/webaudio');
   cached = {
-    evalScope: mod.evalScope,
-    webaudio: mod.webaudio,
+    webaudioRepl: mod.webaudioRepl,
     hush: mod.hush,
   };
   return cached;
@@ -36,10 +38,18 @@ const ensureLoaded = async (): Promise<WebAudioModule> => {
 const impl: Context.Tag.Service<typeof AudioEngine> = {
   eval: (snippet: string) =>
     Effect.gen(function* () {
-      const { evalScope, webaudio } = yield* Effect.tryPromise(() => ensureLoaded());
+      const { webaudioRepl, hush } = yield* Effect.tryPromise(() => ensureLoaded());
+
+      // Stop any existing patterns before starting new ones.
+      try { hush(); } catch { /* ignore */ }
+
       yield* Effect.tryPromise({
-        try: () => evalScope(snippet, webaudio) as Promise<unknown>,
-        catch: (err) => (err instanceof Error ? err : new Error(String(err))),
+        try: () => webaudioRepl(snippet) as Promise<unknown>,
+        catch: (err) => {
+          // eslint-disable-next-line no-console
+          console.error('[wavecode audio] eval failed:', err);
+          return err instanceof Error ? err : new Error(String(err));
+        },
       });
     }),
   stop: () =>
@@ -48,7 +58,11 @@ const impl: Context.Tag.Service<typeof AudioEngine> = {
         const { hush } = await ensureLoaded();
         hush();
       },
-      catch: () => null as null,
+      catch: (err) => {
+        // eslint-disable-next-line no-console
+        console.warn('[wavecode audio] stop failed:', err);
+        return null as null;
+      },
     }).pipe(Effect.catchAll(() => Effect.void)),
 };
 

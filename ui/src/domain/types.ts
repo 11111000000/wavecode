@@ -26,7 +26,16 @@ export type AppState = {
 };
 
 export const initialAppState: AppState = {
-  score: '// Welcome to wavecode!\ns("bd*4");\ns("~ sd");',
+  // Без dirt-samples (не загружены). Используем чистый синтез через n()+s(synth).
+  // s("sawtooth"/"square"/"triangle"/"sine") — встроенные осцилляторы Strudel,
+  // работают без samples.
+  score:
+    '// Welcome to wavecode!\n' +
+    '// Используем синтез (n + sawtooth), samples не подгружены.\n' +
+    'stack(\n' +
+    '  n("0 ~ 0 ~ 0 3 ~ 4").s("sawtooth").gain(0.3),\n' +
+    '  n("0 ~ 2 ~ 1 ~ 0 ~ 2").s("square").gain(0.2).lpf(800)\n' +
+    ').slow(2);',
   messages: [],
   agent: { status: 'idle' },
   audio: { status: 'stopped' },
