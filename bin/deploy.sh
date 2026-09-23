@@ -1,24 +1,25 @@
 #!/usr/bin/env bash
-# bin/deploy.sh — собрать wavecode и подготовить dist/ для Caddy.
+# bin/deploy.sh — собрать wavecode и развернуть в /var/lib/wavecode/dist/.
 #
 # Что делает:
 #   1. Проверяет наличие .env.local (с per-app LLM-ключом).
 #   2. pnpm install (если node_modules отсутствует).
 #   3. pnpm build → ui/dist/
-#   4. Печатает следующий шаг: bin/rebuild.sh switch в ~/Projects/AngaraConfig.
+#   4. sudo cp -r ui/dist/* → /var/lib/wavecode/dist/ (caddy:caddy).
 #
 # После deploy:
 #   • https://wavecode.kosov.online/  — публичный URL (Caddy public listener)
 #   • https://wavecode.tail347ae6.ts.net/ — tailnet URL (Tailscale mesh)
 #
 # Rollback:
-#   • cd ~/Projects/AngaraConfig && git revert f6d226a && bin/rebuild.sh switch
+#   • cd ~/Projects/AngaraConfig && git revert <commit> && bin/rebuild.sh switch
 #
 # Идемпотентно: можно запускать сколько угодно раз.
 
 set -euo pipefail
 
 UI_DIR="$(cd "$(dirname "$0")/../ui" && pwd)"
+DEPLOY_DIR="/var/lib/wavecode/dist"
 
 cd "$UI_DIR"
 
@@ -50,12 +51,18 @@ fi
 echo "==> pnpm build"
 pnpm build
 
+# 5. Deploy to /var/lib/wavecode/dist (Caddy needs read access there).
+echo "==> sudo cp -r $UI_DIR/dist/* → $DEPLOY_DIR/"
+/home/az/.local/bin/sudo -n mkdir -p "$DEPLOY_DIR"
+/home/az/.local/bin/sudo -n cp -r "$UI_DIR/dist/." "$DEPLOY_DIR/"
+/home/az/.local/bin/sudo -n chown -R caddy:caddy "$DEPLOY_DIR"
+
 echo
-echo "✓ Build complete: $UI_DIR/dist/"
+echo "✓ Build + deploy complete: $DEPLOY_DIR/"
 echo
-echo "Next step (NixOS apply):"
-echo "  cd ~/Projects/AngaraConfig && bin/rebuild.sh switch"
+echo "Nix config already points there. Если меняли .env.local,"
+echo "перезагрузите Caddy: systemctl reload caddy"
 echo
-echo "After Caddy reload:"
+echo "Verify:"
 echo "  curl -I https://wavecode.kosov.online/"
 echo "  curl -I https://wavecode.tail347ae6.ts.net/"
