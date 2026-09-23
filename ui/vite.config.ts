@@ -1,3 +1,4 @@
+/// <reference types="vitest" />
 import { defineConfig } from 'vite';
 import solid from 'vite-plugin-solid';
 import { resolve } from 'node:path';
@@ -25,10 +26,10 @@ export default defineConfig({
           strudel: [
             '@strudel/core',
             '@strudel/webaudio',
-            '@strudel/mini-notation',
+            '@strudel/mini',
             '@strudel/tonal',
             '@strudel/transpiler',
-            '@strudel/serialism',
+            '@strudel/serial',
           ],
           audio: ['tone'],
           codemirror: [
@@ -53,5 +54,13 @@ export default defineConfig({
 
   optimizeDeps: {
     exclude: ['@strudel/core', '@strudel/webaudio'],
+  },
+
+  test: {
+    environment: 'jsdom',
+    globals: true,
+    include: ['src/**/*.{test,spec}.?(c|m)[jt]s?(x)'],
+    exclude: ['node_modules', 'dist', 'tests/e2e/**'],
+    passWithNoTests: true,
   },
 });
