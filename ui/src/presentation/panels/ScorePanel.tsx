@@ -3,6 +3,7 @@ import { Effect } from 'effect';
 import { appStore, dispatch } from '../state/appStore';
 import { AppLayer } from '~/infrastructure/composition';
 import { AudioEngine } from '~/domain/services';
+import { CodeMirrorEditor } from '../components/CodeMirrorEditor';
 
 export function ScorePanel() {
   const [draft, setDraft] = createSignal('');
@@ -73,7 +74,10 @@ export function ScorePanel() {
   return (
     <div class="score-panel-inner">
       <h2>Score</h2>
-      <pre aria-label="current score">{appStore.score}</pre>
+      <CodeMirrorEditor
+        value={appStore.score}
+        onChange={(v) => dispatch({ type: 'replaceScore', text: v })}
+      />
 
       <div style={{ display: 'flex', gap: '8px', 'margin-top': '12px' }}>
         <button type="button" onClick={evalScore}>

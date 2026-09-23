@@ -36,6 +36,7 @@
     "@codemirror/theme-one-dark": "^6.1.2",
     "@lezer/highlight": "^1.2.0",
     "@lezer/common": "^1.2.0",
+    "codemirror": "^6.0.1",
 
     "effect": "^3.22.0",
     "@effect/schema": "^0.75.0",
