@@ -1,0 +1,64 @@
+import { EditorState } from '@codemirror/state';
+import { EditorView } from '@codemirror/view';
+import { basicSetup } from 'codemirror';
+import { oneDark } from '@codemirror/theme-one-dark';
+import { autocompletion } from '@codemirror/autocomplete';
+import { createEffect, onCleanup, onMount, untrack } from 'solid-js';
+import { miniNotationHighlight } from '../editor/miniNotationHighlight';
+import { strudelCompletions } from '../editor/strudelCompletions';
+
+type Props = {
+  readonly value: string;
+  readonly onChange: (value: string) => void;
+};
+
+/**
+ * Solid wrapper для CodeMirror 6 vanilla API.
+ *
+ * Two-way binding:
+ *   - при mount инициализируется EditorView с props.value
+ *   - onChange диспатчится на каждое doc change
+ *   - если props.value меняется извне (например, через agent edit),
+ *     editor обновляется через dispatch(changes)
+ */
+export function CodeMirrorEditor(props: Props) {
+  let containerRef: HTMLDivElement | undefined;
+  let view: EditorView | undefined;
+
+  onMount(() => {
+    if (!containerRef) return;
+    const initial = untrack(() => props.value);
+    const state = EditorState.create({
+      doc: initial,
+      extensions: [
+        basicSetup,
+        oneDark,
+        miniNotationHighlight,
+        autocompletion({ override: [strudelCompletions] }),
+        EditorView.updateListener.of((u) => {
+          if (u.docChanged) props.onChange(u.state.doc.toString());
+        }),
+      ],
+    });
+    view = new EditorView({ state, parent: containerRef });
+  });
+
+  createEffect(() => {
+    const next = props.value;
+    if (!view) return;
+    const current = view.state.doc.toString();
+    if (current !== next) {
+      view.dispatch({ changes: { from: 0, to: current.length, insert: next } });
+    }
+  });
+
+  onCleanup(() => view?.destroy());
+
+  return (
+    <div
+      ref={containerRef}
+      class="cm-host"
+      style={{ border: '1px solid var(--border)', 'border-radius': '4px', overflow: 'hidden' }}
+    />
+  );
+}

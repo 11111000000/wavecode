@@ -129,3 +129,26 @@ code {
   font-family: 'SF Mono', Menlo, monospace;
   font-size: 12px;
 }
+
+/* Strudel mini-notation highlight inside CodeMirror */
+.cm-mini-notation {
+  color: var(--accent);
+  font-weight: 600;
+  background: rgba(255, 107, 107, 0.08);
+  border-radius: 2px;
+  padding: 0 1px;
+}
+
+/* CodeMirror host styling */
+.cm-host {
+  font-size: 13px;
+}
+
+.cm-host .cm-editor {
+  background: var(--bg-elev);
+}
+
+.cm-host .cm-scroller {
+  font-family: 'SF Mono', 'JetBrains Mono', Menlo, monospace;
+  line-height: 1.5;
+}
