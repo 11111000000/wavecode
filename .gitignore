@@ -1,0 +1,30 @@
+# Build artefacts
+node_modules/
+dist/
+build/
+coverage/
+.nyc_output/
+
+# Editor / OS
+.DS_Store
+*.swp
+.idea/
+.vscode/
+.vite/
+*.tsbuildinfo
+
+# Secrets / config
+.env
+.env.local
+.env.*.local
+*.key
+*.pem
+
+# Caches
+.cache/
+.eslintcache
+
+# Playwright
+test-results/
+playwright-report/
+playwright/.cache/
