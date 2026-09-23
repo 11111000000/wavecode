@@ -40,10 +40,18 @@ body {
 .app-header {
   display: flex;
   align-items: baseline;
+  justify-content: space-between;
   gap: 12px;
   padding: 12px 20px;
   border-bottom: 1px solid var(--border);
   background: var(--bg-elev);
+  flex-shrink: 0;
+}
+
+.app-title {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
 }
 
 .app-header h1 {
@@ -59,38 +67,166 @@ body {
   font-size: 12px;
 }
 
+.app-hints {
+  color: var(--fg-dim);
+  font-size: 11px;
+  font-family: 'SF Mono', Menlo, monospace;
+}
+
+kbd {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 1px 5px;
+  font-size: 10px;
+  margin: 0 1px;
+}
+
+/* App body: vertical stack of collapsible panels */
 .app-body {
   flex: 1;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 320px;
+  display: flex;
+  flex-direction: column;
   gap: 1px;
   background: var(--border);
+  overflow: hidden;
 }
 
-.app-body > section {
+.collapsible {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  overflow: hidden;
+  transition: flex 200ms ease;
+}
+
+.collapsible[data-open='true'] {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.collapsible[data-open='false'] {
+  flex: 0 0 auto;
+}
+
+.score-panel {
   background: var(--bg);
-  padding: 20px;
-  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 320px;
+  overflow: hidden;
 }
 
-.score-panel pre {
+.repl-panel {
+  background: var(--bg);
+}
+
+.repl-panel[data-open='true'] {
+  flex: 0 0 auto;
+  min-height: 200px;
+  max-height: 35vh;
+}
+
+.status-panel {
   background: var(--bg-elev);
+  border-top: 1px solid var(--border);
+}
+
+.status-panel[data-open='true'] {
+  flex: 0 0 auto;
+  max-height: 40vh;
+}
+
+.panel-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background: var(--bg-elev);
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  user-select: none;
+  flex-shrink: 0;
+}
+
+.collapsible[data-open='false'] .panel-header {
+  border-bottom: none;
+}
+
+.collapse-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.collapse-toggle h2 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+}
+
+.caret {
+  font-size: 12px;
+  width: 12px;
+  display: inline-block;
+  color: var(--fg-dim);
+}
+
+.panel-hint {
+  color: var(--fg-dim);
+  font-size: 11px;
+  font-family: 'SF Mono', Menlo, monospace;
+  margin-left: auto;
+}
+
+/* Inner padding for panels */
+.score-panel > :not(.panel-header),
+.repl-panel > :not(.panel-header),
+.status-panel > :not(.panel-header) {
+  padding: 12px 20px;
+  overflow: auto;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+/* CodeMirror host */
+.cm-host {
+  font-size: 13px;
+  height: 100%;
+  min-height: 220px;
   border: 1px solid var(--border);
   border-radius: 4px;
-  padding: 12px;
-  font-family: 'SF Mono', 'JetBrains Mono', Menlo, monospace;
-  font-size: 13px;
-  color: var(--fg);
-  white-space: pre-wrap;
-  word-break: break-word;
-  margin: 0;
+  overflow: hidden;
 }
 
+.cm-host .cm-editor {
+  background: var(--bg-elev);
+  height: 100%;
+}
+
+.cm-host .cm-scroller {
+  font-family: 'SF Mono', 'JetBrains Mono', Menlo, monospace;
+  line-height: 1.5;
+}
+
+/* Strudel mini-notation highlight inside CodeMirror */
+.cm-mini-notation {
+  color: var(--accent);
+  font-weight: 600;
+  background: rgba(255, 107, 107, 0.08);
+  border-radius: 2px;
+  padding: 0 1px;
+}
+
+/* Status grid */
 .status-grid {
   display: grid;
   grid-template-columns: max-content 1fr;
   gap: 8px 16px;
-  margin-top: 12px;
+  margin: 0;
   font-size: 13px;
 }
 
@@ -108,6 +244,7 @@ body {
 .status-playing { color: var(--ok); }
 .status-error { color: var(--err); }
 
+/* Buttons */
 button {
   background: var(--bg-elev);
   color: var(--fg);
@@ -119,8 +256,24 @@ button {
   font-family: inherit;
 }
 
-button:hover { border-color: var(--accent); }
-button:active { background: var(--accent); color: var(--bg); }
+button:hover:not(:disabled) { border-color: var(--accent); }
+button:active:not(:disabled) { background: var(--accent); color: var(--bg); }
+button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+input, textarea {
+  background: var(--bg-elev);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 6px 10px;
+  font-size: 13px;
+  font-family: inherit;
+}
+
+textarea {
+  font-family: 'SF Mono', Menlo, monospace;
+  resize: vertical;
+}
 
 code {
   background: var(--bg-elev);
@@ -130,27 +283,38 @@ code {
   font-size: 12px;
 }
 
-/* Strudel mini-notation highlight inside CodeMirror */
-.cm-mini-notation {
-  color: var(--accent);
-  font-weight: 600;
-  background: rgba(255, 107, 107, 0.08);
-  border-radius: 2px;
-  padding: 0 1px;
-}
+/* Mobile */
+@media (max-width: 720px) {
+  .app-header {
+    padding: 8px 12px;
+    flex-wrap: wrap;
+  }
 
-/* CodeMirror host styling */
-.cm-host {
-  font-size: 13px;
-  height: 100%;
-}
+  .app-header h1 {
+    font-size: 16px;
+  }
 
-.cm-host .cm-editor {
-  background: var(--bg-elev);
-  height: 100%;
-}
+  .app-subtitle {
+    font-size: 10px;
+  }
 
-.cm-host .cm-scroller {
-  font-family: 'SF Mono', 'JetBrains Mono', Menlo, monospace;
-  line-height: 1.5;
+  .app-hints {
+    font-size: 10px;
+    flex-basis: 100%;
+    margin-top: 4px;
+  }
+
+  .panel-header {
+    padding: 8px 12px;
+  }
+
+  .score-panel > :not(.panel-header),
+  .repl-panel > :not(.panel-header),
+  .status-panel > :not(.panel-header) {
+    padding: 8px 12px;
+  }
+
+  .cm-host {
+    min-height: 160px;
+  }
 }

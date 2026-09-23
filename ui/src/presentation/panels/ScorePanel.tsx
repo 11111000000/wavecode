@@ -73,7 +73,6 @@ export function ScorePanel() {
 
   return (
     <div class="score-panel-inner">
-      <h2>Score</h2>
       <CodeMirrorEditor
         value={appStore.score}
         onChange={(v) => dispatch({ type: 'replaceScore', text: v })}
