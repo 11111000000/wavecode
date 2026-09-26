@@ -26,14 +26,16 @@ export type AppState = {
 };
 
 export const initialAppState: AppState = {
-  // Минимальный pattern, гарантированно играющий в браузере:
-  // - `note("c4")` создаёт constant pattern (без mini-notation парсинга)
-  // - `.s("sine")` использует встроенный OscillatorNode
-  // - `.gain(0.3)` — небольшая громкость чтобы избежать clipping
-  score:
-    '// Welcome to wavecode!\n' +
-    '// note("c4") = статичная нота без mini-notation парсинга.\n' +
-    'note("c4").s("sine").gain(0.3)',
+  // Creep (Radiohead) — reggae-inspired drone.
+  // МИНИМАЛЬНАЯ рабочая версия — одиночные ноты без chord/multi-pattern,
+  // чтобы избежать IndexSizeError в superdough (partials.length < 2 → ошибка
+  // createPeriodicWave).
+  // AI правка через REPL может развить это в полный Creep с chord'ами.
+  score: [
+    '// Creep (Radiohead) — minimal reggae drone',
+    '// Простая нота — AI правка через REPL может развить в полный Creep',
+    'n("43").s("triangle").lpf(200).gain(0.3).slow(4)',
+  ].join('\n'),
   messages: [],
   agent: { status: 'idle' },
   audio: { status: 'stopped' },
