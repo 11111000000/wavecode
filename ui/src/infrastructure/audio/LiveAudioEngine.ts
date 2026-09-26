@@ -18,6 +18,7 @@
 
 import { Effect, Layer, type Context } from 'effect';
 import { AudioEngine } from '~/domain/services';
+import { debugStashAudioContext } from '~/presentation/panels/DebugPanel';
 
 type WebAudioModule = {
   // webaudioOutput(hap, _t, currentTime, duration, cps) — arg 2 unused.
@@ -85,6 +86,7 @@ const ensureLoaded = async (): Promise<{
     // Ensure AudioContext exists (lazy — first user gesture triggers resume).
     if (!audioContextRef) {
       audioContextRef = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
+      debugStashAudioContext(audioContextRef);
     }
 
     // Register built-in synth sounds (sawtooth/square/triangle/sine).

@@ -2,6 +2,7 @@ import { Show } from 'solid-js';
 import { HelloPanel } from './presentation/panels/HelloPanel';
 import { ScorePanel } from './presentation/panels/ScorePanel';
 import { ReplPanel } from './presentation/panels/ReplPanel';
+import { DebugPanel } from './presentation/panels/DebugPanel';
 import { uiState, toggleRepl, toggleStatus, installKeyboardShortcuts } from './presentation/state/uiState';
 
 function CollapsibleHeader(props: {
@@ -83,6 +84,7 @@ export function App() {
           </Show>
         </aside>
       </div>
+      <DebugPanel />
     </main>
   );
 }
