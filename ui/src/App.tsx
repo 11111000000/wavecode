@@ -1,9 +1,10 @@
-import { Show } from 'solid-js';
+import { Show, onMount } from 'solid-js';
 import { HelloPanel } from './presentation/panels/HelloPanel';
 import { ScorePanel } from './presentation/panels/ScorePanel';
 import { ReplPanel } from './presentation/panels/ReplPanel';
 import { DebugPanel } from './presentation/panels/DebugPanel';
 import { uiState, toggleRepl, toggleStatus, installKeyboardShortcuts } from './presentation/state/uiState';
+import { ensureAudioLoaded } from '~/infrastructure/audio/LiveAudioEngine';
 
 function CollapsibleHeader(props: {
   title: string;
@@ -24,6 +25,13 @@ function CollapsibleHeader(props: {
 }
 
 export function App() {
+  // Eagerly bootstrap Strudel globals on app mount so LLM-returned snippets
+  // (which arrive via new Function() before any user-initiated eval) can find
+  // `n`, `note`, `s` etc. on globalThis.
+  onMount(() => {
+    void ensureAudioLoaded();
+  });
+
   installKeyboardShortcuts({
     focusRepl: () => {
       const ta = document.querySelector<HTMLTextAreaElement>('[data-repl-textarea]');
