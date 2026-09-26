@@ -3,23 +3,27 @@ import { Effect } from 'effect';
 import { dispatch, appStore } from '../state/appStore';
 import { AppLayer } from '~/infrastructure/composition';
 import { AudioEngine } from '~/domain/services';
-import { applyEdit } from '~/application/useCases/llmEdit';
+import { applyEdit, type DialogTurn } from '~/application/useCases/llmEdit';
 
 /**
  * AI-редактор: пользователь пишет инструкцию на русском → LLM правит score → авто-eval.
  *
  * Workflow:
  *   1. User вводит запрос (например: "сделай быстрее и громче")
- *   2. applyEdit(currentScore, instruction) вызывает LLMClient
+ *   2. applyEdit(currentScore, instruction, history) вызывает LLMClient
+ *      С историей диалога — LLM помнит контекст (например "это Creep",
+ *      "уже есть бас", и т.д.)
  *   3. LLM возвращает новый score (только JS-код)
  *   4. Заменяем score через dispatch({ type: 'replaceScore', text: ... })
  *   5. Автоматически вызываем AudioEngine.eval для воспроизведения
+ *   6. Добавляем user/assistant turns в историю
  */
 
 export function AIEditPanel() {
   const [instruction, setInstruction] = createSignal('');
   const [busy, setBusy] = createSignal(false);
   const [status, setStatus] = createSignal<{ kind: 'idle' | 'ok' | 'err'; msg: string }>({ kind: 'idle', msg: '' });
+  const [history, setHistory] = createSignal<DialogTurn[]>([]);
 
   const submit = async () => {
     const text = instruction().trim();
@@ -27,16 +31,28 @@ export function AIEditPanel() {
     setBusy(true);
     setStatus({ kind: 'idle', msg: 'Отправляю в ИИ…' });
 
+    // Build history — last 10 turns
+    const hist = history().slice(-10);
+    const currentInstruction = text;
+
     try {
       const newScore = await Effect.runPromise(
         Effect.gen(function* () {
-          const result = yield* applyEdit(appStore.score, text);
+          const result = yield* applyEdit(appStore.score, currentInstruction, hist);
           return result;
         }).pipe(Effect.provide(AppLayer)),
       );
 
       // Replace score in store
       dispatch({ type: 'replaceScore', text: newScore });
+
+      // Update history: add user + assistant turn
+      setHistory([
+        ...hist,
+        { role: 'user', content: currentInstruction },
+        { role: 'assistant', content: newScore },
+      ]);
+
       dispatch({ type: 'agentStatusChange', status: 'idle' });
 
       // Auto-eval the new score
@@ -58,7 +74,6 @@ export function AIEditPanel() {
         setStatus({ kind: 'err', msg: 'ИИ ответил, но ошибка аудио: ' + (audioErr instanceof Error ? audioErr.message : String(audioErr)) });
       }
 
-      // Add to history
       setInstruction('');
     } catch (err) {
       setStatus({ kind: 'err', msg: err instanceof Error ? err.message : String(err) });

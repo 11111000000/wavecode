@@ -113,27 +113,49 @@ export const cleanLLMResponse = (raw: string): string => {
 };
 
 /**
+ * История диалога (max 10 последних turns).
+ * Каждый turn — одна user или assistant message.
+ */
+export type DialogTurn = {
+  readonly role: 'user' | 'assistant';
+  readonly content: string;
+};
+
+/**
  * useCase: применить инструкцию пользователя к текущему score.
- * Возвращает новый score.
+ * Принимает историю диалога — LLM получает её как messages array и помнит
+ * контекст (например "это не Creep" или "я уже просил бас").
  */
 export const applyEdit = (
   currentScore: string,
   instruction: string,
+  history: ReadonlyArray<DialogTurn> = [],
 ): Effect.Effect<string, Error | string, LLMClient> =>
   Effect.gen(function* () {
     const llm = yield* LLMClient;
 
+    // Build messages array: history + current request.
+    // History ограничена до последних 10 turns чтобы не переполнять контекст.
+    const recentHistory = history.slice(-10);
+    const messages = [
+      ...recentHistory.map((t, i) => ({
+        id: `hist-${i}`,
+        role: t.role,
+        content: t.content,
+        ts: 0,
+      })),
+      {
+        id: `user-${Date.now()}`,
+        role: 'user' as const,
+        content: buildUserPrompt(currentScore, instruction),
+        ts: Date.now(),
+      },
+    ];
+
     const stream = yield* llm.streamCompletion({
       model: 'smart',
       systemPrompt: SYSTEM_PROMPT,
-      messages: [
-        {
-          id: `user-${Date.now()}`,
-          role: 'user',
-          content: buildUserPrompt(currentScore, instruction),
-          ts: Date.now(),
-        },
-      ],
+      messages,
     });
 
     const reader = stream.getReader();
