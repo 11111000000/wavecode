@@ -38,7 +38,15 @@ export function AIEditPanel() {
     try {
       const newScore = await Effect.runPromise(
         Effect.gen(function* () {
-          const result = yield* applyEdit(appStore.score, currentInstruction, hist);
+          const result = yield* applyEdit(
+            appStore.score,
+            currentInstruction,
+            hist,
+            {
+              status: appStore.audio.status,
+              ...(appStore.audio.lastError ? { lastError: appStore.audio.lastError } : {}),
+            },
+          );
           return result;
         }).pipe(Effect.provide(AppLayer)),
       );
