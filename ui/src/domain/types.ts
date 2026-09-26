@@ -26,15 +26,16 @@ export type AppState = {
 };
 
 export const initialAppState: AppState = {
-  // Creep (Radiohead) — reggae-inspired drone.
-  // МИНИМАЛЬНАЯ рабочая версия — одиночные ноты без chord/multi-pattern,
-  // чтобы избежать IndexSizeError в superdough (partials.length < 2 → ошибка
-  // createPeriodicWave).
-  // AI правка через REPL может развить это в полный Creep с chord'ами.
+  // Creep (Radiohead) — простая прогрессия аккордов G→B→C→Cm.
+  // Использует только n("...").s(...).gain(...).lpf(...) — наш LiveAudioEngine
+  // сам парсит regex'ом и играет через OscillatorNode (минует superdough bug).
+  // Без stack/slow — чтобы избежать проблем с transpiler.
   score: [
-    '// Creep (Radiohead) — minimal reggae drone',
-    '// Простая нота — AI правка через REPL может развить в полный Creep',
-    'n("43").s("triangle").lpf(200).gain(0.3).slow(4)',
+    '// Creep (Radiohead) — G → B → C → Cm аккорды',
+    'n("55 59 62").s("sawtooth").gain(0.5).lpf(800),',
+    'n("59 62 66").s("sawtooth").gain(0.5).lpf(800),',
+    'n("60 64 67").s("sawtooth").gain(0.5).lpf(800),',
+    'n("60 63 67").s("sawtooth").gain(0.5).lpf(800)',
   ].join('\n'),
   messages: [],
   agent: { status: 'idle' },

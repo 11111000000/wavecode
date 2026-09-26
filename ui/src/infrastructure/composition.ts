@@ -7,7 +7,7 @@ import type { AppEnv } from '~/domain/services';
 
 /**
  * Composition Root: собирает все Layers в один AppEnv.
- * LiveAudioEngine — real Strudel в main thread.
+ * LiveAudioEngine — прямой синтез OscillatorNode (обходим superdough bug).
  * makeLiveLLMClient — real @ai-sdk/openai-compatible → llm.kosov.online.
  *   Fallback to MockLLMClient if VITE_LLM_PROXY_KEY is not set.
  * TODO Phase 3: MockRepo → IDBRepo (real IndexedDB).
@@ -18,6 +18,7 @@ export const AppLayer: Layer.Layer<AppEnv, never, never> = Layer.mergeAll(
   import.meta.env.VITE_LLM_PROXY_KEY
     ? makeLiveLLMClient()
     : MockLLMClient,
+  // Pass factory that creates AudioContext on first eval call (lazy)
   LiveAudioEngine,
   MockRepo,
 );
