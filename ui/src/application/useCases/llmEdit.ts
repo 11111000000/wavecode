@@ -60,18 +60,32 @@ export const SYSTEM_PROMPT = [
 ].join('\n');
 
 /**
- * Собирает user prompt с текущим score и инструкцией.
+ * Собирает user prompt с текущим score, статусом аудио и инструкцией.
  * Содержит явное напоминание: "МОДИФИЦИРУЙ, а НЕ переписывай с нуля".
  */
-export const buildUserPrompt = (currentScore: string, instruction: string): string =>
-  `=== ТЕКУЩИЙ SCORE (это БАЗА, модифицируй её) ===\n` +
-  `\`\`\`\n${currentScore}\n\`\`\`\n\n` +
-  `=== ИНСТРУКЦИЯ ПОЛЬЗОВАТЕЛЯ ===\n${instruction}\n\n` +
-  `=== ЗАДАЧА ===\n` +
-  `Верни МОДИФИЦИРОВАННЫЙ ПОЛНЫЙ score — это база плюс твоя правка.\n` +
-  `Сохрани все ноты/аккорды, которые НЕ упомянуты в инструкции. Измени ТОЛЬКО то что просит пользователь.\n` +
-  `Если инструкция неприменима к score — верни базу без изменений.\n` +
-  `Только JS код, без markdown и пояснений.`;
+export const buildUserPrompt = (
+  currentScore: string,
+  instruction: string,
+  audioState: { status: string; lastError?: string } = { status: 'unknown' },
+): string => {
+  const lastErrorLine = audioState.lastError
+    ? `last_error: ${audioState.lastError}\n`
+    : '';
+  return (
+    `=== ТЕКУЩИЙ SCORE (это БАЗА, модифицируй её) ===\n` +
+    `\`\`\`\n${currentScore}\n\`\`\`\n\n` +
+    `=== СОСТОЯНИЕ АУДИО ===\n` +
+    `status: ${audioState.status}\n` +
+    lastErrorLine +
+    `\n` +
+    `=== ИНСТРУКЦИЯ ПОЛЬЗОВАТЕЛЯ ===\n${instruction}\n\n` +
+    `=== ЗАДАЧА ===\n` +
+    `Верни МОДИФИЦИРОВАННЫЙ ПОЛНЫЙ score — это база плюс твоя правка.\n` +
+    `Сохрани все ноты/аккорды, которые НЕ упомянуты в инструкции. Измени ТОЛЬКО то что просит пользователь.\n` +
+    `Если инструкция неприменима к score — верни базу без изменений.\n` +
+    `Только JS код, без markdown и пояснений.`
+  );
+};
 
 /**
  * Очищает ответ LLM от markdown-блоков, reasoning-blocks и лишних обёрток.
@@ -121,6 +135,7 @@ export const applyEdit = (
   currentScore: string,
   instruction: string,
   history: ReadonlyArray<DialogTurn> = [],
+  audioState: { status: string; lastError?: string } = { status: 'unknown' },
 ): Effect.Effect<string, Error | string, LLMClient> =>
   Effect.gen(function* () {
     const llm = yield* LLMClient;
@@ -138,7 +153,7 @@ export const applyEdit = (
       {
         id: `user-${Date.now()}`,
         role: 'user' as const,
-        content: buildUserPrompt(currentScore, instruction),
+        content: buildUserPrompt(currentScore, instruction, audioState),
         ts: Date.now(),
       },
     ];
