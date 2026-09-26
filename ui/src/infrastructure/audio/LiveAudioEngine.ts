@@ -125,6 +125,7 @@ const parseScore = (score: string): ParsedHap[] => {
 const make = (_config: AudioEngineConfig): Context.Tag.Service<typeof AudioEngine> => {
   let ac: AudioContext | null = null;
   const activeNodes: Set<{ osc: OscillatorNode; gain: GainNode }> = new Set();
+  const intervalIds: Set<number> = new Set();
 
   const getAC = (): AudioContext => {
     if (!ac) {
@@ -216,13 +217,30 @@ const make = (_config: AudioEngineConfig): Context.Tag.Service<typeof AudioEngin
       throw new Error('No haps parsed from score');
     }
 
-    // Schedule each hap sequentially
-    let offset = 0;
-    const gap = 0.1;
-    for (const hap of haps) {
-      playHap(hap, offset);
-      offset += hap.duration + gap;
-    }
+    // Compute total cycle length (sum of all hap durations + gaps)
+    const gap = 0.05;
+    const cycleLength = haps.reduce((acc, h) => acc + h.duration + gap, 0);
+
+    // Repeatedly play the score in a loop using setInterval.
+    // Each tick advances by cycleLength, recreating all OscillatorNodes.
+    const loop = (): void => {
+      let offset = 0;
+      for (const hap of haps) {
+        playHap(hap, offset);
+        offset += hap.duration + gap;
+      }
+    };
+
+    // Play first iteration immediately, then loop every cycleLength
+    loop();
+    const intervalId = window.setInterval(loop, cycleLength * 1000);
+    intervalIds.add(intervalId);
+  };
+
+  const stopImpl = (): void => {
+    intervalIds.forEach((id) => window.clearInterval(id));
+    intervalIds.clear();
+    stopAll();
   };
 
   return {
@@ -230,10 +248,7 @@ const make = (_config: AudioEngineConfig): Context.Tag.Service<typeof AudioEngin
       Effect.promise(() => evalImpl(snippet)).pipe(
         Effect.mapError((e: unknown) => (e instanceof Error ? e : new Error(String(e)))),
       ),
-    stop: () =>
-      Effect.sync(() => {
-        if (ac) stopAll();
-      }),
+    stop: () => Effect.sync(() => stopImpl()),
   };
 };
 
