@@ -10,6 +10,7 @@ declare module '@strudel/webaudio' {
   ): unknown;
   export function webaudioRepl(code: string): Promise<unknown>;
   export function hush(): void;
+  export function setAudioContext(ctx: AudioContext): void;
   export const doughsamples: unknown;
 }
 
