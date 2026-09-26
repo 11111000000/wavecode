@@ -24,7 +24,7 @@ export class LLMClient extends Context.Tag('LLMClient')<
   {
     readonly streamCompletion: (
       req: CompletionRequest,
-    ) => Effect.Effect<ReadableStream<CompletionChunk>, never, never>;
+    ) => Effect.Effect<ReadableStream<CompletionChunk>, Error, never>;
   }
 >() {}
 
