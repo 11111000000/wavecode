@@ -10,7 +10,7 @@ import { AudioEngine } from '~/domain/services';
  * Вывод ошибок отображается в Status панели.
  */
 export function ReplPanel() {
-  const [text, setText] = createSignal('n("0 ~ 2 ~ 4 0 ~ 3").s("sawtooth").lpf(500)');
+  const [text, setText] = createSignal('n("0 ~ 2 ~ 4 0 ~ 3").s("sine")');
   const [history, setHistory] = createSignal<string[]>([]);
   const [busy, setBusy] = createSignal(false);
 
