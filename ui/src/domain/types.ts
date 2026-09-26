@@ -26,15 +26,14 @@ export type AppState = {
 };
 
 export const initialAppState: AppState = {
-  // Без dirt-samples (не загружены). Используем чистый синтез через n()+s(synth).
-  // s("sawtooth"/"square"/"triangle"/"sine") — встроенные осцилляторы Strudel,
-  // работают без samples.
+  // Без dirt-samples (не загружены). Используем синусоиду через n()+s("sine")
+  // — встроенный oscillator, не требует createPeriodicWave.
   score:
     '// Welcome to wavecode!\n' +
-    '// Используем синтез (n + sawtooth), samples не подгружены.\n' +
+    '// Sine oscillator через n() + s("sine") — работает без dirt-samples.\n' +
     'stack(\n' +
-    '  n("0 ~ 0 ~ 0 3 ~ 4").s("sawtooth").gain(0.3),\n' +
-    '  n("0 ~ 2 ~ 1 ~ 0 ~ 2").s("square").gain(0.2).lpf(800)\n' +
+    '  n("0 ~ 2 ~ 4 0 ~ 3").s("sine").gain(0.3),\n' +
+    '  n("4 ~ 2 ~ 0 3 ~ 0").s("sine").gain(0.2).add(7)\n' +
     ').slow(2);',
   messages: [],
   agent: { status: 'idle' },

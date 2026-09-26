@@ -20,7 +20,8 @@ import { Effect, Layer, type Context } from 'effect';
 import { AudioEngine } from '~/domain/services';
 
 type WebAudioModule = {
-  webaudioOutput: (hap: unknown, currentTime: number, cps: number, duration: number, ...rest: unknown[]) => unknown;
+  // webaudioOutput(hap, _t, currentTime, duration, cps) — arg 2 unused.
+  webaudioOutput: (hap: unknown, _t: unknown, currentTime: number, duration: number, cps: number) => unknown;
   hush: () => void;
 };
 
@@ -132,7 +133,9 @@ const ensureCyclist = async (webaudio: WebAudioModule, core: CoreModule): Promis
   cyclist = new core.Cyclist({
     interval: 0.05,
     onTrigger: (hap, currentTime, cps, duration) => {
-      return webaudio.webaudioOutput(hap, currentTime, cps, duration);
+      // webaudioOutput signature is (hap, _t, currentTime, duration, cps)
+      // — the 5th arg is cps. Caller's "t" param is unused.
+      return webaudio.webaudioOutput(hap, 0, currentTime, duration, cps);
     },
     onToggle: (started) => {
       // eslint-disable-next-line no-console

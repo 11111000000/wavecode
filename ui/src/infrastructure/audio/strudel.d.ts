@@ -1,10 +1,12 @@
 declare module '@strudel/webaudio' {
+  // webaudioOutput(hap, _t, currentTime, duration, cps) — arg 2 unused at runtime.
+  // We type _t as `any` so TS accepts any value (Cyclist passes undefined).
   export function webaudioOutput(
     hap: unknown,
+    _t: any,
     currentTime: number,
-    cps: number,
     duration: number,
-    ...rest: unknown[]
+    cps: number,
   ): unknown;
   export function webaudioRepl(code: string): Promise<unknown>;
   export function hush(): void;
