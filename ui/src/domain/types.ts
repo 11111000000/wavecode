@@ -26,15 +26,14 @@ export type AppState = {
 };
 
 export const initialAppState: AppState = {
-  // Без dirt-samples (не загружены). Используем синусоиду через n()+s("sine")
-  // — встроенный oscillator, не требует createPeriodicWave.
+  // Минимальный pattern, гарантированно играющий в браузере:
+  // - `note("c4")` создаёт constant pattern (без mini-notation парсинга)
+  // - `.s("sine")` использует встроенный OscillatorNode
+  // - `.gain(0.3)` — небольшая громкость чтобы избежать clipping
   score:
     '// Welcome to wavecode!\n' +
-    '// Sine oscillator через n() + s("sine") — работает без dirt-samples.\n' +
-    'stack(\n' +
-    '  n("0 ~ 2 ~ 4 0 ~ 3").s("sine").gain(0.3),\n' +
-    '  n("4 ~ 2 ~ 0 3 ~ 0").s("sine").gain(0.2).add(7)\n' +
-    ').slow(2);',
+    '// note("c4") = статичная нота без mini-notation парсинга.\n' +
+    'note("c4").s("sine").gain(0.3)',
   messages: [],
   agent: { status: 'idle' },
   audio: { status: 'stopped' },

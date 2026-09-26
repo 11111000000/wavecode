@@ -10,7 +10,7 @@ import { AudioEngine } from '~/domain/services';
  * Вывод ошибок отображается в Status панели.
  */
 export function ReplPanel() {
-  const [text, setText] = createSignal('n("0 ~ 2 ~ 4 0 ~ 3").s("sine")');
+  const [text, setText] = createSignal('note("c4").s("sine")');
   const [history, setHistory] = createSignal<string[]>([]);
   const [busy, setBusy] = createSignal(false);
 
@@ -65,6 +65,34 @@ export function ReplPanel() {
         rows={2}
         style={textareaStyle}
       />
+      <details style={{ 'margin-top': '8px' }}>
+        <summary style={{ cursor: 'pointer', color: 'var(--fg-dim)', 'font-size': '11px' }}>
+          Test audio (direct Web Audio API — bypasses Strudel)
+        </summary>
+        <button
+          type="button"
+          style={{ 'margin-top': '4px', 'font-size': '11px' }}
+          onClick={() => {
+            // Direct OscillatorNode test — if this fails on mobile, audio is broken at browser level
+            const Ctor = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+            if (!Ctor) return;
+            const ac = new Ctor();
+            if (ac.state === 'suspended') ac.resume();
+            const osc = ac.createOscillator();
+            const gain = ac.createGain();
+            gain.gain.value = 0.3;
+            osc.frequency.value = 440;
+            osc.type = 'sine';
+            osc.connect(gain).connect(ac.destination);
+            osc.start();
+            setTimeout(() => { osc.stop(); ac.close(); }, 1500);
+            // eslint-disable-next-line no-console
+            console.info('[wavecode audio] direct test tone started');
+          }}
+        >
+          ▶ Play 440Hz test tone (1.5s)
+        </button>
+      </details>
       <div style={{ display: 'flex', gap: '8px', 'margin-top': '8px' }}>
         <button type="button" onClick={submit} disabled={busy()}>
           ▶ Eval (Ctrl+↵)
