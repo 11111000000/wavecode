@@ -86,23 +86,30 @@ export const DebugPanel = () => {
     const origInfo = console.info;
     const origWarn = console.warn;
     const origError = console.error;
+    const autoOpen = () => setOpen(true);
     console.log = (...a: unknown[]) => { appendLog('log', a); origLog.apply(console, a); };
     console.info = (...a: unknown[]) => { appendLog('info', a); origInfo.apply(console, a); };
     console.warn = (...a: unknown[]) => { appendLog('warn', a); origWarn.apply(console, a); };
-    console.error = (...a: unknown[]) => { appendLog('error', a); origError.apply(console, a); };
+    console.error = (...a: unknown[]) => {
+      appendLog('error', a);
+      autoOpen();
+      origError.apply(console, a);
+    };
 
-    // Catch uncaught errors
+    // Catch uncaught errors — auto-open overlay
     const onError = (e: ErrorEvent) => {
       appendError({
         message: e.message || String(e.error),
         source: e.filename,
         line: e.lineno,
       });
+      autoOpen();
     };
     const onUnhandled = (e: PromiseRejectionEvent) => {
       const reason = e.reason;
       const message = reason instanceof Error ? `${reason.message}\n${reason.stack ?? ''}` : String(reason);
       appendError({ message });
+      autoOpen();
     };
     window.addEventListener('error', onError);
     window.addEventListener('unhandledrejection', onUnhandled);
