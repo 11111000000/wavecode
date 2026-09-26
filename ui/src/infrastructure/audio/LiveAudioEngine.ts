@@ -89,6 +89,16 @@ const ensureLoaded = async (): Promise<{
       debugStashAudioContext(audioContextRef);
     }
 
+    // CRITICAL: @strudel/webaudio has its own internal AudioContext (cached
+    // via getAudioContext()). If superdough reads it from there while our
+    // Cyclist reads from our own audioCtx, they diverge → superdough
+    // gets a STALE audio context (currentTime=91s) while pattern events
+    // are at pattern cycle 2.0 → "cannot schedule sounds in the past".
+    // Force both to share the same AudioContext.
+    if (typeof webaudio.setAudioContext === 'function') {
+      webaudio.setAudioContext(audioContextRef);
+    }
+
     // Register built-in synth sounds (sawtooth/square/triangle/sine).
     // Without this, s("sawtooth") fails with "sound not found".
     const superdough = await import('superdough');
@@ -132,12 +142,46 @@ const ensureCyclist = async (webaudio: WebAudioModule, core: CoreModule): Promis
 
   const audioCtx = audioContextRef ?? new AudioContext();
 
-  cyclist = new core.Cyclist({
+  let triggerCount = 0;
+cyclist = new core.Cyclist({
     interval: 0.05,
-    onTrigger: (hap, currentTime, cps, duration) => {
-      // webaudioOutput signature is (hap, _t, currentTime, duration, cps)
-      // — the 5th arg is cps. Caller's "t" param is unused.
-      return webaudio.webaudioOutput(hap, 0, currentTime, duration, cps);
+    // Cyclist.onTrigger signature: (hap, latency, duration, cps, x)
+    // — x is the absolute audio context time when the event should play.
+    onTrigger: (hap: unknown, latency: unknown, duration: unknown, cps: unknown, x: unknown) => {
+      triggerCount++;
+      const latencyN = Number(latency ?? 0);
+      const durationN = Number(duration ?? 0.5);
+      const cpsN = Number(cps ?? 0.5);
+      const xN = Number(x ?? 0);
+      if (triggerCount <= 5) {
+        // eslint-disable-next-line no-console
+        console.info(
+          `[wavecode audio] trigger #${triggerCount}:`,
+          'hap.type=' + typeof hap,
+          'whole=' + !!(hap as { whole?: unknown })?.whole,
+          'latency=' + latencyN.toFixed(3),
+          'cps=' + cpsN.toFixed(3),
+          'duration=' + durationN.toFixed(3),
+          'x=' + xN.toFixed(3),
+        );
+      }
+      // webaudioOutput(hap, _latency, hapDuration, cps, targetTime)
+      // From @strudel/webaudio dist: `De(e, t, n, o, s) => P(K(e), s, n, o, e.whole?.begin.valueOf())`
+      // P signature is superdough(value, t, hapDuration, cps, cycle).
+      // So: De.s → P.t (TARGET TIME), De.n → P.hapDuration, De.o → P.cps.
+      // Correct order: (hap, _unused, duration, cps, x).
+      const result = webaudio.webaudioOutput(hap, latencyN, durationN, cpsN, xN);
+      if (triggerCount <= 5 && result) {
+        // eslint-disable-next-line no-console
+        console.info(
+          `[wavecode audio] P args: x=${xN.toFixed(2)} dur=${durationN.toFixed(2)} cps=${cpsN.toFixed(2)} latency=${latencyN.toFixed(3)}`,
+        );
+      }
+      if (triggerCount === 1) {
+        // eslint-disable-next-line no-console
+        console.info('[wavecode audio] webaudioOutput returned:', typeof result);
+      }
+      return result;
     },
     onToggle: (started) => {
       // eslint-disable-next-line no-console
