@@ -1,6 +1,4 @@
 declare module '@strudel/webaudio' {
-  // webaudioOutput(hap, _t, currentTime, duration, cps) — arg 2 unused at runtime.
-  // We type _t as `any` so TS accepts any value (Cyclist passes undefined).
   export function webaudioOutput(
     hap: unknown,
     _t: any,
@@ -60,4 +58,21 @@ declare module '@strudel/tonal' {
 declare module 'superdough' {
   export function registerSynthSounds(): void;
   export function registerSound(name: string, factory: unknown): void;
+}
+
+declare module '@ai-sdk/openai-compatible' {
+  export interface LanguageModelV1 {
+    specificationVersion: string;
+    provider: string;
+    modelId: string;
+  }
+  export function createOpenAICompatible(settings: {
+    baseURL: string;
+    apiKey: string;
+    name?: string;
+    headers?: Record<string, string>;
+  }): {
+    chatModel(modelId: string): unknown;
+    (modelId: string): unknown;
+  };
 }
