@@ -128,6 +128,10 @@ const ensureLoaded = async (): Promise<{
  * makes multi-statement snippets fail with "Unexpected token ';'".
  */
 const evaluateSnippet = async (snippet: string): Promise<unknown> => {
+  // Make sure Strudel globals (n, note, s, stack, ...) are on globalThis.
+  // ensureLoaded is idempotent — safe to call repeatedly.
+  await ensureLoaded();
+
   // Strip trailing `;`/whitespace so `( snippet )` parses cleanly
   // (a `;` inside parens is a syntax error).
   const stripped = snippet.replace(/[;\s]+$/, '');
@@ -146,6 +150,14 @@ const evaluateSnippet = async (snippet: string): Promise<unknown> => {
     throw err;
   }
 };
+
+/**
+ * Eagerly bootstrap Strudel globals. Idempotent — safe to call multiple times.
+ * Call this at app startup so LLM-returned snippets work even before any
+ * user-initiated Eval.
+ */
+export const ensureAudioLoaded = (): Promise<void> =>
+  ensureLoaded().then(() => undefined);
 
 /**
  * Build the Cyclist (scheduler) lazily on first eval.
