@@ -192,6 +192,68 @@ kbd {
   min-height: 0;
 }
 
+/* AI REPL log */
+.repl-log {
+  list-style: none;
+  padding: 0;
+  margin: 8px 0 0 0;
+  font-size: 11px;
+  font-family: 'SF Mono', Menlo, monospace;
+  max-height: 200px;
+  overflow-y: auto;
+  border-top: 1px solid var(--border);
+  padding-top: 8px;
+}
+
+.repl-log-row {
+  display: grid;
+  grid-template-columns: auto auto 1fr auto;
+  gap: 6px;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--border);
+  word-break: break-word;
+}
+
+.repl-log-row:last-child {
+  border-bottom: none;
+}
+
+.repl-log-time {
+  color: var(--fg-dim);
+  font-size: 10px;
+}
+
+.repl-log-icon {
+  font-weight: 700;
+}
+
+.status-ok .repl-log-icon { color: var(--ok); }
+.status-err .repl-log-icon { color: var(--err); }
+.status-busy .repl-log-icon { color: var(--warn); }
+
+.repl-log-instruction {
+  color: var(--fg);
+}
+
+.repl-log-audio {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 3px;
+  white-space: nowrap;
+}
+
+.repl-log-audio.status-playing { background: rgba(74, 222, 128, 0.15); color: var(--ok); }
+.repl-log-audio.status-stopped { background: rgba(136, 136, 136, 0.15); color: var(--fg-dim); }
+.repl-log-audio.status-error { background: rgba(239, 68, 68, 0.15); color: var(--err); }
+
+.repl-log-error {
+  grid-column: 1 / -1;
+  color: var(--err);
+  font-size: 10px;
+  margin-top: 2px;
+  word-break: break-word;
+}
+
 /* CodeMirror host */
 .cm-host {
   font-size: 13px;
