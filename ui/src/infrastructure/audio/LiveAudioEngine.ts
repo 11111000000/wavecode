@@ -119,17 +119,32 @@ const ensureLoaded = async (): Promise<{
 };
 
 /**
- * Evaluate user code via @strudel/core's `evaluate` function.
- * Returns `{ pattern, meta }` — pattern is the Pattern object.
+ * Evaluate user code in globalThis scope (where s, n, stack etc. live).
+ * Wraps the snippet in async IIFE with explicit braces so multi-line
+ * snippets (with `;`, `//` comments, declarations) parse correctly.
  *
- * Why not `new Function()`: core's `evaluate` properly sets up the scope
- * (controls, pattern proxies, register() injects), while a raw `new Function`
- * doesn't — it returns undefined because s/n/etc. globals aren't properly bound.
+ * We don't use `@strudel/core.evaluate(snippet)` because by default it
+ * does NOT wrap with `{}` — only when a 2nd `evalFn` arg is passed — which
+ * makes multi-statement snippets fail with "Unexpected token ';'".
  */
 const evaluateSnippet = async (snippet: string): Promise<unknown> => {
-  const coreMod = await import('@strudel/core');
-  const result = await coreMod.evaluate(snippet);
-  return (result as { pattern?: unknown }).pattern;
+  // Strip trailing `;`/whitespace so `( snippet )` parses cleanly
+  // (a `;` inside parens is a syntax error).
+  const stripped = snippet.replace(/[;\s]+$/, '');
+  // Wrap snippet in `(...)` to make it an expression body for the arrow,
+  // not a block. In strict mode + async context, block-body arrows
+  // return `undefined` even when the last statement is an expression.
+  const fn = new Function(
+    `"use strict"; return (async () => ( ${stripped} ))()`,
+  );
+  try {
+    const v = await fn();
+    return v;
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error('[wavecode audio] eval threw:', err);
+    throw err;
+  }
 };
 
 /**
