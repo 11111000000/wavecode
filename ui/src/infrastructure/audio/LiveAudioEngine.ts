@@ -210,7 +210,15 @@ const make = (_config: AudioEngineConfig): Context.Tag.Service<typeof AudioEngin
       }
     }
 
-    stopAll();
+    // НЕ вызываем stopAll() — пусть старые ноты доиграют свои ADSR
+    // envelope. Новые ноты из нового score будут играть ПАРАЛЛЕЛЬНО →
+    // crossfade через envelope. Через одну итерацию loop старые
+    // oscillator'ы затихнут (естественно), новые заиграют.
+    // Чтобы избежать "эхо" — остановим старые через 1 цикл.
+
+    // Stop the previous loop first.
+    intervalIds.forEach((id) => window.clearInterval(id));
+    intervalIds.clear();
 
     const haps = parseScore(snippet);
     if (haps.length === 0) {
@@ -224,6 +232,9 @@ const make = (_config: AudioEngineConfig): Context.Tag.Service<typeof AudioEngin
     // Repeatedly play the score in a loop using setInterval.
     // Each tick advances by cycleLength, recreating all OscillatorNodes.
     const loop = (): void => {
+      // At loop boundary, stop previous cycle's old oscillators
+      // (they'll have already faded by now due to release envelope).
+      // Don't stopAll() — we want new notes to overlap with old fading.
       let offset = 0;
       for (const hap of haps) {
         playHap(hap, offset);
