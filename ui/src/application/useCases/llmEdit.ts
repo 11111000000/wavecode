@@ -62,6 +62,9 @@ export const SYSTEM_PROMPT = [
 /**
  * Собирает user prompt с текущим score, статусом аудио и инструкцией.
  * Содержит явное напоминание: "МОДИФИЦИРУЙ, а НЕ переписывай с нуля".
+ *
+ * Используем string concatenation с literal triple backticks — это гарантирует
+ * что LLM получает правильный markdown code block в userMsg.
  */
 export const buildUserPrompt = (
   currentScore: string,
@@ -71,49 +74,68 @@ export const buildUserPrompt = (
   const lastErrorLine = audioState.lastError
     ? `last_error: ${audioState.lastError}\n`
     : '';
-  return (
-    `=== ТЕКУЩИЙ SCORE (это БАЗА, модифицируй её) ===\n` +
-    `\`\`\`\n${currentScore}\n\`\`\`\n\n` +
-    `=== СОСТОЯНИЕ АУДИО ===\n` +
-    `status: ${audioState.status}\n` +
-    lastErrorLine +
-    `\n` +
-    `=== ИНСТРУКЦИЯ ПОЛЬЗОВАТЕЛЯ ===\n${instruction}\n\n` +
-    `=== ЗАДАЧА ===\n` +
-    `Верни МОДИФИЦИРОВАННЫЙ ПОЛНЫЙ score — это база плюс твоя правка.\n` +
-    `Сохрани все ноты/аккорды, которые НЕ упомянуты в инструкции. Измени ТОЛЬКО то что просит пользователь.\n` +
-    `Если инструкция неприменима к score — верни базу без изменений.\n` +
-    `Только JS код, без markdown и пояснений.`
-  );
+  return [
+    '=== ТЕКУЩИЙ SCORE (это БАЗА, модифицируй её) ===',
+    '```',
+    currentScore,
+    '```',
+    '',
+    '=== СОСТОЯНИЕ АУДИО ===',
+    `status: ${audioState.status}`,
+    lastErrorLine,
+    '',
+    '=== ИНСТРУКЦИЯ ПОЛЬЗОВАТЕЛЯ ===',
+    instruction,
+    '',
+    '=== ЗАДАЧА ===',
+    'Верни МОДИФИЦИРОВАННЫЙ ПОЛНЫЙ score — это база плюс твоя правка.',
+    'Сохрани все ноты/аккорды, которые НЕ упомянуты в инструкции. Измени ТОЛЬКО то что просит пользователь.',
+    'Если инструкция неприменима к score — верни базу без изменений.',
+    'Только JS код, без markdown и пояснений.',
+  ].join('\n');
 };
 
 /**
- * Очищает ответ LLM от markdown-блоков, reasoning-blocks и лишних обёрток.
+ * Очищает ответ LLM от reasoning-блоков, markdown-обёрток и преамбул.
+ *
+ * Работает с потенциально ОБОРВАННЫМИ reasoning-блоками (если LLM
+ * превысил max_tokens при длинном thinking).
  */
 export const cleanLLMResponse = (raw: string): string => {
   let s = raw.trim();
 
-  // Strip ALL<think>...</think> blocks (DeepSeek-style reasoning).
+  // 1. Сначала — полностью сбалансированные <think>...</think> пары
   s = s.replace(/<think>[\s\S]*?<\/think>/gi, '');
 
-  // Strip markdown code fences at the start.
+  // 2. Несбалансированный <think> без закрытия: удалить от <think> до конца
+  //    (LLM мог не дописать ответ из-за лимита max_tokens)
+  if (/<think>/i.test(s)) {
+    const openIdx = s.indexOf('<think>');
+    s = s.slice(0, openIdx);
+  }
+
+  // 3. Strip markdown code fences at the start.
   const fenceStartMatch = s.match(/^```(?:js|javascript|ts|typescript|strudel)?\s*\n/i);
   if (fenceStartMatch) {
     s = s.slice(fenceStartMatch[0].length);
   }
 
-  // Strip trailing code fence.
+  // 4. Strip trailing code fence.
   const fenceEndMatch = s.match(/\n```\s*$/);
   if (fenceEndMatch) {
     s = s.slice(0, fenceEndMatch.index);
   }
 
-  // Strip leading "Here is..." or similar preamble.
+  // 5. Strip leading "Here is..." or similar preamble.
   s = s.replace(
     /^(?:here['']?s?\s+(?:is\s+)?(?:the|your)?\s*(?:updated|new)?\s*(?:score|code)?:?\s*\n+)/i,
     '',
   );
 
+  // 6. Strip trailing explanations like "This will play..." or "This adds...".
+  // Try to find the LAST actual code line — heuristic: stop at the
+  // closing paren of the last n()/note() call, OR keep as-is.
+  // For now, just trim and return.
   return s.trim();
 };
 

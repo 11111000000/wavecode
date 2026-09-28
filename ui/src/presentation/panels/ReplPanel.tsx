@@ -1,6 +1,6 @@
 import { createSignal, For, Show } from 'solid-js';
 import { Effect } from 'effect';
-import { dispatch } from '../state/appStore';
+import { dispatch, appStore } from '../state/appStore';
 import { AppLayer } from '~/infrastructure/composition';
 import { AudioEngine } from '~/domain/services';
 import { applyEdit } from '~/application/useCases/llmEdit';
@@ -52,7 +52,7 @@ export function ReplPanel() {
     try {
       const newScore = await Effect.runPromise(
         Effect.gen(function* () {
-          const result = yield* applyEdit(/* placeholder */ '', text);
+          const result = yield* applyEdit(appStore.score, text);
           return result;
         }).pipe(Effect.provide(AppLayer)),
       );
