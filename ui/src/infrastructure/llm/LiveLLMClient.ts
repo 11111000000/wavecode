@@ -11,7 +11,8 @@ import { LLMClient, type CompletionRequest, type CompletionChunk } from '~/domai
  *   - "smart"  → MiniMax-M3 (heavy, slower, better for code)
  *   - "fast"   → MiniMax-M2.1-highspeed (light, faster)
  *
- * Default model: "smart" — better for Strudel code generation.
+ * LiteLLM возвращает SSE streaming даже при stream: false. Поэтому мы
+ * всегда читаем до конца stream и парсим оба формата: JSON и SSE.
  */
 
 type LiveLLMClientDeps = {
@@ -43,10 +44,9 @@ const make = (deps: LiveLLMClientDeps): Context.Tag.Service<typeof LLMClient> =>
             body: JSON.stringify({
               model: modelName,
               messages,
-              stream: true,
+              stream: false,
               temperature: 0.3,
-              max_tokens: 1500,
-              reasoning_effort: 'low',
+              max_tokens: 2000,
             }),
           }),
         catch: (err) => new Error(`LLM HTTP request failed: ${err instanceof Error ? err.message : String(err)}`),
@@ -65,53 +65,57 @@ const make = (deps: LiveLLMClientDeps): Context.Tag.Service<typeof LLMClient> =>
         return yield* Effect.fail(new Error('LLM response has no body'));
       }
 
+      // Читаем ВСЕ chunks до полного завершения.
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let buffer = '';
+      // eslint-disable-next-line no-constant-condition
+      while (true) {
+        const { done, value } = yield* Effect.tryPromise(() => reader.read());
+        if (done) break;
+        if (value) {
+          buffer += decoder.decode(value, { stream: true });
+        }
+      }
+      // Финальный flush
+      buffer += decoder.decode();
+
+      // Пробуем JSON. Если failed — парсим SSE.
+      let content = '';
+      try {
+        const parsed = JSON.parse(buffer) as {
+          choices?: { message?: { content?: string } }[];
+        };
+        content = parsed.choices?.[0]?.message?.content ?? '';
+      } catch {
+        // Парсим SSE: строки "data: {...}\n\n" — последний "data: [DONE]"
+        const sseContent: string[] = [];
+        for (const line of buffer.split('\n')) {
+          const trimmed = line.trim();
+          if (!trimmed.startsWith('data:')) continue;
+          const data = trimmed.slice(5).trim();
+          if (data === '[DONE]' || !data) continue;
+          try {
+            const parsed = JSON.parse(data) as {
+              choices?: { delta?: { content?: string } }[];
+            };
+            const delta = parsed.choices?.[0]?.delta?.content;
+            if (delta) sseContent.push(delta);
+          } catch {
+            // skip malformed line
+          }
+        }
+        content = sseContent.join('');
+      }
 
       const stream = new ReadableStream<CompletionChunk>({
-        async pull(controller) {
-          try {
-            const { done, value } = await reader.read();
-            if (done) {
-              controller.close();
-              return;
-            }
-            buffer += decoder.decode(value, { stream: true });
-
-            // SSE format: "data: {...}\n\n"
-            const lines = buffer.split('\n');
-            buffer = lines.pop() ?? '';
-
-            for (const line of lines) {
-              const trimmed = line.trim();
-              if (!trimmed || !trimmed.startsWith('data:')) continue;
-              const data = trimmed.slice(5).trim();
-              if (data === '[DONE]') {
-                controller.close();
-                return;
-              }
-              try {
-                const parsed = JSON.parse(data) as {
-                  choices?: { delta?: { content?: string } }[];
-                };
-                const delta = parsed.choices?.[0]?.delta?.content;
-                if (delta) {
-                  controller.enqueue({ type: 'text', delta });
-                }
-              } catch {
-                // ignore malformed SSE line
-              }
-            }
-          } catch (err) {
-            controller.error(err);
+        start(controller) {
+          if (content) {
+            controller.enqueue({ type: 'text', delta: content });
           }
-        },
-        cancel() {
-          void reader.cancel();
+          controller.close();
         },
       });
-
       return stream;
     }),
 });
