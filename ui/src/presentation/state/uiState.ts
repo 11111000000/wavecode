@@ -3,12 +3,12 @@ import { createSignal, createEffect, onCleanup } from 'solid-js';
 const KEY = 'wavecode-ui-state-v1';
 
 type UIState = {
-  replOpen: boolean;
+  aiOpen: boolean;
   statusOpen: boolean;
 };
 
 const defaultState: UIState = {
-  replOpen: true,
+  aiOpen: true,
   statusOpen: true,
 };
 
@@ -16,8 +16,10 @@ const loadState = (): UIState => {
   try {
     const raw = localStorage.getItem(KEY);
     if (!raw) return defaultState;
-    const parsed = JSON.parse(raw) as Partial<UIState>;
-    return { ...defaultState, ...parsed };
+    const parsed = JSON.parse(raw) as Partial<UIState & { replOpen?: boolean }>;
+    // Migrate legacy replOpen → aiOpen.
+    const { replOpen, ...rest } = parsed;
+    return { ...defaultState, ...rest, ...(replOpen !== undefined ? { aiOpen: replOpen } : {}) };
   } catch {
     return defaultState;
   }
@@ -31,7 +33,6 @@ const saveState = (state: UIState) => {
   }
 };
 
-// Singleton state (shared across panels).
 const initial = loadState();
 export const [uiState, setUiState] = createSignal<UIState>(initial);
 
@@ -39,8 +40,8 @@ createEffect(() => {
   saveState(uiState());
 });
 
-export const toggleRepl = (): void => {
-  setUiState((s) => ({ ...s, replOpen: !s.replOpen }));
+export const toggleAI = (): void => {
+  setUiState((s) => ({ ...s, aiOpen: !s.aiOpen }));
 };
 
 export const toggleStatus = (): void => {
@@ -48,13 +49,13 @@ export const toggleStatus = (): void => {
 };
 
 // Keyboard shortcuts (emacs-inspired).
-//   Ctrl+.       → focus REPL (also expands if collapsed)
+//   Ctrl+.       → focus AI textarea (also expands if collapsed)
 //   Ctrl+,       → focus Score editor
-//   Ctrl+Shift+R → toggle REPL
+//   Ctrl+Shift+R → toggle AI
 //   Ctrl+Shift+S → toggle Status
-//   Ctrl+Enter   → eval (handled by REPL via textarea keydown)
+//   Ctrl+Enter   → submit AI instruction
 export const installKeyboardShortcuts = (refs: {
-  focusRepl: () => void;
+  focusAI: () => void;
   focusScore: () => void;
 }): void => {
   const handler = (e: KeyboardEvent) => {
@@ -63,14 +64,14 @@ export const installKeyboardShortcuts = (refs: {
 
     if (e.key === '.') {
       e.preventDefault();
-      if (!uiState().replOpen) toggleRepl();
-      refs.focusRepl();
+      if (!uiState().aiOpen) toggleAI();
+      refs.focusAI();
     } else if (e.key === ',') {
       e.preventDefault();
       refs.focusScore();
     } else if (e.shiftKey && e.key.toLowerCase() === 'r') {
       e.preventDefault();
-      toggleRepl();
+      toggleAI();
     } else if (e.shiftKey && e.key.toLowerCase() === 's') {
       e.preventDefault();
       toggleStatus();

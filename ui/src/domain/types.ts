@@ -26,16 +26,15 @@ export type AppState = {
 };
 
 export const initialAppState: AppState = {
-  // Creep (Radiohead) — простая прогрессия аккордов G→B→C→Cm.
-  // Использует только n("...").s(...).gain(...).lpf(...) — наш LiveAudioEngine
-  // сам парсит regex'ом и играет через OscillatorNode (минует superdough bug).
-  // Без stack/slow — чтобы избежать проблем с transpiler.
+  // Creep (Radiohead) — chord progression G → Bm → C → Cm at ~92 BPM.
+  // Uses Strudel mini-notation: stack of bass + arpeggios + drums.
   score: [
-    '// Creep (Radiohead) — G → B → C → Cm аккорды',
-    'n("55 59 62").s("sawtooth").gain(0.5).lpf(800),',
-    'n("59 62 66").s("sawtooth").gain(0.5).lpf(800),',
-    'n("60 64 67").s("sawtooth").gain(0.5).lpf(800),',
-    'n("60 63 67").s("sawtooth").gain(0.5).lpf(800)',
+    '// Creep (Radiohead) — G → Bm → C → Cm, ~92 BPM',
+    'stack(',
+    '  note("<g2 b2 c3 c3>*2").s("sawtooth").gain(0.35).lpf(400).decay(0.4),',
+    '  n("<[55,59,62]*2 [59,63,66]*2 [60,64,67]*2 [60,63,67]*2>").s("sawtooth").gain(0.18).lpf(1800),',
+    '  s("bd*4, ~ sd ~ sd, hh*8").gain(0.45)',
+    ').slow(2)',
   ].join('\n'),
   messages: [],
   agent: { status: 'idle' },

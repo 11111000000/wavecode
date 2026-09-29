@@ -1,24 +1,24 @@
 import { Layer } from 'effect';
-import { MockLLMClient } from './llm/MockLLMClient';
 import { makeLiveLLMClient } from './llm/LiveLLMClient';
 import { LiveAudioEngine } from './audio/LiveAudioEngine';
-import { MockRepo } from './repo/MockRepo';
+import { IDBRepo } from './repo/IDBRepo';
 import type { AppEnv } from '~/domain/services';
 
 /**
  * Composition Root: собирает все Layers в один AppEnv.
- * LiveAudioEngine — прямой синтез OscillatorNode (обходим superdough bug).
- * makeLiveLLMClient — real @ai-sdk/openai-compatible → llm.kosov.online.
- *   Fallback to MockLLMClient if VITE_LLM_PROXY_KEY is not set.
- * TODO Phase 3: MockRepo → IDBRepo (real IndexedDB).
+ *
+ * LiveLLMClient — raw fetch к llm.kosov.online/v1 (LiteLLM proxy).
+ * LiveAudioEngine — реальный @strudel/webaudio в main thread.
+ * IDBRepo — IndexedDB через idb-keyval (autosave score + messages).
  */
 
+const llmLayer = import.meta.env.VITE_LLM_PROXY_KEY
+  ? makeLiveLLMClient()
+  : (console.warn('[wavecode] VITE_LLM_PROXY_KEY is not set; LLM calls will fail until configured.'),
+    makeLiveLLMClient({ apiKey: '' }));
+
 export const AppLayer: Layer.Layer<AppEnv, never, never> = Layer.mergeAll(
-  // Use real LLM client if key is set, otherwise mock for offline dev.
-  import.meta.env.VITE_LLM_PROXY_KEY
-    ? makeLiveLLMClient()
-    : MockLLMClient,
-  // Pass factory that creates AudioContext on first eval call (lazy)
+  llmLayer,
   LiveAudioEngine,
-  MockRepo,
+  IDBRepo,
 );

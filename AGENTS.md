@@ -21,7 +21,7 @@ README.md       короткое описание
 AGENTS.md       этот файл
 .gitignore      стандартный для Node-проекта
 math/<name>/    пакеты решений (math-coding)
-ui/             браузерный SPA (TypeScript + Effect-TS + React)
+ui/             браузерный SPA (TypeScript + Effect-TS + Solid.js)
 ```
 
 Composer (`~/Projects/Composer/`) — **отдельный backend-проект в другом треде
@@ -30,10 +30,11 @@ Composer (`~/Projects/Composer/`) — **отдельный backend-проект 
 
 ## Стек
 
-- TypeScript (strict), React 18, Zustand (UI-state), CodeMirror 6
+- TypeScript (strict), Solid.js 1.8, solid-js/store (UI-state), CodeMirror 6
 - Effect-TS для архитектурного рантайма (4 слоя: domain / application /
   infrastructure / presentation)
-- Strudel + Tone.js для аудио в браузере (Web Audio API)
-- `@ai-sdk/openai-compatible` для LLM через `llm.kosov.online`
+- Strudel (`@strudel/webaudio`) для аудио в браузере (Web Audio API)
+- raw `fetch` к llm.kosov.online (LiteLLM proxy, OpenAI-compatible)
+- `idb-keyval` для persistence (IndexedDB)
 - Тесты: vitest (unit), playwright (e2e)
 - Никаких Nix-выходов, никакой контейнеризации — фронтенд деплоится как SPA

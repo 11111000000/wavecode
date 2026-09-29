@@ -69,15 +69,17 @@ const make = (deps: LiveLLMClientDeps): Context.Tag.Service<typeof LLMClient> =>
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let buffer = '';
-      // eslint-disable-next-line no-constant-condition
-      while (true) {
-        const { done, value } = yield* Effect.tryPromise(() => reader.read());
-        if (done) break;
-        if (value) {
-          buffer += decoder.decode(value, { stream: true });
+      let done = false;
+      while (!done) {
+        const chunk = yield* Effect.tryPromise(() => reader.read());
+        if (chunk.done) {
+          done = true;
+          break;
+        }
+        if (chunk.value) {
+          buffer += decoder.decode(chunk.value, { stream: true });
         }
       }
-      // Финальный flush
       buffer += decoder.decode();
 
       // Пробуем JSON. Если failed — парсим SSE.
@@ -128,7 +130,6 @@ export const makeLiveLLMClient = (
   const defaultModel = config.defaultModel ?? 'smart';
 
   if (!apiKey) {
-    // eslint-disable-next-line no-console
     console.warn(
       '[wavecode llm] VITE_LLM_PROXY_KEY is not set; LLM calls will fail. Set it in ui/.env.local before building.',
     );

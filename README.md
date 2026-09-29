@@ -4,8 +4,8 @@
 
 Агент на LLM (MiniMax через `llm.kosov.online`) правит score-файл —
 JS-код со Strudel mini-notation — в реальном времени. Пользователь тоже
-может писать/править; Strudel runtime в Web Worker пересчитывает паттерны,
-Tone.js подаёт звук через колонки. Никаких серверов, кроме LLM-прокси.
+может писать/править; Strudel runtime в main thread пересчитывает паттерны
+и играет через Web Audio API. Никаких серверов, кроме LLM-прокси.
 
 ## Архитектура
 
@@ -13,7 +13,7 @@ Tone.js подаёт звук через колонки. Никаких серв
 ┌────────────────────────────────────────────────────┐
 │ Browser (single SPA)                               │
 │                                                    │
-│  React UI ◄────► Agent (Effect-TS)                 │
+│  Solid UI ◄────► Effect Layer DI                   │
 │       │               │                            │
 │       │               ▼                            │
 │       │         LLM Client ────► llm.kosov.online  │
@@ -21,17 +21,20 @@ Tone.js подаёт звук через колонки. Никаких серв
 │  CodeMirror (Strudel mini-notation)               │
 │       │                                             │
 │       ▼                                             │
-│  Strudel runtime (Web Worker) ──► Tone.js ──► audio│
+│  @strudel/webaudio (evalScope + webaudioRepl)     │
+│       │                                             │
+│       ▼                                             │
+│  Web Audio API → speakers                          │
 └────────────────────────────────────────────────────┘
 ```
 
 ## Стек
 
-- TypeScript (strict), Effect-TS, React 18, Zustand, CodeMirror 6
-- `@strudel/core`, `@strudel/webaudio`, `@strudel/mini-notation`, `@strudel/tonal`,
-  `@strudel/transpiler`, `@strudel/serialism`
-- `tone` (Tone.js) для аудио-графа эффектов
-- `@ai-sdk/openai-compatible` → `https://llm.kosov.online/v1`
+- TypeScript (strict), Effect-TS, Solid.js 1.8, solid-js/store, CodeMirror 6
+- `@strudel/core`, `@strudel/webaudio`, `@strudel/mini`, `@strudel/tonal`,
+  `@strudel/transpiler`, `@strudel/serial`
+- raw `fetch` → `https://llm.kosov.online/v1/chat/completions`
+- `idb-keyval` для persistence (score + messages)
 - Тесты: vitest + playwright
 
 ## Структура
@@ -40,16 +43,16 @@ Tone.js подаёт звук через колонки. Никаких серв
 README.md
 AGENTS.md
 math/                     пакеты решений (math-coding)
-ui/                       браузерный SPA
+ui/
 ├── package.json
 ├── tsconfig.json
 ├── vite.config.ts
 ├── index.html
 └── src/
     ├── domain/           чистые типы, схемы, функции
-    ├── application/      use-cases: agentStep, editScore, evalPattern
-    ├── infrastructure/   llm/, audio/, repo/, clock/
-    └── presentation/     React-компоненты
+    ├── application/      use-cases: llmEdit, editScore, buildUserPrompt, cleanLLMResponse
+    ├── infrastructure/   llm/, audio/, repo/
+    └── presentation/     Solid-компоненты
 ```
 
 ## Решения
@@ -59,18 +62,25 @@ ui/                       браузерный SPA
 | Пакет | Статус | Решение |
 |---|---|---|
 | `wavecode-scope` | draft | wavecode — чистофронтовый SPA, без backend |
+| `wavecode-stack-performance` | draft | UI на Solid.js вместо React |
+| `wavecode-strudel-in-browser` | applied | Audio через `@strudel/webaudio` (main thread) |
+| `wavecode-effect-ts-architecture` | applied | Effect-TS как архитектурный рантайм (4 слоя + Layer DI) |
+| `wavecode-codemirror-6` | applied | CodeMirror 6 для редактора (over Monaco) |
+| `wavecode-llm-litellm-proxy` | applied | LLM через llm.kosov.online (LiteLLM), OpenAI-compatible |
+| `wavecode-static-spa-deployment` | applied | Деплой как статический SPA, без Nix/Docker |
+| `wavecode-test-strategy` | applied | vitest + playwright (пирамида) |
+| `wavecode-strict-layering` | applied | ESLint no-restricted-imports per-layer |
 
 ## Старт (dev)
 
 ```sh
-corepack enable
-cd ui && pnpm install && pnpm dev    # http://localhost:5173
+cd ui && npm install && npm run dev   # http://localhost:5173
 ```
 
 ## Деплой
 
 ```sh
-cd ui && pnpm build                  # → ui/dist/
+cd ui && npm run build                  # → ui/dist/
 # загрузить ui/dist/ на любой static-host
 ```
 

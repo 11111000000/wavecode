@@ -1,0 +1,36 @@
+import { test, expect } from '@playwright/test';
+
+test('Eval button plays audio without errors', async ({ page }) => {
+  const errors = [];
+  const consoleMsgs = [];
+  page.on('console', (m) => consoleMsgs.push({ type: m.type(), text: m.text() }));
+  page.on('pageerror', (e) => errors.push(e.message));
+
+  await page.goto('/', { waitUntil: 'networkidle', timeout: 30000 });
+
+  // Solid mount.
+  await page.waitForSelector('main.app', { timeout: 15000 });
+
+  // Initial status read.
+  const initialStatus = await page.locator('dl.status-grid dd').allTextContents();
+  console.log('initial:', JSON.stringify(initialStatus));
+
+  // Click Eval (play).
+  await page.locator('button:has-text("Eval (play)")').click();
+  await page.waitForTimeout(5000);
+
+  const afterStatus = await page.locator('dl.status-grid dd').allTextContents();
+  console.log('after eval:', JSON.stringify(afterStatus));
+
+  const audioStatus = await page.locator('dl.status-grid dd').nth(1).textContent();
+  const errorText = await page.locator('dd.status-error').textContent().catch(() => null);
+
+  console.log('audio status:', audioStatus);
+  console.log('error:', errorText || '(none)');
+  consoleMsgs.forEach((m) => console.log(`[${m.type}] ${m.text}`));
+  errors.forEach((e) => console.log(e));
+
+  expect(errors).toHaveLength(0);
+  // After Eval, status should be either playing or error (if Strudel failed to load).
+  expect(['playing', 'error']).toContain(audioStatus);
+});

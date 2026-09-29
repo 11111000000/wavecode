@@ -11,12 +11,10 @@ import { applyEdit, type DialogTurn } from '~/application/useCases/llmEdit';
  * Workflow:
  *   1. User вводит запрос (например: "сделай быстрее и громче")
  *   2. applyEdit(currentScore, instruction, history) вызывает LLMClient
- *      С историей диалога — LLM помнит контекст (например "это Creep",
- *      "уже есть бас", и т.д.)
- *   3. LLM возвращает новый score (только JS-код)
- *   4. Заменяем score через dispatch({ type: 'replaceScore', text: ... })
- *   5. Автоматически вызываем AudioEngine.eval для воспроизведения
- *   6. Добавляем user/assistant turns в историю
+ *      с историей диалога — LLM помнит контекст.
+ *   3. LLM возвращает новый score (только JS-код).
+ *   4. Replace score в store + добавляем user/assistant turns в history.
+ *   5. Авто-eval через AudioEngine.
  */
 
 export function AIEditPanel() {
@@ -31,39 +29,24 @@ export function AIEditPanel() {
     setBusy(true);
     setStatus({ kind: 'idle', msg: 'Отправляю в ИИ…' });
 
-    // Build history — last 10 turns
     const hist = history().slice(-10);
-    const currentInstruction = text;
 
     try {
       const newScore = await Effect.runPromise(
         Effect.gen(function* () {
-          const result = yield* applyEdit(
-            appStore.score,
-            currentInstruction,
-            hist,
-            {
-              status: appStore.audio.status,
-              ...(appStore.audio.lastError ? { lastError: appStore.audio.lastError } : {}),
-            },
-          );
-          return result;
+          return yield* applyEdit(appStore.score, text, hist, {
+            status: appStore.audio.status,
+            ...(appStore.audio.lastError ? { lastError: appStore.audio.lastError } : {}),
+          });
         }).pipe(Effect.provide(AppLayer)),
       );
 
-      // Replace score in store
       dispatch({ type: 'replaceScore', text: newScore });
+      dispatch({ type: 'assistantMessage', text: newScore });
+      dispatch({ type: 'userMessage', text });
 
-      // Update history: add user + assistant turn
-      setHistory([
-        ...hist,
-        { role: 'user', content: currentInstruction },
-        { role: 'assistant', content: newScore },
-      ]);
+      setHistory([...hist, { role: 'user', content: text }, { role: 'assistant', content: newScore }]);
 
-      dispatch({ type: 'agentStatusChange', status: 'idle' });
-
-      // Auto-eval the new score
       try {
         await Effect.runPromise(
           Effect.gen(function* () {
@@ -74,12 +57,9 @@ export function AIEditPanel() {
         dispatch({ type: 'audioStatusChange', status: 'playing' });
         setStatus({ kind: 'ok', msg: 'Применено и играет ✓' });
       } catch (audioErr) {
-        dispatch({
-          type: 'audioStatusChange',
-          status: 'error',
-          error: audioErr instanceof Error ? audioErr.message : String(audioErr),
-        });
-        setStatus({ kind: 'err', msg: 'ИИ ответил, но ошибка аудио: ' + (audioErr instanceof Error ? audioErr.message : String(audioErr)) });
+        const msg = audioErr instanceof Error ? audioErr.message : String(audioErr);
+        dispatch({ type: 'audioStatusChange', status: 'error', error: msg });
+        setStatus({ kind: 'err', msg: `ИИ ответил, но ошибка аудио: ${msg}` });
       }
 
       setInstruction('');
@@ -94,55 +74,30 @@ export function AIEditPanel() {
     <div class="ai-edit-panel-inner">
       <textarea
         aria-label="Инструкция для ИИ"
+        data-ai-textarea
         placeholder='Например: "сделай быстрее в два раза", "сделай техно-бит", "добавь басов"'
         value={instruction()}
         onInput={(e) => setInstruction(e.currentTarget.value)}
         onKeyDown={(e) => {
           if ((e.key === 'Enter') && (e.ctrlKey || e.metaKey)) {
             e.preventDefault();
-            submit();
+            void submit();
           }
         }}
         rows={2}
-        style={textareaStyle}
+        class="ai-textarea"
       />
-      <div style={{ display: 'flex', gap: '8px', 'margin-top': '8px', 'align-items': 'center' }}>
-        <button type="button" onClick={submit} disabled={busy()}>
+      <div class="ai-controls">
+        <button type="button" onClick={() => void submit()} disabled={busy()}>
           {busy() ? '⏳ Применяю…' : '✦ Применить правку ИИ'}
         </button>
-        <button
-          type="button"
-          disabled={busy()}
-          onClick={() => setInstruction('')}
-        >
+        <button type="button" disabled={busy()} onClick={() => setInstruction('')}>
           Очистить
         </button>
         <Show when={status().msg}>
-          <span style={{
-            color: status().kind === 'err' ? 'var(--err)' :
-                   status().kind === 'ok' ? 'var(--ok)' : 'var(--fg-dim)',
-            'font-size': '11px',
-            'margin-left': 'auto',
-          }}>
-            {status().msg}
-          </span>
+          <span class={`ai-status ai-status-${status().kind}`}>{status().msg}</span>
         </Show>
       </div>
     </div>
   );
 }
-
-const textareaStyle = {
-  width: '100%',
-  background: 'var(--bg-elev)',
-  color: 'var(--fg)',
-  border: '1px solid var(--border)',
-  'border-radius': '4px',
-  padding: '6px 10px',
-  'font-size': '13px',
-  'font-family': 'inherit',
-  resize: 'vertical' as const,
-  'box-sizing': 'border-box' as const,
-  'min-height': '48px',
-  'max-height': '120px',
-};

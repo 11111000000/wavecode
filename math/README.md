@@ -22,10 +22,10 @@
 |---|---|---|---|
 | `wavecode-scope` | draft | none | wavecode — чистофронтовый SPA, без backend |
 | `wavecode-stack-performance` | draft | none | UI на Solid.js вместо React для max performance |
-| `wavecode-strudel-in-browser` | draft | none | Audio через Strudel+Web Audio, без Tidal+SuperDirt |
-| `wavecode-effect-ts-architecture` | draft | none | Effect-TS как архитектурный рантайм (4 слоя + Layer DI) |
-| `wavecode-codemirror-6` | draft | none | CodeMirror 6 для редактора (over Monaco) |
-| `wavecode-llm-litellm-proxy` | draft | none | LLM через llm.kosov.online (LiteLLM), OpenAI-compatible |
-| `wavecode-static-spa-deployment` | draft | none | Деплой как статический SPA, без Nix/Docker |
-| `wavecode-test-strategy` | draft | none | vitest + playwright (пирамида) |
-| `wavecode-strict-layering` | draft | none | ESLint no-restricted-imports per-layer |
+| `wavecode-strudel-in-browser` | applied | none | Audio через `@strudel/webaudio` (main thread, webaudioRepl) |
+| `wavecode-effect-ts-architecture` | applied | none | Effect-TS как архитектурный рантайм (4 слоя + Layer DI) |
+| `wavecode-codemirror-6` | applied | none | CodeMirror 6 для редактора (over Monaco) |
+| `wavecode-llm-litellm-proxy` | applied | none | LLM через llm.kosov.online (LiteLLM), raw fetch |
+| `wavecode-static-spa-deployment` | applied | none | Деплой как статический SPA, без Nix/Docker |
+| `wavecode-test-strategy` | applied | none | vitest + playwright (пирамида) |
+| `wavecode-strict-layering` | applied | none | ESLint no-restricted-imports per-layer |
