@@ -1,4 +1,4 @@
-import { Show } from 'solid-js';
+import { Show, For } from 'solid-js';
 import { Effect } from 'effect';
 import { appStore, dispatch } from '../state/appStore';
 import { AppLayer } from '~/infrastructure/composition';
@@ -49,31 +49,17 @@ export function ScorePanel() {
         onChange={(v) => dispatch({ type: 'replaceScore', text: v })}
       />
 
-      <div style={{ display: 'flex', gap: '8px', 'margin-top': '12px' }}>
-        <button type="button" onClick={evalScore}>
-          ▶ Eval (play)
-        </button>
-        <button type="button" onClick={stopAudio}>
-          ■ Stop
-        </button>
+      <div class="score-controls">
+        <button type="button" onClick={() => void evalScore()}>▶ Eval (play)</button>
+        <button type="button" onClick={() => void stopAudio()}>■ Stop</button>
       </div>
 
       <Show when={appStore.messages.length > 0}>
-        <h3 style={{ 'margin-top': '24px' }}>Messages ({appStore.messages.length})</h3>
-        <ul style={{ 'list-style': 'none', padding: 0, margin: 0 }}>
-          {appStore.messages.map((m) => (
-            <li
-              style={{
-                'border-left': `3px solid ${m.role === 'user' ? 'var(--accent)' : 'var(--ok)'}`,
-                'padding-left': '12px',
-                'margin-bottom': '8px',
-                color: 'var(--fg-dim)',
-                'font-size': '12px',
-              }}
-            >
-              <strong style={{ color: 'var(--fg)' }}>{m.role}:</strong> {m.content}
-            </li>
-          ))}
+        <h3 class="messages-heading">Messages ({appStore.messages.length})</h3>
+        <ul class="messages-list">
+          <For each={appStore.messages}>
+            {(m) => <li class={`message-item message-${m.role}`}><strong>{m.role}:</strong> {m.content}</li>}
+          </For>
         </ul>
       </Show>
     </div>

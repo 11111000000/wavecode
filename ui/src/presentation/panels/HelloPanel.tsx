@@ -17,14 +17,10 @@ export function HelloPanel() {
         <dd>{appStore.messages.length}</dd>
         <Show when={appStore.audio.lastError}>
           <dt>audio error</dt>
-          <dd class="status-error" style={{ 'font-size': '11px', 'word-break': 'break-word' }}>
-            {appStore.audio.lastError}
-          </dd>
+          <dd class="status-error status-error-message">{appStore.audio.lastError}</dd>
         </Show>
       </dl>
-      <p style={{ 'margin-top': '20px', color: 'var(--fg-dim)', 'font-size': '12px' }}>
-        Синтез через n() + s(osc). samples не подгружены.
-      </p>
+      <p class="status-footer">Strudel в браузере, синтез через Web Audio API.</p>
     </div>
   );
 }

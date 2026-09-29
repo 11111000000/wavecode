@@ -118,11 +118,11 @@ kbd {
   overflow: hidden;
 }
 
-.repl-panel {
+.ai-panel {
   background: var(--bg);
 }
 
-.repl-panel[data-open='true'] {
+.ai-panel[data-open='true'] {
   flex: 0 0 auto;
   min-height: 200px;
   max-height: 35vh;
@@ -184,7 +184,7 @@ kbd {
 
 /* Inner padding for panels */
 .score-panel > :not(.panel-header),
-.repl-panel > :not(.panel-header),
+.ai-panel > :not(.panel-header),
 .status-panel > :not(.panel-header) {
   padding: 12px 20px;
   overflow: auto;
@@ -192,66 +192,77 @@ kbd {
   min-height: 0;
 }
 
-/* AI REPL log */
-.repl-log {
+/* AI edit panel */
+.ai-edit-panel-inner {
+  display: flex;
+  flex-direction: column;
+}
+
+.ai-textarea {
+  width: 100%;
+  min-height: 48px;
+  max-height: 120px;
+}
+
+.ai-controls {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+  align-items: center;
+}
+
+.ai-status {
+  font-size: 11px;
+  margin-left: auto;
+  color: var(--fg-dim);
+}
+
+.ai-status-ok { color: var(--ok); }
+.ai-status-err { color: var(--err); }
+
+/* Score panel */
+.score-controls {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.messages-heading {
+  margin-top: 24px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--fg-dim);
+}
+
+.messages-list {
   list-style: none;
   padding: 0;
-  margin: 8px 0 0 0;
-  font-size: 11px;
-  font-family: 'SF Mono', Menlo, monospace;
-  max-height: 200px;
-  overflow-y: auto;
-  border-top: 1px solid var(--border);
-  padding-top: 8px;
+  margin: 0;
 }
 
-.repl-log-row {
-  display: grid;
-  grid-template-columns: auto auto 1fr auto;
-  gap: 6px;
-  padding: 4px 0;
-  border-bottom: 1px solid var(--border);
-  word-break: break-word;
-}
-
-.repl-log-row:last-child {
-  border-bottom: none;
-}
-
-.repl-log-time {
+.message-item {
+  border-left: 3px solid var(--border);
+  padding-left: 12px;
+  margin-bottom: 8px;
   color: var(--fg-dim);
-  font-size: 10px;
-}
-
-.repl-log-icon {
-  font-weight: 700;
-}
-
-.status-ok .repl-log-icon { color: var(--ok); }
-.status-err .repl-log-icon { color: var(--err); }
-.status-busy .repl-log-icon { color: var(--warn); }
-
-.repl-log-instruction {
-  color: var(--fg);
-}
-
-.repl-log-audio {
-  font-size: 10px;
-  padding: 1px 6px;
-  border-radius: 3px;
-  white-space: nowrap;
-}
-
-.repl-log-audio.status-playing { background: rgba(74, 222, 128, 0.15); color: var(--ok); }
-.repl-log-audio.status-stopped { background: rgba(136, 136, 136, 0.15); color: var(--fg-dim); }
-.repl-log-audio.status-error { background: rgba(239, 68, 68, 0.15); color: var(--err); }
-
-.repl-log-error {
-  grid-column: 1 / -1;
-  color: var(--err);
-  font-size: 10px;
-  margin-top: 2px;
+  font-size: 12px;
   word-break: break-word;
+}
+
+.message-item strong { color: var(--fg); }
+.message-user { border-left-color: var(--accent); }
+.message-assistant { border-left-color: var(--ok); }
+
+/* Status panel */
+.status-error-message {
+  font-size: 11px;
+  word-break: break-word;
+}
+
+.status-footer {
+  margin-top: 20px;
+  color: var(--fg-dim);
+  font-size: 12px;
 }
 
 /* CodeMirror host */
@@ -371,7 +382,7 @@ code {
   }
 
   .score-panel > :not(.panel-header),
-  .repl-panel > :not(.panel-header),
+  .ai-panel > :not(.panel-header),
   .status-panel > :not(.panel-header) {
     padding: 8px 12px;
   }

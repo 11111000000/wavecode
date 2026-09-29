@@ -6,7 +6,7 @@
 ## 1. Резюме (thesis)
 
 **wavecode** — браузерный SPA для live-coding музыки с AI-агентом.
-Pure-frontend, чистый Strudel+Web Audio в браузере, без backend, без
+Pure-frontend, реальный Strudel+Web Audio в браузере, без backend, без
 интеграции с `~/Projects/Composer/`.
 
 ```
@@ -14,22 +14,20 @@ Pure-frontend, чистый Strudel+Web Audio в браузере, без backen
 │ Browser (single SPA, Solid.js)                                       │
 │                                                                      │
 │  ┌─────────────────────┐    ┌────────────────────────────────────┐  │
-│  │ React... Solid      │    │ Web Worker (Strudel runtime)       │  │
-│  │ CodeMirror 6        │    │ @strudel/core + @strudel/webaudio  │  │
-│  │ Solid.js 1.8        │    └─────────────┬──────────────────────┘  │
-│  │ Effect-TS runtime   │                  │                         │
-│  └──────────┬──────────┘                  │ pattern events         │
+│  │ Solid.js 1.8        │    │ Main thread (Strudel runtime)       │  │
+│  │ CodeMirror 6        │    │ @strudel/webaudio.evalScope         │  │
+│  │ solid-js/store      │    │ superdough → Web Audio API          │  │
+│  │ Effect-TS runtime   │    └─────────────┬──────────────────────┘  │
+│  └──────────┬──────────┘                  │                         │
 │             │                              ▼                         │
-│             │             ┌────────────────────────────────────┐    │
-│             │             │ Tone.js (effects chain)            │    │
-│             │             │ reverb / delay / filter            │    │
-│             │             └─────────────┬──────────────────────┘    │
-│             │                           │                            │
-│             ▼                           ▼                            │
-│  ┌─────────────────────┐    ┌────────────────────────────────────┐  │
-│  │ LLMClient (AI SDK)  │    │ Web Audio API → speakers            │  │
-│  │ → llm.kosov.online  │    └────────────────────────────────────┘  │
-│  └─────────────────────┘                                             │
+│             │                    ┌───────────────────────────────┐  │
+│             │                    │ Web Audio API → speakers       │  │
+│             │                    └───────────────────────────────┘  │
+│             ▼                                                      │
+│  ┌─────────────────────┐                                          │
+│  │ LLMClient (raw fetch)│                                          │
+│  │ → llm.kosov.online  │                                          │
+│  └─────────────────────┘                                          │
 └──────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -41,7 +39,7 @@ Pure-frontend, чистый Strudel+Web Audio в браузере, без backen
 |---|---|---|
 | 1 | Strudel в браузере слабее Tidal+SuperDirt | Если нужен pro-grade звук — отдельный backend, не Composer |
 | 2 | Pure-frontend = single-user, нет коллабораций | Use case = local live-coding; multi-user вне scope |
-| 3 | Score в IndexedDB = потеряется если браузер очистить | Export/import score через UI (TODO) |
+| 3 | Strudel main-thread eval блокирует UI | Pattern eval <10ms; если станет узким — вынести transpile в Worker |
 | 4 | Effect-TS кривая обучения +50 KB bundle | Чистая архитектура, тестируемость |
 | 5 | LLM-прокси external dependency (llm.kosov.online) | LiteLLM с per-app-ключами, revocable |
 | 6 | Нет SSR — пустой экран 200-500ms | Loading-state в index.html |
@@ -55,14 +53,15 @@ Pure-frontend, чистый Strudel+Web Audio в браузере, без backen
 | **Strudel в браузере** | Низкая латентность, no deps | Менее pro чем Tidal+SuperDirt | 80% patterns покрыто, pro = опциональный backend |
 | **Effect-TS** | Типизированные эффекты, DI, testability | Bundle +50 KB, learning curve | Сложный async flow (LLM+tools+audio) |
 | **CodeMirror 6** | ~200 KB, extensible | Monaco проще в setup | Vanilla API, custom mini-notation extension |
-| **LLM через LiteLLM proxy** | Per-app-ключи, OpenAI-compatible | +latency через proxy | Уже настроено, безопаснее direct API |
+| **Raw fetch LLM** | Нет SDK bloat, прямой контроль | Нет tool calling из коробки | LiteLLM = прямой OpenAI-compatible; tool calling добавим позже если нужно |
+| **IDB persistence** | Score переживает reload | +5 KB bundle | Без этого UX плохой |
 | **Static SPA deploy** | Простой deploy anywhere | Нет SSR | SEO нерелевантен, loading-state OK |
 | **Vitest + Playwright** | Пирамида тестов | E2e flake risk | Domain pure → быстрые unit; e2e для critical |
 | **Strict layering ESLint** | Защита архитектуры | Можно обойти eslint-disable | Testability + заменяемость impl |
 
 ## 4. Roadmap
 
-### Phase 1: Skeleton (сейчас)
+### Phase 1: Skeleton ✅
 ✅ `wavecode-scope` — pure-frontend
 ✅ `wavecode-stack-performance` — Solid.js
 ✅ `wavecode-strudel-in-browser` — Strudel + Web Audio
@@ -73,31 +72,30 @@ Pure-frontend, чистый Strudel+Web Audio в браузере, без backen
 ✅ `wavecode-test-strategy` — vitest + playwright
 ✅ `wavecode-strict-layering` — ESLint rules
 ✅ Configs: vite + tsconfig + eslint + playwright + index.html
-🔲 **TODO**: src/ — 4-layer skeleton + hello-world
-🔲 **TODO**: npm install (фикс dep version conflict)
+✅ src/ — 4-layer skeleton
+✅ npm install
 
-### Phase 2: Agent loop
-🔲 `domain/types.ts` — Score, Message, Tool, AgentState
-🔲 `domain/tools/*.ts` — zod-схемы инструментов
-🔲 `application/reducer.ts` — pure reducer для AppState
-🔲 `application/agentLoop.ts` — orchestration через Effect.gen
-🔲 `infrastructure/llm/LiveLLMClient.ts` — AI SDK integration
-🔲 `infrastructure/audio/StrudelEngine.ts` — Worker RPC
-🔲 `presentation/panels/ChatPanel.tsx` — Solid chat
-🔲 `presentation/components/CodeMirrorEditor.tsx` — vanilla CM6 mount
-🔲 Unit-тесты: domain (10-20), application (5-10)
+### Phase 2: Agent loop ✅
+✅ `domain/types.ts` — Score, Message, AppState
+✅ `domain/tools/editScore.ts` — zod-schemas + applyEdit (pure)
+✅ `application/reducer.ts` — pure reducer для AppState
+✅ `application/useCases/llmEdit.ts` — system prompt + applyEdit orchestration
+✅ `infrastructure/llm/LiveLLMClient.ts` — raw fetch + SSE/JSON parse
+✅ `infrastructure/audio/LiveAudioEngine.ts` — `@strudel/webaudio` wrapper
+✅ `infrastructure/repo/IDBRepo.ts` — IndexedDB persistence
+✅ `presentation/panels/AIEditPanel.tsx` — Solid chat
+✅ `presentation/components/CodeMirrorEditor.tsx` — vanilla CM6 mount
 
-### Phase 3: Effects + Audio
-🔲 `infrastructure/audio/ToneGraph.ts` — reverb/delay chain
-🔲 `infrastructure/repo/IDBRepo.ts` — persistence
-🔲 Strudel mini-notation overlay для CM6
-🔲 E2E тест: edit score → eval → audio plays
+### Phase 3: Polish ✅
+✅ IDBRepo: autosave score + reload
+✅ CodeMirror mini-notation highlight + completions
+✅ E2E тест: edit score → eval → audio plays
+✅ Cleanup: dead code, dead deps, inline styles → CSS
 
-### Phase 4: Polish
+### Phase 4: Future
 🔲 RAG по Strudel-функциям (если нужно)
-🔲 Streaming UX (chunk display)
+🔲 Tool calling через @ai-sdk (вместо whole-score replacement)
 🔲 Concurrent edits (lock или last-write-wins)
-🔲 Export/import score
 🔲 Theme switcher (dark/light)
 🔲 Hot-reload через HMR для Score updates
 
@@ -109,8 +107,8 @@ Pure-frontend, чистый Strudel+Web Audio в браузере, без backen
 2. **Infrastructure = effects.** Всё IO через Layer.
 3. **Presentation не знает про audio/AI/DB.** Только через сервисы.
 4. **Effect-TS — для всех асинхронных операций.** Никакого raw fetch/eval в components.
-5. **Score = JS-файл с Strudel mini-notation.** Не Haskell, не YAML.
-6. **Деплой = `pnpm build` → `dist/`.** Никаких Nix-выходов.
+5. **Score = JS-файл со Strudel mini-notation.** Не Haskell, не YAML.
+6. **Деплой = `npm run build` → `dist/`.** Никаких Nix-выходов.
 7. **LLM через llm.kosov.online.** Per-app Bearer-ключ.
 
 ## 6. Открытые вопросы (для будущих пакетов)
@@ -118,9 +116,8 @@ Pure-frontend, чистый Strudel+Web Audio в браузере, без backen
 | Вопрос | Когда решать |
 |---|---|
 | RAG по Strudel: нужен или нет? | Phase 4, после eval первых 20+ функций |
-| Streaming UX: raw или buffer? | Phase 2, при имплементации agentLoop |
+| Tool calling: добавить или оставить whole-score replacement? | Phase 4, если качество LLM-edit упадёт |
 | Concurrent edits: lock или CRDT? | Phase 4, если планируется multi-tab |
-| Export/import score: формат? | Phase 3, при persistence |
 | Theme: какие цвета/типографика? | Phase 4, перед релизом |
 
 ## 7. Что НЕ входит

@@ -31,7 +31,6 @@ export default defineConfig({
             '@strudel/transpiler',
             '@strudel/serial',
           ],
-          audio: ['tone'],
           codemirror: [
             '@codemirror/state',
             '@codemirror/view',
@@ -42,7 +41,6 @@ export default defineConfig({
             '@codemirror/lint',
           ],
           effect: ['effect', '@effect/schema', '@effect/platform', '@effect/platform-browser'],
-          ai: ['ai', '@ai-sdk/openai-compatible'],
         },
       },
     },

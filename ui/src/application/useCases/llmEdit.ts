@@ -7,7 +7,7 @@ import { LLMClient } from '~/domain/services';
  */
 export const SYSTEM_PROMPT = [
   'Ты — wavecode, AI-ассистент для live-coding музыки в Strudel (https://strudel.cc).',
-  'Strudel — это JavaScript-порт TidalCycles, работающий в браузере через Web Audio API.',
+  'Strudel — JS-порт TidalCycles в браузере через Web Audio API.',
   '',
   '=== ГЛАВНОЕ: ТЫ РЕДАКТИРУЕШЬ, А НЕ СОЗДАЁШЬ С НУЛЯ ===',
   'В каждом user prompt тебе передаётся ТЕКУЩИЙ SCORE пользователя.',
@@ -21,36 +21,37 @@ export const SYSTEM_PROMPT = [
   '2. Никакого markdown, никаких преамбул, никаких <think>блоков. Только JS.',
   '3. Сохрани все существующие ноты/аккорды, которые не упомянуты в инструкции.',
   '',
-  'СИНТАКСИС (минимально необходимое):',
-  '- n("43 43 43") — три MIDI-ноты подряд в одном цикле',
-  '- n("[55,59,62]") — аккорд (три ноты одновременно)',
-  '- n("<55 59 62>") — последовательность (55 потом 59 потом 62)',
-  '- note("c4") — одна статичная нота (для одной MIDI ноты)',
-  '- .s("sine"/"sawtooth"/"square"/"triangle") — обязательно! Без .s() тишина',
-  '- .gain(0..1) — громкость',
-  '- .lpf(hz) — low-pass фильтр',
+  'СИНТАКСИС Strudel:',
+  '- note("c4") — нота по имени. Можно числами (MIDI: 55=G3, 60=C4, 67=G4) или именами (c4, eb5, f#3).',
+  '- n("...") — MIDI числа.',
+  '- s("bd sd hh") — сэмплы по имени. Drum-сэмплы Strudel (bd, sd, hh, oh, cp) работают.',
+  '- .s("sawtooth"|"sine"|"square"|"triangle") — выбор синтезатора. БЕЗ .s() тишина.',
+  '- .gain(0..1) — громкость, .lpf(hz) — low-pass, .decay(s) — огибающая.',
   '',
-  'Ноты можно указывать числами (MIDI: 55=G3, 60=C4, 67=G4) или именами (c4, eb5).',
+  'Mini-notation (внутри кавычек):',
+  '- "[a b c]" — три ноты ОДНОВРЕМЕННО (аккорд)',
+  '- "<a b c>" — последовательность по шагам цикла (один шаг = одна нота)',
+  '- "*n" — повторить n раз',
+  '- "~" — пауза',
+  '- "a, b c" — несколько параллельных голосов в одном pattern (polyphony)',
   '',
-  'СОЕДИНЯТЬ МОЖНО через stack(...):',
-  '  stack(n("55 59 62").s("sawtooth"), n("67 71 74").s("sine"))',
-  '',
-  'ИСПОЛЬЗУЙ ТОЛЬКО ВСТРОЕННЫЕ СИНТЕЗАТОРЫ (sine/sawtooth/square/triangle).',
-  'Drum-сэмплы (bd, sd, hh) НЕ работают. Если нужны ударные — используй короткие',
-  'триггерные ноты или square wave на 0.05s.',
+  'Композиция:',
+  '- stack(pat1, pat2, ...) — наложить patterns',
+  '- .slow(2) — замедлить в 2 раза, .fast(2) — ускорить',
+  '- .every(n, fn) — применять fn каждый n-ый цикл',
+  '- .sometimes(fn) — применять fn в 50% циклов',
+  '- .jux(fn) — применить fn к правому каналу',
   '',
   'ПРИМЕРЫ ПРАВИЛЬНЫХ ОТВЕТОВ:',
   'User: "добавь бас"',
-  '  Возьми текущий score, добавь в начало bass pattern:',
-  '  stack(n("43 43").s("triangle").gain(0.4).lpf(400), <current_score>)',
+  '  Возьми текущий score, добавь bass через stack(...):',
+  '  stack(<current_score>, note("g2 b2 c3 c3").s("sawtooth").gain(0.4).lpf(400).slow(2))',
   '',
   'User: "сделай быстрее"',
-  '  Добавь .fast(2) к существующим n():',
-  '  n("55 59 62").s("sawtooth").fast(2)',
+  '  Добавь .fast(2) к существующим patterns.',
   '',
   'User: "добавь гармонию"',
-  '  Добавь ещё один аккорд выше:',
-  '  n("67 71 74").s("sine").gain(0.3).lpf(2000)',
+  '  Расширь арпеджио вверх через <...>*2 с добавленной октавой.',
   '',
   'User: "убери бас"',
   '  Удали только bass pattern, оставь аккорды как есть.',
@@ -104,38 +105,33 @@ export const buildUserPrompt = (
 export const cleanLLMResponse = (raw: string): string => {
   let s = raw.trim();
 
-  // 1. Сначала — полностью сбалансированные <think>...</think> пары
+  // 1. Balanced <think>...</think> блоки (DeepSeek-style reasoning).
   s = s.replace(/<think>[\s\S]*?<\/think>/gi, '');
 
-  // 2. Несбалансированный <think> без закрытия: удалить от <think> до конца
-  //    (LLM мог не дописать ответ из-за лимита max_tokens)
+  // 2. Unbalanced <think> без закрытия: модель оборвалась на reasoning — ответ ненадёжный.
+  //    Возвращаем пустую строку, чтобы caller залогировал ошибку.
   if (/<think>/i.test(s)) {
-    const openIdx = s.indexOf('<think>');
-    s = s.slice(0, openIdx);
+    return '';
   }
 
-  // 3. Strip markdown code fences at the start.
-  const fenceStartMatch = s.match(/^```(?:js|javascript|ts|typescript|strudel)?\s*\n/i);
-  if (fenceStartMatch) {
-    s = s.slice(fenceStartMatch[0].length);
-  }
-
-  // 4. Strip trailing code fence.
-  const fenceEndMatch = s.match(/\n```\s*$/);
-  if (fenceEndMatch) {
-    s = s.slice(0, fenceEndMatch.index);
-  }
-
-  // 5. Strip leading "Here is..." or similar preamble.
+  // 3. Strip leading "Here is..." preamble (до fence, иначе regex не сматчит).
   s = s.replace(
     /^(?:here['']?s?\s+(?:is\s+)?(?:the|your)?\s*(?:updated|new)?\s*(?:score|code)?:?\s*\n+)/i,
     '',
   );
 
-  // 6. Strip trailing explanations like "This will play..." or "This adds...".
-  // Try to find the LAST actual code line — heuristic: stop at the
-  // closing paren of the last n()/note() call, OR keep as-is.
-  // For now, just trim and return.
+  // 4. Strip markdown code fence at start.
+  const fenceStartMatch = s.match(/^```(?:js|javascript|ts|typescript|strudel)?\s*\n/i);
+  if (fenceStartMatch) {
+    s = s.slice(fenceStartMatch[0].length);
+  }
+
+  // 5. Strip trailing code fence.
+  const fenceEndMatch = s.match(/\n```\s*$/);
+  if (fenceEndMatch) {
+    s = s.slice(0, fenceEndMatch.index);
+  }
+
   return s.trim();
 };
 

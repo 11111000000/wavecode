@@ -1,9 +1,13 @@
-import { Show, onMount } from 'solid-js';
+import { Show, onMount, createEffect } from 'solid-js';
+import { Effect } from 'effect';
 import { HelloPanel } from './presentation/panels/HelloPanel';
 import { ScorePanel } from './presentation/panels/ScorePanel';
-import { ReplPanel } from './presentation/panels/ReplPanel';
+import { AIEditPanel } from './presentation/panels/AIEditPanel';
 import { DebugPanel } from './presentation/panels/DebugPanel';
-import { uiState, toggleRepl, toggleStatus, installKeyboardShortcuts } from './presentation/state/uiState';
+import { uiState, toggleAI, toggleStatus, installKeyboardShortcuts } from './presentation/state/uiState';
+import { appStore, dispatch } from './presentation/state/appStore';
+import { AppLayer } from '~/infrastructure/composition';
+import { Repo } from '~/domain/services';
 import { ensureAudioLoaded } from '~/infrastructure/audio/LiveAudioEngine';
 
 function CollapsibleHeader(props: {
@@ -14,7 +18,7 @@ function CollapsibleHeader(props: {
   ariaLabel: string;
 }) {
   return (
-    <header class="panel-header" onClick={props.onToggle}>
+    <header class="panel-header" onClick={() => props.onToggle()}>
       <span class="collapse-toggle" aria-expanded={props.open} aria-label={props.ariaLabel}>
         <span class="caret">{props.open ? '▾' : '▸'}</span>
         <h2>{props.title}</h2>
@@ -25,16 +29,37 @@ function CollapsibleHeader(props: {
 }
 
 export function App() {
-  // Eagerly bootstrap Strudel globals on app mount so LLM-returned snippets
-  // (which arrive via new Function() before any user-initiated eval) can find
-  // `n`, `note`, `s` etc. on globalThis.
+  // Eagerly bootstrap Strudel runtime so LLM-returned snippets work on first edit.
   onMount(() => {
     void ensureAudioLoaded();
+    // Restore score from IDB on startup (debounced via promise).
+    void Effect.runPromise(
+      Effect.gen(function* () {
+        const repo = yield* Repo;
+        const saved = yield* repo.loadScore();
+        if (saved) dispatch({ type: 'replaceScore', text: saved });
+      }).pipe(Effect.provide(AppLayer)),
+    );
+  });
+
+  // Autosave score on change (debounced).
+  let saveTimer: number | undefined;
+  createEffect(() => {
+    const score = appStore.score;
+    if (saveTimer !== undefined) window.clearTimeout(saveTimer);
+    saveTimer = window.setTimeout(() => {
+      void Effect.runPromise(
+        Effect.gen(function* () {
+          const repo = yield* Repo;
+          yield* repo.saveScore(score);
+        }).pipe(Effect.provide(AppLayer)),
+      );
+    }, 500);
   });
 
   installKeyboardShortcuts({
-    focusRepl: () => {
-      const ta = document.querySelector<HTMLTextAreaElement>('[data-repl-textarea]');
+    focusAI: () => {
+      const ta = document.querySelector<HTMLTextAreaElement>('[data-ai-textarea]');
       ta?.focus();
     },
     focusScore: () => {
@@ -51,7 +76,7 @@ export function App() {
           <span class="app-subtitle">live-coding · AI · Strudel</span>
         </div>
         <span class="app-hints">
-          <kbd>Ctrl</kbd>+<kbd>.</kbd> REPL · <kbd>Ctrl</kbd>+<kbd>↵</kbd> eval
+          <kbd>Ctrl</kbd>+<kbd>.</kbd> AI · <kbd>Ctrl</kbd>+<kbd>↵</kbd> eval
         </span>
       </header>
       <div class="app-body">
@@ -66,16 +91,16 @@ export function App() {
           <ScorePanel />
         </section>
 
-        <section class="repl-panel collapsible" data-open={uiState().replOpen}>
+        <section class="ai-panel collapsible" data-open={uiState().aiOpen}>
           <CollapsibleHeader
-            title="REPL"
-            open={uiState().replOpen}
-            onToggle={toggleRepl}
+            title="AI"
+            open={uiState().aiOpen}
+            onToggle={toggleAI}
             hint="Ctrl+. · Ctrl+↵"
-            ariaLabel="REPL panel"
+            ariaLabel="AI edit panel"
           />
-          <Show when={uiState().replOpen}>
-            <ReplPanel />
+          <Show when={uiState().aiOpen}>
+            <AIEditPanel />
           </Show>
         </section>
 

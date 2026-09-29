@@ -36,7 +36,7 @@ export function CodeMirrorEditor(props: Props) {
         miniNotationHighlight,
         autocompletion({ override: [strudelCompletions] }),
         EditorView.updateListener.of((u) => {
-          if (u.docChanged) props.onChange(u.state.doc.toString());
+          if (u.docChanged) untrack(() => props.onChange(u.state.doc.toString()));
         }),
       ],
     });

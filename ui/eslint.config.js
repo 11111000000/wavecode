@@ -4,7 +4,7 @@ import solid from 'eslint-plugin-solid';
 
 export default [
   {
-    ignores: ['dist/**', 'node_modules/**', 'playwright-report/**', 'test-results/**'],
+    ignores: ['dist/**', 'node_modules/**', 'playwright-report/**', 'test-results/**', 'tests/**'],
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,
