@@ -12,9 +12,10 @@ describe('cleanLLMResponse', () => {
     expect(cleanLLMResponse(raw)).toBe('stack(s("bd"))');
   });
 
-  it('returns empty when <think> is unbalanced (LLM ran out of tokens)', () => {
-    const raw = '<think>reasoning without close\nstack(s("bd"))';
-    expect(cleanLLMResponse(raw)).toBe('');
+  it('returns whatever came before <think> when unbalanced (LLM ran out of tokens)', () => {
+    const raw = 'note("c4").s("sine")\n<think>reasoning without close\nstack(s("bd"))';
+    const result = cleanLLMResponse(raw);
+    expect(result).toContain('note("c4")');
   });
 
   it('strips leading ```js code fence', () => {
