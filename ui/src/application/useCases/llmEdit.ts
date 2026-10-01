@@ -7,57 +7,85 @@ import { LLMClient } from '~/domain/services';
  */
 export const SYSTEM_PROMPT = [
   'Ты — wavecode, AI-ассистент для live-coding музыки в Strudel (https://strudel.cc).',
-  'Strudel — JS-порт TidalCycles в браузере через Web Audio API.',
+  'Strudel — JS-порт TidalCycles, работает в браузере через Web Audio API.',
   '',
-  '=== ГЛАВНОЕ: ТЫ РЕДАКТИРУЕШЬ, А НЕ СОЗДАЁШЬ С НУЛЯ ===',
-  'В каждом user prompt тебе передаётся ТЕКУЩИЙ SCORE пользователя.',
-  'Твоя задача — МОДИФИЦИРОВАТЬ его в соответствии с инструкцией.',
-  'ОСТАВЬ НЕИЗМЕННЫМ всё, что пользователь НЕ просил менять.',
-  'Измени ТОЛЬКО ту часть, которая относится к его инструкции.',
+  '=== ГЛАВНОЕ ПРАВИЛО: СОХРАНЯЙ СУЩЕСТВУЮЩЕЕ, ДОБАВЛЯЙ НОВОЕ ===',
+  'Текущий score пользователя — это БАЗА. Ты НЕ переписываешь его с нуля.',
+  'Каждый pattern, который был в текущем score и НЕ упомянут в инструкции,',
+  'ДОЛЖЕН присутствовать в твоём ответе БЕЗ ИЗМЕНЕНИЙ (можно обернуть в stack).',
+  '',
+  'ПРАВИЛА РЕДАКТИРОВАНИЯ:',
+  '• "добавь X" → ОБЕРНИ существующее в stack(...) и добавь X. НЕ трогай остальное.',
+  '• "убери X" → удали только X, остальное оставь как было.',
+  '• "измени X" → измени только X, остальное копируй ПОСИМВОЛЬНО из текущего.',
+  '• "сделай быстрее/громче/медленнее" → добавь .fast()/.gain()/.slow() к существующему.',
   '',
   'ПРАВИЛА ВЫВОДА:',
   '1. Верни ПОЛНЫЙ финальный score (не diff, не фрагмент).',
-  '   Текущий score как БАЗА + твоя правка = полный новый score.',
-  '2. Никакого markdown, никаких преамбул, никаких <think>блоков. Только JS.',
-  '3. Сохрани все существующие ноты/аккорды, которые не упомянуты в инструкции.',
+  '2. Никакого markdown, преамбул, <think>блоков. Только JS.',
   '',
-  'СИНТАКСИС Strudel:',
-  '- note("c4") — нота по имени. Можно числами (MIDI: 55=G3, 60=C4, 67=G4) или именами (c4, eb5, f#3).',
-  '- n("...") — MIDI числа.',
-  '- s("bd sd hh") — сэмплы по имени. Drum-сэмплы Strudel (bd, sd, hh, oh, cp) работают.',
-  '- .s("sawtooth"|"sine"|"square"|"triangle") — выбор синтезатора. БЕЗ .s() тишина.',
-  '- .gain(0..1) — громкость, .lpf(hz) — low-pass, .decay(s) — огибающая.',
+  '=== СИНТАКСИС Strudel ===',
   '',
   'Mini-notation (внутри кавычек):',
-  '- "[a b c]" — три ноты ОДНОВРЕМЕННО (аккорд)',
-  '- "<a b c>" — последовательность по шагам цикла (один шаг = одна нота)',
-  '- "*n" — повторить n раз',
-  '- "~" — пауза',
-  '- "a, b c" — несколько параллельных голосов в одном pattern (polyphony)',
+  '  "55 59 62"      — sequence (3 ноты по очереди, каждая 1/3 цикла)',
+  '  "[55,59,62]"    — chord (3 ноты ОДНОВРЕМЕННО)',
+  '  "<a b c d>"     — sequence из 4 шагов в цикл',
+  '  "~"             — пауза (rest)',
+  '  "*n"            — повторить n раз (например "55*4")',
+  '  "a, b c"        — параллельные голоса (polyphony)',
+  '',
+  'Основные функции:',
+  '  note("c4") / note("55 59 62")  — нота по имени или MIDI числами',
+  '  n("...")                       — то же что note(), но только MIDI числа',
+  '  s("sawtooth")                 — форма волны (sine/sawtooth/square/triangle)',
+  '  s("sbd")                      — синтезированный bass drum (РАБОТАЕТ ВСЕГДА)',
+  '  sbd — единственный синтезированный ударный в Strudel по умолчанию.',
+  '  ⚠️ НЕ используй bd/sd/hh/oh/cp — это sample-based, требуют сеть.',
+  '  .gain(0..1)   — громкость',
+  '  .lpf(hz)      — low-pass фильтр',
+  '  .slow(n)      — замедлить в n раз',
+  '  .fast(n)      — ускорить в n раз',
+  '  .decay(s)     — огибающая затухания',
   '',
   'Композиция:',
-  '- stack(pat1, pat2, ...) — наложить patterns',
-  '- .slow(2) — замедлить в 2 раза, .fast(2) — ускорить',
-  '- .every(n, fn) — применять fn каждый n-ый цикл',
-  '- .sometimes(fn) — применять fn в 50% циклов',
-  '- .jux(fn) — применить fn к правому каналу',
+  '  stack(pat1, pat2, ...) — параллельные дорожки (chords + bass + drums)',
   '',
-  'ПРИМЕРЫ ПРАВИЛЬНЫХ ОТВЕТОВ:',
-  'User: "добавь бас"',
-  '  Возьми текущий score, добавь bass через stack(...):',
-  '  stack(<current_score>, note("g2 b2 c3 c3").s("sawtooth").gain(0.4).lpf(400).slow(2))',
+  '=== ПРИМЕРЫ: ADDITIVE EDITING ===',
+  '',
+  'Текущий score (для примеров):',
+  '  note("<[55,59,62] [59,63,66] [60,64,67] [60,63,67]>").s("sawtooth").gain(0.4)',
+  '',
+  'User: "добавь басовую линию"',
+  '  Правильный ответ:',
+  '  stack(',
+  '    note("<[55,59,62] [59,63,66] [60,64,67] [60,63,67]>").s("sawtooth").gain(0.4),',
+  '    note("<g2 b2 c3 c3>").s("sawtooth").gain(0.35).lpf(400)',
+  '  )',
+  '',
+  'User: "добавь бит (drum pattern)"',
+  '  Правильный ответ:',
+  '  stack(',
+  '    note("<[55,59,62] [59,63,66] [60,64,67] [60,63,67]>").s("sawtooth").gain(0.4),',
+  '    s("sbd*4").gain(0.5)',
+  '  )',
+  '',
+  'User: "добавь простую мелодию на октаву выше"',
+  '  Правильный ответ:',
+  '  stack(',
+  '    note("<[55,59,62] [59,63,66] [60,64,67] [60,63,67]>").s("sawtooth").gain(0.4),',
+  '    note("<67 71 74 72>").s("sine").gain(0.2)',
+  '  )',
   '',
   'User: "сделай быстрее"',
-  '  Добавь .fast(2) к существующим patterns.',
+  '  Правильный ответ (добавь .fast(2) к существующему):',
+  '  note("<[55,59,62] [59,63,66] [60,64,67] [60,63,67]>").s("sawtooth").gain(0.4).fast(2)',
   '',
-  'User: "добавь гармонию"',
-  '  Расширь арпеджио вверх через <...>*2 с добавленной октавой.',
+  'User: "добавь reverb"',
+  '  Правильный ответ (добавь .room(.5) к существующему):',
+  '  note("<[55,59,62] [59,63,66] [60,64,67] [60,63,67]>").s("sawtooth").gain(0.4).room(.5)',
   '',
-  'User: "убери бас"',
-  '  Удали только bass pattern, оставь аккорды как есть.',
-  '',
-  'Если инструкция вообще не относится к music score — всё равно верни',
-  'ТЕКУЩИЙ score без изменений (только если вообще невозможно сохранить).',
+  '=== ПОСЛЕДНЕЕ ===',
+  'Если инструкция не относится к music — верни ТЕКУЩИЙ score без изменений.',
 ].join('\n');
 
 /**
@@ -102,16 +130,26 @@ export const buildUserPrompt = (
  * Работает с потенциально ОБОРВАННЫМИ reasoning-блоками (если LLM
  * превысил max_tokens при длинном thinking).
  */
+/**
+ * Чистит ответ LLM от markdown/thinking блоков.
+ * Возвращает cleaned строку. Если после чистки ничего не осталось — возвращает
+ * raw (trimmed) чтобы caller видел что LLM вообще вернул, а не "пустой ответ".
+ *
+ * Извлечение кода из prose: если LLM дал ответ вроде "Here's the code:\n<code>"
+ * (без code fence), пытаемся найти pattern-блок и вернуть только его.
+ */
 export const cleanLLMResponse = (raw: string): string => {
-  let s = raw.trim();
+  const trimmed = raw.trim();
+  let s = trimmed;
 
   // 1. Balanced <think>...</think> блоки (DeepSeek-style reasoning).
   s = s.replace(/<think>[\s\S]*?<\/think>/gi, '');
 
-  // 2. Unbalanced <think> без закрытия: модель оборвалась на reasoning — ответ ненадёжный.
-  //    Возвращаем пустую строку, чтобы caller залогировал ошибку.
+  // 2. Unbalanced <think> без закрытия: модель оборвалась на reasoning.
+  //    Пробуем извлечь что было ДО <think> (если LLM начала с кода, потом стала думать).
   if (/<think>/i.test(s)) {
-    return '';
+    const before = s.slice(0, s.indexOf('<think>')).trim();
+    s = before;
   }
 
   // 3. Strip leading "Here is..." preamble (до fence, иначе regex не сматчит).
@@ -132,7 +170,25 @@ export const cleanLLMResponse = (raw: string): string => {
     s = s.slice(0, fenceEndMatch.index);
   }
 
-  return s.trim();
+  const cleaned = s.trim();
+
+  // Если после чистки ничего не осталось — fallback на raw trimmed.
+  // Caller увидит хоть что-то и сможет понять что LLM вернул.
+  if (!cleaned) return trimmed;
+
+  // Если cleaned выглядит как prose (нет ни одной строчки похожей на JS),
+  // пробуем найти pattern-блок между ```...``` или просто строку с `note(`/`s(`/`stack(`.
+  const hasJsHint = /(\bstack\s*\(|\bnote\s*\(|\bs\s*\(|\.gain|\.slow|\.fast|\.s\s*\()/.test(cleaned);
+  if (!hasJsHint) {
+    const fenced = raw.match(/```(?:js|javascript|ts|typescript|strudel)?\s*\n([\s\S]*?)\n```/i);
+    if (fenced && fenced[1]) return fenced[1].trim();
+    const noteMatch = raw.match(/(note\s*\([^)]*\.[\s\S]*)/);
+    if (noteMatch && noteMatch[1]) return noteMatch[1].trim();
+    // Без шансов — возвращаем cleaned (caller сам разберётся)
+    return cleaned;
+  }
+
+  return cleaned;
 };
 
 /**
@@ -154,6 +210,7 @@ export const applyEdit = (
   instruction: string,
   history: ReadonlyArray<DialogTurn> = [],
   audioState: { status: string; lastError?: string } = { status: 'unknown' },
+  options: { model?: 'smart' | 'fast'; thinking?: 'low' | 'high' | 'off' } = {},
 ): Effect.Effect<string, Error | string, LLMClient> =>
   Effect.gen(function* () {
     const llm = yield* LLMClient;
@@ -177,7 +234,8 @@ export const applyEdit = (
     ];
 
     const stream = yield* llm.streamCompletion({
-      model: 'smart',
+      model: options.model ?? 'smart',
+      thinking: options.thinking ?? 'low',
       systemPrompt: SYSTEM_PROMPT,
       messages,
     });
@@ -199,5 +257,15 @@ export const applyEdit = (
       catch: () => undefined,
     }).pipe(Effect.ignore);
 
-    return cleanLLMResponse(raw);
+    // Stash raw response on globalThis so UI может показать что LLM ответил
+    // при ошибках (например "ИИ вернул пустой ответ").
+    (window as unknown as { __wavecodeLastRaw?: string }).__wavecodeLastRaw = raw;
+
+    const cleaned = cleanLLMResponse(raw);
+    console.log('[wavecode/applyEdit] raw length:', raw.length, 'cleaned length:', cleaned.length);
+    return cleaned;
   });
+
+/** Last raw LLM response (для отладки/UI). */
+export const getLastRawLLMResponse = (): string =>
+  (window as unknown as { __wavecodeLastRaw?: string }).__wavecodeLastRaw ?? '';
