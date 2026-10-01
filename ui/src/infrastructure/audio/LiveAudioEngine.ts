@@ -217,17 +217,26 @@ const ensureRepl = (audioCtx: AudioContext): Promise<ReplHandle> => {
 export const LiveAudioEngine: Layer.Layer<AudioEngine, never, never> = Layer.succeed(
   AudioEngine,
   {
-    eval: (snippet: string) =>
+eval: (snippet: string) =>
       Effect.tryPromise({
         try: async () => {
           const audioCtx = (window as unknown as { __wavecodeAudioCtx?: AudioContext }).__wavecodeAudioCtx
             ?? unlockAudioContext();
           const repl = await ensureRepl(audioCtx);
+          // Stop the in-flight scheduler first so the previous pattern
+          // does NOT keep playing one more cycle after the new one is
+          // loaded. Without this, switching presets while audio was playing
+          // leaves the user listening to the previous score for one cycle.
+          await Promise.resolve();
+          repl.stop();
+          // AudioContext itself stays alive (do not call suspend — preserve
+          // user-gesture state for subsequent context-stable resumes).
+          if (audioCtx.state === 'suspended') await audioCtx.resume();
           await repl.evaluate(snippet);
         },
         catch: (err) => {
           const msg = err instanceof Error ? err.message : String(err);
-          console.error('[wavecode/LiveAudioEngine.eval]', msg);
+          console.error('[wavecode/LiveAudioEngine.eval]', msg, err);
           return new Error(`eval failed: ${msg}`);
         },
       }),
