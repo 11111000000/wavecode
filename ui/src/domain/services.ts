@@ -12,6 +12,8 @@ export type CompletionRequest = {
   readonly messages: ReadonlyArray<Message>;
   readonly model: 'smart' | 'fast';
   readonly systemPrompt?: string;
+  /** 'low' = fast/minimal thinking, 'high' = deep thinking, 'off' = disabled. */
+  readonly thinking?: 'low' | 'high' | 'off';
 };
 
 export type CompletionChunk = {
