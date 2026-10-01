@@ -107,7 +107,7 @@ export const evalSnippet = (
 | `LLMClient` | `@ai-sdk/openai-compatible` → `llm.kosov.online/v1` | `infrastructure/llm/LiveLLMClient.ts` |
 | `AudioEngine` | `@strudel/core` + `@strudel/webaudio` в Web Worker | `infrastructure/audio/StrudelEngine.ts` |
 | `ToneGraph` | `tone` для эффектов (reverb/delay/filter) | `infrastructure/audio/ToneGraph.ts` |
-| `Repo` | IndexedDB (`idb-keyval`) | `infrastructure/repo/IDBRepo.ts` |
+| `Repo` | `idb-keyval` (`IDBRepo`) | `infrastructure/repo/IDBRepo.ts` |
 | `Clock` | `Effect Clock` | `infrastructure/clock/ClockLive.ts` |
 
 Каждый экспортирует `Layer.succeed(Service, impl)` или `Layer.effect(...)`.
@@ -287,6 +287,132 @@ export const editScoreTool = {
 
 Расширение — добавить файл в `domain/tools/`, без правок агента.
 
+### 3.3. Presets & Custom Score Persistence
+
+Score в wavecode — либо один из **8 встроенных пресетов**, либо пользовательская
+заготовка, либо черновик, который автоматически сохраняется в IndexedDB.
+
+**Встроенные пресеты** — `domain/presets.ts`, массив `BUILTIN_PRESETS`:
+
+| id | name | artist |
+|---|---|---|
+| `creep` | Creep | Radiohead |
+| `seven-nation-army` | Seven Nation Army | White Stripes |
+| `fur-elise` | Für Elise | Beethoven |
+| `smoke-on-the-water` | Smoke on the Water | Deep Purple |
+| `house-of-the-rising-sun` | House of the Rising Sun | Traditional |
+| `let-it-be-style` | Let It Be (chords) | Beatles-style |
+| `wonderwall-style` | Wonderwall (chords) | Oasis-style |
+| `mary-had-a-little-lamb` | Mary Had a Little Lamb | Traditional |
+
+Каждый пресет — `stack(bass, arpeggio, chords, drums)`, замкнутый в один цикл
+`.slow(2)` (≈4 сек, rock tempo). Структура одного пресета — тип `Preset`
+(`domain/presets.ts:16`):
+
+```ts
+type Preset = {
+  readonly id: string;
+  readonly name: string;
+  readonly artist?: string;
+  readonly score: string;
+  readonly custom?: boolean;
+};
+```
+
+**Custom пресеты** живут в `presentation/state/presetsStore.ts`. Хранилище —
+`localStorage` под ключом `wavecode-custom-presets-v1`. API:
+
+- `allPresets()` — встроенные + пользовательские;
+- `getPreset(id)` — найти по id;
+- `saveCustomPreset(name, score)` — добавить с id `custom-<base36-timestamp>`;
+- `deleteCustomPreset(id)` — удалить custom-пресет;
+- `resetAllBrowserData()` — очистить все ключи `wavecode-*` (UI-state, LLM-settings,
+  custom-presets).
+
+**Autosave score** — дебаунс 500 мс в `App.tsx`:
+
+```tsx
+// ui/src/App.tsx:63-74
+createEffect(() => {
+  const score = appStore.score;
+  if (saveTimer !== undefined) window.clearTimeout(saveTimer);
+  saveTimer = window.setTimeout(() => {
+    void Effect.runPromise(
+      Effect.gen(function* () {
+        const repo = yield* Repo;
+        yield* repo.saveScore(score);
+      }).pipe(Effect.provide(AppLayer)),
+    );
+  }, 500);
+});
+```
+
+`onMount` зеркально читает последний score и `dispatch({ type: 'replaceScore', text: saved })`
+(`App.tsx:51-60`). Хранилище — IndexedDB через `idb-keyval` в
+`infrastructure/repo/IDBRepo.ts`, ключи `wavecode-score-v5` /
+`wavecode-messages-v5`.
+
+**UI** — в шапке `<header class="app-header">`:
+- `<select class="preset-select">` — два `<optgroup>` (Встроенные / Мои);
+- 💾 — открывает `save-preset-bar` с input для имени нового пресета;
+- 🗑 — появляется только когда выбран custom-пресет;
+- 🧹 — `resetAllBrowserData()` + `repo.saveScore('')` + `window.location.reload()`.
+
+### 3.4. LLM UI Settings
+
+UI-настройки агента: модель + уровень reasoning. Хранятся отдельно от domain-state,
+потому что это персональные предпочтения пользователя, а не часть workflow.
+
+Тип — `LLMSettings` (`presentation/state/llmSettings.ts:11`):
+
+```ts
+type Model = 'smart' | 'fast';
+type Thinking = 'low' | 'high' | 'off';
+
+type LLMSettings = {
+  model: Model;
+  thinking: Thinking;
+};
+```
+
+API (`llmSettings.ts`):
+- `getLLMSettings()` — текущие настройки;
+- `setModel(model)` / `setThinking(thinking)` — мутируют signal и persist в
+  localStorage.
+
+**Persistence** — `localStorage` под ключом `wavecode-llm-settings-v1`. Defaults —
+`{ model: 'smart', thinking: 'low' }`. Это UI-state, в IDB не идёт.
+
+**UI** — два `<select class="llm-select">` в `AIEditPanel.tsx`:
+
+```tsx
+// ui/src/presentation/panels/AIEditPanel.tsx:123-144
+<select class="llm-select" value={settings().model} onChange={onModelChange} ...>
+  <option value="smart">smart · M3</option>
+  <option value="fast">fast · M2.1</option>
+</select>
+<select class="llm-select" value={settings().thinking} onChange={onThinkingChange} ...>
+  <option value="low">think · low</option>
+  <option value="high">think · high</option>
+  <option value="off">think · off</option>
+</select>
+```
+
+При `submit()` текущие настройки пробрасываются в `applyEdit(...,
+{ model, thinking })` (`AIEditPanel.tsx:43`). Дальше `LiveLLMClient`
+(`infrastructure/llm/LiveLLMClient.ts:30-44`) транслирует `thinking` в
+`reasoning_effort` для LiteLLM-прокси:
+
+```ts
+const thinkingRaw = (req as { thinking?: 'low' | 'high' | 'off' }).thinking;
+const includeReasoning = thinkingRaw !== 'off';
+const reasoningEffort = thinkingRaw === 'high' ? 'high' : 'low';
+// ...
+if (includeReasoning) requestBody.reasoning_effort = reasoningEffort;
+```
+
+`off` означает, что поле `reasoning_effort` просто не отправляется в запросе.
+
 ---
 
 ## 4. Editor (CodeMirror 6)
@@ -405,3 +531,21 @@ export const [appStore, setAppStore] = createStore<AppState>({
 3. **Конфликты правок.** Если агент и пользователь редактируют score
    одновременно — стратегия (OT, last-write-wins, lock).
 4. **Multi-user.** Пока single-user. Если multi — CRDT (Yjs) поверх CodeMirror.
+
+## 10. Что появилось в этой ветке
+
+Ветка `refactor-wavecode-restore-strudel` добавила поверх архитектуры выше
+следующие user-facing возможности:
+
+1. **Пресеты** (`domain/presets.ts`, `presentation/state/presetsStore.ts`,
+   `App.tsx`). 8 встроенных мелодий + кастомные пресеты, сохраняемые в
+   localStorage. UI — `<select class="preset-select">` в шапке + кнопки 💾/🗑/🧹.
+2. **Autosave score** в IDB (`App.tsx:63-74`, `infrastructure/repo/IDBRepo.ts`).
+   `createEffect` дебаунсит `repo.saveScore` на 500 мс после каждой правки.
+   `onMount` восстанавливает последний score при загрузке.
+3. **UI-настройки LLM** (`presentation/state/llmSettings.ts`, `AIEditPanel.tsx`).
+   Два `<select class="llm-select">` — модель (`smart`/`fast`) и `thinking`
+   (`low`/`high`/`off`). Persistence в localStorage под `wavecode-llm-settings-v1`.
+4. **Reasoning в `LiveLLMClient`** (`infrastructure/llm/LiveLLMClient.ts:30-44`).
+   Поле `req.thinking` транслируется в `reasoning_effort` для LiteLLM-прокси;
+   `off` — поле просто опускается из тела запроса.
