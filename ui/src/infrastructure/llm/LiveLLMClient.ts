@@ -2,23 +2,20 @@ import { Effect, Layer, type Context } from 'effect';
 import { LLMClient, type CompletionRequest, type CompletionChunk } from '~/domain/services';
 
 /**
- * Live LLM client — real @ai-sdk/openai-compatible → llm.kosov.online.
+ * Live LLM client — raw fetch к llm.kosov.online (LiteLLM proxy, OpenAI-compatible).
  *
- * Per-app LiteLLM key (sk-litellm-...) baked into bundle via VITE_LLM_PROXY_KEY.
- * Keys are scoped + revocable. See ~/Projects/AngaraConfig/KB/50_operations/llm-proxy.md.
+ * Models: "smart" (MiniMax-M3, code), "fast" (MiniMax-M2.1-highspeed, лёгкий).
  *
- * Models exposed by proxy:
- *   - "smart"  → MiniMax-M3 (heavy, slower, better for code)
- *   - "fast"   → MiniMax-M2.1-highspeed (light, faster)
- *
- * LiteLLM возвращает SSE streaming даже при stream: false. Поэтому мы
- * всегда читаем до конца stream и парсим оба формата: JSON и SSE.
+ * LiteLLM может вернуть либо JSON, либо SSE. Парсим оба.
  */
+
+type Model = 'smart' | 'fast';
 
 type LiveLLMClientDeps = {
   readonly apiUrl: string;
   readonly apiKey: string;
-  readonly defaultModel: 'smart' | 'fast';
+  readonly defaultModel: Model;
+  readonly defaultThinking: 'low' | 'high';
 };
 
 const make = (deps: LiveLLMClientDeps): Context.Tag.Service<typeof LLMClient> => ({
@@ -27,11 +24,38 @@ const make = (deps: LiveLLMClientDeps): Context.Tag.Service<typeof LLMClient> =>
       const modelName = req.model ?? deps.defaultModel;
       const messages = [
         ...(req.systemPrompt ? [{ role: 'system' as const, content: req.systemPrompt }] : []),
-        ...req.messages.map((m) => ({
-          role: m.role,
-          content: m.content,
-        })),
+        ...req.messages.map((m) => ({ role: m.role, content: m.content })),
       ];
+
+      // Получаем thinking preference из метаданных запроса (если есть).
+      const thinkingRaw = (req as { thinking?: 'low' | 'high' | 'off' }).thinking;
+      const includeReasoning = thinkingRaw !== 'off';
+      const reasoningEffort = thinkingRaw === 'high' ? 'high' : 'low';
+
+      const requestBody: Record<string, unknown> = {
+        model: modelName,
+        messages,
+        stream: false,
+        temperature: 0.3,
+        max_tokens: 2000,
+      };
+      if (includeReasoning) {
+        requestBody.reasoning_effort = reasoningEffort;
+      }
+
+      console.log('[llm] → request', {
+        model: modelName,
+        messages: messages.length,
+        reasoning_effort: includeReasoning ? reasoningEffort : '(off)',
+      });
+
+
+
+      console.log('[llm] → request', {
+        model: modelName,
+        messages: messages.length,
+        reasoning_effort: includeReasoning ? reasoningEffort : '(off)',
+      });
 
       const response = yield* Effect.tryPromise({
         try: () =>
@@ -41,13 +65,7 @@ const make = (deps: LiveLLMClientDeps): Context.Tag.Service<typeof LLMClient> =>
               'Content-Type': 'application/json',
               Authorization: `Bearer ${deps.apiKey}`,
             },
-            body: JSON.stringify({
-              model: modelName,
-              messages,
-              stream: false,
-              temperature: 0.3,
-              max_tokens: 2000,
-            }),
+            body: JSON.stringify(requestBody),
           }),
         catch: (err) => new Error(`LLM HTTP request failed: ${err instanceof Error ? err.message : String(err)}`),
       });
@@ -57,15 +75,16 @@ const make = (deps: LiveLLMClientDeps): Context.Tag.Service<typeof LLMClient> =>
           try: () => response.text(),
           catch: () => '',
         }).pipe(Effect.catchAll(() => Effect.succeed('')));
-        return yield* Effect.fail(
-          new Error(`LLM HTTP ${response.status}: ${text.slice(0, 200)}`),
-        );
+        const errMsg = `LLM HTTP ${response.status}: ${text.slice(0, 500)}`;
+        console.error('[llm] ✗ HTTP error', errMsg);
+        return yield* Effect.fail(new Error(errMsg));
       }
       if (!response.body) {
-        return yield* Effect.fail(new Error('LLM response has no body'));
+        const errMsg = 'LLM response has no body';
+        console.error('[llm] ✗ no body');
+        return yield* Effect.fail(new Error(errMsg));
       }
 
-      // Читаем ВСЕ chunks до полного завершения.
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let buffer = '';
@@ -82,15 +101,31 @@ const make = (deps: LiveLLMClientDeps): Context.Tag.Service<typeof LLMClient> =>
       }
       buffer += decoder.decode();
 
-      // Пробуем JSON. Если failed — парсим SSE.
+      console.log('[llm] ← response', {
+        status: response.status,
+        bodyLength: buffer.length,
+        bodyPreview: buffer.slice(0, 200),
+      });
+
+      if (!buffer.trim()) {
+        const errMsg = 'LLM returned empty body (no chunks)';
+        console.error('[llm] ✗', errMsg);
+        return yield* Effect.fail(new Error(errMsg));
+      }
+
       let content = '';
       try {
         const parsed = JSON.parse(buffer) as {
           choices?: { message?: { content?: string } }[];
+          error?: { message?: string };
         };
+        if (parsed.error) {
+          const errMsg = `LLM API error: ${parsed.error.message ?? JSON.stringify(parsed.error)}`;
+          console.error('[llm] ✗', errMsg);
+          return yield* Effect.fail(new Error(errMsg));
+        }
         content = parsed.choices?.[0]?.message?.content ?? '';
       } catch {
-        // Парсим SSE: строки "data: {...}\n\n" — последний "data: [DONE]"
         const sseContent: string[] = [];
         for (const line of buffer.split('\n')) {
           const trimmed = line.trim();
@@ -110,11 +145,15 @@ const make = (deps: LiveLLMClientDeps): Context.Tag.Service<typeof LLMClient> =>
         content = sseContent.join('');
       }
 
+      console.log('[llm] ✓ content length:', content.length);
+
+      if (!content) {
+        return yield* Effect.fail(new Error('LLM returned empty content (parsed but no message body)'));
+      }
+
       const stream = new ReadableStream<CompletionChunk>({
         start(controller) {
-          if (content) {
-            controller.enqueue({ type: 'text', delta: content });
-          }
+          controller.enqueue({ type: 'text', delta: content });
           controller.close();
         },
       });
@@ -127,13 +166,12 @@ export const makeLiveLLMClient = (
 ): Layer.Layer<LLMClient, never, never> => {
   const apiUrl = config.apiUrl ?? import.meta.env.VITE_LLM_PROXY_URL ?? 'https://llm.kosov.online/v1';
   const apiKey = config.apiKey ?? import.meta.env.VITE_LLM_PROXY_KEY ?? '';
-  const defaultModel = config.defaultModel ?? 'smart';
+  const defaultModel = (config.defaultModel ?? 'smart') as Model;
+  const defaultThinking = config.defaultThinking ?? 'low';
 
   if (!apiKey) {
-    console.warn(
-      '[wavecode llm] VITE_LLM_PROXY_KEY is not set; LLM calls will fail. Set it in ui/.env.local before building.',
-    );
+    console.warn('[llm] VITE_LLM_PROXY_KEY is not set; LLM calls will fail.');
   }
 
-  return Layer.succeed(LLMClient, make({ apiUrl, apiKey, defaultModel }) as never);
+  return Layer.succeed(LLMClient, make({ apiUrl, apiKey, defaultModel, defaultThinking }) as never);
 };
