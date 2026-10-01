@@ -26,14 +26,16 @@ export type AppState = {
 };
 
 export const initialAppState: AppState = {
-  // Creep (Radiohead) — chord progression G → Bm → C → Cm at ~92 BPM.
-  // Uses Strudel mini-notation: stack of bass + arpeggios + drums.
+  // Creep (Radiohead) — chord progression G → B → C → Cm + bass + synth drum.
+  // sbd = synthesized bass drum (работает без sample loading).
+  // stack(...) — параллельные дорожки (bass + chords + drums).
+  // .slow(2) — каждый шаг 1 секунда, цикл 4 секунды.
   score: [
-    '// Creep (Radiohead) — G → Bm → C → Cm, ~92 BPM',
+    '// Creep (Radiohead) — G → B → C → Cm + bass + beat',
     'stack(',
-    '  note("<g2 b2 c3 c3>*2").s("sawtooth").gain(0.35).lpf(400).decay(0.4),',
-    '  n("<[55,59,62]*2 [59,63,66]*2 [60,64,67]*2 [60,63,67]*2>").s("sawtooth").gain(0.18).lpf(1800),',
-    '  s("bd*4, ~ sd ~ sd, hh*8").gain(0.45)',
+    '  note("<g2 b2 c3 c3>").s("sawtooth").gain(0.35).lpf(400),',
+    '  note("<[55,59,62] [59,63,66] [60,64,67] [60,63,67]>").s("sawtooth").gain(0.25).lpf(1500),',
+    '  s("sbd*4").gain(0.5)',
     ').slow(2)',
   ].join('\n'),
   messages: [],

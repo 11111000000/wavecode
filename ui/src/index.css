@@ -39,13 +39,95 @@ body {
 
 .app-header {
   display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 12px 20px;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 16px;
   border-bottom: 1px solid var(--border);
   background: var(--bg-elev);
   flex-shrink: 0;
+}
+
+.app-header-row1 {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.app-preset-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.app-controls-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex-wrap: wrap;
+  padding-top: 4px;
+  border-top: 1px solid var(--border);
+}
+
+.preset-select {
+  background: var(--bg);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 5px 8px;
+  font-size: 12px;
+  font-family: 'SF Mono', Menlo, monospace;
+  cursor: pointer;
+  min-width: 180px;
+  flex-shrink: 1;
+}
+
+.preset-btn {
+  background: var(--bg);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 5px 8px;
+  font-size: 13px;
+  cursor: pointer;
+  min-width: 32px;
+}
+
+.preset-btn:hover { border-color: var(--accent); }
+.preset-btn-danger:hover { color: var(--err); border-color: var(--err); }
+
+.ctrl-btn {
+  background: var(--bg);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 6px 12px;
+  font-size: 13px;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.ctrl-btn-primary {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.ctrl-btn:hover { border-color: var(--accent); }
+.ctrl-btn-primary:hover { background: var(--accent); color: var(--bg); }
+
+.save-preset-bar {
+  display: flex;
+  gap: 6px;
+  padding: 8px 16px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+  align-items: center;
+}
+
+.save-preset-input {
+  flex: 1;
+  max-width: 280px;
 }
 
 .app-title {
@@ -118,6 +200,29 @@ kbd {
   overflow: hidden;
 }
 
+/* Score panel-inner ВСЕГДА виден, скроллится ТОЛЬКО редактор. */
+.score-panel-inner {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+  padding: 0 !important;
+}
+
+.score-panel-inner > .cm-host {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: auto;
+}
+
+.score-panel-inner > .score-debug {
+  flex-shrink: 0;
+  padding: 8px 16px;
+  border-top: 1px solid var(--border);
+  background: var(--bg-elev);
+}
+
 .ai-panel {
   background: var(--bg);
 }
@@ -183,7 +288,6 @@ kbd {
 }
 
 /* Inner padding for panels */
-.score-panel > :not(.panel-header),
 .ai-panel > :not(.panel-header),
 .status-panel > :not(.panel-header) {
   padding: 12px 20px;
@@ -204,6 +308,30 @@ kbd {
   max-height: 120px;
 }
 
+.ai-controls-row1 {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.llm-select {
+  background: var(--bg-elev);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 5px 8px;
+  font-size: 12px;
+  font-family: 'SF Mono', Menlo, monospace;
+  cursor: pointer;
+}
+
+.llm-select:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .ai-controls {
   display: flex;
   gap: 8px;
@@ -213,8 +341,9 @@ kbd {
 
 .ai-status {
   font-size: 11px;
-  margin-left: auto;
+  margin-top: 6px;
   color: var(--fg-dim);
+  word-break: break-word;
 }
 
 .ai-status-ok { color: var(--ok); }
@@ -225,6 +354,30 @@ kbd {
   display: flex;
   gap: 8px;
   margin-top: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.ctx-state {
+  font-size: 11px;
+  color: var(--fg-dim);
+  font-family: 'SF Mono', Menlo, monospace;
+  margin-left: auto;
+}
+
+.score-debug {
+  display: flex;
+  gap: 16px;
+  margin-top: 8px;
+  font-size: 11px;
+  color: var(--fg-dim);
+  font-family: 'SF Mono', Menlo, monospace;
+  flex-wrap: wrap;
+}
+
+.score-debug .debug-err {
+  color: var(--err);
+  word-break: break-word;
 }
 
 .messages-heading {
@@ -273,6 +426,12 @@ kbd {
   border: 1px solid var(--border);
   border-radius: 4px;
   overflow: hidden;
+}
+
+.cm-host-fill {
+  flex: 1 1 auto;
+  min-height: 0;
+  align-self: stretch;
 }
 
 .cm-host .cm-editor {
