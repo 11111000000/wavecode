@@ -92,6 +92,30 @@ Pure-frontend, реальный Strudel+Web Audio в браузере, без ba
 ✅ E2E тест: edit score → eval → audio plays
 ✅ Cleanup: dead code, dead deps, inline styles → CSS
 
+### Phase 2.5 / 3.5: Presets + LLM UI Settings ✅ (added 2026-10-01)
+✅ `domain/presets.ts` — 8 встроенных пресетов: Creep (Radiohead),
+   Seven Nation Army (White Stripes), Für Elise (Beethoven),
+   Smoke on the Water (Deep Purple), House of the Rising Sun,
+   Let It Be / Wonderwall-style progressions, Mary Had a Little Lamb
+✅ `presentation/state/presetsStore.ts` — custom-пресеты в localStorage
+   (`wavecode-custom-presets-v1`), save/delete/reset-all
+✅ `presentation/state/audioActions.ts` — извлечённые evalScore/stopAudio/beep
+   (раньше copy-paste между панелями)
+✅ `presentation/state/llmSettings.ts` — model (smart|fast) + thinking
+   (low|high|off), UI-state в localStorage (`wavecode-llm-settings-v1`)
+✅ App.tsx: header restructured — preset selector, save/delete/reset
+   buttons, Eval/Stop/test-beep buttons, live ctx state polling
+✅ App.tsx: createEffect autosave (500ms debounce) + onMount loadScore
+✅ LiveAudioEngine: unlockAudioContext + getDebug + createOscillator
+   trigger counter для мобильной отладки
+✅ LiveLLMClient: `req.thinking` → LiteLLM `reasoning_effort`
+✅ cleanLLMResponse rewrite: fallback на raw при пустом ответе,
+   извлечение pattern-кода из prose
+✅ Unit-тесты: +23 (39 всего) — domain/presets, presetsStore, llmSettings
+✅ E2E тесты: +3 specs — presets, persistence, strudel-debug
+✅ math/wavecode-presets/packet.md — пакет решения
+✅ ui/ARCHITECTURE.md — секции 3.3, 3.4, 10
+
 ### Phase 4: Future
 🔲 RAG по Strudel-функциям (если нужно)
 🔲 Tool calling через @ai-sdk (вместо whole-score replacement)
@@ -130,3 +154,14 @@ Pure-frontend, реальный Strudel+Web Audio в браузере, без ba
 - ❌ Публичный стрим / Icecast
 - ❌ Nix-флейк outputs
 - ❌ Docker / контейнеры
+
+## 8. Branch status (на 2026-10-01)
+
+| Ветка | Коммитов после master | Что |
+|---|---|---|
+| `master` | 0 | regex-bypass аудио (mini-notation не работает), LLM polish, REPL-only UI |
+| `refactor-wavecode-restore-strudel` | +11 | real Strudel runtime + 8 пресетов + persistence + LLM UI settings + 23 unit + 3 e2e |
+
+Мердж `refactor-wavecode-restore-strudel` → `master` — отдельная задача.
+Перед мержем проверить, что `domain/types.ts:initialAppState.score` (полный
+Creep) играет через `webaudioRepl` без ошибок на мобильном — это риск.
