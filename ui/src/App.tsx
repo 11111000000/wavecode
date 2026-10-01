@@ -78,6 +78,9 @@ export function App() {
     if (!preset) return;
     setPresetId(id);
     dispatch({ type: 'replaceScore', text: preset.score });
+    // Auto-eval: заменяем score и сразу играем. Если уже играло — стоп
+    // предыдущего цикла происходит внутри LiveAudioEngine.eval (repl.stop).
+    void evalScore();
   };
 
   const onSavePreset = (): void => {
