@@ -26,17 +26,19 @@ export type AppState = {
 };
 
 export const initialAppState: AppState = {
-  // Creep (Radiohead) — chord progression G → B → C → Cm + bass + synth drum.
-  // sbd = synthesized bass drum (работает без sample loading).
-  // stack(...) — параллельные дорожки (bass + chords + drums).
-  // .slow(2) — каждый шаг 1 секунда, цикл 4 секунды.
+  // Дефолтный score при первом запуске (IDB пуст).
+  // Creep (Radiohead) — без .slow(2): 1 cycle = 2 sec на cps=0.5,
+  // chord changes по 0.5 сек = 120 BPM.
   score: [
-    '// Creep (Radiohead) — G → B → C → Cm + bass + beat',
+    '// Creep (Radiohead) — G \u2192 B \u2192 C \u2192 Cm, indie-rock 4/4',
     'stack(',
-    '  note("<g2 b2 c3 c3>").s("sawtooth").gain(0.35).lpf(400),',
-    '  note("<[55,59,62] [59,63,66] [60,64,67] [60,63,67]>").s("sawtooth").gain(0.25).lpf(1500),',
-    '  s("sbd*4").gain(0.5)',
-    ').slow(2)',
+    '  note("<g2 b2 c3 c3>").s("sawtooth").gain(0.4).lpf(300),',
+    '  note("<[55,59,62] [59,63,66] [60,64,67] [60,63,67]>").s("triangle").gain(0.2).lpf(1500),',
+    '  n("<55 67 59 67 62 67 59 67>*2").s("sawtooth").gain(0.12).lpf(1500),',
+    '  s("sbd ~ sbd ~").gain(0.5),',
+    '  s("~ white ~ white").decay(.05).sustain(0).gain(0.22),',
+    '  s("white*8").decay(.04).sustain(0).gain(0.15)',
+    ')',
   ].join('\n'),
   messages: [],
   agent: { status: 'idle' },
