@@ -1,0 +1,11 @@
+- sha: 6e2af47
+  date: 2026-10-02
+  kind: amendment
+  files:
+    - ui/src/domain/presets.ts
+    - math/wavecode-fur-elise-preset-accuracy/packet.md
+  notes: |
+    Bass A3-G3-F3-A3 → A2/E2 alternation (canonical Für Elise motion).
+    Hihat s("white*4") removed (WoO 59 has no drums).
+    Mid arpeggio corrected to broken A-minor (a4 c5 e5).
+    Melody pitches (e5 d#5 e5 d#5 e5 b4 d5 c5 a4) were already correct.
