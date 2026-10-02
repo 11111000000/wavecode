@@ -68,28 +68,27 @@ export const BUILTIN_PRESETS: ReadonlyArray<Preset> = [
   },
   {
     // Für Elise — Beethoven (Bagatelle No. 25 in A minor, WoO 59).
-    // Opening A-section in 3/8 time. Iconic dotted-8th + 16th rhythm
-    // (notes stretched via *3 in Strudel mini-notation).
-    // No drums (classical). Triangle waves with staccato envelope.
+    // 8-measure opening in mini-notation, 3/8 time. Transcribed from
+    // Nohl's 1867 first edition (LilyPond incipit, Wikipedia).
+    // Each event = one 16th; ~ = rest. Triangle + staccato envelope.
     id: 'fur-elise',
     name: 'Für Elise',
     artist: 'Beethoven',
     score: [
-      '// Für Elise — opening phrase in 3/8, dotted-8th + 16th rhythm.',
-      '// *3 = dotted-8th, no suffix = 16th, *6 = dotted-quarter (held).',
-      '// Tempo: .slow(2) → 4 sec per 20-step loop ≈ 80 BPM quarter.',
+      '// Für Elise — 8-measure A-section (M1-M4 + repeat).',
+      '// 42 events × 16th = 8 measures × 6 16ths = 48 16th-positions.',
+      '// .slow(4) → 8 sec/loop ≈ 90 BPM quarter (Poco moto).',
       'stack(',
-      '  // Right hand: opening phrase (M1+M2 of A-section).',
-      '  // e5*3 d#5 = dotted-8th E + 16th D# (Für Elise signature figure).',
-      '  note("<e5*3 d#5 e5*3 d#5 e5*3 d#5 e5*3 b4 d5*3 c5 a4*3 c5 e5 a4>")',
+      '  // Right hand: M1 e d# e b d c | M2 a r c e a | M3 b r e g# b |',
+      '  // M4 c r e e d# | M5-M8 = M1-M4 (A-section repeats).',
+      '  note("<e5 d#5 e5 b4 d5 c5 a4 ~ c5 e5 a4 b4 ~ e5 g#5 b4 c5 ~ e5 e6 d#5 e5 d#5 e5 b4 d5 c5 a4 ~ c5 e5 a4 b4 ~ e5 g#5 b4 c5 ~ e5 e6 d#5>")',
       '    .s("triangle").gain(0.4)',
-      '    .attack(.005).decay(.5).sustain(0).release(.05),',
-      '  // Left hand bass — a2/e2 alternating (8th notes, Für Elise motion).',
-      '  // *2 = 8th note duration in 16th-step resolution.',
-      '  note("<a2*2 e2*2 a2*2 e2*2 a2*2 e2*2 a2*2 e2*2 a2*2 e2*2>")',
-      '    .s("sine").gain(0.25).lpf(400)',
-      '    .attack(.005).decay(.5).sustain(0).release(.05)',
-      ').slow(2)',
+      '    .attack(.005).decay(.4).sustain(.15).release(.05),',
+      '  // Left hand bass: a2/e2 alternating, 8th notes (24 per loop).',
+      '  note("<a2 e2>*12")',
+      '    .s("sine").gain(0.3).lpf(400)',
+      '    .attack(.005).decay(.4).sustain(.15).release(.05)',
+      ').slow(4)',
     ].join('\n'),
   },
   {
