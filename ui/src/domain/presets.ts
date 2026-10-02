@@ -67,21 +67,21 @@ export const BUILTIN_PRESETS: ReadonlyArray<Preset> = [
     ].join('\n'),
   },
   {
-    // Für Elise — Beethoven. Opening melody + soft accompaniment.
+    // Für Elise — Beethoven (Bagatelle No. 25 in A minor, WoO 59).
+    // Opening phrase (right hand) + A2/E2 bass alternation + arpeggio.
+    // No drums: classical piece, not pop/rock.
     id: 'fur-elise',
     name: 'Für Elise',
     artist: 'Beethoven',
     score: [
-      '// Für Elise — opening E D# E D# E B D C A, soft classical',
+      '// Für Elise — opening e5 d#5 e5 d#5 e5 b4 d5 c5 a4, soft classical',
       'stack(',
-      '  // Melody (right hand)',
+      '  // Melody (right hand) — iconic 9-note opening phrase',
       '  note("<e5 d#5 e5 d#5 e5 b4 d5 c5 a4>").s("sine").gain(0.45),',
-      '  // Bass: A and F (root motion)',
-      '  note("<a3 a3 a3 a3 a3 g3 f3 a3>").s("triangle").gain(0.2).lpf(800),',
-      '  // Mid arpeggio (8th notes)',
-      '  n("<a4 c5 e5 a4 a4 c5 e5 a4>*2").s("triangle").gain(0.08).lpf(2000),',
-      '  // Тонкий hihat — единственный «ударный» элемент',
-      '  s("white*4").decay(.03).sustain(0).gain(0.08)',
+      '  // Bass: a2/e2 alternation (Für Elise signature bass motion)',
+      '  note("<a2 e2 a2 e2 a2 e2 a2 e2 a2>").s("triangle").gain(0.3).lpf(500),',
+      '  // Mid arpeggio: broken A-minor chord (a4 c5 e5) underneath',
+      '  n("<a4 c5 e5 a4 c5 e5 a4 c5>*2").s("triangle").gain(0.1).lpf(2000)',
       ')',
     ].join('\n'),
   },
