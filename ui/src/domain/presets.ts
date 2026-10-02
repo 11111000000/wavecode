@@ -68,21 +68,22 @@ export const BUILTIN_PRESETS: ReadonlyArray<Preset> = [
   },
   {
     // Für Elise — Beethoven (Bagatelle No. 25 in A minor, WoO 59).
-    // Opening phrase (right hand) + A2/E2 bass alternation + arpeggio.
-    // No drums: classical piece, not pop/rock.
+    // Opening A-section: 12 notes of right-hand + A2/E2 bass alternation.
+    // Triangle waves with short decay for piano-like articulation.
+    // No drums (classical). Tempo: Poco moto ~ 4=70.
     id: 'fur-elise',
     name: 'Für Elise',
     artist: 'Beethoven',
     score: [
-      '// Für Elise — opening e5 d#5 e5 d#5 e5 b4 d5 c5 a4, soft classical',
+      '// Für Elise — opening e5 d#5 e5 d#5 e5 b4 d5 c5 a4 a4 c5 e5',
       'stack(',
-      '  // Melody (right hand) — iconic 9-note opening phrase',
-      '  note("<e5 d#5 e5 d#5 e5 b4 d5 c5 a4>").s("sine").gain(0.45),',
-      '  // Bass: a2/e2 alternation (Für Elise signature bass motion)',
-      '  note("<a2 e2 a2 e2 a2 e2 a2 e2 a2>").s("triangle").gain(0.3).lpf(500),',
-      '  // Mid arpeggio: broken A-minor chord (a4 c5 e5) underneath',
-      '  n("<a4 c5 e5 a4 c5 e5 a4 c5>*2").s("triangle").gain(0.1).lpf(2000)',
-      ')',
+      '  // Right hand: opening 9 notes + first 3 of consequent phrase (12 total)',
+      '  note("<e5 d#5 e5 d#5 e5 b4 d5 c5 a4 a4 c5 e5>")',
+      '    .s("triangle").gain(0.35).decay(.15).sustain(.3),',
+      '  // Left hand bass — a2/e2 alternating (Für Elise signature motion)',
+      '  note("<a2 e2 a2 e2 a2 e2 a2 e2 a2 a2 e2 a2>")',
+      '    .s("triangle").gain(0.25).lpf(500).decay(.15).sustain(.3)',
+      ').slow(3)',
     ].join('\n'),
   },
   {
