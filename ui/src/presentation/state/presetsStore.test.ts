@@ -119,4 +119,27 @@ describe('presetsStore', () => {
     const { allPresets } = await import('./presetsStore');
     expect(allPresets().length).toBe(BUILTIN_PRESETS.length);
   });
+
+  it('drops custom presets whose name shadows a builtin on load', async () => {
+    // Stale custom preset saved from an older version of a builtin.
+    localStorage.setItem(
+      'wavecode-custom-presets-v1',
+      JSON.stringify([
+        { id: 'custom-stale', name: 'Für Elise', score: 'old code', custom: true },
+        { id: 'custom-fresh', name: 'My Sketch', score: 's("bd")', custom: true },
+      ]),
+    );
+    const { allPresets } = await import('./presetsStore');
+    const list = allPresets();
+    // 'Für Elise' builtin remains, but the custom 'Für Elise' is dropped.
+    expect(list.filter((p) => p.name === 'Für Elise')).toHaveLength(1);
+    expect(list.some((p) => p.id === 'custom-stale')).toBe(false);
+    expect(list.some((p) => p.id === 'custom-fresh')).toBe(true);
+
+    // localStorage is also updated so the stale entry doesn't return.
+    const raw = localStorage.getItem('wavecode-custom-presets-v1');
+    const stored = JSON.parse(raw!) as Array<{ id: string }>;
+    expect(stored.some((p) => p.id === 'custom-stale')).toBe(false);
+    expect(stored.some((p) => p.id === 'custom-fresh')).toBe(true);
+  });
 });
