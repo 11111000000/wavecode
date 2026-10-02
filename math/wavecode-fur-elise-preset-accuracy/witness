@@ -48,3 +48,25 @@
     than Poco Moto's 80 BPM but with the rhythmic long-short figure
     that makes it recognizable). Bass aligned to 16th-step grid via
     *2 = 8th note duration.
+- sha: e2a6209
+  date: 2026-10-02
+  kind: amendment
+  files:
+    - ui/src/domain/presets.ts
+  notes: |
+    v5 — *N was wrong: e5*3 = e5 e5 e5 (REPETITION = trill, same
+    pitch repeated → blends into one long sustained note, which is
+    exactly what user reported). Correct operator is @N (elongation):
+    e5@3 d#5 = e5 for 3 parts + d#5 for 1 part of step = true
+    dotted-8th + 16th. v4's "rhythm" was actually e e e d# (trill
+    of same pitch) — that explains the "целые ноты ми" perception.
+
+    Real score fetched from Wikipedia/Nohl first edition (LilyPond,
+    public domain). Transcribed 8 measures of A-section (M1-M4 +
+    repeat M5-M8), 3/8 time:
+      M1: e5 d#5 e5 b4 d5 c5        (6 16ths)
+      M2: a4 ~ c5 e5 a4              (a(8th)+rest+3 16ths)
+      M3: b4 ~ e5 g#5 b4
+      M4: c5 ~ e5 e6 d#5             (climax: e6/d#6 high register)
+    42 events, .slow(4) → 8 sec/loop ≈ 90 BPM quarter. Bass:
+    <a2 e2>*12 = 24 alternating 8th notes per loop, sine + lpf 400.
