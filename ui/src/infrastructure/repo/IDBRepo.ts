@@ -9,8 +9,8 @@ import type { Message } from '~/domain/types';
  * Reload восстанавливает state.
  */
 
-const KEY_SCORE = 'wavecode-score-v5';
-const KEY_MESSAGES = 'wavecode-messages-v5';
+const KEY_SCORE = 'wavecode-score-v6';
+const KEY_MESSAGES = 'wavecode-messages-v6';
 
 export const IDBRepo: Layer.Layer<Repo, never, never> = Layer.succeed(
   Repo,
