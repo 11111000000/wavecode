@@ -14,7 +14,24 @@ const load = (): Preset[] => {
     const raw = localStorage.getItem(KEY);
     if (!raw) return [];
     const parsed = JSON.parse(raw) as Preset[];
-    return parsed.filter((p) => p.id && p.score && p.name);
+    // Migration: drop custom presets whose name shadows a built-in.
+    // Typical case: user loaded old version of a built-in, hit "💾 Save"
+    // and saved as custom — now their stale code shadows the updated
+    // built-in in the dropdown and confuses the user.
+    const builtInNames = new Set(
+      BUILTIN_PRESETS.map((p) => p.name.toLowerCase().trim())
+    );
+    const filtered = parsed.filter(
+      (p) => !p.custom || !builtInNames.has((p.name ?? '').toLowerCase().trim())
+    );
+    if (filtered.length !== parsed.length) {
+      try {
+        localStorage.setItem(KEY, JSON.stringify(filtered));
+      } catch {
+        /* ignore */
+      }
+    }
+    return filtered.filter((p) => p.id && p.score && p.name);
   } catch {
     return [];
   }
