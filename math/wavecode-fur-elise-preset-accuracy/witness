@@ -21,3 +21,30 @@
     with triangle + .decay(.15).sustain(.3) for piano articulation.
     Fragment extended 9 → 12 notes (opening + first 3 of consequent).
     .slow(3) added: 6 sec/loop ≈ 0.5s/note ≈ 120 BPM (Poco moto target).
+- sha: c87f525
+  date: 2026-10-02
+  kind: amendment
+  files:
+    - ui/src/domain/presets.ts
+  notes: |
+    v3 — full notes perceived as 'long whole notes'. envelope was
+    .decay(.15).sustain(.3): 30% gain sustained through whole step,
+    sounded as one continuous drone. Replaced with piano-like staccato:
+      .attack(.005).decay(.7).sustain(0).release(.1)
+    Each step now ~50% audible + ~50% silent. Notes clearly
+    articulated, no bleeding between steps. Bass: triangle → sine
+    for cleaner low end (no muddy harmonics in bass register).
+- sha: 04f52c8
+  date: 2026-10-02
+  kind: amendment
+  files:
+    - ui/src/domain/presets.ts
+  notes: |
+    v4 — tempo perceived as 'laggy/slow' relative to Für Elise. Even
+    rhythm (12 evenly-spaced notes) gave flat, plodding feel. Replaced
+    with dotted-8th + 16th rhythm via Strudel *N notation:
+      e5*3 d#5 = dotted-8th E + 16th D# (Für Elise signature figure)
+    26-step pattern + .slow(2) = 4 sec/loop = ~95 BPM quarter (faster
+    than Poco Moto's 80 BPM but with the rhythmic long-short figure
+    that makes it recognizable). Bass aligned to 16th-step grid via
+    *2 = 8th note duration.
