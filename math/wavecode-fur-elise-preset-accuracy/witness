@@ -9,3 +9,15 @@
     Hihat s("white*4") removed (WoO 59 has no drums).
     Mid arpeggio corrected to broken A-minor (a4 c5 e5).
     Melody pitches (e5 d#5 e5 d#5 e5 b4 d5 c5 a4) were already correct.
+- sha: 8483d45
+  date: 2026-10-02
+  kind: amendment
+  files:
+    - ui/src/domain/presets.ts
+  notes: |
+    Mid arpeggio (n(...)*2 triangle drone at lpf 2000) perceived as
+    hihat / masking noise — removed entirely. Bass + melody is enough.
+    Sine sustained notes perceived as 'long slow notes' — replaced
+    with triangle + .decay(.15).sustain(.3) for piano articulation.
+    Fragment extended 9 → 12 notes (opening + first 3 of consequent).
+    .slow(3) added: 6 sec/loop ≈ 0.5s/note ≈ 120 BPM (Poco moto target).
