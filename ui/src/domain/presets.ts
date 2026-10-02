@@ -68,28 +68,28 @@ export const BUILTIN_PRESETS: ReadonlyArray<Preset> = [
   },
   {
     // Für Elise — Beethoven (Bagatelle No. 25 in A minor, WoO 59).
-    // Opening A-section: 12 notes of right-hand + A2/E2 bass alternation.
-    // Triangle waves with short decay for piano-like articulation.
-    // No drums (classical). Tempo: Poco moto ~ 4=70.
+    // Opening A-section in 3/8 time. Iconic dotted-8th + 16th rhythm
+    // (notes stretched via *3 in Strudel mini-notation).
+    // No drums (classical). Triangle waves with staccato envelope.
     id: 'fur-elise',
     name: 'Für Elise',
     artist: 'Beethoven',
     score: [
-      '// Für Elise — opening e5 d#5 e5 d#5 e5 b4 d5 c5 a4 a4 c5 e5',
-      '// .decay(.7).sustain(0) = piano staccato: each note fades to silence',
-      '// within ~70% of the step, then explicit silent gap before the next.',
+      '// Für Elise — opening phrase in 3/8, dotted-8th + 16th rhythm.',
+      '// *3 = dotted-8th, no suffix = 16th, *6 = dotted-quarter (held).',
+      '// Tempo: .slow(2) → 4 sec per 20-step loop ≈ 80 BPM quarter.',
       'stack(',
-      '  // Right hand: opening 9 notes + first 3 of consequent phrase (12 total).',
-      '  // Staccato envelope: attack 5ms, decay 70% of step, sustain 0.',
-      '  note("<e5 d#5 e5 d#5 e5 b4 d5 c5 a4 a4 c5 e5>")',
+      '  // Right hand: opening phrase (M1+M2 of A-section).',
+      '  // e5*3 d#5 = dotted-8th E + 16th D# (Für Elise signature figure).',
+      '  note("<e5*3 d#5 e5*3 d#5 e5*3 d#5 e5*3 b4 d5*3 c5 a4*3 c5 e5 a4>")',
       '    .s("triangle").gain(0.4)',
-      '    .attack(.005).decay(.7).sustain(0).release(.1),',
-      '  // Left hand bass — a2/e2 alternating (Für Elise signature motion).',
-      '  // Same staccato envelope, sine for clean low end.',
-      '  note("<a2 e2 a2 e2 a2 e2 a2 e2 a2 a2 e2 a2>")',
+      '    .attack(.005).decay(.5).sustain(0).release(.05),',
+      '  // Left hand bass — a2/e2 alternating (8th notes, Für Elise motion).',
+      '  // *2 = 8th note duration in 16th-step resolution.',
+      '  note("<a2*2 e2*2 a2*2 e2*2 a2*2 e2*2 a2*2 e2*2 a2*2 e2*2>")',
       '    .s("sine").gain(0.25).lpf(400)',
-      '    .attack(.005).decay(.7).sustain(0).release(.1)',
-      ').slow(3)',
+      '    .attack(.005).decay(.5).sustain(0).release(.05)',
+      ').slow(2)',
     ].join('\n'),
   },
   {
