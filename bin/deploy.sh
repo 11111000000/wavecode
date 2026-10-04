@@ -53,9 +53,25 @@ pnpm build
 
 # 5. Deploy to /var/lib/wavecode/dist (Caddy needs read access there).
 echo "==> sudo cp -r $UI_DIR/dist/* → $DEPLOY_DIR/"
-/home/az/.local/bin/sudo -n mkdir -p "$DEPLOY_DIR"
-/home/az/.local/bin/sudo -n cp -r "$UI_DIR/dist/." "$DEPLOY_DIR/"
-/home/az/.local/bin/sudo -n chown -R caddy:caddy "$DEPLOY_DIR"
+SUDO=/usr/bin/sudo
+if ! "$SUDO" -n true 2>/dev/null; then
+  echo "ERROR: $SUDO -n rejected (no passwordless sudo)."
+  echo "  Fix: add NOPASSWD for /bin/cp /bin/mkdir /bin/chown in /etc/sudoers.d/wavecode-deploy"
+  echo "  OR run this script as root."
+  exit 1
+fi
+"$SUDO" -n mkdir -p "$DEPLOY_DIR"
+"$SUDO" -n cp -r "$UI_DIR/dist/." "$DEPLOY_DIR/"
+# Drop stale hashed assets (vite emits content-hashed filenames, so the
+# previous index-*.js is now orphaned and just wastes disk).
+for f in "$DEPLOY_DIR/assets/index-"*.js{,.map}; do
+  [ -f "$f" ] || continue
+  case "$f" in
+    *index.html) ;;
+    *) "$SUDO" -n rm -f "$f" ;;
+  esac
+done
+"$SUDO" -n chown -R caddy:caddy "$DEPLOY_DIR"
 
 echo
 echo "✓ Build + deploy complete: $DEPLOY_DIR/"
