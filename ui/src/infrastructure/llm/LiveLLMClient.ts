@@ -32,12 +32,17 @@ const make = (deps: LiveLLMClientDeps): Context.Tag.Service<typeof LLMClient> =>
       const includeReasoning = thinkingRaw !== 'off';
       const reasoningEffort = thinkingRaw === 'high' ? 'high' : 'low';
 
+      // max_tokens must cover BOTH reasoning_content and message.content.
+      // MiniMax-M3 is a reasoning model (always emits reasoning_content even
+      // without reasoning_effort). With max_tokens=2000 the reasoning ate
+      // the whole budget and the user got an empty message.content
+      // ("ИИ вернул пустой ответ"). 16000 leaves headroom for both.
       const requestBody: Record<string, unknown> = {
         model: modelName,
         messages,
         stream: false,
         temperature: 0.3,
-        max_tokens: 2000,
+        max_tokens: 16000,
       };
       if (includeReasoning) {
         requestBody.reasoning_effort = reasoningEffort;
@@ -114,9 +119,10 @@ const make = (deps: LiveLLMClientDeps): Context.Tag.Service<typeof LLMClient> =>
       }
 
       let content = '';
+      let reasoningContent = '';
       try {
         const parsed = JSON.parse(buffer) as {
-          choices?: { message?: { content?: string } }[];
+          choices?: { message?: { content?: string; reasoning_content?: string } }[];
           error?: { message?: string };
         };
         if (parsed.error) {
@@ -125,6 +131,7 @@ const make = (deps: LiveLLMClientDeps): Context.Tag.Service<typeof LLMClient> =>
           return yield* Effect.fail(new Error(errMsg));
         }
         content = parsed.choices?.[0]?.message?.content ?? '';
+        reasoningContent = parsed.choices?.[0]?.message?.reasoning_content ?? '';
       } catch {
         const sseContent: string[] = [];
         for (const line of buffer.split('\n')) {
@@ -145,10 +152,18 @@ const make = (deps: LiveLLMClientDeps): Context.Tag.Service<typeof LLMClient> =>
         content = sseContent.join('');
       }
 
-      console.log('[llm] ✓ content length:', content.length);
+      console.log('[llm] ✓ content length:', content.length, 'reasoning length:', reasoningContent.length);
 
       if (!content) {
-        return yield* Effect.fail(new Error('LLM returned empty content (parsed but no message body)'));
+        // Reasoning may have eaten the budget. Surface reasoning_content
+        // length in the error so the operator can see this is a token-budget
+        // issue, not a wrong-model issue.
+        const hint = reasoningContent
+          ? ` (reasoning used ${reasoningContent.length} chars — likely max_tokens too low)`
+          : '';
+        return yield* Effect.fail(
+          new Error(`LLM returned empty content (parsed but no message body)${hint}`),
+        );
       }
 
       const stream = new ReadableStream<CompletionChunk>({
