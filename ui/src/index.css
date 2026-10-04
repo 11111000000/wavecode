@@ -391,7 +391,25 @@ kbd {
   list-style: none;
   padding: 0;
   margin: 0;
+  max-height: 180px;
+  overflow-y: auto;
 }
+
+/* AI history: collapsed <details> in AI panel. Stays closed by default
+   so it doesn't push the textarea out when many messages accumulate. */
+.ai-history {
+  margin-top: 8px;
+  border-top: 1px solid var(--border);
+  padding-top: 6px;
+}
+.ai-history > summary {
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--fg-dim);
+  padding: 4px 0;
+  user-select: none;
+}
+.ai-history > summary:hover { color: var(--fg); }
 
 .message-item {
   border-left: 3px solid var(--border);

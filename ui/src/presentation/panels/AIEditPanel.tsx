@@ -1,4 +1,4 @@
-import { createSignal, Show } from 'solid-js';
+import { createSignal, Show, For } from 'solid-js';
 import { Effect } from 'effect';
 import { dispatch, appStore } from '../state/appStore';
 import { AppLayer } from '~/infrastructure/composition';
@@ -151,6 +151,21 @@ export function AIEditPanel() {
       </div>
       <Show when={status().msg}>
         <div class={`ai-status ai-status-${status().kind}`}>{status().msg}</div>
+      </Show>
+
+      <Show when={appStore.messages.length > 0}>
+        <details class="ai-history" open={false}>
+          <summary>История ({appStore.messages.length})</summary>
+          <ul class="messages-list">
+            <For each={appStore.messages}>
+              {(m) => (
+                <li class={`message-item message-${m.role}`}>
+                  <strong>{m.role}:</strong> {m.content}
+                </li>
+              )}
+            </For>
+          </ul>
+        </details>
       </Show>
     </div>
   );

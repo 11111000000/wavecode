@@ -3,11 +3,13 @@ import { createSignal, createEffect, onCleanup } from 'solid-js';
 const KEY = 'wavecode-ui-state-v1';
 
 type UIState = {
+  scoreOpen: boolean;
   aiOpen: boolean;
   statusOpen: boolean;
 };
 
 const defaultState: UIState = {
+  scoreOpen: true,
   aiOpen: true,
   statusOpen: true,
 };
@@ -40,6 +42,10 @@ createEffect(() => {
   saveState(uiState());
 });
 
+export const toggleScore = (): void => {
+  setUiState((s) => ({ ...s, scoreOpen: !s.scoreOpen }));
+};
+
 export const toggleAI = (): void => {
   setUiState((s) => ({ ...s, aiOpen: !s.aiOpen }));
 };
@@ -49,11 +55,12 @@ export const toggleStatus = (): void => {
 };
 
 // Keyboard shortcuts (emacs-inspired).
-//   Ctrl+.       → focus AI textarea (also expands if collapsed)
-//   Ctrl+,       → focus Score editor
-//   Ctrl+Shift+R → toggle AI
-//   Ctrl+Shift+S → toggle Status
-//   Ctrl+Enter   → submit AI instruction
+//   Ctrl+.        → focus AI textarea (also expands if collapsed)
+//   Ctrl+,        → focus Score editor (also expands if collapsed)
+//   Ctrl+Shift+R  → toggle AI
+//   Ctrl+Shift+S  → toggle Status
+//   Ctrl+Shift+E  → toggle Score
+//   Ctrl+Enter    → submit AI instruction
 export const installKeyboardShortcuts = (refs: {
   focusAI: () => void;
   focusScore: () => void;
@@ -68,6 +75,7 @@ export const installKeyboardShortcuts = (refs: {
       refs.focusAI();
     } else if (e.key === ',') {
       e.preventDefault();
+      if (!uiState().scoreOpen) toggleScore();
       refs.focusScore();
     } else if (e.shiftKey && e.key.toLowerCase() === 'r') {
       e.preventDefault();
@@ -75,9 +83,11 @@ export const installKeyboardShortcuts = (refs: {
     } else if (e.shiftKey && e.key.toLowerCase() === 's') {
       e.preventDefault();
       toggleStatus();
+    } else if (e.shiftKey && e.key.toLowerCase() === 'e') {
+      e.preventDefault();
+      toggleScore();
     }
   };
-
   window.addEventListener('keydown', handler);
   onCleanup(() => window.removeEventListener('keydown', handler));
 };
