@@ -68,27 +68,29 @@ export const BUILTIN_PRESETS: ReadonlyArray<Preset> = [
   },
   {
     // Für Elise — Beethoven (Bagatelle No. 25 in A minor, WoO 59).
-    // 8-measure opening in mini-notation, 3/8 time. Transcribed from
-    // Nohl's 1867 first edition (LilyPond incipit, Wikipedia).
-    // Each event = one 16th; ~ = rest. Triangle + staccato envelope.
+    // 8-measure A-section in 3/8 time. Nohl 1867 transcription.
+    // Faster tempo (120 BPM quarter) + legato envelope for flowing
+    // piano-like phrasing (notes sustain, blend into each other).
     id: 'fur-elise',
     name: 'Für Elise',
     artist: 'Beethoven',
     score: [
-      '// Für Elise — 8-measure A-section (M1-M4 + repeat).',
-      '// 42 events × 16th = 8 measures × 6 16ths = 48 16th-positions.',
-      '// .slow(4) → 8 sec/loop ≈ 90 BPM quarter (Poco moto).',
+      '// Für Elise — 8 measures (M1-M4 + repeat M5-M8).',
+      '// 42 events (M1 e d# e b d c | M2 a r c e a | M3 b r e g# b |',
+      '// M4 c r e e d# | M5-M8 = M1-M4).',
+      '// .slow(2) → 4 sec/loop ≈ 180 BPM quarter (brisk, flowing).',
+      '// Envelope: legato — note sustains at 70% for ~70% of step so',
+      '// adjacent notes blend rather than clicking.',
       'stack(',
-      '  // Right hand: M1 e d# e b d c | M2 a r c e a | M3 b r e g# b |',
-      '  // M4 c r e e d# | M5-M8 = M1-M4 (A-section repeats).',
+      '  // Right hand melody (triangle, legato)',
       '  note("<e5 d#5 e5 b4 d5 c5 a4 ~ c5 e5 a4 b4 ~ e5 g#5 b4 c5 ~ e5 e6 d#5 e5 d#5 e5 b4 d5 c5 a4 ~ c5 e5 a4 b4 ~ e5 g#5 b4 c5 ~ e5 e6 d#5>")',
       '    .s("triangle").gain(0.4)',
-      '    .attack(.005).decay(.4).sustain(.15).release(.05),',
-      '  // Left hand bass: a2/e2 alternating, 8th notes (24 per loop).',
+      '    .attack(.005).decay(.15).sustain(.7).release(.15),',
+      '  // Left hand bass: a2/e2 alternating, 8th notes (24 per loop)',
       '  note("<a2 e2>*12")',
       '    .s("sine").gain(0.3).lpf(400)',
-      '    .attack(.005).decay(.4).sustain(.15).release(.05)',
-      ').slow(4)',
+      '    .attack(.005).decay(.15).sustain(.7).release(.15)',
+      ').slow(2)',
     ].join('\n'),
   },
   {
