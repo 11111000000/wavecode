@@ -4,7 +4,7 @@ import { HelloPanel } from './presentation/panels/HelloPanel';
 import { ScorePanel } from './presentation/panels/ScorePanel';
 import { AIEditPanel } from './presentation/panels/AIEditPanel';
 import { DebugPanel } from './presentation/panels/DebugPanel';
-import { uiState, toggleAI, toggleStatus, installKeyboardShortcuts } from './presentation/state/uiState';
+import { uiState, toggleScore, toggleAI, toggleStatus, installKeyboardShortcuts } from './presentation/state/uiState';
 import { appStore, dispatch } from './presentation/state/appStore';
 import { evalScore, stopAudio, beep } from './presentation/state/audioActions';
 import { AppLayer } from '~/infrastructure/composition';
@@ -206,15 +206,17 @@ export function App() {
       </Show>
 
       <div class="app-body">
-        <section class="score-panel">
+        <section class="score-panel collapsible" data-open={uiState().scoreOpen}>
           <CollapsibleHeader
             title="Score"
-            open={true}
-            onToggle={() => {}}
-            hint="(live edit)"
-            ariaLabel="Score panel (always visible)"
+            open={uiState().scoreOpen}
+            onToggle={toggleScore}
+            hint="(live edit) · Ctrl+Shift+E"
+            ariaLabel="Score panel"
           />
-          <ScorePanel />
+          <Show when={uiState().scoreOpen}>
+            <ScorePanel />
+          </Show>
         </section>
 
         <section class="ai-panel collapsible" data-open={uiState().aiOpen}>

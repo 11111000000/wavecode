@@ -1,4 +1,4 @@
-import { Show, For, createSignal, onCleanup } from 'solid-js';
+import { Show, createSignal, onCleanup } from 'solid-js';
 import { appStore, dispatch } from '../state/appStore';
 import { getDebug } from '~/infrastructure/audio/LiveAudioEngine';
 import { CodeMirrorEditor } from '../components/CodeMirrorEditor';
@@ -6,6 +6,7 @@ import { CodeMirrorEditor } from '../components/CodeMirrorEditor';
 /**
  * Score panel — ТОЛЬКО редактор + debug-info.
  * Кнопки Eval/Stop/Test живут в header (App.tsx) чтобы быть всегда видны.
+ * История диалога (messages) переехала в AIEditPanel.
  */
 export function ScorePanel() {
   const [debug, setDebug] = createSignal(getDebug());
@@ -33,15 +34,6 @@ export function ScorePanel() {
           <span class="debug-err">super: {debug().superdoughErr}</span>
         </Show>
       </div>
-
-      <Show when={appStore.messages.length > 0}>
-        <h3 class="messages-heading">Messages ({appStore.messages.length})</h3>
-        <ul class="messages-list">
-          <For each={appStore.messages}>
-            {(m) => <li class={`message-item message-${m.role}`}><strong>{m.role}:</strong> {m.content}</li>}
-          </For>
-        </ul>
-      </Show>
     </div>
   );
 }
