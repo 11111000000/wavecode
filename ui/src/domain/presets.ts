@@ -68,26 +68,25 @@ export const BUILTIN_PRESETS: ReadonlyArray<Preset> = [
   },
   {
     // Für Elise — Beethoven (Bagatelle No. 25 in A minor, WoO 59).
-    // 8-measure A-section in 3/8 time. Nohl 1867 transcription.
-    // Faster tempo (120 BPM quarter) + legato envelope for flowing
-    // piano-like phrasing (notes sustain, blend into each other).
+    // 8-measure A-section (Nohl 1867), 3/8 time. SEQUENCE, not slowcat:
+    // in Strudel <a b c> is slowcat (each element = 1 cycle) — that
+    // would give 4-sec sustained tones. Plain 'a b c' is sequence
+    // (each element = 1/N of cycle) — what we want for melody.
     id: 'fur-elise',
     name: 'Für Elise',
     artist: 'Beethoven',
     score: [
       '// Für Elise — 8 measures (M1-M4 + repeat M5-M8).',
-      '// 42 events (M1 e d# e b d c | M2 a r c e a | M3 b r e g# b |',
-      '// M4 c r e e d# | M5-M8 = M1-M4).',
-      '// .slow(2) → 4 sec/loop ≈ 180 BPM quarter (brisk, flowing).',
-      '// Envelope: legato — note sustains at 70% for ~70% of step so',
-      '// adjacent notes blend rather than clicking.',
+      '// 42 events in sequence, 1/42 of cycle each. .slow(2) → 4 sec/loop.',
+      '// Legato: .decay(.15).sustain(.7) keeps note at 70% for ~70% of step.',
       'stack(',
-      '  // Right hand melody (triangle, legato)',
-      '  note("<e5 d#5 e5 b4 d5 c5 a4 ~ c5 e5 a4 b4 ~ e5 g#5 b4 c5 ~ e5 e6 d#5 e5 d#5 e5 b4 d5 c5 a4 ~ c5 e5 a4 b4 ~ e5 g#5 b4 c5 ~ e5 e6 d#5>")',
+      '  // Right hand: M1 e d# e b d c | M2 a r c e a | M3 b r e g# b |',
+      '  // M4 c r e e d# | M5-M8 = M1-M4',
+      '  note("e5 d#5 e5 b4 d5 c5 a4 ~ c5 e5 a4 b4 ~ e5 g#5 b4 c5 ~ e5 e6 d#5 e5 d#5 e5 b4 d5 c5 a4 ~ c5 e5 a4 b4 ~ e5 g#5 b4 c5 ~ e5 e6 d#5")',
       '    .s("triangle").gain(0.4)',
       '    .attack(.005).decay(.15).sustain(.7).release(.15),',
-      '  // Left hand bass: a2/e2 alternating, 8th notes (24 per loop)',
-      '  note("<a2 e2>*12")',
+      '  // Left hand bass: a2/e2 alternating, 24 per loop (8th notes)',
+      '  note("a2 e2 a2 e2 a2 e2 a2 e2 a2 e2 a2 e2 a2 e2 a2 e2 a2 e2 a2 e2 a2 e2 a2 e2")',
       '    .s("sine").gain(0.3).lpf(400)',
       '    .attack(.005).decay(.15).sustain(.7).release(.15)',
       ').slow(2)',
