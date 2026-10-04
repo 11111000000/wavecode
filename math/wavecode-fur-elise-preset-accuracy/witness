@@ -70,3 +70,18 @@
       M4: c5 ~ e5 e6 d#5             (climax: e6/d#6 high register)
     42 events, .slow(4) → 8 sec/loop ≈ 90 BPM quarter. Bass:
     <a2 e2>*12 = 24 alternating 8th notes per loop, sine + lpf 400.
+- sha: 2929b2a
+  date: 2026-10-02
+  kind: amendment
+  files:
+    - ui/src/domain/presets.ts
+  notes: |
+    v6 — 'тормознутая медленная по одной нотке'. v5 was 8 sec/loop
+    = ~50 BPM quarter (half Poco moto). Plus staccato envelope
+    .decay(.4).sustain(.15) left 60% of each step silent — clicking.
+    Two changes:
+      Tempo: .slow(4) → .slow(2) — 4 sec/loop ≈ 180 BPM quarter
+        (brisk, flowing performance tempo).
+      Envelope: .decay(.4).sustain(.15) → .decay(.15).sustain(.7)
+        — legato: note sustains at 70% for ~70% of step, adjacent
+        notes blend. Each 16th ≈ 95ms; ~85ms audible with overlap.
