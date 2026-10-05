@@ -20,6 +20,7 @@ export type AudioStatus = 'stopped' | 'playing' | 'error';
 
 export type AppState = {
   readonly score: Score;
+  readonly scorePrev: Score;
   readonly messages: ReadonlyArray<Message>;
   readonly agent: { readonly status: AgentStatus; readonly lastError?: string };
   readonly audio: { readonly status: AudioStatus; readonly lastError?: string };
@@ -40,6 +41,7 @@ export const initialAppState: AppState = {
     '  s("white*8").decay(.04).sustain(0).gain(0.15)',
     ')',
   ].join('\n'),
+  scorePrev: '',
   messages: [],
   agent: { status: 'idle' },
   audio: { status: 'stopped' },

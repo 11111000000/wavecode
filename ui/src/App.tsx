@@ -161,6 +161,12 @@ export function App() {
     setPresetId('creep');
   };
 
+  const onRollback = (): void => {
+    if (!appStore.scorePrev) return;
+    void stopAudio();
+    dispatch({ type: 'rollbackScore' });
+  };
+
   installKeyboardShortcuts({
     focusAI: () => {
       const ta = document.querySelector<HTMLTextAreaElement>('[data-ai-textarea]');
@@ -199,6 +205,15 @@ export function App() {
               </optgroup>
             </Show>
           </select>
+          <button
+            type="button"
+            class="preset-btn"
+            onClick={onRollback}
+            disabled={!appStore.scorePrev}
+            title="Вернуть предыдущую версию партитуры"
+          >
+            ↶ Откатить
+          </button>
           <button
             type="button"
             class="preset-btn preset-btn-new"

@@ -15,7 +15,7 @@ import type { Role } from '~/domain/types';
  *   ┌──────────────────────────────┐
  *   │  история сообщений (скролл)  │
  *   ├──────────────────────────────┤
- *   │  статус (если есть)          │
+ *   │  статус (+ retry если err)   │
  *   ├──────────────────────────────┤
  *   │  textarea + Применить        │
  *   │  + селекты модели/think      │
@@ -31,16 +31,22 @@ const roleLabel = (role: Role): string => {
   }
 };
 
+type FailedRequest = { readonly text: string };
+
 export function AIEditPanel() {
   const [instruction, setInstruction] = createSignal('');
   const [busy, setBusy] = createSignal(false);
   const [status, setStatus] = createSignal<{ kind: 'idle' | 'ok' | 'err'; msg: string }>({ kind: 'idle', msg: '' });
   const [settings, setSettings] = createSignal(getLLMSettings());
+  // Последний запрос, упавший с ошибкой. Нужен для кнопки «Попробовать
+  // исправить» — повторяет ровно тот же текст + текущие настройки модели/
+  // thinking. Очищается при успехе (новом или повторном).
+  const [lastFailed, setLastFailed] = createSignal<FailedRequest | null>(null);
 
   let messagesRef: HTMLDivElement | undefined;
 
-  const submit = async () => {
-    const text = instruction().trim();
+  const submit = async (overrideText?: string): Promise<void> => {
+    const text = (overrideText ?? instruction()).trim();
     if (!text) {
       setStatus({ kind: 'err', msg: 'Введи инструкцию' });
       return;
@@ -72,6 +78,7 @@ export function AIEditPanel() {
       const msg = err instanceof Error ? err.message : String(err);
       console.error('[AIEditPanel] LLM error:', msg, err);
       setStatus({ kind: 'err', msg: `LLM ошибка: ${msg}` });
+      setLastFailed({ text });
       setBusy(false);
       return;
     }
@@ -86,6 +93,7 @@ export function AIEditPanel() {
           ? `ИИ вернул пустой ответ после очистки. Сырой: "${preview.replace(/\n/g, ' ')}"`
           : 'ИИ вернул пустой ответ (нет данных от API)',
       });
+      setLastFailed({ text });
       setBusy(false);
       return;
     }
@@ -93,7 +101,10 @@ export function AIEditPanel() {
     dispatch({ type: 'replaceScore', text: newScore });
     dispatch({ type: 'assistantMessage', text: newScore });
     dispatch({ type: 'userMessage', text });
-    setInstruction('');
+    if (overrideText === undefined) {
+      // Retry: текст уже в textarea как instruction, не перезаписываем.
+      setInstruction('');
+    }
 
     try {
       await Effect.runPromise(
@@ -104,14 +115,22 @@ export function AIEditPanel() {
       );
       dispatch({ type: 'audioStatusChange', status: 'playing' });
       setStatus({ kind: 'ok', msg: 'Применено и играет ✓' });
+      setLastFailed(null);
     } catch (audioErr) {
       const msg = audioErr instanceof Error ? audioErr.message : String(audioErr);
       console.error('[AIEditPanel] audio eval error:', msg);
       dispatch({ type: 'audioStatusChange', status: 'error', error: msg });
       setStatus({ kind: 'err', msg: `ИИ ответил, но ошибка аудио: ${msg}` });
+      setLastFailed({ text });
     } finally {
       setBusy(false);
     }
+  };
+
+  const onRetry = (): void => {
+    const f = lastFailed();
+    if (!f) return;
+    void submit(f.text);
   };
 
   const onModelChange = (e: Event) => {
@@ -162,7 +181,20 @@ export function AIEditPanel() {
       </div>
 
       <Show when={status().msg}>
-        <div class={`ai-status ai-status-${status().kind}`}>{status().msg}</div>
+        <div class="ai-status-row">
+          <div class={`ai-status ai-status-${status().kind}`}>{status().msg}</div>
+          <Show when={status().kind === 'err' && lastFailed()}>
+            <button
+              type="button"
+              class="ai-retry-btn"
+              onClick={onRetry}
+              disabled={busy()}
+              title="Отправить тот же запрос ещё раз"
+            >
+              ↻ Попробовать исправить
+            </button>
+          </Show>
+        </div>
       </Show>
 
       <div class="ai-footer">
