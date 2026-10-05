@@ -1,4 +1,4 @@
-import { createSignal, createEffect, onCleanup } from 'solid-js';
+import { createSignal, createEffect, onCleanup, createRoot } from 'solid-js';
 
 const KEY = 'wavecode-ui-state-v1';
 
@@ -38,8 +38,13 @@ const saveState = (state: UIState) => {
 const initial = loadState();
 export const [uiState, setUiState] = createSignal<UIState>(initial);
 
-createEffect(() => {
-  saveState(uiState());
+// Module-level reactive: оборачиваем в createRoot, чтобы не получать
+// warning «computations created outside a createRoot or render will never
+// be disposed» — эффект реально живёт всю сессию страницы.
+createRoot(() => {
+  createEffect(() => {
+    saveState(uiState());
+  });
 });
 
 export const toggleScore = (): void => {

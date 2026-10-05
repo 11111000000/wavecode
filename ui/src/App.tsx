@@ -49,7 +49,10 @@ export function App() {
   onCleanup(() => window.clearInterval(pollId));
 
   onMount(() => {
-    void ensureAudioLoaded();
+    // Lazy: подгружаем сохранённый score, но НЕ дёргаем Strudel.
+    // Strudel (≈676KB / 216KB gzip — половина initial bundle) нужен только
+    // для аудио, которое юзер запросит кнопкой «Запуск» / «440» / «Применить».
+    // Без ensureAudioLoaded() initial бандл падает с ~415KB до ~200KB gzip.
     void Effect.runPromise(
       Effect.gen(function* () {
         const repo = yield* Repo;
@@ -57,6 +60,21 @@ export function App() {
         if (saved) dispatch({ type: 'replaceScore', text: saved });
       }).pipe(Effect.provide(AppLayer)),
     );
+
+    // Preload Strudel по первому user-gesture. Пока юзер просто смотрит
+    // на партитуру — chunk не качается (важно для слабых сетей). Как только
+    // юзер кликнул / нажал клавишу / ткнул в тач — стартуем фоном, чтобы
+    // к моменту «Запуск» chunk уже был тёплый в кэше.
+    let preloaded = false;
+    const preload = () => {
+      if (preloaded) return;
+      preloaded = true;
+      void ensureAudioLoaded();
+      window.removeEventListener('pointerdown', preload, true);
+      window.removeEventListener('keydown', preload, true);
+    };
+    window.addEventListener('pointerdown', preload, { capture: true, passive: true });
+    window.addEventListener('keydown', preload, { capture: true, passive: true });
   });
 
   let saveTimer: number | undefined;
