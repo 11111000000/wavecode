@@ -1,0 +1,51 @@
+- sha: 2745586
+  date: 2026-10-05
+  kind: creation
+  files:
+    - ui/package.json
+    - ui/package-lock.json
+    - ui/src/domain/midi/types.ts
+    - ui/src/domain/midi/codec.ts
+    - ui/src/domain/midi/encoder.ts
+    - ui/src/domain/midi/decoder.ts
+    - ui/src/domain/midi/codec.test.ts
+    - ui/src/domain/midi/encoder.test.ts
+    - ui/src/domain/midi/decoder.test.ts
+    - ui/src/application/midi/gmDrumMap.ts
+    - ui/src/application/midi/exportMidi.ts
+    - ui/src/application/midi/importMidi.ts
+    - ui/src/infrastructure/audio/LiveAudioEngine.ts
+    - ui/src/domain/services.ts
+    - ui/src/presentation/components/MidiIOButtons.tsx
+    - ui/src/presentation/panels/ScorePanel.tsx
+    - ui/src/index.css
+    - math/midi-io/packet.md
+  notes: |
+    В `ScorePanel` под редактором добавлена пара кнопок 📥 Импорт / 📤 Экспорт:
+
+    1. **Текстовый round-trip** (lossless): `.strudel.txt` / `.js` / `.txt`
+       через FileReader + Blob + URL.createObjectURL. Никакой зависимости,
+       никакой эвристики — `Score = string` уже текст, мы просто пишем
+       его в файл.
+
+    2. **MIDI round-trip** (lossy): `.mid` через Standard MIDI File codec.
+       Экспорт: snippet → `AudioEngine.compileAndQuery(snippet, cycles)`
+       (через новый метод AudioEngine-интерфейса, реализация в
+       LiveAudioEngine) → NoteEvent[] → hapsToSequence (encoder) → writeSmi
+       (codec, обёртка над @tonejs/midi) → Uint8Array. Длительность
+       настраивается в UI (cycles ∈ [1, 32], default 4).
+       Импорт: bytes → parseSmi → midiToScore (decoder: auto-BPM detect
+       из median IOI, 16th-grid quantize, per-channel voice split,
+       channel 10 → s(...) через GM drum map) → validate через
+       compileAndQuery → dispatch({ type: 'replaceScore', text }).
+
+    Архитектурные ограничения соблюдены:
+    - domain/midi/* — pure, lint-clean (без @strudel, без fetch, без DOM);
+    - application/midi/* — НЕ импортирует @strudel/* (через AudioEngine-интерфейс);
+    - presentation/components/MidiIOButtons.tsx — НЕ импортирует @strudel/*;
+    - AudioEngine interface расширен через чистый метод compileAndQuery
+      (substrate-extension, не ломает существующий eval/stop).
+
+    Тесты: 22 новых vitest-кейса (codec roundtrip, encoder grouping,
+    decoder midiToScore, decoder detectBpm). Полный набор 66/66 passed.
+    Typecheck, lint — clean.
