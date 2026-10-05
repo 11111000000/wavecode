@@ -5,6 +5,7 @@ import type * as MiniModule from '@strudel/mini';
 import type * as TonalModule from '@strudel/tonal';
 import type * as TranspilerModule from '@strudel/transpiler';
 import type * as WebaudioModule from '@strudel/webaudio';
+import type { NoteEvent } from '~/domain/midi/encoder';
 
 /**
  * Live AudioEngine — реальный Strudel runtime в main thread.
@@ -214,10 +215,76 @@ const ensureRepl = (audioCtx: AudioContext): Promise<ReplHandle> => {
   return cachedRepl;
 };
 
+type HapLike = {
+  whole?: { begin?: unknown };
+  duration?: unknown;
+  value?: unknown;
+  context?: unknown;
+  hasOnset?: () => boolean;
+};
+
+const fractionToNumber = (v: unknown): number => {
+  if (typeof v === 'number') return v;
+  if (typeof v === 'object' && v !== null && typeof (v as { valueOf?: () => number }).valueOf === 'function') {
+    return Number((v as { valueOf: () => number }).valueOf());
+  }
+  return NaN;
+};
+
+const extractFromHap = (
+  hap: unknown,
+  getFrequency: (h: unknown) => unknown,
+  accumulator: NoteEvent[],
+): void => {
+  const h = hap as HapLike;
+  if (h.hasOnset && !h.hasOnset()) return;
+  const value = h.value;
+  if (value === undefined || value === null) return;
+
+  const begin = fractionToNumber(h.whole?.begin);
+  const dur = h.duration !== undefined ? fractionToNumber(h.duration) : 0.25;
+  if (!Number.isFinite(begin) || !Number.isFinite(dur) || dur <= 0) return;
+
+  let velocity = 100;
+  let channel = 1;
+  const ctx = h.context;
+  if (typeof ctx === 'object' && ctx !== null) {
+    const gain = (ctx as { gain?: unknown }).gain;
+    if (typeof gain === 'number') velocity = Math.round(Math.max(0, Math.min(1, gain)) * 127);
+    const ch = (ctx as { channel?: unknown }).channel;
+    if (typeof ch === 'number' && ch >= 1 && ch <= 16) channel = ch;
+  }
+
+  const pushNote = (midi: number): void => {
+    if (!Number.isFinite(midi)) return;
+    accumulator.push({
+      midi,
+      startCycle: begin,
+      endCycle: begin + dur,
+      velocity,
+      channel,
+    });
+  };
+
+  try {
+    const freq = getFrequency(hap);
+    if (typeof freq === 'number' && Number.isFinite(freq) && freq > 0) {
+      pushNote(Math.round(12 * Math.log2(freq / 440) + 69));
+      return;
+    }
+  } catch {
+    /* fallthrough to raw value */
+  }
+
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    pushNote(value);
+  }
+};
+
 export const LiveAudioEngine: Layer.Layer<AudioEngine, never, never> = Layer.succeed(
   AudioEngine,
   {
-eval: (snippet: string) =>
+    eval: (snippet: string) =>
       Effect.tryPromise({
         try: async () => {
           const audioCtx = (window as unknown as { __wavecodeAudioCtx?: AudioContext }).__wavecodeAudioCtx
@@ -249,6 +316,42 @@ eval: (snippet: string) =>
         },
         catch: () => null as null,
       }).pipe(Effect.catchAll(() => Effect.void)),
+    compileAndQuery: (snippet: string, cycles: number) =>
+      Effect.tryPromise({
+        try: async () => {
+          const modules = await loadModules();
+          // ensure evalScope has been called so globalThis has stack/note/n/s
+          await modules.core.evalScope(modules.core, modules.mini, modules.tonal);
+          const transpilerMod = modules.transpilerMod as unknown as {
+            evaluate?: (code: string, transpiler: unknown) => Promise<{ pattern?: unknown }>;
+            transpiler?: unknown;
+          };
+          if (!transpilerMod.evaluate) throw new Error('transpilerMod.evaluate недоступен');
+          const result = await transpilerMod.evaluate(snippet, transpilerMod.transpiler);
+          const pattern = result.pattern as { queryArc?: (a: number, b: number) => unknown[] } | undefined;
+          if (!pattern || typeof pattern.queryArc !== 'function') {
+            throw new Error('compiled pattern не поддерживает queryArc');
+          }
+          const haps = pattern.queryArc(0, Math.max(1, Math.min(32, cycles | 0)));
+          const coreMod = modules.core as unknown as {
+            getFrequency?: (h: unknown) => unknown;
+          };
+          const getFreq = coreMod.getFrequency ?? ((h: unknown) => {
+            const v = (h as { value?: unknown }).value;
+            return typeof v === 'number' ? v : NaN;
+          });
+          const events: NoteEvent[] = [];
+          for (const hap of haps) {
+            extractFromHap(hap, getFreq, events);
+          }
+          return events;
+        },
+        catch: (err) => {
+          const msg = err instanceof Error ? err.message : String(err);
+          console.error('[wavecode/LiveAudioEngine.compileAndQuery]', msg, err);
+          return new Error(`compileAndQuery failed: ${msg}`);
+        },
+      }),
   },
 );
 

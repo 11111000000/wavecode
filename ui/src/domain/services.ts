@@ -1,5 +1,6 @@
 import { Context, type Effect } from 'effect';
 import type { Message } from './types';
+import type { NoteEvent } from './midi/encoder';
 
 /**
  * Service Tags (интерфейсы).
@@ -35,6 +36,15 @@ export class AudioEngine extends Context.Tag('AudioEngine')<
   {
     readonly eval: (snippet: string) => Effect.Effect<void, Error, never>;
     readonly stop: () => Effect.Effect<void, never, never>;
+    /**
+     * Compile snippet to a Strudel Pattern and query the first N cycles.
+     * Returns flat NoteEvent[] (no Strudel types leak to callers).
+     * Implementation lives in `infrastructure/audio/`.
+     */
+    readonly compileAndQuery: (
+      snippet: string,
+      cycles: number,
+    ) => Effect.Effect<ReadonlyArray<NoteEvent>, Error, never>;
   }
 >() {}
 

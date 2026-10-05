@@ -1,8 +1,9 @@
-import { createSignal, Show, onCleanup, createMemo } from 'solid-js';
+import { createSignal, Show, onCleanup, createMemo, For } from 'solid-js';
 import { Effect } from 'effect';
 import { appStore, dispatch } from '../state/appStore';
 import { exportMidi } from '~/application/midi/exportMidi';
 import { importMidi } from '~/application/midi/importMidi';
+import { AppLayer } from '~/infrastructure/composition';
 import type { MIDIExportResult, MIDIImportResult } from '~/domain/midi/types';
 
 /**
@@ -72,10 +73,10 @@ export function MidiIOButtons() {
   const [busy, setBusy] = createSignal(false);
   const [error, setError] = createSignal<string | null>(null);
   const [warnings, setWarnings] = createSignal<ReadonlyArray<string>>([]);
-  let lastUrl: string | null = null;
+  const lastUrl: { current: string | null } = { current: null };
 
   onCleanup(() => {
-    if (lastUrl) URL.revokeObjectURL(lastUrl);
+    if (lastUrl.current) URL.revokeObjectURL(lastUrl.current);
   });
 
   const handleImport = async (file: File): Promise<void> => {
@@ -87,7 +88,9 @@ export function MidiIOButtons() {
       if (MIDI_ACCEPT.split(',').includes(ext) || ext === '.midi') {
         const buf = await readFileAsArrayBuffer(file);
         const bytes = new Uint8Array(buf);
-        const result = await Effect.runPromise(importMidi(bytes));
+        const result = await Effect.runPromise(
+          importMidi(bytes).pipe(Effect.provide(AppLayer)),
+        );
         applyImportResult(result);
       } else {
         const text = await readFileAsText(file);
@@ -118,7 +121,7 @@ export function MidiIOButtons() {
         exportMidi(appStore.score, {
           bpm: 120,
           cycles: cycles(),
-        }),
+        }).pipe(Effect.provide(AppLayer)),
       );
       if (!result.ok) {
         setError(result.error);
@@ -181,9 +184,7 @@ export function MidiIOButtons() {
         <details class="midi-io-warn">
           <summary>{warnings().length} предупреждение</summary>
           <ul>
-            {warnings().map((w) => (
-              <li>{w}</li>
-            ))}
+            <For each={warnings()}>{(w) => <li>{w}</li>}</For>
           </ul>
         </details>
       </Show>

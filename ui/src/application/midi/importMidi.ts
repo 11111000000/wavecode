@@ -3,16 +3,17 @@
  *
  * Pipeline:
  *   bytes (Uint8Array)
- *     → parseSmi(bytes)                  [MIDISequence]
+ *     → parseSmi(bytes)              [MIDISequence]
  *     → midiToScore(seq, opts, drumMap)  [MIDIImportResult]
- *     → validate (compile через transpiler, без playback)
+ *     → validate (compileAndQuery, без playback)
  *
- * Если валидация fails — возвращаем ok=true с warning, не блокируем
- * импорт: юзер может захотеть увидеть результат чтобы понять почему.
+ * Если compileAndQuery fails — возвращаем ok=true с warning,
+ * не блокируем импорт: юзер может захотеть увидеть результат
+ * чтобы понять почему.
  */
 
 import { Effect } from 'effect';
-import * as transpiler from '@strudel/transpiler';
+import { AudioEngine } from '~/domain/services';
 import { parseSmi } from '~/domain/midi/codec';
 import { midiToScore } from '~/domain/midi/decoder';
 import { gmDrumMap } from './gmDrumMap';
@@ -24,8 +25,8 @@ import type {
 export const importMidi = (
   bytes: Uint8Array,
   opts: MIDIImportOptions = {},
-): Effect.Effect<MIDIImportResult, never, never> =>
-  Effect.sync((): MIDIImportResult => {
+): Effect.Effect<MIDIImportResult, never, AudioEngine> =>
+  Effect.gen(function* () {
     let seq;
     try {
       seq = parseSmi(bytes);
@@ -33,24 +34,23 @@ export const importMidi = (
       return {
         ok: false,
         error: `не удалось распарсить MIDI: ${e instanceof Error ? e.message : String(e)}`,
-      };
+      } satisfies MIDIImportResult;
     }
 
     const result = midiToScore(seq, opts, gmDrumMap);
     if (!result.ok) return result;
 
-    try {
-      const ev = (transpiler as { evaluate?: (s: string, opts?: object) => unknown }).evaluate;
-      if (ev) ev(result.score, { nanFallback: 0 });
-    } catch (e) {
+    const engine = yield* AudioEngine;
+    const validateExit = yield* Effect.exit(engine.compileAndQuery(result.score, 1));
+    if (validateExit._tag === 'Failure') {
+      const msg = validateExit.cause._tag === 'Fail'
+        ? String((validateExit.cause as { error?: unknown }).error ?? 'unknown')
+        : 'validate failed';
       return {
         ok: true,
         score: result.score,
-        warnings: [
-          ...result.warnings,
-          `сниппет скомпилирован с ошибкой: ${e instanceof Error ? e.message : String(e)}`,
-        ],
-      };
+        warnings: [...result.warnings, `сниппет не компилируется: ${msg}`],
+      } satisfies MIDIImportResult;
     }
 
     return result;

@@ -28,7 +28,7 @@ const PC = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 
 const midiToName = (midi: number): string => {
   const m = Math.round(midi);
-  const pc = PC[((m % 12) + 12) % 12];
+  const pc = PC[((m % 12) + 12) % 12] ?? 'C';
   const octave = Math.floor(m / 12) - 1;
   return `${pc.toLowerCase()}${octave}`;
 };
