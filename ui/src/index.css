@@ -499,6 +499,115 @@ kbd {
   word-break: break-word;
 }
 
+/* MIDI / file I/O bar — живёт внизу ScorePanel */
+.score-panel-inner > .midi-io-bar {
+  flex-shrink: 0;
+  border-top: 1px solid var(--border);
+  background: var(--bg-elev);
+  font-size: 11px;
+}
+
+.midi-io-bar[open] > .midi-io-summary {
+  padding: 8px 16px;
+  background: var(--bg-elev-2);
+  border-bottom: 1px solid var(--border);
+  font-weight: 600;
+  cursor: pointer;
+  user-select: none;
+}
+
+.midi-io-summary {
+  padding: 6px 16px;
+  cursor: pointer;
+  user-select: none;
+  color: var(--fg-dim);
+}
+
+.midi-io-summary:hover {
+  color: var(--fg);
+}
+
+.midi-io-row {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  flex-wrap: wrap;
+  padding: 10px 16px;
+}
+
+.midi-io-field {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: 'SF Mono', Menlo, monospace;
+}
+
+.midi-io-label {
+  color: var(--fg-dim);
+}
+
+.midi-io-field input[type='number'] {
+  width: 56px;
+  padding: 3px 6px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--fg);
+  font-family: inherit;
+  font-size: 11px;
+}
+
+.midi-io-field input[type='file'] {
+  font-size: 11px;
+  font-family: inherit;
+  color: var(--fg-dim);
+  max-width: 220px;
+}
+
+.midi-io-btn {
+  padding: 4px 10px;
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--fg);
+  font-family: 'SF Mono', Menlo, monospace;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.midi-io-btn:hover:not(:disabled) {
+  background: var(--bg);
+  border-color: var(--accent);
+}
+
+.midi-io-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.midi-io-err {
+  padding: 6px 16px 10px;
+  color: var(--err);
+  font-family: 'SF Mono', Menlo, monospace;
+  word-break: break-word;
+}
+
+.midi-io-warn {
+  padding: 4px 16px 10px;
+  font-family: 'SF Mono', Menlo, monospace;
+  color: var(--fg-dim);
+}
+
+.midi-io-warn summary {
+  cursor: pointer;
+  user-select: none;
+}
+
+.midi-io-warn ul {
+  margin: 4px 0 0 16px;
+  padding: 0;
+}
+
 .preset-btn-new {
   border-color: var(--accent);
   color: var(--accent);

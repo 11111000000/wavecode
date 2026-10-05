@@ -2,6 +2,7 @@ import { Show, createSignal, onCleanup } from 'solid-js';
 import { appStore, dispatch } from '../state/appStore';
 import { getDebug } from '~/infrastructure/audio/LiveAudioEngine';
 import { CodeMirrorEditor } from '../components/CodeMirrorEditor';
+import { MidiIOButtons } from '../components/MidiIOButtons';
 
 /**
  * Score panel — ТОЛЬКО редактор + debug-info.
@@ -34,6 +35,8 @@ export function ScorePanel() {
           <span class="debug-err">super: {debug().superdoughErr}</span>
         </Show>
       </div>
+
+      <MidiIOButtons />
     </div>
   );
 }

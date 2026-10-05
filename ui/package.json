@@ -48,7 +48,8 @@
     "solid-js": "^1.8.0",
     "nanoid": "^5.0.7",
     "clsx": "^2.1.1",
-    "idb-keyval": "^6.2.1"
+    "idb-keyval": "^6.2.1",
+    "@tonejs/midi": "^2.0.28"
   },
   "devDependencies": {
     "vite-plugin-solid": "^2.10.0",
