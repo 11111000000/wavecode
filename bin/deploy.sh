@@ -62,14 +62,23 @@ if ! "$SUDO" -n true 2>/dev/null; then
 fi
 "$SUDO" -n mkdir -p "$DEPLOY_DIR"
 "$SUDO" -n cp -r "$UI_DIR/dist/." "$DEPLOY_DIR/"
-# Drop stale hashed assets (vite emits content-hashed filenames, so the
-# previous index-*.js is now orphaned and just wastes disk).
-for f in "$DEPLOY_DIR/assets/index-"*.js{,.map}; do
+# Drop stale hashed assets. Vite emits content-hashed filenames, so the
+# previous index-*.js / index-*.css are orphaned once a new build lands.
+# Keep ONLY the bundle(s) referenced by the freshly-copied index.html —
+# otherwise the cleanup loop would happily nuke the just-deployed bundle.
+ACTIVE_JS=$(grep -oE 'index-[A-Za-z0-9_-]+\.js' "$DEPLOY_DIR/index.html" | sort -u || true)
+ACTIVE_CSS=$(grep -oE 'index-[A-Za-z0-9_-]+\.css' "$DEPLOY_DIR/index.html" | sort -u || true)
+for f in "$DEPLOY_DIR/assets/"index-*.js "$DEPLOY_DIR/assets/"index-*.js.map \
+         "$DEPLOY_DIR/assets/"index-*.css "$DEPLOY_DIR/assets/"index-*.css.map; do
   [ -f "$f" ] || continue
-  case "$f" in
-    *index.html) ;;
-    *) "$SUDO" -n rm -f "$f" ;;
+  base=$(basename "$f")
+  case "$base" in
+    *.js|*.js.map)
+      echo "$ACTIVE_JS" | grep -qx "$base" && continue ;;
+    *.css|*.css.map)
+      echo "$ACTIVE_CSS" | grep -qx "$base" && continue ;;
   esac
+  "$SUDO" -n rm -f "$f"
 done
 "$SUDO" -n chown -R caddy:caddy "$DEPLOY_DIR"
 
