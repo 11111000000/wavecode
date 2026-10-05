@@ -47,7 +47,7 @@ status: applied
 axiom: A4
 witness:
   applied_at: 2026-10-05
-  commit: <filled on apply>
+  commit: ae2afc7
 amendment: null
 epistemics:
   - statement: "wavecode — pure frontend SPA, оператор — русскоязычный"
