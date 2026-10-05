@@ -179,11 +179,11 @@ export const DebugPanel = () => {
     <Show when={open()}>
       <div class="debug-overlay">
         <header class="debug-header">
-          <span class="debug-title">🐛 Debug</span>
+          <span class="debug-title">🐛 Отладка</span>
           <span class="debug-meta">
             AudioContext: <strong>{debugState().audioContextState}</strong>
-            {' · '}sr: {debugState().audioContextSampleRate ?? '?'}
-            {' · '}osc: {debugState().oscillatorCount}
+            {' · '}: <strong>{debugState().audioContextSampleRate ?? '?'}</strong>
+            {' · '}osc: <strong>{debugState().oscillatorCount}</strong>
           </span>
           <button
             type="button"
@@ -196,14 +196,14 @@ export const DebugPanel = () => {
               void navigator.clipboard?.writeText(text);
             }}
           >
-            Copy
+            Скопировать
           </button>
           <button type="button" onClick={() => setOpen(false)}>×</button>
         </header>
 
         <Show when={debugState().errors.length > 0}>
           <details class="debug-errors" open>
-            <summary>Errors ({debugState().errors.length})</summary>
+            <summary>Ошибки ({debugState().errors.length})</summary>
             <ul>
               <For each={debugState().errors}>
                 {(e) => (
@@ -222,7 +222,7 @@ export const DebugPanel = () => {
         </Show>
 
         <details class="debug-logs" open>
-          <summary>Logs ({debugState().logs.length})</summary>
+          <summary>Журналы ({debugState().logs.length})</summary>
           <ol class="debug-log-list">
             <For each={debugState().logs.slice().reverse()}>
               {(l) => (

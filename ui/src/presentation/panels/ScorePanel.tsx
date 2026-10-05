@@ -22,7 +22,7 @@ export function ScorePanel() {
       />
 
       <div class="score-debug">
-        <span>triggers: <strong>{debug().triggers}</strong></span>
+        <span>триггеры: <strong>{debug().triggers}</strong></span>
         <span>cps: <strong>{debug().cps}</strong></span>
         <Show when={debug().replErr}>
           <span class="debug-err">repl: {debug().replErr}</span>

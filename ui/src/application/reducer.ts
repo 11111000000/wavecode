@@ -11,6 +11,7 @@ export type AppEvent =
   | { readonly type: 'assistantMessage'; readonly text: string }
   | { readonly type: 'editScore'; readonly oldText: string; readonly newText: string }
   | { readonly type: 'replaceScore'; readonly text: string }
+  | { readonly type: 'clearMessages' }
   | { readonly type: 'agentStatusChange'; readonly status: AgentStatus; readonly error?: string }
   | { readonly type: 'audioStatusChange'; readonly status: AudioStatus; readonly error?: string };
 
@@ -43,6 +44,9 @@ export const reduceAppEvent = (state: AppState, event: AppEvent): AppState => {
 
     case 'replaceScore':
       return { ...state, score: event.text };
+
+    case 'clearMessages':
+      return { ...state, messages: [] };
 
     case 'agentStatusChange':
       return {

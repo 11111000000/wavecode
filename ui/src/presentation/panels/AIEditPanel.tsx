@@ -1,4 +1,4 @@
-import { createSignal, Show, For } from 'solid-js';
+import { createSignal, Show, For, createEffect, onCleanup } from 'solid-js';
 import { Effect } from 'effect';
 import { dispatch, appStore } from '../state/appStore';
 import { AppLayer } from '~/infrastructure/composition';
@@ -6,17 +6,38 @@ import { AudioEngine } from '~/domain/services';
 import { unlockAudioContext } from '~/infrastructure/audio/LiveAudioEngine';
 import { applyEdit, getLastRawLLMResponse, type DialogTurn } from '~/application/useCases/llmEdit';
 import { getLLMSettings, setModel, setThinking } from '../state/llmSettings';
+import type { Role } from '~/domain/types';
 
 /**
  * AI-редактор: пользователь пишет инструкцию на русском → LLM правит score → авто-eval.
+ *
+ * Layout: мессенджер-стиль.
+ *   ┌──────────────────────────────┐
+ *   │  история сообщений (скролл)  │
+ *   ├──────────────────────────────┤
+ *   │  статус (если есть)          │
+ *   ├──────────────────────────────┤
+ *   │  textarea + Применить        │
+ *   │  + селекты модели/think      │
+ *   └──────────────────────────────┘
+ * При новом сообщении auto-scroll в конец.
  */
+
+const roleLabel = (role: Role): string => {
+  switch (role) {
+    case 'user': return 'вы';
+    case 'assistant': return 'ИИ';
+    case 'system': return 'система';
+  }
+};
 
 export function AIEditPanel() {
   const [instruction, setInstruction] = createSignal('');
   const [busy, setBusy] = createSignal(false);
   const [status, setStatus] = createSignal<{ kind: 'idle' | 'ok' | 'err'; msg: string }>({ kind: 'idle', msg: '' });
-  const [history, setHistory] = createSignal<DialogTurn[]>([]);
   const [settings, setSettings] = createSignal(getLLMSettings());
+
+  let messagesRef: HTMLDivElement | undefined;
 
   const submit = async () => {
     const text = instruction().trim();
@@ -28,7 +49,10 @@ export function AIEditPanel() {
     setBusy(true);
     setStatus({ kind: 'idle', msg: 'Отправляю в ИИ…' });
 
-    const hist = history().slice(-10);
+    const hist = appStore.messages.slice(-10).map((m): DialogTurn => ({
+      role: m.role === 'user' ? 'user' : 'assistant',
+      content: m.content,
+    }));
     const currentSettings = settings();
 
     let newScore: string;
@@ -69,7 +93,6 @@ export function AIEditPanel() {
     dispatch({ type: 'replaceScore', text: newScore });
     dispatch({ type: 'assistantMessage', text: newScore });
     dispatch({ type: 'userMessage', text });
-    setHistory([...hist, { role: 'user', content: text }, { role: 'assistant', content: newScore }]);
     setInstruction('');
 
     try {
@@ -103,70 +126,94 @@ export function AIEditPanel() {
     setSettings(getLLMSettings());
   };
 
+  createEffect(() => {
+    // Следим за длиной истории: при изменении auto-scroll в конец.
+    void appStore.messages.length;
+    if (messagesRef) {
+      messagesRef.scrollTop = messagesRef.scrollHeight;
+    }
+  });
+
+  onCleanup(() => {
+    // nothing to clean — effect self-disposes on unmount
+  });
+
   return (
     <div class="ai-edit-panel-inner">
-      <textarea
-        aria-label="Инструкция для ИИ"
-        data-ai-textarea
-        placeholder='Например: "сделай быстрее в два раза", "сделай техно-бит", "добавь басов"'
-        value={instruction()}
-        onInput={(e) => setInstruction(e.currentTarget.value)}
-        onKeyDown={(e) => {
-          if ((e.key === 'Enter') && (e.ctrlKey || e.metaKey)) {
-            e.preventDefault();
-            void submit();
+      <div class="ai-messages" ref={messagesRef}>
+        <Show
+          when={appStore.messages.length > 0}
+          fallback={
+            <div class="ai-messages-empty">
+              Здесь будет диалог с ИИ. Напиши инструкцию внизу — например:
+              «сделай быстрее в два раза», «добавь басов», «сделай техно-бит».
+            </div>
           }
-        }}
-        rows={2}
-        class="ai-textarea"
-      />
-      <div class="ai-controls-row1">
-        <select
-          class="llm-select"
-          value={settings().model}
-          onChange={onModelChange}
-          disabled={busy()}
-          title="Модель: smart=MiniMax-M3 (код, медленнее), fast=MiniMax-M2.1 (быстрее)"
         >
-          <option value="smart">smart · M3</option>
-          <option value="fast">fast · M2.1</option>
-        </select>
-        <select
-          class="llm-select"
-          value={settings().thinking}
-          onChange={onThinkingChange}
-          disabled={busy()}
-          title="Thinking: low=быстро+дешевле, high=глубже, off=отключить"
-        >
-          <option value="low">think · low</option>
-          <option value="high">think · high</option>
-          <option value="off">think · off</option>
-        </select>
-        <button type="button" onClick={() => void submit()} disabled={busy()}>
-          {busy() ? '⏳ Применяю…' : '✦ Применить'}
-        </button>
-        <button type="button" disabled={busy()} onClick={() => setInstruction('')}>
-          Очистить
-        </button>
+          <For each={appStore.messages}>
+            {(m) => (
+              <div class={`ai-message ai-message-${m.role}`}>
+                <div class="ai-message-meta">{roleLabel(m.role)}</div>
+                <div class="ai-message-body">{m.content}</div>
+              </div>
+            )}
+          </For>
+        </Show>
       </div>
+
       <Show when={status().msg}>
         <div class={`ai-status ai-status-${status().kind}`}>{status().msg}</div>
       </Show>
 
-      <Show when={appStore.messages.length > 0}>
-        <details class="ai-history" open={false}>
-          <summary>История ({appStore.messages.length})</summary>
-          <ul class="messages-list">
-            <For each={appStore.messages}>
-              {(m) => (
-                <li class={`message-item message-${m.role}`}>
-                  <strong>{m.role}:</strong> {m.content}
-                </li>
-              )}
-            </For>
-          </ul>
-        </details>
-      </Show>
+      <div class="ai-footer">
+        <textarea
+          aria-label="Инструкция для ИИ"
+          data-ai-textarea
+          placeholder='Что сделать? Например: «сделай быстрее в два раза»'
+          value={instruction()}
+          onInput={(e) => setInstruction(e.currentTarget.value)}
+          onKeyDown={(e) => {
+            if ((e.key === 'Enter') && (e.ctrlKey || e.metaKey)) {
+              e.preventDefault();
+              void submit();
+            }
+          }}
+          rows={2}
+          class="ai-textarea"
+          disabled={busy()}
+        />
+        <div class="ai-controls-row1">
+          <select
+            class="llm-select"
+            value={settings().model}
+            onChange={onModelChange}
+            disabled={busy()}
+            title="Модель: умная = M3 (код, медленнее), быстрая = M2.1"
+          >
+            <option value="smart">умная · M3</option>
+            <option value="fast">быстрая · M2.1</option>
+          </select>
+          <select
+            class="llm-select"
+            value={settings().thinking}
+            onChange={onThinkingChange}
+            disabled={busy()}
+            title="Размышление: low = быстрее и дешевле, high = глубже, off = отключить"
+          >
+            <option value="low">размышление · мало</option>
+            <option value="high">размышление · много</option>
+            <option value="off">размышление · выкл</option>
+          </select>
+          <button
+            type="button"
+            class="ai-apply-btn"
+            onClick={() => void submit()}
+            disabled={busy()}
+          >
+            {busy() ? '⏳ Применяю…' : '✦ Применить'}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

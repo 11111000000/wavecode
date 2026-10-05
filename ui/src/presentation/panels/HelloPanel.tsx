@@ -7,16 +7,16 @@ export function HelloPanel() {
   return (
     <div>
       <dl class="status-grid">
-        <dt>agent</dt>
+        <dt>агент</dt>
         <dd class={statusClass(appStore.agent.status)}>{appStore.agent.status}</dd>
-        <dt>audio</dt>
+        <dt>аудио</dt>
         <dd class={statusClass(appStore.audio.status)}>{appStore.audio.status}</dd>
-        <dt>score</dt>
-        <dd>{appStore.score.length} chars</dd>
-        <dt>messages</dt>
+        <dt>партитура</dt>
+        <dd>{appStore.score.length} симв.</dd>
+        <dt>сообщения</dt>
         <dd>{appStore.messages.length}</dd>
         <Show when={appStore.audio.lastError}>
-          <dt>audio error</dt>
+          <dt>ошибка аудио</dt>
           <dd class="status-error status-error-message">{appStore.audio.lastError}</dd>
         </Show>
       </dl>
