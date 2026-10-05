@@ -73,6 +73,24 @@ export function App() {
     }, 500);
   });
 
+  let saveMessagesTimer: number | undefined;
+  createEffect(() => {
+    const messages = appStore.messages;
+    if (saveMessagesTimer !== undefined) window.clearTimeout(saveMessagesTimer);
+    saveMessagesTimer = window.setTimeout(() => {
+      // Глубокая копия: Solid-store proxy не сериализуется через
+      // structured-clone (см. DataCloneError в IDB). JSON-roundtrip
+      // снимает proxy-обёртки и оставляет plain-object массив.
+      const plain = JSON.parse(JSON.stringify(messages));
+      void Effect.runPromise(
+        Effect.gen(function* () {
+          const repo = yield* Repo;
+          yield* repo.saveMessages(plain);
+        }).pipe(Effect.provide(AppLayer)),
+      );
+    }, 500);
+  });
+
   const loadPreset = (id: string): void => {
     const preset = getPreset(id);
     if (!preset) return;
@@ -112,6 +130,17 @@ export function App() {
         yield* repo.saveMessages([]);
       }).pipe(Effect.provide(AppLayer)),
     ).then(() => window.location.reload());
+  };
+
+  const NEW_COMPOSITION_TEMPLATE = '// Начни новую композицию здесь\n';
+
+  const onNewComposition = (): void => {
+    const ok = window.confirm('Создать новую композицию?\nТекущая партитура и история диалога сбросятся.');
+    if (!ok) return;
+    void stopAudio();
+    dispatch({ type: 'replaceScore', text: NEW_COMPOSITION_TEMPLATE });
+    dispatch({ type: 'clearMessages' });
+    setPresetId('creep');
   };
 
   installKeyboardShortcuts({
@@ -154,9 +183,17 @@ export function App() {
           </select>
           <button
             type="button"
+            class="preset-btn preset-btn-new"
+            onClick={onNewComposition}
+            title="Создать новую композицию"
+          >
+            ✦ Новая
+          </button>
+          <button
+            type="button"
             class="preset-btn"
             onClick={() => setShowSavePreset((v) => !v)}
-            title="Сохранить текущий score как новый пресет"
+            title="Сохранить партитуру как пресет"
           >
             💾
           </button>
@@ -165,7 +202,7 @@ export function App() {
               type="button"
               class="preset-btn preset-btn-danger"
               onClick={onDeletePreset}
-              title="Удалить custom пресет"
+              title="Удалить пресет"
             >
               🗑
             </button>
@@ -180,12 +217,12 @@ export function App() {
           </button>
         </div>
         <div class="app-controls-row">
-          <button type="button" class="ctrl-btn ctrl-btn-primary" onClick={() => void evalScore()}>▶ Eval</button>
-          <button type="button" class="ctrl-btn" onClick={() => void stopAudio()}>■ Stop</button>
-          <button type="button" class="ctrl-btn" onClick={() => beep(440)} title="440Hz">🔊 440</button>
-          <button type="button" class="ctrl-btn" onClick={() => beep(220)} title="220Hz">🔊 220</button>
+          <button type="button" class="ctrl-btn ctrl-btn-primary" onClick={() => void evalScore()}>▶ Запуск</button>
+          <button type="button" class="ctrl-btn" onClick={() => void stopAudio()}>■ Стоп</button>
+          <button type="button" class="ctrl-btn" onClick={() => beep(440)} title="440 Гц">🔊 440</button>
+          <button type="button" class="ctrl-btn" onClick={() => beep(220)} title="220 Гц">🔊 220</button>
           <span class="ctx-state">
-            ctx: <strong class={`status-${ctxState().state === 'running' ? 'playing' : 'idle'}`}>{ctxState().state}</strong>
+            контекст: <strong class={`status-${ctxState().state === 'running' ? 'playing' : 'idle'}`}>{ctxState().state}</strong>
           </span>
         </div>
       </header>
@@ -208,11 +245,11 @@ export function App() {
       <div class="app-body">
         <section class="score-panel collapsible" data-open={uiState().scoreOpen}>
           <CollapsibleHeader
-            title="Score"
+            title="Партитура"
             open={uiState().scoreOpen}
             onToggle={toggleScore}
-            hint="(live edit) · Ctrl+Shift+E"
-            ariaLabel="Score panel"
+            hint="live-редактирование · Ctrl+Shift+E"
+            ariaLabel="Панель партитуры"
           />
           <Show when={uiState().scoreOpen}>
             <ScorePanel />
@@ -221,11 +258,11 @@ export function App() {
 
         <section class="ai-panel collapsible" data-open={uiState().aiOpen}>
           <CollapsibleHeader
-            title="AI"
+            title="ИИ"
             open={uiState().aiOpen}
             onToggle={toggleAI}
-            hint="Ctrl+. · Ctrl+↵"
-            ariaLabel="AI edit panel"
+            hint="Ctrl+. фокус · Ctrl+↵ отправить"
+            ariaLabel="Панель ИИ"
           />
           <Show when={uiState().aiOpen}>
             <AIEditPanel />
@@ -234,11 +271,11 @@ export function App() {
 
         <aside class="status-panel collapsible" data-open={uiState().statusOpen}>
           <CollapsibleHeader
-            title="Status"
+            title="Состояние"
             open={uiState().statusOpen}
             onToggle={toggleStatus}
             hint="Ctrl+Shift+S"
-            ariaLabel="Status panel"
+            ariaLabel="Панель состояния"
           />
           <Show when={uiState().statusOpen}>
             <HelloPanel />

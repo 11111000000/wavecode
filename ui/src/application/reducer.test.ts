@@ -33,6 +33,20 @@ describe('reduceAppEvent', () => {
     expect(next.score).toBe('new score');
   });
 
+  it('clearMessages empties the message history but keeps the score', () => {
+    const withMessages: AppState = {
+      ...baseState(),
+      score: 'note("c4")',
+      messages: [
+        { id: '1', role: 'user', content: 'a', ts: 1 },
+        { id: '2', role: 'assistant', content: 'b', ts: 2 },
+      ],
+    };
+    const next = reduceAppEvent(withMessages, { type: 'clearMessages' });
+    expect(next.messages).toEqual([]);
+    expect(next.score).toBe('note("c4")');
+  });
+
   it('agentStatusChange updates agent.status', () => {
     const next = reduceAppEvent(baseState(), { type: 'agentStatusChange', status: 'streaming' });
     expect(next.agent.status).toBe('streaming');
