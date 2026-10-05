@@ -33,6 +33,30 @@ describe('reduceAppEvent', () => {
     expect(next.score).toBe('new score');
   });
 
+  it('replaceScore snapshots previous score into scorePrev', () => {
+    const start: AppState = { ...baseState(), score: 'note("c4")' };
+    const next = reduceAppEvent(start, { type: 'replaceScore', text: 'note("e4")' });
+    expect(next.score).toBe('note("e4")');
+    expect(next.scorePrev).toBe('note("c4")');
+  });
+
+  it('rollbackScore restores score from scorePrev and clears it', () => {
+    const start: AppState = {
+      ...baseState(),
+      score: 'note("e4")',
+      scorePrev: 'note("c4")',
+    };
+    const next = reduceAppEvent(start, { type: 'rollbackScore' });
+    expect(next.score).toBe('note("c4")');
+    expect(next.scorePrev).toBe('');
+  });
+
+  it('rollbackScore is a no-op when scorePrev is empty', () => {
+    const start: AppState = { ...baseState(), score: 'note("c4")' };
+    const next = reduceAppEvent(start, { type: 'rollbackScore' });
+    expect(next).toEqual(start);
+  });
+
   it('clearMessages empties the message history but keeps the score', () => {
     const withMessages: AppState = {
       ...baseState(),

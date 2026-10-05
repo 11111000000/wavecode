@@ -435,6 +435,36 @@ kbd {
   background: var(--bg);
 }
 
+.ai-status-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  border-top: 1px solid var(--border);
+  background: var(--bg);
+}
+
+.ai-status-row .ai-status {
+  flex: 1 1 auto;
+  border-top: none;
+  padding: 4px 8px 4px 16px;
+  background: transparent;
+}
+
+.ai-retry-btn {
+  flex-shrink: 0;
+  margin-right: 12px;
+  font-size: 11px;
+  padding: 4px 10px;
+  border-color: var(--warn);
+  color: var(--warn);
+}
+
+.ai-retry-btn:hover:not(:disabled) {
+  background: var(--warn);
+  color: var(--bg);
+}
+
 .ai-status-ok { color: var(--ok); }
 .ai-status-err { color: var(--err); }
 
