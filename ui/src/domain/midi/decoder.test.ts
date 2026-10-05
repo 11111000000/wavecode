@@ -34,7 +34,6 @@ describe('midi/decoder detectBpm', () => {
   });
 
   it('detects from median IOI when seq.bpm is invalid', () => {
-    const seq = melody([], 0);
     const notes: { midi: number; timeSec: number }[] = [];
     for (let i = 0; i < 8; i++) {
       notes.push({ midi: 60, timeSec: i * 0.5 });
