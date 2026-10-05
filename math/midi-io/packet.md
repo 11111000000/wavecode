@@ -73,12 +73,16 @@ substrate: |
     MIDISequence` — Hap[] → MIDINote[] (структура; сама `Pattern.query`
     не здесь).
   + `application/midi/exportMidi.ts` (new): Effect: `snippet + cycles →
-    Pattern.query(cycles*cycleLength) → Hap[] → domain.encoder →
-    domain.codec.writeSmi → Uint8Array → Blob`. Использует существующий
-    `AudioEngine` для компиляции/eval.
+    evaluate(snippet) → Pattern → pattern.queryArc(0, cycles) → Hap[] →
+    domain.encoder → domain.codec.writeSmi → Uint8Array → Blob`.
+    Использует `@strudel/transpiler.evaluate()` напрямую (compile-only,
+    без сайд-эффектов на AudioContext — layer application может импортить
+    `@strudel/*`, ограничения lint-rules касаются только `domain/` и
+    `presentation/`). `AudioEngine` не расширяем.
   + `application/midi/importMidi.ts` (new): Effect: `File → bytes →
     domain.codec.parseSmi → domain.decoder.midiToScore → validate
-    (try eval через AudioEngine, warning если throws) → return string`.
+    (sanity: попытка evaluate через `transpiler.evaluate`, warning если
+    throws) → return string`.
   + `presentation/components/MidiIOButtons.tsx` (new): Solid-компонент,
     `<details>`-блок внизу ScorePanel: file-pick → импорт, cycles-input +
     download-link → экспорт. `URL.createObjectURL` / `URL.revokeObjectURL`.
@@ -394,10 +398,11 @@ export function MidiIOButtons() {
 - **Reducer не меняется**: импорт = `replaceScore`. Экспорт = нет
   state change. Существующий `replaceScore` уже сохраняет `scorePrev`
   для undo — MIDI-импорт тоже откатывается через «↶ Откатить».
-- **Wired через `AudioEngine`**: добавляем опциональный метод
-  `queryEvents(snippet, cycles, bpm): Effect<MIDINote[], Error>`.
-  Если `AudioEngine` interface без этого метода — расширяем через
-  новую substrate-секцию (substrate-extension на сервис).
+- **Wired без расширения `AudioEngine`**: используем
+  `@strudel/transpiler.evaluate()` (compile-only, не трогает
+  AudioContext) + `Pattern.queryArc()`. `AudioEngine` остаётся
+  нетронутым, separation of concerns сохранён (export — отдельный
+  flow, не конкурирует с playback).
 
 ## Open questions
 
