@@ -65,7 +65,7 @@ status: applied
 axiom: A4
 witness:
   applied_at: 2026-10-05
-  commit: <filled after implementation commit>
+  commit: 25e83e0
 amendment: null
 epistemics:
   - statement: "replaceScore уже сохраняет score в scorePrev перед заменой"
