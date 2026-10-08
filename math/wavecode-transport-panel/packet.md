@@ -63,7 +63,7 @@ substrate: |
     absolute, transition: transform 16ms linear).
   − ничего не удалено. `evalScore()` в `audioActions.ts` →
     retrofitted на `evalWithTransport()`.
-status: draft
+status: applied
 axiom: A1
 epistemics:
   - statement: "CPS-slider удобнее BPM-slider потому что cps — это то,

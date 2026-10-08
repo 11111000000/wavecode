@@ -177,6 +177,7 @@ describe('reduceAppEvent', () => {
     expect(b.audio.lastError).toBeUndefined();
   });
 
+<<<<<<< HEAD
   it('setLayerGain updates gain for the targeted layer only', () => {
     const start = withLayerMix([makeLayerMix(0), makeLayerMix(1), makeLayerMix(2)]);
     const next = reduceAppEvent(start, { type: 'setLayerGain', index: 1, gain: 0.3 });
@@ -239,6 +240,39 @@ describe('reduceAppEvent', () => {
     const start = withLayerMix([makeLayerMix(0), makeLayerMix(1)]);
     const next = reduceAppEvent(start, { type: 'setLayerCount', count: 2 });
     expect(next.layerMix).toBe(start.layerMix);
+  });
+
+  it('setCps updates transportState.cps but keeps swing and other fields', () => {
+    const start: AppState = {
+      ...baseState(),
+      transportState: { cps: 0.5, swing: true },
+    };
+    const next = reduceAppEvent(start, { type: 'setCps', cps: 1.25 });
+    expect(next.transportState.cps).toBe(1.25);
+    expect(next.transportState.swing).toBe(true);
+  });
+
+  it('toggleSwing flips transportState.swing and keeps cps', () => {
+    const start: AppState = {
+      ...baseState(),
+      transportState: { cps: 0.7, swing: false },
+    };
+    const on = reduceAppEvent(start, { type: 'toggleSwing' });
+    expect(on.transportState.swing).toBe(true);
+    expect(on.transportState.cps).toBe(0.7);
+    const off = reduceAppEvent(on, { type: 'toggleSwing' });
+    expect(off.transportState.swing).toBe(false);
+  });
+
+  it('setCps with the same value still produces a new state object (immutable)', () => {
+    const start: AppState = {
+      ...baseState(),
+      transportState: { cps: 0.5, swing: false },
+    };
+    const next = reduceAppEvent(start, { type: 'setCps', cps: 0.5 });
+    expect(next).not.toBe(start);
+    expect(next.transportState).not.toBe(start.transportState);
+    expect(next.transportState.cps).toBe(0.5);
   });
 });
 

@@ -33,6 +33,11 @@ export const makeLayerMix = (index: number): LayerMix => ({
   soloed: false,
 });
 
+export type TransportState = {
+  readonly cps: number;
+  readonly swing: boolean;
+};
+
 export type AppState = {
   readonly score: Score;
   readonly history: ReadonlyArray<Score>;
@@ -43,6 +48,7 @@ export type AppState = {
   /** Side-state: mixer tracks for the top-level stack of `score`.
    *  Length is reconciled to actual stack size on every `audio.eval`. */
   readonly layerMix: ReadonlyArray<LayerMix>;
+  readonly transportState: TransportState;
 };
 
 export const HISTORY_LIMIT = 50;
@@ -52,7 +58,7 @@ export const initialAppState: AppState = {
   // Creep (Radiohead) — без .slow(2): 1 cycle = 2 sec на cps=0.5,
   // chord changes по 0.5 сек = 120 BPM.
   score: [
-    '// Creep (Radiohead) — G \u2192 B \u2192 C \u2192 Cm, indie-rock 4/4',
+    '// Creep (Radiohead) — G → B → C → Cm, indie-rock 4/4',
     'stack(',
     '  note("<g2 b2 c3 c3>").s("sawtooth").gain(0.4).lpf(300),',
     '  note("<[55,59,62] [59,63,66] [60,64,67] [60,63,67]>").s("triangle").gain(0.2).lpf(1500),',
@@ -68,4 +74,5 @@ export const initialAppState: AppState = {
   agent: { status: 'idle' },
   audio: { status: 'stopped' },
   layerMix: [],
+  transportState: { cps: 0.5, swing: false },
 };
