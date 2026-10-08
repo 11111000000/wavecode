@@ -66,8 +66,11 @@ substrate: |
     AppState.scorePrev` removed в v4; миграция тривиальна.
   − `ui/src/application/reducer.test.ts`: rollback-score cases →
     undo/redo cases (rename).
-status: draft
+status: applied
 axiom: A1
+witness:
+  applied_at: 2026-10-08
+  commit: 3ed8c73
 epistemics:
   - statement: "Stack-based undo/redo — стандарт в дизайн-инструментах
       (Figma: 100 шагов; VSCode: infinite пока RAM есть)"
