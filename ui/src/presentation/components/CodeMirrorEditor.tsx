@@ -35,6 +35,12 @@ export function CodeMirrorEditor(props: Props) {
         oneDark,
         miniNotationHighlight,
         autocompletion({ override: [strudelCompletions] }),
+        EditorView.contentAttributes.of({
+          autocorrect: 'off',
+          autocapitalize: 'off',
+          spellcheck: 'false',
+          inputmode: 'text',
+        }),
         EditorView.updateListener.of((u) => {
           if (u.docChanged) untrack(() => props.onChange(u.state.doc.toString()));
         }),
