@@ -1,0 +1,47 @@
+- sha: d1865f6
+  date: 2026-10-08
+  kind: creation
+  files:
+    - ui/src/presentation/state/uiState.ts
+    - ui/src/presentation/state/uiState.test.ts
+    - ui/src/App.tsx
+    - ui/src/index.css
+    - math/wavecode-mobile-single-panel/packet.md
+  notes: |
+    Mobile single-panel layout (≤720px) — auto-detected on first load
+    (no localStorage KEY), pinned via 📱 toggle in the header.
+
+    Architecture:
+    - `uiState.ts` — добавлен `MobileMode = 'auto' | 'compact' | 'full'`,
+      `getMobileMode()` / `setMobileMode()`. `resolveInitialState()`:
+      1) если `wavecode-ui-state-v1` есть в localStorage — берём его
+         (existing per-panel state всегда побеждает);
+      2) иначе смотрим `wavecode-mobile-default` pref:
+         - `compact` → {scoreOpen:true, aiOpen:false, statusOpen:false}
+         - `full`    → {scoreOpen:true, aiOpen:true,  statusOpen:true}
+         - `auto`    → matchMedia('(max-width: 720px)') fallback
+                       (mobile → compact, desktop → default)
+    - `App.tsx` — кнопка `📱` между `↶ Откатить` и `✦ Новая`, открывает
+      mini-menu с 3 опциями (auto / compact / full), активная помечена ●.
+      Document-click handler закрывает меню при клике вне `.mobile-menu-wrap`.
+    - `index.css`:
+      - `.mobile-menu-wrap` (positioning + popup) — общие стили;
+      - `@media (min-width: 721px) { .mobile-menu-wrap { display: none; } }`
+        — на десктопе 📱-toggle скрыт (auto-detect достаточно);
+      - `@media (max-width: 720px)` — расширен:
+        - `.score-panel` → `flex: 1 1 auto; min-height: calc(100vh - 100pt)`
+        - `.ai-panel[data-open='false']` / `.status-panel[data-open='false']`
+          → `flex: 0 0 auto; min-height: 0` (header-only strip)
+
+    Инварианты соблюдены:
+    - Desktop behavior (≥721px) не сломан: KEY + defaultState unchanged.
+    - localStorage KEY override всегда побеждает matchMedia и mode pref.
+    - matchMedia consult только в `resolveInitialState()` (synchronous,
+      module-load time) — без reactive `createEffect` per resize. Юзер
+      меняет режим явно через toggle, не реактивно.
+    - Collapse через `<Show when={uiState().aiOpen}>` уже существует — UI
+      уже скрывает panel content, остаётся только header strip.
+    - localStorage key = `wavecode-mobile-default` (как в packet spec).
+
+    Tests: +13 vitest cases (uiState.test.ts). Полный набор 79/79 passed
+    (было 66/66). lint + typecheck clean.
