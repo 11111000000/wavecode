@@ -3,6 +3,7 @@ import { appStore, dispatch } from '../state/appStore';
 import { getDebug } from '~/infrastructure/audio/LiveAudioEngine';
 import { CodeMirrorEditor } from '../components/CodeMirrorEditor';
 import { MidiIOButtons } from '../components/MidiIOButtons';
+import { MixerPanel } from '../components/MixerPanel';
 
 /**
  * Score panel — ТОЛЬКО редактор + debug-info.
@@ -37,6 +38,7 @@ export function ScorePanel() {
       </div>
 
       <MidiIOButtons />
+      <MixerPanel />
     </div>
   );
 }

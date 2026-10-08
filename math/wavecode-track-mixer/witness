@@ -1,0 +1,51 @@
+- sha: dc39533
+  date: 2026-10-08
+  kind: creation
+  files:
+    - ui/src/domain/types.ts
+    - ui/src/domain/layers/parseStack.ts
+    - ui/src/domain/layers/parseStack.test.ts
+    - ui/src/application/reducer.ts
+    - ui/src/application/reducer.test.ts
+    - ui/src/application/useCases/injectMix.ts
+    - ui/src/application/useCases/injectMix.test.ts
+    - ui/src/presentation/components/MixerPanel.tsx
+    - ui/src/presentation/panels/ScorePanel.tsx
+    - ui/src/presentation/state/audioActions.ts
+    - ui/src/index.css
+    - math/wavecode-track-mixer/packet.md
+  notes: |
+    Track-mixer panel — collapsible 🎛 Mixer под MidiIOButtons в
+    ScorePanel. Per-layer mute / solo / gain slider (0..1.5) с
+    авто-reconcile при изменении партитуры.
+
+    Side-state живёт в `appStore.layerMix: LayerMix[]` отдельно от
+    `score` — slider/mute не триггерит `replaceScore`, ИИ-edit не
+    задевает mixer. `audio.eval` прогоняет score через
+    `injectMix(score, layerMix)` preprocessor'ом (pure fn).
+
+    Solo cascade: если хоть один layer soloed, все не-soloed → .gain(0).
+    Soloed-свой-mute игнорируется (стандартное DAW-поведение). Mute
+    без solo → .gain(0). Без solo/mute → gain слоя применяется
+    (replace последнего .gain(<num>) либо append если нет).
+
+    **Deviation from packet**: packet говорит "parse via
+    @strudel/transpiler.transpiler, walk AST". Реальность:
+    (a) `eslint.config.js` запрещает `@strudel/*` в domain/ и
+        application/;
+    (b) `@strudel/transpiler.transpiler()` возвращает
+        транспилированный JS output, а не AST (нет `.parse()` /
+        `.parseSync()` API).
+    Fallback: paren-aware str-split в `parseStack.ts` и `injectMix.ts`
+    (как описано в antithesis (1) packet'а — «regex split на ,\n
+    наивный, но с уважением к nested stack/скобкам/строкам»).
+    Тесты: 11 parseStack cases (включая Creep 6-слой), 17 injectMix
+    cases (gain replace, mute, solo cascade, length mismatch,
+    single bare pattern, comments/whitespace preservation).
+
+    Limitations: nested stack(...) внутри слоя считается одним
+    слоем (sub-mixing — future packet). pitch-detection heuristic
+    работает только для одной первой ноты; chord arrays без
+    letter+number (MIDI 55,59,62) → "Piano" fallback.
+
+    Тесты: 102/102 passed. lint + typecheck clean.
