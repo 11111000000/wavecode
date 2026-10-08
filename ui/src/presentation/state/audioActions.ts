@@ -3,6 +3,7 @@ import { dispatch, appStore } from '../state/appStore';
 import { AppLayer } from '~/infrastructure/composition';
 import { AudioEngine } from '~/domain/services';
 import { injectMix } from '~/application/useCases/injectMix';
+import { evalWithTransport } from '~/application/useCases/evalWithTransport';
 import {
   unlockAudioContext,
   testBeep,
@@ -20,14 +21,17 @@ export const evalScore = async (): Promise<void> => {
   }
   unlockAudioContext();
   dispatch({ type: 'audioStatusChange', status: 'playing' });
+  // Mixer side-state: gain/mute/solo — applied at eval time only,
+  // never mutates the persisted score.
+  const mixed = injectMix(appStore.score, appStore.layerMix);
+  // Transport-side-effects (swing) применяются в обёртке — score
+  // остаётся чистым, swing виден только на лету.
+  const wrapped = evalWithTransport(mixed, appStore.transportState);
   try {
-    // Mixer side-state: gain/mute/solo — applied at eval time only,
-    // never mutates the persisted score.
-    const mixed = injectMix(appStore.score, appStore.layerMix);
     await Effect.runPromise(
       Effect.gen(function* () {
         const audio = yield* AudioEngine;
-        yield* audio.eval(mixed);
+        yield* audio.eval(wrapped);
       }).pipe(Effect.provide(AppLayer)),
     );
   } catch (err) {

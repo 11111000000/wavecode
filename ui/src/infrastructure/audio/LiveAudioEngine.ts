@@ -72,6 +72,7 @@ type ReplHandle = {
   evaluate: (code: string) => Promise<unknown>;
   stop: () => void;
   audioCtx: AudioContext;
+  setCps?: (cps: number) => void;
 };
 
 type DebugState = {
@@ -81,6 +82,10 @@ type DebugState = {
   replErr: string | null;
   lastEvalErr: string | null;
   cps: number;
+  /** AudioContext.currentTime последнего успешного eval (для getCycleProgress). */
+  lastEvalClock: number;
+  /** cps, актуальный на момент eval (для прогресса playhead). */
+  evalCps: number;
 };
 
 let cachedRepl: Promise<ReplHandle> | null = null;
@@ -92,6 +97,8 @@ let debugState: DebugState = {
   replErr: null,
   lastEvalErr: null,
   cps: 0,
+  lastEvalClock: 0,
+  evalCps: 0,
 };
 
 const setDebug = (patch: Partial<DebugState>): void => {
@@ -190,6 +197,14 @@ const ensureRepl = (audioCtx: AudioContext): Promise<ReplHandle> => {
             if (audioCtx.state === 'suspended') await audioCtx.resume();
             setDebug({ lastEvalErr: null, triggers: 0, superdoughErr: null });
             const result = await repl.evaluate(code);
+            // Snapshot clock + cps сразу после успешного eval — playhead
+            // должен отсчитывать прогресс цикла, синхронно с Цикл-листом
+            // Strudel. Если просто пересчитывать на каждом RAF без якоря —
+            // прогресс уползёт при каждом reload preset.
+            setDebug({
+              lastEvalClock: audioCtx.currentTime,
+              evalCps: debugState.cps,
+            });
             console.log('[wavecode] eval done, scheduler started');
             return result;
           } catch (err) {
@@ -202,6 +217,17 @@ const ensureRepl = (audioCtx: AudioContext): Promise<ReplHandle> => {
         stop: () => {
           repl.stop();
           if (audioCtx.state === 'running') void audioCtx.suspend();
+          // Reset progress anchor — после stop прогресс должен показать 0,
+          // а не «застыть» на значении, бывшем в момент остановки.
+          setDebug({ lastEvalClock: 0 });
+        },
+        setCps: (cps: number) => {
+          // Cyclist (через @strudel/webaudio) поддерживает setCps сразу —
+          // никакого re-eval не нужно, scheduler пересчитает lookahead.
+          if (typeof repl.setCps === 'function') {
+            repl.setCps(cps);
+            setDebug({ cps });
+          }
         },
         audioCtx,
       };
@@ -351,6 +377,31 @@ export const LiveAudioEngine: Layer.Layer<AudioEngine, never, never> = Layer.suc
           console.error('[wavecode/LiveAudioEngine.compileAndQuery]', msg, err);
           return new Error(`compileAndQuery failed: ${msg}`);
         },
+      }),
+    setCps: (cps: number) =>
+      Effect.tryPromise({
+        try: async () => {
+          if (!cachedRepl) return;
+          const repl = await cachedRepl;
+          repl.setCps?.(cps);
+        },
+        catch: () => null as null,
+      }).pipe(Effect.catchAll(() => Effect.void)),
+    getCycleProgress: () =>
+      Effect.sync(() => {
+        // Sync-only — вызывается RAF-ом, обещание здесь неуместно.
+        // Используем cps, актуальный на момент eval (evalCps) — если юзер
+        // успел дёрнуть setCps после последнего eval, мы ещё не знаем, с
+        // какой скоростью тикает scheduler; репортим по старой.
+        const ctx = (window as unknown as { __wavecodeAudioCtx?: AudioContext }).__wavecodeAudioCtx;
+        if (!ctx) return 0;
+        const cps = debugState.evalCps;
+        const anchor = debugState.lastEvalClock;
+        if (cps <= 0 || anchor <= 0) return 0;
+        const elapsed = ctx.currentTime - anchor;
+        // ((elapsed * cps) mod 1) даёт позицию 0..1 в цикле.
+        const progress = (elapsed * cps) - Math.floor(elapsed * cps);
+        return Number.isFinite(progress) ? progress : 0;
       }),
   },
 );

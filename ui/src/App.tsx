@@ -4,6 +4,8 @@ import { HelloPanel } from './presentation/panels/HelloPanel';
 import { ScorePanel } from './presentation/panels/ScorePanel';
 import { AIEditPanel } from './presentation/panels/AIEditPanel';
 import { DebugPanel } from './presentation/panels/DebugPanel';
+import { TransportPanel } from './presentation/components/TransportPanel';
+import { installTransportAudioSync } from './presentation/state/useTransportAudioSync';
 import { uiState, toggleScore, toggleAI, toggleStatus, installKeyboardShortcuts } from './presentation/state/uiState';
 import { appStore, dispatch } from './presentation/state/appStore';
 import { installTypingTracker } from './presentation/state/editorTypingTracker';
@@ -50,6 +52,10 @@ export function App() {
   onCleanup(() => window.clearInterval(pollId));
 
   onMount(() => {
+    // Side-channel: cps signal → AudioEngine.setCps (debounced). Изолировано
+    // от тестов transportState (там эта ф-ция не вызывается).
+    installTransportAudioSync();
+
     // Lazy: подгружаем сохранённый score, но НЕ дёргаем Strudel.
     // Strudel (≈676KB / 216KB gzip — половина initial bundle) нужен только
     // для аудио, которое юзер запросит кнопкой «Запуск» / «440» / «Применить».
@@ -272,6 +278,7 @@ export function App() {
           <button type="button" class="ctrl-btn" onClick={() => void stopAudio()}>■ Стоп</button>
           <button type="button" class="ctrl-btn" onClick={() => beep(440)} title="440 Гц">🔊 440</button>
           <button type="button" class="ctrl-btn" onClick={() => beep(220)} title="220 Гц">🔊 220</button>
+          <TransportPanel />
           <span class="ctx-state">
             контекст: <strong class={`status-${ctxState().state === 'running' ? 'playing' : 'idle'}`}>{ctxState().state}</strong>
           </span>

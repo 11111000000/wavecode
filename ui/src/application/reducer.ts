@@ -21,7 +21,9 @@ export type AppEvent =
   | { readonly type: 'setLayerGain'; readonly index: number; readonly gain: number }
   | { readonly type: 'toggleLayerMute'; readonly index: number }
   | { readonly type: 'toggleLayerSolo'; readonly index: number }
-  | { readonly type: 'setLayerCount'; readonly count: number };
+  | { readonly type: 'setLayerCount'; readonly count: number }
+  | { readonly type: 'setCps'; readonly cps: number }
+  | { readonly type: 'toggleSwing' };
 
 const newId = (): string =>
   globalThis.crypto?.randomUUID?.() ??
@@ -165,5 +167,20 @@ export const reduceAppEvent = (state: AppState, event: AppEvent): AppState => {
       const { count } = event;
       return { ...state, layerMix: reconcileLayerMix(state.layerMix, count) };
     }
+
+    case 'setCps':
+      return {
+        ...state,
+        transportState: { ...state.transportState, cps: event.cps },
+      };
+
+    case 'toggleSwing':
+      return {
+        ...state,
+        transportState: {
+          ...state.transportState,
+          swing: !state.transportState.swing,
+        },
+      };
   }
 };
