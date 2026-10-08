@@ -1,6 +1,12 @@
 import { Context, type Effect } from 'effect';
 import type { Message } from './types';
 import type { NoteEvent } from './midi/encoder';
+import type { LiveRecorderHandle } from '~/infrastructure/audio/AudioRecorder';
+import type {
+  OfflineRenderCallbacks,
+  OfflineRenderOptions,
+  OfflineRenderResult,
+} from '~/infrastructure/audio/OfflineRender';
 
 /**
  * Service Tags (интерфейсы).
@@ -45,6 +51,21 @@ export class AudioEngine extends Context.Tag('AudioEngine')<
       snippet: string,
       cycles: number,
     ) => Effect.Effect<ReadonlyArray<NoteEvent>, Error, never>;
+    /**
+     * Создаёт live recorder (MediaRecorder поверх webaudioRepl output).
+     * Возвращает handle, presentation вызывает start()/stop() напрямую
+     * (это imperative lifecycle, не Effect-async).
+     */
+    readonly recordLive: () => Effect.Effect<LiveRecorderHandle, Error, never>;
+    /**
+     * Offline render snippet → WAV Blob. Не трогает live AudioContext
+     * (создаёт свой OfflineAudioContext); в конце восстанавливает live ctx.
+     */
+    readonly renderOffline: (
+      snippet: string,
+      opts: OfflineRenderOptions,
+      callbacks?: OfflineRenderCallbacks,
+    ) => Effect.Effect<OfflineRenderResult, Error, never>;
   }
 >() {}
 

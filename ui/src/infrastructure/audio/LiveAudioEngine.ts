@@ -6,6 +6,8 @@ import type * as TonalModule from '@strudel/tonal';
 import type * as TranspilerModule from '@strudel/transpiler';
 import type * as WebaudioModule from '@strudel/webaudio';
 import type { NoteEvent } from '~/domain/midi/encoder';
+import { LiveRecorder, pickSupportedMime } from './AudioRecorder';
+import { renderToWav } from './OfflineRender';
 
 /**
  * Live AudioEngine — реальный Strudel runtime в main thread.
@@ -350,6 +352,87 @@ export const LiveAudioEngine: Layer.Layer<AudioEngine, never, never> = Layer.suc
           const msg = err instanceof Error ? err.message : String(err);
           console.error('[wavecode/LiveAudioEngine.compileAndQuery]', msg, err);
           return new Error(`compileAndQuery failed: ${msg}`);
+        },
+      }),
+    recordLive: () =>
+      Effect.try({
+        try: () => {
+          const audioCtx = (window as unknown as { __wavecodeAudioCtx?: AudioContext }).__wavecodeAudioCtx
+            ?? unlockAudioContext();
+          const picked = pickSupportedMime();
+          if (!picked) {
+            throw new Error(
+              'MediaRecorder.isTypeSupported вернул false для всех mime — браузер не поддерживает запись',
+            );
+          }
+          return new LiveRecorder(audioCtx, picked);
+        },
+        catch: (err) => {
+          const msg = err instanceof Error ? err.message : String(err);
+          console.error('[wavecode/LiveAudioEngine.recordLive]', msg, err);
+          return new Error(`recordLive failed: ${msg}`);
+        },
+      }),
+    renderOffline: (snippet: string, opts, callbacks) =>
+      Effect.tryPromise({
+        try: async () => {
+          const modules = await loadModules();
+          await modules.core.evalScope(modules.core, modules.mini, modules.tonal);
+          const transpilerMod = modules.transpilerMod as unknown as {
+            evaluate?: (code: string, transpiler: unknown) => Promise<{ pattern?: unknown }>;
+            transpiler?: unknown;
+          };
+          if (!transpilerMod.evaluate) throw new Error('transpilerMod.evaluate недоступен');
+          if (!transpilerMod.transpiler) throw new Error('transpilerMod.transpiler недоступен');
+          const sdIdx = (await import('superdough')) as unknown as Record<string, unknown>;
+          const sdOut = (await import(
+            /* @vite-ignore */ 'superdough/superdoughoutput.mjs'
+          )) as unknown as Record<string, unknown>;
+          const SuperdoughAudioController = sdOut['SuperdoughAudioController'] as
+            | (new (ctx: AudioContext) => unknown)
+            | undefined;
+          const superdough = sdIdx['superdough'] as
+            | ((v: unknown, t: number, d: number, c: number, o?: number) => Promise<unknown>)
+            | undefined;
+          const setAudioContext = sdIdx['setAudioContext'] as
+            | ((ctx: AudioContext) => void)
+            | undefined;
+          const setSuperdoughAudioController = sdIdx['setSuperdoughAudioController'] as
+            | ((ctrl: unknown) => void)
+            | undefined;
+          const initAudio = sdIdx['initAudio'] as
+            | ((opts: { maxPolyphony: number; multiChannelOrbits: boolean }) => Promise<void>)
+            | undefined;
+          if (!SuperdoughAudioController || !superdough || !setAudioContext ||
+              !setSuperdoughAudioController || !initAudio) {
+            throw new Error('superdough API не полностью доступно');
+          }
+          const liveCtx = (window as unknown as { __wavecodeAudioCtx?: AudioContext }).__wavecodeAudioCtx ?? null;
+          const result = await renderToWav(
+            snippet,
+            opts,
+            callbacks ?? {},
+            {
+              superdough: {
+                superdough,
+                setAudioContext,
+                setSuperdoughAudioController,
+                SuperdoughAudioController,
+                initAudio,
+              },
+              transpilerMod: {
+                evaluate: transpilerMod.evaluate,
+                transpiler: transpilerMod.transpiler,
+              },
+              liveAudioCtx: liveCtx,
+            },
+          );
+          return result;
+        },
+        catch: (err) => {
+          const msg = err instanceof Error ? err.message : String(err);
+          console.error('[wavecode/LiveAudioEngine.renderOffline]', msg, err);
+          return new Error(`renderOffline failed: ${msg}`);
         },
       }),
   },
