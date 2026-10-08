@@ -18,12 +18,30 @@ export type AgentStatus = 'idle' | 'streaming' | 'awaiting-tool' | 'error';
 
 export type AudioStatus = 'stopped' | 'playing' | 'error';
 
+export type LayerMix = {
+  readonly layerIndex: number;
+  /** 0..1.5 amplitude scalar applied via .gain() */
+  readonly gain: number;
+  readonly muted: boolean;
+  readonly soloed: boolean;
+};
+
+export const makeLayerMix = (index: number): LayerMix => ({
+  layerIndex: index,
+  gain: 1,
+  muted: false,
+  soloed: false,
+});
+
 export type AppState = {
   readonly score: Score;
   readonly scorePrev: Score;
   readonly messages: ReadonlyArray<Message>;
   readonly agent: { readonly status: AgentStatus; readonly lastError?: string };
   readonly audio: { readonly status: AudioStatus; readonly lastError?: string };
+  /** Side-state: mixer tracks for the top-level stack of `score`.
+   *  Length is reconciled to actual stack size on every `audio.eval`. */
+  readonly layerMix: ReadonlyArray<LayerMix>;
 };
 
 export const initialAppState: AppState = {
@@ -45,4 +63,5 @@ export const initialAppState: AppState = {
   messages: [],
   agent: { status: 'idle' },
   audio: { status: 'stopped' },
+  layerMix: [],
 };
