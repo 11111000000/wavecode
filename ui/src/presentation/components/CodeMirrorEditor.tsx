@@ -7,9 +7,14 @@ import { createEffect, onCleanup, onMount, untrack } from 'solid-js';
 import { miniNotationHighlight } from '../editor/miniNotationHighlight';
 import { strudelCompletions } from '../editor/strudelCompletions';
 
+export type CodeMirrorEditorApi = {
+  readonly getView: () => EditorView | undefined;
+};
+
 type Props = {
   readonly value: string;
   readonly onChange: (value: string) => void;
+  readonly onReady?: (api: CodeMirrorEditorApi) => void;
 };
 
 /**
@@ -20,6 +25,10 @@ type Props = {
  *   - onChange диспатчится на каждое doc change
  *   - если props.value меняется извне (например, через agent edit),
  *     editor обновляется через dispatch(changes)
+ *
+ * Imperative handle: после mount вызывает props.onReady(api) с
+ * функцией getView() — внешние компоненты (например, mini-toolbar)
+ * могут диспатчить транзакции напрямую через view.dispatch.
  */
 export function CodeMirrorEditor(props: Props) {
   let containerRef: HTMLDivElement | undefined;
@@ -47,6 +56,11 @@ export function CodeMirrorEditor(props: Props) {
       ],
     });
     view = new EditorView({ state, parent: containerRef });
+
+    const api: CodeMirrorEditorApi = {
+      getView: () => view,
+    };
+    untrack(() => props.onReady?.(api));
   });
 
   createEffect(() => {
