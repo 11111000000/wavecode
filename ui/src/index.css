@@ -738,6 +738,81 @@ code {
   font-size: 12px;
 }
 
+/* Mobile mode toggle: 📱 mini-menu. Hidden on desktop via @media below. */
+.mobile-menu-wrap {
+  position: relative;
+  display: inline-flex;
+}
+
+.mobile-menu-btn.is-open,
+.mobile-menu-btn[aria-expanded='true'] {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.mobile-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  min-width: 220px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.6);
+  padding: 4px;
+  gap: 2px;
+}
+
+.mobile-menu-item {
+  display: grid;
+  grid-template-columns: 16px auto 1fr;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  font-size: 12px;
+  text-align: left;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: var(--fg);
+  cursor: pointer;
+}
+
+.mobile-menu-item:hover {
+  background: var(--bg);
+  border-color: var(--border);
+}
+
+.mobile-menu-item.is-active {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.mobile-menu-mark {
+  font-size: 10px;
+  text-align: center;
+}
+
+.mobile-menu-hint {
+  color: var(--fg-dim);
+  font-size: 11px;
+  font-family: 'SF Mono', Menlo, monospace;
+  text-align: right;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* On desktop the 📱 toggle is hidden — matchMedia auto-detect is enough. */
+@media (min-width: 721px) {
+  .mobile-menu-wrap {
+    display: none;
+  }
+}
+
 /* Mobile */
 @media (max-width: 720px) {
   .app-header {
@@ -771,5 +846,28 @@ code {
 
   .cm-host {
     min-height: 220px;
+  }
+
+  /* Score panel owns full viewport height on mobile. AI/Status are
+     collapsed to their header strip so the editor stays comfortable. */
+  .score-panel {
+    flex: 1 1 auto;
+    min-height: calc(100vh - 100pt);
+  }
+
+  .score-panel[data-open='false'] {
+    flex: 0 0 auto;
+    min-height: 0;
+  }
+
+  .ai-panel[data-open='false'],
+  .status-panel[data-open='false'] {
+    flex: 0 0 auto;
+    min-height: 0;
+  }
+
+  .ai-panel[data-open='false'] .panel-header,
+  .status-panel[data-open='false'] .panel-header {
+    border-bottom: 1px solid var(--border);
   }
 }

@@ -4,7 +4,16 @@ import { HelloPanel } from './presentation/panels/HelloPanel';
 import { ScorePanel } from './presentation/panels/ScorePanel';
 import { AIEditPanel } from './presentation/panels/AIEditPanel';
 import { DebugPanel } from './presentation/panels/DebugPanel';
-import { uiState, toggleScore, toggleAI, toggleStatus, installKeyboardShortcuts } from './presentation/state/uiState';
+import {
+  uiState,
+  toggleScore,
+  toggleAI,
+  toggleStatus,
+  installKeyboardShortcuts,
+  getMobileMode,
+  setMobileMode,
+  type MobileMode,
+} from './presentation/state/uiState';
 import { appStore, dispatch } from './presentation/state/appStore';
 import { evalScore, stopAudio, beep } from './presentation/state/audioActions';
 import { AppLayer } from '~/infrastructure/composition';
@@ -44,6 +53,14 @@ export function App() {
   const [presetId, setPresetId] = createSignal('creep');
   const [showSavePreset, setShowSavePreset] = createSignal(false);
   const [newPresetName, setNewPresetName] = createSignal('');
+  const [mobileMode, setMobileModeSignal] = createSignal<MobileMode>(getMobileMode());
+  const [showMobileMenu, setShowMobileMenu] = createSignal(false);
+
+  const chooseMobileMode = (mode: MobileMode): void => {
+    setMobileMode(mode);
+    setMobileModeSignal(mode);
+    setShowMobileMenu(false);
+  };
 
   const pollId = window.setInterval(() => setCtxState(getAudioContextState()), 500);
   onCleanup(() => window.clearInterval(pollId));
@@ -167,6 +184,17 @@ export function App() {
     dispatch({ type: 'rollbackScore' });
   };
 
+  onMount(() => {
+    const onDocClick = (e: MouseEvent) => {
+      if (!showMobileMenu()) return;
+      const target = e.target as HTMLElement | null;
+      if (target && target.closest('.mobile-menu-wrap')) return;
+      setShowMobileMenu(false);
+    };
+    document.addEventListener('click', onDocClick);
+    onCleanup(() => document.removeEventListener('click', onDocClick));
+  });
+
   installKeyboardShortcuts({
     focusAI: () => {
       const ta = document.querySelector<HTMLTextAreaElement>('[data-ai-textarea]');
@@ -214,6 +242,41 @@ export function App() {
           >
             ↶ Откатить
           </button>
+          <div class="mobile-menu-wrap">
+            <button
+              type="button"
+              class="preset-btn mobile-menu-btn"
+              onClick={() => setShowMobileMenu((v) => !v)}
+              title={`Мобильный режим: ${mobileMode()}`}
+              aria-haspopup="true"
+              aria-expanded={showMobileMenu()}
+            >
+              📱
+            </button>
+            <Show when={showMobileMenu()}>
+              <div class="mobile-menu" role="menu">
+                <For each={(['auto', 'compact', 'full'] as const)}>
+                  {(mode) => (
+                    <button
+                      type="button"
+                      class={`mobile-menu-item${mobileMode() === mode ? ' is-active' : ''}`}
+                      onClick={() => chooseMobileMode(mode)}
+                      role="menuitemradio"
+                      aria-checked={mobileMode() === mode}
+                    >
+                      <span class="mobile-menu-mark">{mobileMode() === mode ? '●' : '○'}</span>
+                      <span>
+                        {mode === 'auto' ? 'Авто' : mode === 'compact' ? 'Компактно' : 'Полно'}
+                      </span>
+                      <span class="mobile-menu-hint">
+                        {mode === 'auto' ? 'по ширине экрана' : mode === 'compact' ? 'только партитура' : 'все 3 панели'}
+                      </span>
+                    </button>
+                  )}
+                </For>
+              </div>
+            </Show>
+          </div>
           <button
             type="button"
             class="preset-btn preset-btn-new"
