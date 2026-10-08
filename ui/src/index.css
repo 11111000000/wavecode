@@ -621,6 +621,152 @@ kbd {
   color: var(--bg);
 }
 
+/* Share modal — кнопка «🔗 Поделиться» в шапке */
+.share-modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 16px;
+}
+
+.share-modal-inner {
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 20px 22px;
+  min-width: 360px;
+  max-width: 640px;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  font-family: 'SF Mono', Menlo, monospace;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+}
+
+.share-modal-title {
+  margin: 0;
+  font-size: 14px;
+  color: var(--fg);
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro', system-ui, sans-serif;
+}
+
+.share-url {
+  background: var(--bg);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 8px 10px;
+  font-family: 'SF Mono', Menlo, monospace;
+  font-size: 11px;
+  width: 100%;
+  word-break: break-all;
+  user-select: all;
+}
+
+.share-url:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.share-modal-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.share-modal-size {
+  color: var(--fg-dim);
+  font-size: 11px;
+}
+
+.share-modal-btn {
+  background: var(--bg);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 6px 12px;
+  font-family: 'SF Mono', Menlo, monospace;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.share-modal-btn:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+
+.share-modal-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.share-modal-copy {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.share-modal-warn {
+  background: var(--bg);
+  border: 1px solid var(--warn);
+  border-radius: 4px;
+  padding: 10px 12px;
+  color: var(--warn);
+  font-size: 12px;
+  line-height: 1.5;
+  word-break: break-word;
+}
+
+.share-modal-warn code {
+  background: var(--bg-elev);
+  padding: 1px 4px;
+  border-radius: 3px;
+  font-size: 11px;
+}
+
+.share-modal-pending {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.share-modal-pending-msg {
+  color: var(--fg-dim);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.share-modal-load {
+  align-self: flex-start;
+  border-color: var(--ok);
+  color: var(--ok);
+}
+
+.share-modal-load:hover:not(:disabled) {
+  background: var(--ok);
+  color: var(--bg);
+}
+
+.share-modal-err {
+  color: var(--err);
+  font-size: 11px;
+  word-break: break-word;
+}
+
+.share-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
 /* Status panel */
 .status-error-message {
   font-size: 11px;
