@@ -7,6 +7,7 @@ import { DebugPanel } from './presentation/panels/DebugPanel';
 import { uiState, toggleScore, toggleAI, toggleStatus, installKeyboardShortcuts } from './presentation/state/uiState';
 import { appStore, dispatch } from './presentation/state/appStore';
 import { evalScore, stopAudio, beep } from './presentation/state/audioActions';
+import { RecordButton } from './presentation/components/RecordButton';
 import { AppLayer } from '~/infrastructure/composition';
 import { Repo } from '~/domain/services';
 import {
@@ -252,6 +253,7 @@ export function App() {
         <div class="app-controls-row">
           <button type="button" class="ctrl-btn ctrl-btn-primary" onClick={() => void evalScore()}>▶ Запуск</button>
           <button type="button" class="ctrl-btn" onClick={() => void stopAudio()}>■ Стоп</button>
+          <RecordButton />
           <button type="button" class="ctrl-btn" onClick={() => beep(440)} title="440 Гц">🔊 440</button>
           <button type="button" class="ctrl-btn" onClick={() => beep(220)} title="220 Гц">🔊 220</button>
           <span class="ctx-state">

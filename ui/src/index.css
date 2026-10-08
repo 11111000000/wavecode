@@ -621,6 +621,131 @@ kbd {
   color: var(--bg);
 }
 
+.ctrl-btn-record.recording {
+  border-color: var(--err);
+  color: var(--err);
+  background: rgba(239, 68, 68, 0.12);
+  animation: record-pulse 1.4s ease-in-out infinite;
+}
+
+.ctrl-btn-record.stopping {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+.ctrl-btn-record.error {
+  border-color: var(--err);
+  color: var(--err);
+}
+
+@keyframes record-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+.record-err {
+  font-size: 11px;
+  color: var(--err);
+  padding: 4px 16px;
+  word-break: break-word;
+  font-family: 'SF Mono', Menlo, monospace;
+}
+
+/* Render offline modal */
+.record-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.65);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.record-modal {
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 20px 24px;
+  width: min(420px, 92vw);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  font-family: 'SF Mono', Menlo, monospace;
+  font-size: 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+}
+
+.record-modal-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--fg);
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 8px;
+}
+
+.record-modal-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.record-modal-label {
+  color: var(--fg-dim);
+  min-width: 60px;
+}
+
+.record-modal-input {
+  width: 80px;
+}
+
+.record-modal-hint {
+  color: var(--fg-dim);
+  font-size: 11px;
+}
+
+.record-modal-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.record-modal-progress-bar {
+  height: 8px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.record-modal-progress-fill {
+  height: 100%;
+  background: var(--accent);
+  transition: width 80ms linear;
+}
+
+.record-modal-progress-text {
+  font-size: 11px;
+  color: var(--fg-dim);
+  text-transform: lowercase;
+}
+
+.record-modal-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+
+.record-modal-err {
+  font-size: 11px;
+  color: var(--err);
+  word-break: break-word;
+  padding: 6px 0;
+  border-top: 1px solid var(--err);
+}
+
 /* Status panel */
 .status-error-message {
   font-size: 11px;
