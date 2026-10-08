@@ -18,12 +18,18 @@ export type AgentStatus = 'idle' | 'streaming' | 'awaiting-tool' | 'error';
 
 export type AudioStatus = 'stopped' | 'playing' | 'error';
 
+export type TransportState = {
+  readonly cps: number;
+  readonly swing: boolean;
+};
+
 export type AppState = {
   readonly score: Score;
   readonly scorePrev: Score;
   readonly messages: ReadonlyArray<Message>;
   readonly agent: { readonly status: AgentStatus; readonly lastError?: string };
   readonly audio: { readonly status: AudioStatus; readonly lastError?: string };
+  readonly transportState: TransportState;
 };
 
 export const initialAppState: AppState = {
@@ -45,4 +51,5 @@ export const initialAppState: AppState = {
   messages: [],
   agent: { status: 'idle' },
   audio: { status: 'stopped' },
+  transportState: { cps: 0.5, swing: false },
 };

@@ -2,6 +2,7 @@ import { Effect } from 'effect';
 import { dispatch, appStore } from '../state/appStore';
 import { AppLayer } from '~/infrastructure/composition';
 import { AudioEngine } from '~/domain/services';
+import { evalWithTransport } from '~/application/useCases/evalWithTransport';
 import {
   unlockAudioContext,
   testBeep,
@@ -19,11 +20,14 @@ export const evalScore = async (): Promise<void> => {
   }
   unlockAudioContext();
   dispatch({ type: 'audioStatusChange', status: 'playing' });
+  // Transport-side-effects (swing) применяются в обёртке — score
+  // остаётся чистым, swing виден только на лету.
+  const wrapped = evalWithTransport(appStore.score, appStore.transportState);
   try {
     await Effect.runPromise(
       Effect.gen(function* () {
         const audio = yield* AudioEngine;
-        yield* audio.eval(appStore.score);
+        yield* audio.eval(wrapped);
       }).pipe(Effect.provide(AppLayer)),
     );
   } catch (err) {

@@ -14,7 +14,9 @@ export type AppEvent =
   | { readonly type: 'rollbackScore' }
   | { readonly type: 'clearMessages' }
   | { readonly type: 'agentStatusChange'; readonly status: AgentStatus; readonly error?: string }
-  | { readonly type: 'audioStatusChange'; readonly status: AudioStatus; readonly error?: string };
+  | { readonly type: 'audioStatusChange'; readonly status: AudioStatus; readonly error?: string }
+  | { readonly type: 'setCps'; readonly cps: number }
+  | { readonly type: 'toggleSwing' };
 
 const newId = (): string =>
   globalThis.crypto?.randomUUID?.() ??
@@ -63,6 +65,21 @@ export const reduceAppEvent = (state: AppState, event: AppEvent): AppState => {
       return {
         ...state,
         audio: { status: event.status, ...(event.error ? { lastError: event.error } : {}) },
+      };
+
+    case 'setCps':
+      return {
+        ...state,
+        transportState: { ...state.transportState, cps: event.cps },
+      };
+
+    case 'toggleSwing':
+      return {
+        ...state,
+        transportState: {
+          ...state.transportState,
+          swing: !state.transportState.swing,
+        },
       };
   }
 };

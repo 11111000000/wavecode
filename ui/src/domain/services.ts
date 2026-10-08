@@ -45,6 +45,17 @@ export class AudioEngine extends Context.Tag('AudioEngine')<
       snippet: string,
       cycles: number,
     ) => Effect.Effect<ReadonlyArray<NoteEvent>, Error, never>;
+    /**
+     * Update Strudel scheduler tempo in real-time (cycles per second).
+     * Used by the Transport panel — debounced 100ms from UI.
+     */
+    readonly setCps: (cps: number) => Effect.Effect<void, never, never>;
+    /**
+     * Synchronous read of current playback cycle position (0..1).
+     * Computed from AudioContext clock + last successful eval start time.
+     * Returns 0 when audio has never been started.
+     */
+    readonly getCycleProgress: () => Effect.Effect<number, never, never>;
   }
 >() {}
 
