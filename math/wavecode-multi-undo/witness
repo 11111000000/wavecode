@@ -1,0 +1,44 @@
+- sha: 3ed8c73
+  date: 2026-10-08
+  kind: creation
+  files:
+    - math/wavecode-multi-undo/packet.md
+    - math/rollback-and-retry/packet.md
+    - ui/src/domain/types.ts
+    - ui/src/application/reducer.ts
+    - ui/src/application/reducer.test.ts
+    - ui/src/presentation/state/uiState.ts
+    - ui/src/presentation/state/editorTypingTracker.ts
+    - ui/src/presentation/state/editorTypingTracker.test.ts
+    - ui/src/App.tsx
+  notes: |
+    Скоуп строго по SUBAGENT-PLAN §#3. Двусторонний stack-based
+    undo/redo заменил одношаговый scorePrev. `commitHistoryCheckpoint`
+    через 600ms debounce в `editorTypingTracker` группирует burst
+    typing в один undo step. Keyboard: Ctrl+Z undo, Ctrl+Y /
+    Ctrl+Shift+Z redo (in text fields — native text undo, не наш).
+
+    `replaceScore` idempotent — повторный write с тем же text не
+    пушит в history. History cap 50 enforced через `pushCapped`
+    helper. IDB persistence не тронут — только текущий score
+    сохраняется, history/future volatile (acceptable: see packet
+    substrate).
+
+    Tests: 19 reducer cases (включая history cap overflow,
+    idempotent replaceScore, future-clear-on-new-replace,
+    commitHistoryCheckpoint merge, undo/redo round-trip symmetry) +
+    2 editorTypingTracker pattern tests. Total 77/77 unit pass.
+
+    Supersession: math/rollback-and-retry/packet.md получил
+    `supersession: math/wavecode-multi-undo/` в YAML frontmatter.
+    witness-файл rollback-and-retry сохранён (applied остаётся
+    applied, но superseded).
+
+    Typecheck (tsc --noEmit), lint (eslint . --ext .ts,.tsx) — clean.
+
+    Замечание по среде: на этой машине pnpm недоступен, использовал
+    `npm run <script>` — эквивалентны (`package.json` scripts
+    идентичны). node_modules был circular symlink (точнее: указывал
+    на себя), пришлось `rm` его и переустановить в master
+    (один раз), затем worktree использует тот же node_modules через
+    symlink на master — typecheck/lint/test там и запускались.
