@@ -608,6 +608,158 @@ kbd {
   padding: 0;
 }
 
+/* Mixer panel — collapsible под MidiIOButtons в ScorePanel */
+.score-panel-inner > .mixer-panel {
+  flex-shrink: 0;
+  border-top: 1px solid var(--border);
+  background: var(--bg-elev);
+  font-size: 11px;
+}
+
+.mixer-panel[open] > .mixer-summary {
+  padding: 8px 16px;
+  background: var(--bg-elev-2);
+  border-bottom: 1px solid var(--border);
+  font-weight: 600;
+  cursor: pointer;
+  user-select: none;
+}
+
+.mixer-summary {
+  padding: 6px 16px;
+  cursor: pointer;
+  user-select: none;
+  color: var(--fg-dim);
+}
+
+.mixer-summary:hover { color: var(--fg); }
+
+.mixer-empty {
+  padding: 8px 16px 12px;
+  color: var(--fg-dim);
+  font-family: 'SF Mono', Menlo, monospace;
+}
+
+.mixer-list {
+  display: flex;
+  flex-direction: column;
+  padding: 6px 12px 10px;
+  gap: 4px;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.mixer-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 4px 6px;
+  border-radius: 4px;
+  font-family: 'SF Mono', Menlo, monospace;
+}
+
+.mixer-row:hover { background: rgba(255, 255, 255, 0.03); }
+
+.mixer-btn {
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--fg-dim);
+  font-weight: 700;
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+  user-select: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.mixer-btn:hover { border-color: var(--accent); color: var(--fg); }
+
+.mixer-mute.is-active {
+  background: var(--err);
+  border-color: var(--err);
+  color: var(--bg);
+}
+
+.mixer-solo.is-active {
+  background: var(--warn);
+  border-color: var(--warn);
+  color: var(--bg);
+}
+
+.mixer-name {
+  flex: 0 1 auto;
+  min-width: 80px;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--fg);
+  font-size: 11px;
+}
+
+.mixer-gain {
+  flex: 1 1 auto;
+  min-width: 80px;
+  height: 44px;
+  margin: 0;
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+  touch-action: pan-y manipulation;
+}
+
+.mixer-gain::-webkit-slider-runnable-track {
+  height: 4px;
+  background: var(--border);
+  border-radius: 2px;
+}
+
+.mixer-gain::-moz-range-track {
+  height: 4px;
+  background: var(--border);
+  border-radius: 2px;
+}
+
+.mixer-gain::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid var(--bg);
+  margin-top: -9px;
+  cursor: pointer;
+}
+
+.mixer-gain::-moz-range-thumb {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid var(--bg);
+  cursor: pointer;
+}
+
+.mixer-gain-val {
+  flex: 0 0 auto;
+  min-width: 36px;
+  text-align: right;
+  color: var(--fg-dim);
+  font-size: 11px;
+  font-family: 'SF Mono', Menlo, monospace;
+}
+
 .preset-btn-new {
   border-color: var(--accent);
   color: var(--accent);

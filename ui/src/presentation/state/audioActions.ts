@@ -2,6 +2,7 @@ import { Effect } from 'effect';
 import { dispatch, appStore } from '../state/appStore';
 import { AppLayer } from '~/infrastructure/composition';
 import { AudioEngine } from '~/domain/services';
+import { injectMix } from '~/application/useCases/injectMix';
 import {
   unlockAudioContext,
   testBeep,
@@ -20,10 +21,13 @@ export const evalScore = async (): Promise<void> => {
   unlockAudioContext();
   dispatch({ type: 'audioStatusChange', status: 'playing' });
   try {
+    // Mixer side-state: gain/mute/solo — applied at eval time only,
+    // never mutates the persisted score.
+    const mixed = injectMix(appStore.score, appStore.layerMix);
     await Effect.runPromise(
       Effect.gen(function* () {
         const audio = yield* AudioEngine;
-        yield* audio.eval(appStore.score);
+        yield* audio.eval(mixed);
       }).pipe(Effect.provide(AppLayer)),
     );
   } catch (err) {

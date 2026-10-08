@@ -73,7 +73,7 @@ substrate: |
     через transpiler (или fall-back regex split, документируем
     как less accurate).
   − ничего не удалено.
-status: draft
+status: applied
 axiom: A1
 epistemics:
   - statement: "Strudel `.gain()` chain operator — accepts scalar or
