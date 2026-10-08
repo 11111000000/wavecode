@@ -123,6 +123,62 @@ Pure-frontend, реальный Strudel+Web Audio в браузере, без ba
 🔲 Theme switcher (dark/light)
 🔲 Hot-reload через HMR для Score updates
 
+### Phase 5: P0 baseline для профи + мобайл (draft 2026-10-08)
+
+Без этих восьми пакетов профи не воспринимают wavecode как инструмент,
+а мобайл остаётся «веб-страницей, на которой неудобно». Пакеты — draft,
+готовы к применению в параллельных субагентах; операционный handoff —
+в `docs/SUBAGENT-PLAN.md`.
+
+| # | Пакет | Что даёт профи | Что даёт мобайлу |
+|---|---|---|---|
+| 1 | `wavecode-transport-panel` | BPM-индикатор, swing, playhead | — |
+| 2 | `wavecode-audio-recording` | Запись и WAV-render takes | native share-sheet |
+| 3 | `wavecode-multi-undo` | N-шаговый undo, не потерять работу | защита от typos |
+| 4 | `wavecode-track-mixer` | Mute/solo/gain per layer без правки кода | крупные touch-knobs |
+| 5 | `wavecode-url-sharing` | Шаринг паттернов одним кликом | работает через system share |
+| 6 | `wavecode-pwa-mobile` | Fullscreen install без Safari chrome | Add-to-Home-Screen |
+| 7 | `wavecode-mini-notation-toolbar` | Быстрый ввод mini-notation | решает vkb-ввод Strudel-кода |
+| 8 | `wavecode-mobile-single-panel` | — | Score full-height, AI/Status collapsed |
+
+**Зависимости между пакетами** (для partition на 8 параллельных субагентов):
+
+```
+[6 pwa-mobile]  [7 mini-toolbar]  [8 mobile-single-panel]      ← CSS / config layer, no domain overlap
+[3 multi-undo]  [5 url-sharing]  [1 transport-panel]           ← independent state/UX, parallelizable
+[2 audio-recording]  [4 track-mixer]                          ← shared substrate: LiveAudioEngine.ts
+```
+
+Параллельность: субагенты #1, #3, #5, #6, #7, #8 не пересекаются по
+substrate. #2 и #4 оба трогают `LiveAudioEngine.ts` (audio-recording
+добавляет recordLive/renderOffline, mixer добавляет getCycleProgress для
+playhead и mix inject hook) — рекомендуется последовательное выполнение
+#2 → #4, ИЛИ в одном worktree merge после интеграции.
+
+**Supersession:** `wavecode-multi-undo` retire'ит `rollback-and-retry`
+(sha 25e83e0) — supersede с явной ссылкой в новом пакете.
+
+**Что НЕ входит в Phase 5** (P1, не сейчас):
+🔲 WebMIDI input — hardware-keyboard integration (iOS Safari не
+  поддерживает, ограничивает scope)
+🔲 Степ-секвенсор / pad-grid — альтернативный не-код input; больше
+  работы, чем P0
+🔲 Больше пресетов по жанрам (jazz/EDM/hip-hop/ambient) — расширение
+  `BUILTIN_PRESETS`, чисто content-работа
+🔲 Snapshots / версионирование — IM-отдельный пакет
+🔲 Sample-pack (фортепиано/барабаны-real) — лицензии + десятки MB,
+  не pure-frontend scope
+
+### Phase 6: Future (post-Phase-5)
+🔲 Tool calling через @ai-sdk (вместо whole-score replacement)
+🔲 Step sequencer / pad-grid (после P0 baseline)
+🔲 WebMIDI input
+🔲 Snapshots / version history
+🔲 Тема switcher
+🔲 Hot-reload через HMR для Score updates
+🔲 RAG по Strudel-функциям
+🔲 Multi-user collab (после решения архитектурных вопросов)
+
 ## 5. Архитектурные инварианты
 
 Эти правила не меняются без явного решения в новом пакете:
