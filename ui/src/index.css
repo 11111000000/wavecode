@@ -657,6 +657,14 @@ kbd {
 .cm-host .cm-scroller {
   font-family: 'SF Mono', 'JetBrains Mono', Menlo, monospace;
   line-height: 1.5;
+  touch-action: pan-y manipulation;
+  -webkit-overflow-scrolling: touch;
+}
+
+.cm-host .cm-content {
+  -webkit-user-select: text;
+  -webkit-touch-callout: default;
+  touch-action: manipulation;
 }
 
 /* Strudel mini-notation highlight inside CodeMirror */
@@ -762,6 +770,6 @@ code {
   }
 
   .cm-host {
-    min-height: 160px;
+    min-height: 220px;
   }
 }
