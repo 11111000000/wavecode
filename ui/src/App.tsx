@@ -6,6 +6,7 @@ import { AIEditPanel } from './presentation/panels/AIEditPanel';
 import { DebugPanel } from './presentation/panels/DebugPanel';
 import { uiState, toggleScore, toggleAI, toggleStatus, installKeyboardShortcuts } from './presentation/state/uiState';
 import { appStore, dispatch } from './presentation/state/appStore';
+import { installTypingTracker } from './presentation/state/editorTypingTracker';
 import { evalScore, stopAudio, beep } from './presentation/state/audioActions';
 import { AppLayer } from '~/infrastructure/composition';
 import { Repo } from '~/domain/services';
@@ -162,10 +163,16 @@ export function App() {
   };
 
   const onRollback = (): void => {
-    if (!appStore.scorePrev) return;
     void stopAudio();
-    dispatch({ type: 'rollbackScore' });
+    dispatch({ type: 'undoScore' });
   };
+
+  const onRedo = (): void => {
+    void stopAudio();
+    dispatch({ type: 'redoScore' });
+  };
+
+  installTypingTracker(dispatch);
 
   installKeyboardShortcuts({
     focusAI: () => {
@@ -176,6 +183,8 @@ export function App() {
       const cm = document.querySelector<HTMLElement>('.cm-content');
       cm?.focus();
     },
+    undoScore: onRollback,
+    redoScore: onRedo,
   });
 
   return (
@@ -209,10 +218,19 @@ export function App() {
             type="button"
             class="preset-btn"
             onClick={onRollback}
-            disabled={!appStore.scorePrev}
-            title="Вернуть предыдущую версию партитуры"
+            disabled={appStore.history.length === 0}
+            title="Отменить последнюю правку (Ctrl+Z)"
           >
-            ↶ Откатить
+            ↶ Undo
+          </button>
+          <button
+            type="button"
+            class="preset-btn"
+            onClick={onRedo}
+            disabled={appStore.future.length === 0}
+            title="Повторить отменённую правку (Ctrl+Y)"
+          >
+            ↷ Redo
           </button>
           <button
             type="button"

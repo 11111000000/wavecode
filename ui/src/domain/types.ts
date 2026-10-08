@@ -20,11 +20,14 @@ export type AudioStatus = 'stopped' | 'playing' | 'error';
 
 export type AppState = {
   readonly score: Score;
-  readonly scorePrev: Score;
+  readonly history: ReadonlyArray<Score>;
+  readonly future: ReadonlyArray<Score>;
   readonly messages: ReadonlyArray<Message>;
   readonly agent: { readonly status: AgentStatus; readonly lastError?: string };
   readonly audio: { readonly status: AudioStatus; readonly lastError?: string };
 };
+
+export const HISTORY_LIMIT = 50;
 
 export const initialAppState: AppState = {
   // Дефолтный score при первом запуске (IDB пуст).
@@ -36,12 +39,13 @@ export const initialAppState: AppState = {
     '  note("<g2 b2 c3 c3>").s("sawtooth").gain(0.4).lpf(300),',
     '  note("<[55,59,62] [59,63,66] [60,64,67] [60,63,67]>").s("triangle").gain(0.2).lpf(1500),',
     '  n("<55 67 59 67 62 67 59 67>*2").s("sawtooth").gain(0.12).lpf(1500),',
-    '  s("sbd ~ sbd ~").gain(0.5),',
+    '  s("bd ~ sbd ~").gain(0.5),',
     '  s("~ white ~ white").decay(.05).sustain(0).gain(0.22),',
     '  s("white*8").decay(.04).sustain(0).gain(0.15)',
     ')',
   ].join('\n'),
-  scorePrev: '',
+  history: [],
+  future: [],
   messages: [],
   agent: { status: 'idle' },
   audio: { status: 'stopped' },
