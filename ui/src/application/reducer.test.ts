@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { reduceAppEvent, type AppEvent } from './reducer';
-import { initialAppState, type AppState } from '~/domain/types';
+import { initialAppState, type AppState, HISTORY_LIMIT } from '~/domain/types';
 
 const baseState = (): AppState => ({ ...initialAppState });
 
@@ -33,28 +33,117 @@ describe('reduceAppEvent', () => {
     expect(next.score).toBe('new score');
   });
 
-  it('replaceScore snapshots previous score into scorePrev', () => {
-    const start: AppState = { ...baseState(), score: 'note("c4")' };
+  it('replaceScore snapshots previous score into history and clears future', () => {
+    const start: AppState = {
+      ...baseState(),
+      score: 'note("c4")',
+      history: ['prev-a'],
+      future: ['pending-redo'],
+    };
     const next = reduceAppEvent(start, { type: 'replaceScore', text: 'note("e4")' });
     expect(next.score).toBe('note("e4")');
-    expect(next.scorePrev).toBe('note("c4")');
+    expect(next.history).toEqual(['prev-a', 'note("c4")']);
+    expect(next.future).toEqual([]);
   });
 
-  it('rollbackScore restores score from scorePrev and clears it', () => {
+  it('replaceScore with identical text is a no-op', () => {
+    const start: AppState = {
+      ...baseState(),
+      score: 'note("c4")',
+      history: ['prev-a'],
+    };
+    const next = reduceAppEvent(start, { type: 'replaceScore', text: 'note("c4")' });
+    expect(next).toBe(start);
+  });
+
+  it('history cap drops oldest entry when limit exceeded', () => {
+    let state: AppState = baseState();
+    const overflow = HISTORY_LIMIT + 5;
+    for (let i = 0; i < overflow; i++) {
+      state = reduceAppEvent(state, { type: 'replaceScore', text: `v${i}` });
+    }
+    expect(state.history.length).toBe(HISTORY_LIMIT);
+    expect(state.history[0]).toBe(`v${overflow - HISTORY_LIMIT - 1}`);
+    expect(state.score).toBe(`v${overflow - 1}`);
+  });
+
+  it('undoScore pops history and pushes current score into future', () => {
     const start: AppState = {
       ...baseState(),
       score: 'note("e4")',
-      scorePrev: 'note("c4")',
+      history: ['note("c4")'],
     };
-    const next = reduceAppEvent(start, { type: 'rollbackScore' });
+    const next = reduceAppEvent(start, { type: 'undoScore' });
     expect(next.score).toBe('note("c4")');
-    expect(next.scorePrev).toBe('');
+    expect(next.history).toEqual([]);
+    expect(next.future).toEqual(['note("e4")']);
   });
 
-  it('rollbackScore is a no-op when scorePrev is empty', () => {
+  it('undoScore is a no-op when history is empty', () => {
     const start: AppState = { ...baseState(), score: 'note("c4")' };
-    const next = reduceAppEvent(start, { type: 'rollbackScore' });
-    expect(next).toEqual(start);
+    const next = reduceAppEvent(start, { type: 'undoScore' });
+    expect(next).toBe(start);
+  });
+
+  it('redoScore pops future and pushes current score into history', () => {
+    const start: AppState = {
+      ...baseState(),
+      score: 'note("c4")',
+      future: ['note("e4")'],
+    };
+    const next = reduceAppEvent(start, { type: 'redoScore' });
+    expect(next.score).toBe('note("e4")');
+    expect(next.future).toEqual([]);
+    expect(next.history).toEqual(['note("c4")']);
+  });
+
+  it('redoScore is a no-op when future is empty', () => {
+    const start: AppState = { ...baseState(), score: 'note("c4")' };
+    const next = reduceAppEvent(start, { type: 'redoScore' });
+    expect(next).toBe(start);
+  });
+
+  it('undo/redo round-trip restores the original score', () => {
+    let state: AppState = { ...baseState(), score: 'note("c4")' };
+    state = reduceAppEvent(state, { type: 'replaceScore', text: 'note("e4")' });
+    state = reduceAppEvent(state, { type: 'undoScore' });
+    expect(state.score).toBe('note("c4")');
+    state = reduceAppEvent(state, { type: 'redoScore' });
+    expect(state.score).toBe('note("e4")');
+  });
+
+  it('a new replaceScore after undo clears the future', () => {
+    let state: AppState = { ...baseState(), score: 'a' };
+    state = reduceAppEvent(state, { type: 'replaceScore', text: 'b' });
+    state = reduceAppEvent(state, { type: 'undoScore' });
+    expect(state.future).toEqual(['b']);
+    state = reduceAppEvent(state, { type: 'replaceScore', text: 'c' });
+    expect(state.future).toEqual([]);
+    expect(state.score).toBe('c');
+    expect(state.history).toEqual(['a']);
+  });
+
+  it('commitHistoryCheckpoint merges with top by dropping the top entry', () => {
+    const start: AppState = {
+      ...baseState(),
+      score: 'd',
+      history: ['a', 'b', 'c'],
+    };
+    const next = reduceAppEvent(start, { type: 'commitHistoryCheckpoint' });
+    expect(next.history).toEqual(['a', 'b']);
+    expect(next.score).toBe('d');
+  });
+
+  it('commitHistoryCheckpoint is a no-op when history has fewer than two entries', () => {
+    const start: AppState = { ...baseState(), score: 'b', history: ['a'] };
+    const next = reduceAppEvent(start, { type: 'commitHistoryCheckpoint' });
+    expect(next).toBe(start);
+  });
+
+  it('commitHistoryCheckpoint is a no-op when history is empty', () => {
+    const start: AppState = { ...baseState(), score: 'a' };
+    const next = reduceAppEvent(start, { type: 'commitHistoryCheckpoint' });
+    expect(next).toBe(start);
   });
 
   it('clearMessages empties the message history but keeps the score', () => {

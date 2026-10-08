@@ -63,6 +63,7 @@ substrate: |
   − ничего не удалено.
 status: applied
 axiom: A4
+supersession: math/wavecode-multi-undo/
 witness:
   applied_at: 2026-10-05
   commit: 25e83e0

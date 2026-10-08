@@ -66,15 +66,32 @@ export const toggleStatus = (): void => {
 //   Ctrl+Shift+S  → toggle Status
 //   Ctrl+Shift+E  → toggle Score
 //   Ctrl+Enter    → submit AI instruction
+//   Ctrl+Z        → undo score (when focus outside text input — see refs.undoScore)
+//   Ctrl+Y        → redo score
+//   Ctrl+Shift+Z  → redo score (Windows convention)
 export const installKeyboardShortcuts = (refs: {
   focusAI: () => void;
   focusScore: () => void;
+  undoScore: () => void;
+  redoScore: () => void;
 }): void => {
   const handler = (e: KeyboardEvent) => {
     const mod = e.ctrlKey || e.metaKey;
     if (!mod) return;
 
-    if (e.key === '.') {
+    // Skip undo/redo when user is typing in a text field (let native
+    // text undo handle per-character edits in inputs/textareas).
+    const target = e.target as HTMLElement | null;
+    const inTextField = target instanceof HTMLTextAreaElement
+      || (target instanceof HTMLInputElement && target.type !== 'checkbox' && target.type !== 'radio');
+
+    if (!inTextField && !e.shiftKey && e.key.toLowerCase() === 'z') {
+      e.preventDefault();
+      refs.undoScore();
+    } else if (!inTextField && ((e.shiftKey && e.key.toLowerCase() === 'z') || (!e.shiftKey && e.key.toLowerCase() === 'y'))) {
+      e.preventDefault();
+      refs.redoScore();
+    } else if (e.key === '.') {
       e.preventDefault();
       if (!uiState().aiOpen) toggleAI();
       refs.focusAI();
