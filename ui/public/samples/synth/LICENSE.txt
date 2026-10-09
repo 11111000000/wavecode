@@ -1,0 +1,108 @@
+Synth samples — wavecode-sample-synth pack.
+
+All samples are licensed under Creative Commons CC0 1.0 Universal
+(Public Domain Dedication). Redistributed from Freesound.org
+(https://freesound.org). No attribution required but appreciated
+(see table below).
+
+This pack supplements Salamander Grand Piano v3 (also CC0) shipped
+in `../piano/`. Together they cover: piano, bass, pad, lead, strings,
+brass — full spectrum for sketch-mode live-coding without leaving the
+browser (offline after first SW cache).
+
+==========================================================================
+ATTRIBUTION TABLE
+==========================================================================
+
+Bass (4 files) — analog Moog & waveform synth bass
+--------------------------------------------------
+  bass-c1.mp3  "Electric Bass Waveform Stereo C2"
+               by Vanyamba, Freesound #636438
+               https://freesound.org/people/Vanyamba/sounds/636438/
+               Recorded at C2; pitched down to C1 in Strudel.
+
+  bass-c2.mp3  "MOOG_BASS_SPACE_ECHO_C2"
+               by menegass, Freesound #324031
+               https://freesound.org/people/menegass/sounds/324031/
+               Recorded at C2 — exact match.
+
+  bass-e1.mp3  "MOOG_BASS_SPACE_ECHO_A"
+               by menegass, Freesound #324029
+               https://freesound.org/people/menegass/sounds/324029/
+               Recorded at A1 (bass series); pitched down to E1.
+
+  bass-a1.mp3  "MOOG_BASS_SPACE_ECHO_C"
+               by menegass, Freesound #324026
+               https://freesound.org/people/menegass/sounds/324026/
+               Recorded at C (bass series); pitched down to A1.
+
+Pad (4 files) — sustained synth pads, choir & atmospheric
+---------------------------------------------------------
+  pad-c3.mp3   "Vibrato Choir Pad Waveform Stereo C#2"
+               by Vanyamba, Freesound #653658
+               https://freesound.org/people/Vanyamba/sounds/653658/
+               Lush choir pad at C#2; pitched up to C3.
+
+  pad-e3.mp3   "Kansas Pad Waveform Stereo C#2"
+               by Vanyamba, Freesound #649448
+               https://freesound.org/people/Vanyamba/sounds/649448/
+               Warm pad at C#2; pitched up to E3.
+
+  pad-g3.mp3   "IDM Atmosphare8 (C note)"
+               by CAT-FOX_ALEX, Freesound #817868
+               https://freesound.org/people/CAT-FOX_ALEX/sounds/817868/
+               Atmospheric IDM pad C; pitched up to G3.
+
+  pad-a3.mp3   "IDM Atmosphare6 (A note)"
+               by CAT-FOX_ALEX, Freesound #817864
+               https://freesound.org/people/CAT-FOX_ALEX/sounds/817864/
+               Atmospheric IDM pad A; pitched up to A3.
+
+Lead (2 files) — Minimoog lead with vibrato
+-------------------------------------------
+  lead-e4.mp3  "minimoog_vibrating_E-4"
+               by Garzul, Freesound #266810
+               https://freesound.org/people/Garzul/sounds/266810/
+               Recorded at E4 — exact match.
+
+  lead-g4.mp3  "minimoog_vibrating_G-4"
+               by Garzul, Freesound #266813
+               https://freesound.org/people/Garzul/sounds/266813/
+               Recorded at G4 — exact match.
+
+Strings (1 file) — analog synth strings
+---------------------------------------
+  strings-c4.mp3  "Suiko Vs-1 Strings C5"
+                  by brotherandroid, Freesound #729366
+                  https://freesound.org/people/brotherandroid/sounds/729366/
+                  Suiko Vs-1 (VST emulation) strings at C5;
+                  pitched down to C4.
+
+Brass (1 file) — cinematic analog brass
+---------------------------------------
+  brass-c3.mp3  "Cinematic Brass Waveform Stereo C2"
+                by Vanyamba, Freesound #653549
+                https://freesound.org/people/Vanyamba/sounds/653549/
+                Cinematic brass at C2; pitched up to C3.
+
+==========================================================================
+NOTES
+==========================================================================
+
+- All preview-quality (LQ) MP3s at 64kbps, 24kHz from Freesound CDN
+  (https://cdn.freesound.org/previews/...). Total bundle: ~1.3MB.
+- Strudel handles pitch-shifting from the recorded pitch to any
+  target note in mini-notation. The file name (`bass-c1.mp3`) is a
+  label, not a hard constraint — the actual recorded pitch is noted
+  above.
+- Vanyamba "Waveform Stereo" series uses single sustained 32-second
+  notes (designed for sound design), pitch-shifted in Strudel.
+- menegass "MOOG_*" series is 2-3 second analog Moog plucks with
+  built-in space-echo / lead timbre.
+- Garzul "minimoog_vibrating_*" series is 5-second Minimoog notes
+  with subtle vibrato — the exact pitches requested for leads.
+- CAT-FOX_ALEX "IDM Atmosphare" series is 8-second atmospheric
+  pads with evolving texture.
+
+CC0 1.0 Universal (Public Domain Dedication)
+https://creativecommons.org/publicdomain/zero/1.0/
