@@ -1,0 +1,19 @@
+- sha: fb3c8c0
+  date: 2026-10-09
+  kind: creation
+  files:
+    - math/wavecode-sample-pack/packet.md
+    - ui/src/infrastructure/audio/PianoSampleLoader.ts
+    - ui/src/infrastructure/audio/PianoSampleLoader.test.ts
+    - ui/src/domain/presets.ts
+    - ui/src/domain/presets.test.ts
+    - ui/src/App.tsx
+    - ui/public/samples/piano/A1.mp3..C7.mp3 (10 files, ~720KB)
+    - ui/public/samples/piano/LICENSE.txt
+  notes: |
+    Salamander Grand Piano v3 (CC0) bundled. 10 chromatic MP3 covering
+    A1..C7 (6 octaves), 720KB total. Strudel globalThis.samples() loader
+    in PianoSampleLoader.ts (lazy + idempotent). Two new presets:
+    piano-ballad (uses s('piano:...')) + 808-classic (synth, no .wav).
+    Tests: +3 loader, +1 preset-count. 220/220 pass. PWA build OK.
+    LICENSE.txt documents CC0 attribution.

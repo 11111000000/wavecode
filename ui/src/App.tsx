@@ -97,6 +97,12 @@ export function App() {
     // от тестов transportState (там эта ф-ция не вызывается).
     installTransportAudioSync();
 
+    // Register Salamander piano samples (CC0) with Strudel — lazy,
+    // idempotent (no-op on second call within a session).
+    void import('./infrastructure/audio/PianoSampleLoader').then((m) =>
+      m.loadPianoSamples(),
+    );
+
     // Lazy: подгружаем сохранённый score, но НЕ дёргаем Strudel.
     // Strudel (≈676KB / 216KB gzip — половина initial bundle) нужен только
     // для аудио, которое юзер запросит кнопкой «Запуск» / «440» / «Применить».
