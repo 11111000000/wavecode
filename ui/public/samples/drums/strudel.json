@@ -1,0 +1,17 @@
+{
+  "_base": "./",
+  "bd": ["bd.mp3"],
+  "bd-sub": ["bd-sub.mp3"],
+  "sd": ["sd.mp3"],
+  "rim": ["rim.mp3"],
+  "hh": ["hh.mp3"],
+  "oh": ["oh.mp3"],
+  "cp": ["cp.mp3"],
+  "cb": ["cb.mp3"],
+  "sh": ["sh.mp3"],
+  "tom-l": ["tom-l.mp3"],
+  "tom-m": ["tom-m.mp3"],
+  "tom-h": ["tom-h.mp3"],
+  "crash": ["crash.mp3"],
+  "ride": ["ride.mp3"]
+}
