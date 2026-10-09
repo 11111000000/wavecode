@@ -83,6 +83,9 @@ importers:
       idb-keyval:
         specifier: ^6.2.1
         version: 6.3.0
+      lz-string:
+        specifier: ^1.5.0
+        version: 1.5.0
       nanoid:
         specifier: ^5.0.7
         version: 5.1.16

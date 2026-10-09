@@ -1,0 +1,30 @@
+Drum samples: 14 one-shots (CC0 1.0 Universal / public domain).
+All samples downloaded from Freesound (https://freesound.org) — every
+contributor below published their work under Creative Commons 0, which
+permits unrestricted redistribution (commercial and non-commercial) and
+modification, with no obligation to credit. Attribution is provided here
+as a courtesy.
+
+Sources (file → original title → author → Freesound URL):
+
+  bd.mp3       C-SPENCE_KICK+808.wav    HUMANOISEMAKER     https://freesound.org/people/HUMANOISEMAKER/sounds/157410/
+  bd-sub.mp3   Hard_Subby_Kick.mp3      NoirPantalon       https://freesound.org/people/NoirPantalon/sounds/102130/
+  sd.mp3       FD808A Snare.wav         Uberproduktion     https://freesound.org/people/Uberproduktion/sounds/455642/
+  hh.mp3       Hi-Hat Closed 8.mp3      blakengouda        https://freesound.org/people/blakengouda/sounds/509972/
+  oh.mp3       Hi-Hat Open 2.mp3        blakengouda        https://freesound.org/people/blakengouda/sounds/509985/
+  cp.mp3       HandClap14.wav           bastianpusch       https://freesound.org/people/bastianpusch/sounds/493717/
+  rim.mp3      2.wav                    vroup              https://freesound.org/people/vroup/sounds/67411/
+  tom-l.mp3    FLOOR_TOM_PO-12.aif      jannevse           https://freesound.org/people/jannevse/sounds/669735/
+  tom-m.mp3    Yamaha PSR-36 Tom Mid    Joao_Janz          https://freesound.org/people/Joao_Janz/sounds/477896/
+  tom-h.mp3    HighTom.aif              bdu                https://freesound.org/people/bdu/sounds/805/
+  crash.mp3    gongcrash 2 short        Logicogonist       https://freesound.org/people/Logicogonist/sounds/799186/
+  ride.mp3     Long Ride Cymbal 2       Cringegaming64yt   https://freesound.org/people/Cringegaming64yt/sounds/567213/
+  sh.mp3       Swipe Shaker             8bitmyketison      https://freesound.org/people/8bitmyketison/sounds/701124/
+  cb.mp3       Cowbell - Tic 03.wav     RP1312             https://freesound.org/people/RP1312/sounds/350713/
+
+All samples are Freesound "lq" (low-quality) preview MP3s, 24-48 kHz
+mono or joint-stereo, 64-128 kbps. Each preview is <2 seconds and
+sufficient as a one-shot drum hit.
+
+License: Creative Commons CC0 1.0 Universal (public domain dedication).
+Full text: https://creativecommons.org/publicdomain/zero/1.0/

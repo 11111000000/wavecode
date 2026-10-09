@@ -58,7 +58,7 @@ status: applied
 axiom: A1
 witness:
   applied_at: 2026-10-09
-  commit: pending
+  commit: a8af94d
   supersedes: null
 epistemics:
   - statement: "Strudel `s('bd sd hh cp')` = GM-mapped drums через
