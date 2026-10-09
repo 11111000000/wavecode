@@ -22,9 +22,9 @@ let pianoLoaded = false;
 let drumsLoaded = false;
 let synthLoaded = false;
 
-const PIANO_BANK = './samples/piano/';
-const DRUMS_BANK = './samples/drums/';
-const SYNTH_BANK = './samples/synth/';
+const PIANO_BANK = './samples/piano/strudel.json';
+const DRUMS_BANK = './samples/drums/strudel.json';
+const SYNTH_BANK = './samples/synth/strudel.json';
 
 const registerBank = (
   bank: Record<string, string>,
