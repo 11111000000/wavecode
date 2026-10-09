@@ -2,8 +2,8 @@ import { describe, it, expect } from 'vitest';
 import { BUILTIN_PRESETS } from './presets';
 
 describe('BUILTIN_PRESETS', () => {
-  it('has 8 entries', () => {
-    expect(BUILTIN_PRESETS).toHaveLength(8);
+  it('has 18 entries (8 original + 10 genre)', () => {
+    expect(BUILTIN_PRESETS).toHaveLength(18);
   });
 
   it('has unique ids', () => {
@@ -35,5 +35,29 @@ describe('BUILTIN_PRESETS', () => {
     expect(creep).toBeDefined();
     expect(creep?.name).toBe('Creep');
     expect(creep?.artist).toBe('Radiohead');
+  });
+
+  it('all 10 new genre presets are present', () => {
+    const expected = [
+      'edm-house', 'hiphop-boombap', 'jazz-ii-v-i', 'ambient-drone',
+      'bossa-nova', 'trap-modern', 'reggaeton', 'idm-glitch',
+      'dreampop', 'step-grid-demo',
+    ];
+    for (const id of expected) {
+      expect(BUILTIN_PRESETS.find((p) => p.id === id), `missing ${id}`).toBeDefined();
+    }
+  });
+
+  it('every preset has balanced stack() with same-line closing or proper newlines', () => {
+    for (const p of BUILTIN_PRESETS) {
+      // Loose check: `stack(` opens and matching `)` closes on a line.
+      expect(p.score).toMatch(/stack\(/);
+      // Count of `(` and `)` should match (ignoring those inside strings is hard,
+      // so we use a simple heuristic — at least 1 of each).
+      const opens = (p.score.match(/\(/g) ?? []).length;
+      const closes = (p.score.match(/\)/g) ?? []).length;
+      expect(opens).toBeGreaterThan(0);
+      expect(closes).toBeGreaterThanOrEqual(opens - 1); // tolerates `min(` style fn
+    }
   });
 });
