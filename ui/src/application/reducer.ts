@@ -23,7 +23,8 @@ export type AppEvent =
   | { readonly type: 'toggleLayerSolo'; readonly index: number }
   | { readonly type: 'setLayerCount'; readonly count: number }
   | { readonly type: 'setCps'; readonly cps: number }
-  | { readonly type: 'toggleSwing' };
+  | { readonly type: 'setSwingAmount'; readonly amount: number }
+  | { readonly type: 'setSwingDivisor'; readonly divisor: string };
 
 const newId = (): string =>
   globalThis.crypto?.randomUUID?.() ??
@@ -174,13 +175,18 @@ export const reduceAppEvent = (state: AppState, event: AppEvent): AppState => {
         transportState: { ...state.transportState, cps: event.cps },
       };
 
-    case 'toggleSwing':
+    case 'setSwingAmount': {
+      const amount = Math.max(0, Math.min(1, event.amount));
       return {
         ...state,
-        transportState: {
-          ...state.transportState,
-          swing: !state.transportState.swing,
-        },
+        transportState: { ...state.transportState, swingAmount: amount },
+      };
+    }
+
+    case 'setSwingDivisor':
+      return {
+        ...state,
+        transportState: { ...state.transportState, swingDivisor: event.divisor },
       };
   }
 };

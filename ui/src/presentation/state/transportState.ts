@@ -3,7 +3,7 @@ import { dispatch, appStore } from './appStore';
 import type { TransportState } from '~/domain/types';
 
 /**
- * Presentation-layer signals for transport (cps, swing).
+ * Presentation-layer signals for transport (cps, swingAmount, swingDivisor).
  *
  * Read source of truth: `appStore.transportState` (Solid store, reducer).
  * Local signals mirror the store on init and on subsequent reducer updates,
@@ -14,27 +14,28 @@ import type { TransportState } from '~/domain/types';
  *   - UI → reducer (debounced 100ms — slider drags fire rapid events).
  *   - cps → AudioEngine.setCps — реализован ОТДЕЛЬНО в `App.tsx` через
  *     `useTransportAudioSync()`, чтобы изолировать тесты от
- *     Effect.runPromise (которая держит vitest до разрешения microtasks).
+ *     Effect.runPromise.
  */
 
 const SYNC_DEBOUNCE_MS = 100;
 
 const initialTransport = (): TransportState => ({
   cps: appStore.transportState.cps,
-  swing: appStore.transportState.swing,
+  swingAmount: appStore.transportState.swingAmount,
+  swingDivisor: appStore.transportState.swingDivisor,
 });
 
 export const [cps, setCpsSignal] = createSignal<number>(initialTransport().cps);
-export const [swing, setSwingSignal] = createSignal<boolean>(initialTransport().swing);
+export const [swingAmount, setSwingAmountSignal] = createSignal<number>(initialTransport().swingAmount);
+export const [swingDivisor, setSwingDivisorSignal] = createSignal<string>(initialTransport().swingDivisor);
 
 /** Apply a TransportState seeded from the store (используется App.tsx). */
 export const syncFromReducer = (next: TransportState): void => {
   setCpsSignal(next.cps);
-  setSwingSignal(next.swing);
+  setSwingAmountSignal(next.swingAmount);
+  setSwingDivisorSignal(next.swingDivisor);
 };
 
-// UI → reducer. Чистый setTimeout (no Effect.runPromise) — тесты с real-таймерами
-// могут await без риска висящего microtask в Effect.
 let pendingDispatchCps: number | null = null;
 let dispatchTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -46,8 +47,6 @@ const flushDispatch = (): void => {
   dispatch({ type: 'setCps', cps: value });
 };
 
-/** Imperative setter used by the panel. UI signal updates immediately;
- *  reducer dispatch is debounced 100ms. */
 export const setCpsLocal = (next: number): void => {
   setCpsSignal(next);
   pendingDispatchCps = next;
@@ -55,21 +54,35 @@ export const setCpsLocal = (next: number): void => {
   dispatchTimer = setTimeout(flushDispatch, SYNC_DEBOUNCE_MS);
 };
 
-export const toggleSwingLocal = (): void => {
-  const next = !swing();
-  setSwingSignal(next);
-  // Swing не требует debounce — редкое событие. Synchronous dispatch.
-  dispatch({ type: 'toggleSwing' });
+let pendingSwingAmount: number | null = null;
+let swingDispatchTimer: ReturnType<typeof setTimeout> | null = null;
+const flushSwingDispatch = (): void => {
+  swingDispatchTimer = null;
+  if (pendingSwingAmount === null) return;
+  const value = pendingSwingAmount;
+  pendingSwingAmount = null;
+  dispatch({ type: 'setSwingAmount', amount: value });
 };
 
-/** Keep local signals in sync with external reducer updates (load preset и т.д.).
- *  `untrack` важен: если effect читает `cps()`/`swing()` внутри и
- *  setCpsSignal/setSwingSignal тоже внутри, Solid делает это реактивным
- *  (feedback loop). Реагируем ТОЛЬКО на `transportState`, не на собственные сигналы. */
+/** Imperative setter for swing amount. Debounced 100ms. */
+export const setSwingAmountLocal = (next: number): void => {
+  const clamped = Math.max(0, Math.min(1, next));
+  setSwingAmountSignal(clamped);
+  pendingSwingAmount = clamped;
+  if (swingDispatchTimer !== null) clearTimeout(swingDispatchTimer);
+  swingDispatchTimer = setTimeout(flushSwingDispatch, SYNC_DEBOUNCE_MS);
+};
+
+export const setSwingDivisorLocal = (divisor: string): void => {
+  setSwingDivisorSignal(divisor);
+  dispatch({ type: 'setSwingDivisor', divisor });
+};
+
 createRoot(() => {
   createEffect(() => {
     const t = appStore.transportState;
     if (t.cps !== untrack(cps)) setCpsSignal(t.cps);
-    if (t.swing !== untrack(swing)) setSwingSignal(t.swing);
+    if (t.swingAmount !== untrack(swingAmount)) setSwingAmountSignal(t.swingAmount);
+    if (t.swingDivisor !== untrack(swingDivisor)) setSwingDivisorSignal(t.swingDivisor);
   });
 });

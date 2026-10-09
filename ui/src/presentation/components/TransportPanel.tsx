@@ -5,36 +5,27 @@ import { AppLayer } from '~/infrastructure/composition';
 import {
   cps,
   setCpsLocal,
-  swing,
-  toggleSwingLocal,
+  swingAmount,
+  swingDivisor,
+  setSwingAmountLocal,
+  setSwingDivisorLocal,
 } from '~/presentation/state/transportState';
-
-/**
- * TransportPanel — CPS-слайдер, BPM-индикатор, swing toggle и playhead.
- *
- * Layout (slim, 28px tall, помещается в `.app-controls-row`):
- *
- *   ┌── .transport-panel ──────────────────────────────┐
- *   │ CPS [slider]   120 BPM   [Swing]  ▮▮▮░░░░░░░░░░  │
- *   └──────────────────────────────────────────────────┘
- *
- * BPM = 60 · cps · 2 при 4/4 — это UX-проекция, не параметр runtime.
- * Swing toggle пишет в transportState (через reducer), но НЕ в score —
- * переключение применяется через evalWithTransport на лету при следующем eval.
- *
- * Playhead — узкая полоска (height 2px), absolute, читает
- * `AudioEngine.getCycleProgress()` через RAF и применяет transform.
- * Не вызывает re-render компонента — только DOM-mutation.
- */
 
 const CPS_MIN = 0.05;
 const CPS_MAX = 2.0;
 const CPS_STEP = 0.01;
 const CPS_DEFAULT = 0.5;
 
-const formatBpm = (cpsValue: number): number => Math.round(60 * cpsValue * 2);
+const SWING_DIVISORS: ReadonlyArray<{ value: string; label: string }> = [
+  { value: '1/4', label: '1/4' },
+  { value: '1/8', label: '1/8' },
+  { value: '1/16', label: '1/16' },
+  { value: '1/3', label: '1/3 (triplet)' },
+];
 
+const formatBpm = (cpsValue: number): number => Math.round(60 * cpsValue * 2);
 const formatCps = (cpsValue: number): string => cpsValue.toFixed(2);
+const formatSwing = (s: number): string => s.toFixed(2);
 
 const PRESET_CPS_LABELS: ReadonlyArray<{ value: number; label: string }> = [
   { value: 0.25, label: '60' },
@@ -60,8 +51,6 @@ export function TransportPanel() {
   let rafId: number | null = null;
   let playheadEl: HTMLDivElement | undefined;
 
-  // Keep slider thumb synced when transport state changes externally
-  // (например, при load preset, или если кто-то меняет store напрямую).
   const sync = () => {
     const storeCps = cps();
     if (Math.abs(storeCps - localCps()) > 1e-9) setLocalCps(storeCps);
@@ -79,6 +68,16 @@ export function TransportPanel() {
     setCpsLocal(value);
   };
 
+  const onSwingSlider = (event: Event & { currentTarget: HTMLInputElement }): void => {
+    const next = Number.parseFloat(event.currentTarget.value);
+    if (!Number.isFinite(next)) return;
+    setSwingAmountLocal(next);
+  };
+
+  const onDivisorChange = (event: Event & { currentTarget: HTMLSelectElement }): void => {
+    setSwingDivisorLocal(event.currentTarget.value);
+  };
+
   onMount(() => {
     rafId = requestAnimationFrame(loop);
   });
@@ -93,7 +92,6 @@ export function TransportPanel() {
     if (now - lastWrite >= 14) {
       lastWrite = now;
       if (playheadEl) {
-        // RAF без await DOM-мутации — async-free, минимум 60Hz апается.
         void readProgress().then((p) => {
           if (playheadEl) {
             const clamped = Number.isFinite(p) ? Math.max(0, Math.min(1, p)) : 0;
@@ -129,17 +127,34 @@ export function TransportPanel() {
           <span class="bpm-suffix">BPM</span>
         </span>
 
-        <button
-          type="button"
-          class="swing-btn"
-          classList={{ 'swing-btn-on': swing() }}
-          onClick={() => toggleSwingLocal()}
-          title={swing() ? 'Swing ON (.swing(0.5, 1/3))' : 'Swing OFF'}
-          aria-pressed={swing()}
-          data-testid="swing-btn"
-        >
-          swing
-        </button>
+        <div class="swing-control" data-testid="swing-control">
+          <span class="swing-label">swing</span>
+          <input
+            type="range"
+            min={0}
+            max={1}
+            step={0.01}
+            value={swingAmount()}
+            onInput={onSwingSlider}
+            class="swing-slider"
+            title="Swing amount: 0=off, 1=max shuffle"
+            aria-label="Swing amount"
+            data-testid="swing-slider"
+          />
+          <span class="swing-readout" data-testid="swing-readout">{formatSwing(swingAmount())}</span>
+          <select
+            class="swing-divisor"
+            value={swingDivisor()}
+            onChange={onDivisorChange}
+            title="Swing divisor (Strudel .swing amount, divisor)"
+            aria-label="Swing divisor"
+            data-testid="swing-divisor"
+          >
+            <For each={SWING_DIVISORS}>
+              {(d) => <option value={d.value}>{d.label}</option>}
+            </For>
+          </select>
+        </div>
 
         <div class="cps-presets" role="group" aria-label="CPS presets">
           <For each={PRESET_CPS_LABELS}>
@@ -164,5 +179,4 @@ export function TransportPanel() {
   );
 }
 
-// Re-export DEFAULT for testability + dev only.
 export const CPS_PRESET_DEFAULT = CPS_DEFAULT;

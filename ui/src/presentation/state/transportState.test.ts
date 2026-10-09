@@ -34,21 +34,51 @@ describe('transportState — debounce & reducer sync', () => {
     expect(appStore.transportState.cps).toBe(0.75);
   }, 5000);
 
-  it('toggleSwingLocal synchronously dispatches reducer (no debounce)', async () => {
-    const { toggleSwingLocal } = await import('./transportState');
+  it('setSwingAmountLocal debounces rapid slider drags to single dispatch', async () => {
+    const { setSwingAmountLocal } = await import('./transportState');
     const { appStore } = await import('./appStore');
 
-    const start = appStore.transportState.swing;
+    const initial = appStore.transportState.swingAmount;
 
-    toggleSwingLocal();
+    setSwingAmountLocal(0.1);
+    setSwingAmountLocal(0.2);
+    setSwingAmountLocal(0.3);
 
-    // Без задержки — store обновился сразу.
-    expect(appStore.transportState.swing).toBe(!start);
+    expect(appStore.transportState.swingAmount).toBe(initial);
 
-    // Повторный toggle — обратно.
-    toggleSwingLocal();
-    expect(appStore.transportState.swing).toBe(start);
+    await new Promise((r) => setTimeout(r, 200));
+
+    expect(appStore.transportState.swingAmount).toBeCloseTo(0.3, 5);
   }, 5000);
+
+  it('setSwingAmountLocal clamps to [0, 1]', async () => {
+    const { setSwingAmountLocal } = await import('./transportState');
+    const { appStore } = await import('./appStore');
+
+    setSwingAmountLocal(2.5);
+    await new Promise((r) => setTimeout(r, 200));
+    expect(appStore.transportState.swingAmount).toBe(1);
+
+    setSwingAmountLocal(-0.5);
+    await new Promise((r) => setTimeout(r, 200));
+    expect(appStore.transportState.swingAmount).toBe(0);
+  }, 5000);
+
+  it('setSwingDivisorLocal dispatches synchronously (no debounce)', async () => {
+    const { setSwingDivisorLocal } = await import('./transportState');
+    const { appStore } = await import('./appStore');
+
+    setSwingDivisorLocal('1/3');
+    expect(appStore.transportState.swingDivisor).toBe('1/3');
+  }, 5000);
+
+  it('swingAmount signal stays in sync when reducer is dispatched externally', async () => {
+    const { swingAmount } = await import('./transportState');
+    const { dispatch } = await import('./appStore');
+
+    dispatch({ type: 'setSwingAmount', amount: 0.42 });
+    expect(swingAmount()).toBeCloseTo(0.42, 5);
+  });
 
   it('cps signal stays in sync when reducer is dispatched externally', async () => {
     const { cps } = await import('./transportState');
