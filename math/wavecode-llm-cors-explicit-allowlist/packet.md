@@ -60,7 +60,7 @@ substrate: |
   ~ ui/src/infrastructure/llm/LiveLLMClient.ts (удалён дубликат
     console.log, 8 lines removed)
   ~ ui/.env.example (1 line comment updated)
-status: draft
+status: applied
 axiom: A5
 epistemics:
   - statement: "FastAPI CORSMiddleware сравнивает Origin exact-string,
