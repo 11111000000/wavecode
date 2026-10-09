@@ -35,7 +35,10 @@ export const makeLayerMix = (index: number): LayerMix => ({
 
 export type TransportState = {
   readonly cps: number;
-  readonly swing: boolean;
+  /** 0..1 swing amount; 0 = off. */
+  readonly swingAmount: number;
+  /** Strudel `.swing(amount, divisor)` divisor; common: '1/4', '1/8', '1/16', '1/3'. */
+  readonly swingDivisor: string;
 };
 
 export type AppState = {
@@ -74,5 +77,5 @@ export const initialAppState: AppState = {
   agent: { status: 'idle' },
   audio: { status: 'stopped' },
   layerMix: [],
-  transportState: { cps: 0.5, swing: false },
+  transportState: { cps: 0.5, swingAmount: 0, swingDivisor: '1/8' },
 };

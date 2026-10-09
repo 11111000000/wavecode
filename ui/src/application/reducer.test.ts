@@ -244,29 +244,47 @@ describe('reduceAppEvent', () => {
   it('setCps updates transportState.cps but keeps swing and other fields', () => {
     const start: AppState = {
       ...baseState(),
-      transportState: { cps: 0.5, swing: true },
+      transportState: { cps: 0.5, swingAmount: 0.3, swingDivisor: '1/8' },
     };
     const next = reduceAppEvent(start, { type: 'setCps', cps: 1.25 });
     expect(next.transportState.cps).toBe(1.25);
-    expect(next.transportState.swing).toBe(true);
+    expect(next.transportState.swingAmount).toBe(0.3);
+    expect(next.transportState.swingDivisor).toBe('1/8');
   });
 
-  it('toggleSwing flips transportState.swing and keeps cps', () => {
+  it('setSwingAmount updates swingAmount but keeps cps and divisor', () => {
     const start: AppState = {
       ...baseState(),
-      transportState: { cps: 0.7, swing: false },
+      transportState: { cps: 0.7, swingAmount: 0, swingDivisor: '1/16' },
     };
-    const on = reduceAppEvent(start, { type: 'toggleSwing' });
-    expect(on.transportState.swing).toBe(true);
-    expect(on.transportState.cps).toBe(0.7);
-    const off = reduceAppEvent(on, { type: 'toggleSwing' });
-    expect(off.transportState.swing).toBe(false);
+    const next = reduceAppEvent(start, { type: 'setSwingAmount', amount: 0.7 });
+    expect(next.transportState.swingAmount).toBe(0.7);
+    expect(next.transportState.cps).toBe(0.7);
+    expect(next.transportState.swingDivisor).toBe('1/16');
+  });
+
+  it('setSwingAmount clamps to [0, 1]', () => {
+    const start: AppState = baseState();
+    const over = reduceAppEvent(start, { type: 'setSwingAmount', amount: 1.5 });
+    expect(over.transportState.swingAmount).toBe(1);
+    const under = reduceAppEvent(over, { type: 'setSwingAmount', amount: -0.3 });
+    expect(under.transportState.swingAmount).toBe(0);
+  });
+
+  it('setSwingDivisor updates divisor but keeps swingAmount', () => {
+    const start: AppState = {
+      ...baseState(),
+      transportState: { cps: 0.7, swingAmount: 0.5, swingDivisor: '1/4' },
+    };
+    const next = reduceAppEvent(start, { type: 'setSwingDivisor', divisor: '1/3' });
+    expect(next.transportState.swingDivisor).toBe('1/3');
+    expect(next.transportState.swingAmount).toBe(0.5);
   });
 
   it('setCps with the same value still produces a new state object (immutable)', () => {
     const start: AppState = {
       ...baseState(),
-      transportState: { cps: 0.5, swing: false },
+      transportState: { cps: 0.5, swingAmount: 0, swingDivisor: '1/8' },
     };
     const next = reduceAppEvent(start, { type: 'setCps', cps: 0.5 });
     expect(next).not.toBe(start);
