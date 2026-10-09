@@ -5,6 +5,7 @@ import type * as MiniModule from '@strudel/mini';
 import type * as TonalModule from '@strudel/tonal';
 import type * as TranspilerModule from '@strudel/transpiler';
 import type * as WebaudioModule from '@strudel/webaudio';
+import * as superdough from 'superdough';
 import type { NoteEvent } from '~/domain/midi/encoder';
 import { LiveRecorder, pickSupportedMime } from './AudioRecorder';
 import { renderToWav } from './OfflineRender';
@@ -176,34 +177,23 @@ const ensureRepl = (audioCtx: AudioContext): Promise<ReplHandle> => {
       // БЕЗ этого Cyclist триггерит хапы, но superdough падает с
       // "sound sawtooth not found" — тишина.
       //
-      // ВАЖНО: registerSynthSounds должен писать в ТОТ ЖЕ soundMap,
-      // который использует bundled @strudel/webaudio. Если импортировать
-      // 'superdough' напрямую, Vite вернёт unbundled копию (отдельный
-      // soundMap). Используем globalThis.registerSynthSounds, который
-      // evalScope уже положил — это ТОТ ЖЕ объект, что использует
-      // webaudioRepl внутри bundle. Critical: import('superdough') here
-      // creates a SEPARATE module instance and SEPARATE soundMap.
-      const registerSynthSounds = (globalThis as { registerSynthSounds?: () => void }).registerSynthSounds;
-      if (typeof registerSynthSounds === 'function') {
-        registerSynthSounds();
-        console.log('[wavecode] synth sounds registered');
-      } else {
-        console.warn('[wavecode] registerSynthSounds not on globalThis — synth sounds may be missing');
-      }
+      // CRITICAL: import from 'superdough' (via top-level static
+      // import, NOT dynamic). When Vite bundles @strudel/webaudio
+      // together with its superdough dep, a dynamic `import('superdough')`
+      // at runtime resolves to a SEPARATE module instance and SEPARATE
+      // soundMap. The static import (hoisted by Vite) resolves to the
+      // SAME instance used by webaudioRepl → soundMap writes go to the
+      // right place. (See: git log master fix(audio))
+      superdough.registerSynthSounds();
+      console.log('[wavecode] synth sounds registered');
 
       // Загружаем worklet'ы (reverb, delay, djf) — нужно для synth с эффектами.
-      // initAudio идёт через globalThis.initAudio по той же причине:
-      // bundled @strudel/webaudio использует bundled superdough.
-      const initAudio = (globalThis as { initAudio?: (opts?: object) => Promise<void> }).initAudio;
-      if (typeof initAudio === 'function') {
-        try {
-          await initAudio();
-          console.log('[wavecode] initAudio done (worklets loaded)');
-        } catch (err) {
-          console.warn('[wavecode] initAudio failed (will continue without worklets):', err);
-        }
-      } else {
-        console.warn('[wavecode] initAudio not on globalThis — worklets will not be loaded');
+      // Тот же superdough instance через static import.
+      try {
+        await superdough.initAudio();
+        console.log('[wavecode] initAudio done (worklets loaded)');
+      } catch (err) {
+        console.warn('[wavecode] initAudio failed (will continue without worklets):', err);
       }
 
       const repl = modules.webaudio.webaudioRepl({
