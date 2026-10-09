@@ -22,6 +22,11 @@ import { evalScore, stopAudio, beep } from './presentation/state/audioActions';
 import { RecordButton } from './presentation/components/RecordButton';
 import { ShareButton } from './presentation/components/ShareButton';
 import { shareState, setPendingShare, markIdbHasScore, startLoadingShared, finishLoadingShared } from './presentation/state/shareState';
+import {
+  PlayIcon, StopIcon, StepIcon, PianoIcon, SpeakerIcon,
+  SaveIcon, TrashIcon, ResetIcon, NewIcon, PhoneIcon,
+  UndoIcon, RedoIcon,
+} from './presentation/icons';
 import { decodeSnippet } from '~/domain/urlCodec';
 import { AppLayer } from '~/infrastructure/composition';
 import { Repo } from '~/domain/services';
@@ -275,8 +280,11 @@ export function App() {
     <main class="app">
       <header class="app-header">
         <div class="app-title">
-          <h1>wavecode</h1>
-          <span class="app-subtitle">live-coding · AI · Strudel</span>
+          <h1>
+            <span class="wc-logo-wave" aria-hidden="true">∿∿∿</span>
+            wavecode
+          </h1>
+          <span class="app-subtitle">live-coding · ai · strudel</span>
         </div>
         <div class="app-preset-row">
           <select
@@ -305,7 +313,8 @@ export function App() {
             disabled={appStore.history.length === 0}
             title="Отменить последнюю правку (Ctrl+Z)"
           >
-            ↶ Undo
+            <UndoIcon />
+            <span>Undo</span>
           </button>
           <button
             type="button"
@@ -314,7 +323,8 @@ export function App() {
             disabled={appStore.future.length === 0}
             title="Повторить отменённую правку (Ctrl+Y)"
           >
-            ↷ Redo
+            <RedoIcon />
+            <span>Redo</span>
           </button>
           <div class="mobile-menu-wrap">
             <button
@@ -325,7 +335,7 @@ export function App() {
               aria-haspopup="true"
               aria-expanded={showMobileMenu()}
             >
-              📱
+              <PhoneIcon />
             </button>
             <Show when={showMobileMenu()}>
               <div class="mobile-menu" role="menu">
@@ -357,15 +367,17 @@ export function App() {
             onClick={onNewComposition}
             title="Создать новую композицию"
           >
-            ✦ Новая
+            <NewIcon />
+            <span>Новая</span>
           </button>
           <button
             type="button"
             class="preset-btn"
             onClick={() => setShowSavePreset((v) => !v)}
             title="Сохранить партитуру как пресет"
+            aria-label="Сохранить партитуру как пресет"
           >
-            💾
+            <SaveIcon />
           </button>
           <ShareButton />
           <Show when={presetId().startsWith('custom-')}>
@@ -374,8 +386,9 @@ export function App() {
               class="preset-btn preset-btn-danger"
               onClick={onDeletePreset}
               title="Удалить пресет"
+              aria-label="Удалить пресет"
             >
-              🗑
+              <TrashIcon />
             </button>
           </Show>
           <button
@@ -383,13 +396,24 @@ export function App() {
             class="preset-btn preset-btn-danger"
             onClick={onResetAll}
             title="Сбросить всё"
+            aria-label="Сбросить всё"
           >
-            🧹
+            <ResetIcon />
           </button>
         </div>
         <div class="app-controls-row">
-          <button type="button" class="ctrl-btn ctrl-btn-primary" onClick={() => void evalScore()}>▶ Запуск</button>
-          <button type="button" class="ctrl-btn" onClick={() => void stopAudio()}>■ Стоп</button>
+          <button
+            type="button"
+            class="ctrl-btn ctrl-btn-primary"
+            onClick={() => void evalScore()}
+          >
+            <PlayIcon />
+            <span>Запуск</span>
+          </button>
+          <button type="button" class="ctrl-btn" onClick={() => void stopAudio()}>
+            <StopIcon />
+            <span>Стоп</span>
+          </button>
           <RecordButton />
           <button
             type="button"
@@ -398,7 +422,8 @@ export function App() {
             title="Toggle step sequencer (4×8 drum pads)"
             aria-pressed={showStepGrid()}
           >
-            🎹 Step
+            <StepIcon />
+            <span>Step</span>
           </button>
           <button
             type="button"
@@ -407,13 +432,20 @@ export function App() {
             title="Toggle 2-octave piano (WebMIDI auto-bind on supported browsers)"
             aria-pressed={showPiano()}
           >
-            🎹 Piano
+            <PianoIcon />
+            <span>Piano</span>
           </button>
-          <button type="button" class="ctrl-btn" onClick={() => beep(440)} title="440 Гц">🔊 440</button>
-          <button type="button" class="ctrl-btn" onClick={() => beep(220)} title="220 Гц">🔊 220</button>
+          <button type="button" class="ctrl-btn" onClick={() => beep(440)} title="440 Гц">
+            <SpeakerIcon />
+            <span>440</span>
+          </button>
+          <button type="button" class="ctrl-btn" onClick={() => beep(220)} title="220 Гц">
+            <SpeakerIcon />
+            <span>220</span>
+          </button>
           <TransportPanel />
           <span class="ctx-state">
-            контекст: <strong class={`status-${ctxState().state === 'running' ? 'playing' : 'idle'}`}>{ctxState().state}</strong>
+            контекст: <strong class={`status-${ctxState().state}`}>{ctxState().state}</strong>
           </span>
         </div>
       </header>
