@@ -52,7 +52,7 @@ status: applied
 axiom: A1
 witness:
   applied_at: 2026-10-09
-  commit: pending
+  commit: aa00af4
   supersedes: null
 epistemics:
   - statement: "Strudel `.swing(amount, divisor)` — стандартный

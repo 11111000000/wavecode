@@ -471,6 +471,29 @@ export const BUILTIN_PRESETS: ReadonlyArray<Preset> = [
     ].join('\n'),
   },
   {
+    // 808-king — классический 808 beat через CC0 Freesound-сэмплы.
+    // Банк `drums` регистрируется автоматически при первом eval.
+    // kick 4-on-floor + snare backbeat + closed hat 8ths + clap on 7.
+    id: '808-king',
+    name: '808 king (samples)',
+    artist: 'Freesound CC0',
+    score: [
+      '// 808 king — CC0 Freesound samples, 4-on-floor + backbeat + clap fill',
+      'stack(',
+      '  // Kick — каждый бит (808-стиль)',
+      '  s("bd*4").gain(0.55),',
+      '  // Snare — backbeat (2 и 4)',
+      '  s("~ sd ~ sd").gain(0.40),',
+      '  // Closed hat — 8-е ноты',
+      '  s("hh*8").gain(0.22),',
+      '  // Clap — на 7-м шаге как fill',
+      '  s("~ ~ ~ ~ ~ ~ ~ cp").gain(0.35),',
+      '  // Sub-bass — тоническая основа',
+      '  note("<a1 a1 a1 a1>").s("sine").lpf(120).gain(0.30)',
+      ')',
+    ].join('\n'),
+  },
+  {
     // Lush pad — CC0 Vanyamba choir/Fantasy pad + CAT-FOX IDM Atmosphare.
     // Long attack + release for cinematic feel. C-E-G-A chord progression.
     id: 'lush-pad',
@@ -512,6 +535,26 @@ export const BUILTIN_PRESETS: ReadonlyArray<Preset> = [
       '  s("bd ~ ~ ~ bd ~ ~ ~").decay(.10).sustain(0).gain(0.18),',
       '  // Bass — root notes (поддержка lead линии)',
       '  note("<e2 e2 e2 e2 g2 e2 b2 e2>").s("synth:bass-c2").gain(0.25).lpf(400)',
+      ')',
+    ].join('\n'),
+  },
+  {
+    // toms-funk — функ-том филинг через 3 toms (low/mid/high).
+    // Использует cc0 сэмплы tom-l / tom-m / tom-h.
+    id: 'toms-funk',
+    name: 'Toms funk (samples)',
+    artist: 'Freesound CC0',
+    score: [
+      '// toms funk — филинг через 3 toms (low/mid/high), CC0 Freesound',
+      'stack(',
+      '  // Tom fill — low → mid → high, по такту',
+      '  s("~ ~ tom-l ~ tom-m ~ tom-h ~").gain(0.45),',
+      '  // Креш — на каждом такте как fill-акцент',
+      '  s("~ ~ ~ ~ ~ ~ ~ crash").gain(0.30),',
+      '  // Райд — длинный «шум» на фоне (время от времени)',
+      '  s("ride ~ ~ ~ ~ ~ ~ ~").gain(0.25),',
+      '  // Лёгкий kick для басовой основы',
+      '  s("bd ~ ~ ~ ~ ~ ~ ~").gain(0.30)',
       ')',
     ].join('\n'),
   },
