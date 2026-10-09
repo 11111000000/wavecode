@@ -14,8 +14,9 @@ import {
  * Используют Effect + AppLayer напрямую, без передачи пропсов.
  */
 
-export const evalScore = async (): Promise<void> => {
-  if (!appStore.score.trim()) {
+export const evalScore = async (overrideScore?: string): Promise<void> => {
+  const score = overrideScore ?? appStore.score;
+  if (!score.trim()) {
     dispatch({ type: 'audioStatusChange', status: 'error', error: 'score is empty' });
     return;
   }
@@ -23,7 +24,7 @@ export const evalScore = async (): Promise<void> => {
   dispatch({ type: 'audioStatusChange', status: 'playing' });
   // Mixer side-state: gain/mute/solo — applied at eval time only,
   // never mutates the persisted score.
-  const mixed = injectMix(appStore.score, appStore.layerMix);
+  const mixed = injectMix(score, appStore.layerMix);
   // Transport-side-effects (swing) применяются в обёртке — score
   // остаётся чистым, swing виден только на лету.
   const wrapped = evalWithTransport(mixed, appStore.transportState);

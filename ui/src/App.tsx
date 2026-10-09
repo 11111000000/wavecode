@@ -60,6 +60,7 @@ export function App() {
   const [presetId, setPresetId] = createSignal('creep');
   const [showSavePreset, setShowSavePreset] = createSignal(false);
   const [showStepGrid, setShowStepGrid] = createSignal(false);
+  const [showPiano, setShowPiano] = createSignal(false);
 
   // Emit step-grid toggle events so ScorePanel can render/remove the grid
   // without owning its own state. Decoupled — both App and ScorePanel listen
@@ -69,6 +70,13 @@ export function App() {
     setShowStepGrid(next);
     window.dispatchEvent(
       new CustomEvent('wavecode:step-grid', { detail: { open: next } }),
+    );
+  };
+  const togglePiano = () => {
+    const next = !showPiano();
+    setShowPiano(next);
+    window.dispatchEvent(
+      new CustomEvent('wavecode:piano', { detail: { open: next } }),
     );
   };
   const [newPresetName, setNewPresetName] = createSignal('');
@@ -385,6 +393,15 @@ export function App() {
             aria-pressed={showStepGrid()}
           >
             🎹 Step
+          </button>
+          <button
+            type="button"
+            class={`ctrl-btn${showPiano() ? ' ctrl-btn-primary' : ''}`}
+            onClick={togglePiano}
+            title="Toggle 2-octave piano (WebMIDI auto-bind on supported browsers)"
+            aria-pressed={showPiano()}
+          >
+            🎹 Piano
           </button>
           <button type="button" class="ctrl-btn" onClick={() => beep(440)} title="440 Гц">🔊 440</button>
           <button type="button" class="ctrl-btn" onClick={() => beep(220)} title="220 Гц">🔊 220</button>
