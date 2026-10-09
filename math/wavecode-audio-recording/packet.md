@@ -69,7 +69,7 @@ substrate: |
   + `index.css`: `.record-modal` (центрированная, backdrop).
   − ничего не удалено. `LiveAudioEngine` расширен, не сломан
     (substrate-extension, не breaking change интерфейса).
-status: draft
+status: applied
 axiom: A1
 epistemics:
   - statement: "MediaRecorder.isTypeSupported() varies per browser: Chrome
