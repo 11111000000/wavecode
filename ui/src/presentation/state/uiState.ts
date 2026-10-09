@@ -1,6 +1,7 @@
 import { createSignal, createEffect, onCleanup, createRoot } from 'solid-js';
 
 const KEY = 'wavecode-ui-state-v1';
+const MOBILE_MODE_KEY = 'wavecode-mobile-default';
 
 type UIState = {
   scoreOpen: boolean;
@@ -8,23 +9,68 @@ type UIState = {
   statusOpen: boolean;
 };
 
+export type MobileMode = 'auto' | 'compact' | 'full';
+
 const defaultState: UIState = {
   scoreOpen: true,
   aiOpen: true,
   statusOpen: true,
 };
 
-const loadState = (): UIState => {
+const compactState: UIState = {
+  scoreOpen: true,
+  aiOpen: false,
+  statusOpen: false,
+};
+
+const isMobileViewport = (): boolean => {
+  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
+    return false;
+  }
+  return window.matchMedia('(max-width: 720px)').matches;
+};
+
+export const getMobileMode = (): MobileMode => {
+  try {
+    const raw = localStorage.getItem(MOBILE_MODE_KEY);
+    if (raw === 'compact' || raw === 'full' || raw === 'auto') return raw;
+  } catch {
+    /* ignore */
+  }
+  return 'auto';
+};
+
+export const setMobileMode = (mode: MobileMode): void => {
+  try {
+    localStorage.setItem(MOBILE_MODE_KEY, mode);
+  } catch {
+    /* ignore */
+  }
+};
+
+const resolveInitialState = (): UIState => {
+  // Explicit per-panel state always wins (localStorage KEY).
   try {
     const raw = localStorage.getItem(KEY);
-    if (!raw) return defaultState;
-    const parsed = JSON.parse(raw) as Partial<UIState & { replOpen?: boolean }>;
-    // Migrate legacy replOpen → aiOpen.
-    const { replOpen, ...rest } = parsed;
-    return { ...defaultState, ...rest, ...(replOpen !== undefined ? { aiOpen: replOpen } : {}) };
+    if (raw) {
+      const parsed = JSON.parse(raw) as Partial<UIState & { replOpen?: boolean }>;
+      const { replOpen, ...rest } = parsed;
+      return {
+        ...defaultState,
+        ...rest,
+        ...(replOpen !== undefined ? { aiOpen: replOpen } : {}),
+      };
+    }
   } catch {
-    return defaultState;
+    /* fall through to mode-based default */
   }
+
+  // No explicit per-panel state — fall back to mobile-mode preference.
+  // 'auto' consults matchMedia; 'compact'/'full' are explicit user pins.
+  const mode = getMobileMode();
+  if (mode === 'compact') return compactState;
+  if (mode === 'full') return defaultState;
+  return isMobileViewport() ? compactState : defaultState;
 };
 
 const saveState = (state: UIState) => {
@@ -35,7 +81,7 @@ const saveState = (state: UIState) => {
   }
 };
 
-const initial = loadState();
+const initial = resolveInitialState();
 export const [uiState, setUiState] = createSignal<UIState>(initial);
 
 // Module-level reactive: оборачиваем в createRoot, чтобы не получать
