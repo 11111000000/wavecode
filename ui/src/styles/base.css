@@ -1,0 +1,167 @@
+/*
+ * base layer — reset, html/body defaults, CRT scanlines, фон.
+ * всё, что ниже — это «инфраструктура», на которой стоят компоненты.
+ */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root,
+.app {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  font-family: var(--font-mono);
+  font-size: var(--fs-base);
+  line-height: var(--lh-base);
+  color: var(--fg);
+  background: var(--bg-base);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  font-feature-settings: 'liga' 0, 'calt' 0, 'tnum' 1;
+}
+
+body {
+  font-family: inherit;
+  font-size: inherit;
+  line-height: inherit;
+  color: inherit;
+  background: var(--bg-base);
+  overflow: hidden;
+  padding-top: env(safe-area-inset-top, 0);
+  padding-right: env(safe-area-inset-right, 0);
+  padding-bottom: env(safe-area-inset-bottom, 0);
+  padding-left: env(safe-area-inset-left, 0);
+}
+
+#root {
+  position: relative;
+  isolation: isolate;
+}
+
+/* CRT scanlines — фоновая фактура «phosphor decay». 1px тёмная линия
+   через каждые 3px, opacity 0.04 — едва видно, добавляет materiality.
+   pointer-events: none — не мешает кликам. */
+#root::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background: repeating-linear-gradient(
+    to bottom,
+    transparent 0,
+    transparent 3px,
+    rgba(0, 0, 0, 0.04) 3px,
+    rgba(0, 0, 0, 0.04) 4px
+  );
+  pointer-events: none;
+  z-index: 1;
+  mix-blend-mode: multiply;
+}
+
+/* Subtle vignette в углах — старый CRT, не OLED. */
+#root::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background: radial-gradient(
+    ellipse at center,
+    transparent 55%,
+    rgba(0, 0, 0, 0.35) 100%
+  );
+  pointer-events: none;
+  z-index: 2;
+}
+
+/* Selection — phosphor style: amber на чёрном, не системный blue. */
+::selection {
+  background: var(--amber);
+  color: var(--bg-base);
+  text-shadow: none;
+}
+
+/* Focus ring — phosphor glow, видим на любом фоне. */
+:focus-visible {
+  outline: 1px solid var(--amber);
+  outline-offset: 1px;
+  box-shadow: var(--shadow-glow);
+}
+
+/* scrollbars — узкие, phosphor-окрашенные. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+}
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 0;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--fg-ghost);
+}
+
+a {
+  color: var(--amber);
+  text-decoration: none;
+  border-bottom: 1px dotted var(--fg-dim);
+}
+a:hover {
+  color: var(--fg);
+  border-bottom-color: var(--amber);
+}
+
+button {
+  font-family: inherit;
+  font-size: inherit;
+  background: transparent;
+  border: none;
+  color: inherit;
+  padding: 0;
+  margin: 0;
+  cursor: pointer;
+}
+
+input,
+textarea,
+select {
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+  background: transparent;
+  border: none;
+  outline: none;
+}
+
+kbd {
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  padding: 1px 5px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  color: var(--fg-dim);
+}
+
+/* utility classes — small set, всё через CSS variables. */
+.wc-mono   { font-family: var(--font-mono); }
+.wc-dim    { color: var(--fg-dim); }
+.wc-ghost  { color: var(--fg-ghost); }
+.wc-amber  { color: var(--amber); }
+.wc-ok     { color: var(--ok); }
+.wc-warn   { color: var(--warn); }
+.wc-err    { color: var(--err); }

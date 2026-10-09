@@ -31,3 +31,4 @@
 | `wavecode-static-spa-deployment` | applied | none | Деплой как статический SPA, без Nix/Docker |
 | `wavecode-test-strategy` | applied | none | vitest + playwright (пирамида) |
 | `wavecode-strict-layering` | applied | none | ESLint no-restricted-imports per-layer |
+| `wavecode-redesign-repl-phosphor` | applied | 11 files (5 CSS-слоёв + icons + App.tsx + index.html + manifest + test) | REPL Phosphor: phosphor-amber палитра, моноширинный UI, ASCII-волна, 14 SVG-иконок вместо emoji, 5-слойная CSS-иерархия (tokens/base/components/icons/legacy), docs/design.md фиксирует систему |
