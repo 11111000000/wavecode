@@ -2,8 +2,8 @@ import { describe, it, expect } from 'vitest';
 import { BUILTIN_PRESETS } from './presets';
 
 describe('BUILTIN_PRESETS', () => {
-  it('has 20 entries (8 original + 10 genre + 2 sample-pack demos)', () => {
-    expect(BUILTIN_PRESETS).toHaveLength(20);
+  it('has 23 entries (8 original + 10 genre + 2 sample-pack demos + 3 synth demos)', () => {
+    expect(BUILTIN_PRESETS).toHaveLength(23);
   });
 
   it('has unique ids', () => {
@@ -45,6 +45,17 @@ describe('BUILTIN_PRESETS', () => {
     ];
     for (const id of expected) {
       expect(BUILTIN_PRESETS.find((p) => p.id === id), `missing ${id}`).toBeDefined();
+    }
+  });
+
+  it('all 3 new synth-pack demos are present (CC0 analog bass / lush pad / retro lead)', () => {
+    const expected = ['analog-bass', 'lush-pad', 'retro-lead'];
+    for (const id of expected) {
+      const p = BUILTIN_PRESETS.find((p) => p.id === id);
+      expect(p, `missing ${id}`).toBeDefined();
+      // Every synth-pack demo references the `synth:` bank (Strudel
+      // bank prefix). Verifies the bank wiring is in place.
+      expect(p?.score).toMatch(/s\("synth:/);
     }
   });
 
