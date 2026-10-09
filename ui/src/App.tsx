@@ -59,6 +59,18 @@ export function App() {
   const [ctxState, setCtxState] = createSignal(getAudioContextState());
   const [presetId, setPresetId] = createSignal('creep');
   const [showSavePreset, setShowSavePreset] = createSignal(false);
+  const [showStepGrid, setShowStepGrid] = createSignal(false);
+
+  // Emit step-grid toggle events so ScorePanel can render/remove the grid
+  // without owning its own state. Decoupled — both App and ScorePanel listen
+  // independently, no direct prop drilling needed.
+  const toggleStepGrid = () => {
+    const next = !showStepGrid();
+    setShowStepGrid(next);
+    window.dispatchEvent(
+      new CustomEvent('wavecode:step-grid', { detail: { open: next } }),
+    );
+  };
   const [newPresetName, setNewPresetName] = createSignal('');
   const [mobileMode, setMobileModeSignal] = createSignal<MobileMode>(getMobileMode());
   const [showMobileMenu, setShowMobileMenu] = createSignal(false);
@@ -365,6 +377,15 @@ export function App() {
           <button type="button" class="ctrl-btn ctrl-btn-primary" onClick={() => void evalScore()}>▶ Запуск</button>
           <button type="button" class="ctrl-btn" onClick={() => void stopAudio()}>■ Стоп</button>
           <RecordButton />
+          <button
+            type="button"
+            class={`ctrl-btn${showStepGrid() ? ' ctrl-btn-primary' : ''}`}
+            onClick={toggleStepGrid}
+            title="Toggle step sequencer (4×8 drum pads)"
+            aria-pressed={showStepGrid()}
+          >
+            🎹 Step
+          </button>
           <button type="button" class="ctrl-btn" onClick={() => beep(440)} title="440 Гц">🔊 440</button>
           <button type="button" class="ctrl-btn" onClick={() => beep(220)} title="220 Гц">🔊 220</button>
           <TransportPanel />

@@ -1528,3 +1528,130 @@ code {
   gap: 8px;
 }
 
+
+/* Step Grid — 4×8 drum pads, mobile-friendly */
+.step-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  background: var(--bg-elev);
+  border-bottom: 1px solid var(--border);
+}
+
+.step-grid-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.step-grid-btn {
+  background: var(--bg);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 4px 10px;
+  font-family: 'SF Mono', Menlo, monospace;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.step-grid-btn:hover:not(:disabled) { border-color: var(--accent); }
+.step-grid-btn-primary {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.step-grid-btn-primary:hover:not(:disabled) {
+  background: var(--accent);
+  color: var(--bg);
+}
+
+.step-grid-hint {
+  color: var(--fg-dim);
+  font-size: 10px;
+  font-family: 'SF Mono', Menlo, monospace;
+  flex: 1 1 100%;
+  margin-top: 2px;
+}
+
+.step-grid-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.step-grid-row {
+  display: grid;
+  grid-template-columns: 80px repeat(8, 1fr);
+  gap: 4px;
+  align-items: center;
+}
+
+.step-grid-row-label {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  font-family: 'SF Mono', Menlo, monospace;
+  font-size: 10px;
+  line-height: 1.2;
+  color: var(--fg-dim);
+}
+
+.step-grid-row-sample {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.step-grid-row-name {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.step-cell {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  height: 44px;
+  cursor: pointer;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+.step-cell:hover { border-color: var(--fg-dim); }
+
+.step-cell.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  animation: cell-pulse 0.6s ease-in-out infinite;
+}
+
+.step-cell.tap-flash {
+  background: var(--warn);
+  border-color: var(--warn);
+  animation: none;
+}
+
+.step-cell.beat {
+  outline: 1px dashed var(--fg-dim);
+  outline-offset: -2px;
+}
+
+.step-cell-dot {
+  width: 8px;
+  height: 8px;
+  background: var(--bg);
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+@keyframes cell-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}

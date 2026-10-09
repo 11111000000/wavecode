@@ -5,6 +5,7 @@ import { CodeMirrorEditor, type CodeMirrorEditorApi } from '../components/CodeMi
 import { MidiIOButtons } from '../components/MidiIOButtons';
 import { MixerPanel } from '../components/MixerPanel';
 import { MiniNotationToolbar } from '../components/MiniNotationToolbar';
+import { StepGrid } from '../components/StepGrid';
 
 /**
  * Score panel — ТОЛЬКО редактор + debug-info.
@@ -13,16 +14,32 @@ import { MiniNotationToolbar } from '../components/MiniNotationToolbar';
  *
  * MiniNotationToolbar живёт В DOM под MidiIOButtons; CSS mobile-only
  * (см. `.mini-toolbar` / `@media (max-width: 720px)`).
+ * StepGrid показывается поверх editor когда showStepGrid=true (App.tsx).
  */
 export function ScorePanel() {
   const [debug, setDebug] = createSignal(getDebug());
+  const [showStepGrid, setShowStepGrid] = createSignal(false);
   let editorApi: CodeMirrorEditorApi | undefined;
 
   const pollId = window.setInterval(() => setDebug(getDebug()), 500);
   onCleanup(() => window.clearInterval(pollId));
 
+  // Listen for App-level "🎹 Step" toggle events (CustomEvent from App).
+  if (typeof window !== 'undefined') {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent<{ open: boolean }>).detail;
+      setShowStepGrid(detail.open);
+    };
+    window.addEventListener('wavecode:step-grid', handler as EventListener);
+    onCleanup(() => window.removeEventListener('wavecode:step-grid', handler as EventListener));
+  }
+
   return (
     <div class="score-panel-inner">
+      <Show when={showStepGrid()}>
+        <StepGrid />
+      </Show>
+
       <CodeMirrorEditor
         value={appStore.score}
         onChange={(v) => dispatch({ type: 'replaceScore', text: v })}
