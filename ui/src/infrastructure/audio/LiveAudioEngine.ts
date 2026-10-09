@@ -175,16 +175,35 @@ const ensureRepl = (audioCtx: AudioContext): Promise<ReplHandle> => {
       // Регистрируем дефолтные синты (sawtooth/sine/square/triangle/noise).
       // БЕЗ этого Cyclist триггерит хапы, но superdough падает с
       // "sound sawtooth not found" — тишина.
-      const superdoughMod = await import('superdough');
-      superdoughMod.registerSynthSounds();
-      console.log('[wavecode] synth sounds registered');
+      //
+      // ВАЖНО: registerSynthSounds должен писать в ТОТ ЖЕ soundMap,
+      // который использует bundled @strudel/webaudio. Если импортировать
+      // 'superdough' напрямую, Vite вернёт unbundled копию (отдельный
+      // soundMap). Используем globalThis.registerSynthSounds, который
+      // evalScope уже положил — это ТОТ ЖЕ объект, что использует
+      // webaudioRepl внутри bundle. Critical: import('superdough') here
+      // creates a SEPARATE module instance and SEPARATE soundMap.
+      const registerSynthSounds = (globalThis as { registerSynthSounds?: () => void }).registerSynthSounds;
+      if (typeof registerSynthSounds === 'function') {
+        registerSynthSounds();
+        console.log('[wavecode] synth sounds registered');
+      } else {
+        console.warn('[wavecode] registerSynthSounds not on globalThis — synth sounds may be missing');
+      }
 
       // Загружаем worklet'ы (reverb, delay, djf) — нужно для synth с эффектами.
-      try {
-        await superdoughMod.initAudio();
-        console.log('[wavecode] initAudio done (worklets loaded)');
-      } catch (err) {
-        console.warn('[wavecode] initAudio failed (will continue without worklets):', err);
+      // initAudio идёт через globalThis.initAudio по той же причине:
+      // bundled @strudel/webaudio использует bundled superdough.
+      const initAudio = (globalThis as { initAudio?: (opts?: object) => Promise<void> }).initAudio;
+      if (typeof initAudio === 'function') {
+        try {
+          await initAudio();
+          console.log('[wavecode] initAudio done (worklets loaded)');
+        } catch (err) {
+          console.warn('[wavecode] initAudio failed (will continue without worklets):', err);
+        }
+      } else {
+        console.warn('[wavecode] initAudio not on globalThis — worklets will not be loaded');
       }
 
       const repl = modules.webaudio.webaudioRepl({
