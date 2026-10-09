@@ -407,4 +407,46 @@ export const BUILTIN_PRESETS: ReadonlyArray<Preset> = [
       ')',
     ].join('\n'),
   },
+  {
+    // Piano ballad — Salamander Grand Piano v3 (CC0) + simple chord progression.
+    // Piano bank auto-registered on first eval (lazy load).
+    id: 'piano-ballad',
+    name: 'Piano ballad',
+    artist: 'Salamander',
+    score: [
+      '// Piano ballad — Salamander Grand Piano v3 (CC0) + vi-IV-I-V',
+      'stack(',
+      '  // Right hand — 8th-note arpeggio в стиле Billy Joel',
+      '  n("a4 c5 e5 c5 f4 a4 c5 e5 g4 b4 d5 b4 c5 e5 g4 c5 e5").s("piano").gain(0.5).room(.4),',
+      '  // Left hand — vi-IV-I-V chord roots',
+      '  note("<f3 [a3,c4] g3 [b3,d4] a3 [c4,e4] e3 [g3,b3] f3 [a3,c4] g3 [b3,d4] a3 [c4,e4] e3 [g3,b3]>").s("piano").gain(0.4).room(.3),',
+      '  // Soft kick on 1 и 3',
+      '  s("bd ~ ~ bd ~ ~ ~ ~").decay(.15).gain(0.18),',
+      '  // Brush snare — light off-beat',
+      '  s("~ ~ sd ~ ~ ~ sd ~").decay(.20).sustain(0.05).gain(0.15)',
+      ')',
+    ].join('\n'),
+  },
+  {
+    // 808 classic — pure synthesis, no samples. Sine sweep kick + noise
+    // snare + hpf hat. Droppable в любой live-coding сессии.
+    id: '808-classic',
+    name: '808 classic (synth)',
+    artist: 'Tone-baked',
+    score: [
+      '// 808 classic — pure synthesis (sine sweep kick + noise snare + hpf hat)',
+      'stack(',
+      '  // 808 kick — sine sweep с long decay',
+      '  s("bd bd bd bd").s("sine").lpf(80).decay(0.4).sustain(0).gain(0.5),',
+      '  // 808 snare — noise + tone burst',
+      '  s("~ sd ~ sd").s("white").hpf(1500).lpf(8000).decay(0.15).gain(0.40),',
+      '  // Closed hat — short burst, каждый 8-й',
+      '  s("~ ~ hh ~ ~ ~ hh ~").s("white").hpf(8000).decay(0.05).gain(0.22),',
+      '  // Open hat — последний 16-й',
+      '  s("~ ~ ~ ~ ~ ~ ~ oh").s("white").hpf(8000).decay(0.25).gain(0.20),',
+      '  // Bass — sub-bass через sine + lpf',
+      '  note("<a1 a1 a1 a1 e1 a1 a1 a1>").s("sine").lpf(150).gain(0.40)',
+      ')',
+    ].join('\n'),
+  },
 ];

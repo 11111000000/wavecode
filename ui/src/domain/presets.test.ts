@@ -2,8 +2,8 @@ import { describe, it, expect } from 'vitest';
 import { BUILTIN_PRESETS } from './presets';
 
 describe('BUILTIN_PRESETS', () => {
-  it('has 18 entries (8 original + 10 genre)', () => {
-    expect(BUILTIN_PRESETS).toHaveLength(18);
+  it('has 20 entries (8 original + 10 genre + 2 sample-pack demos)', () => {
+    expect(BUILTIN_PRESETS).toHaveLength(20);
   });
 
   it('has unique ids', () => {
