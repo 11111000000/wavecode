@@ -54,14 +54,6 @@ const make = (deps: LiveLLMClientDeps): Context.Tag.Service<typeof LLMClient> =>
         reasoning_effort: includeReasoning ? reasoningEffort : '(off)',
       });
 
-
-
-      console.log('[llm] → request', {
-        model: modelName,
-        messages: messages.length,
-        reasoning_effort: includeReasoning ? reasoningEffort : '(off)',
-      });
-
       const response = yield* Effect.tryPromise({
         try: () =>
           fetch(`${deps.apiUrl}/chat/completions`, {
