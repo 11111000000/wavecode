@@ -449,4 +449,113 @@ export const BUILTIN_PRESETS: ReadonlyArray<Preset> = [
       ')',
     ].join('\n'),
   },
+  {
+    // Analog bass — CC0 Moog sample bank (`synth:bass-*`). Steady 4-on-the-floor
+    // with sub-octave motion + tape-stop whoosh at the end. Pitched down
+    // from C2/E1/A1 recordings (Strudel handles transposition).
+    id: 'analog-bass',
+    name: 'Analog bass',
+    artist: 'CC0 Moog',
+    score: [
+      '// Analog bass — CC0 Moog sample pack (synth:bass-*) + tape stop',
+      'stack(',
+      '  // Bass: roots on 1, sub-fifth on 3, octave on 4',
+      '  note("<c2 c2 a1 e1 c2 c2 g1 c2>").s("synth:bass-c2").gain(0.45).lpf(500),',
+      '  // Counter-bass: fifth + octave motion (octave higher)',
+      '  note("<g2 g2 e2 b1 g2 g2 d2 g2>").s("synth:bass-c2").gain(0.20).lpf(800),',
+      '  // Soft kick on 1 and 3 (synthesized — no sample needed)',
+      '  s("bd ~ ~ ~ bd ~ ~ ~").decay(.12).sustain(0).gain(0.30),',
+      '  // 8th-note hihat — light, no snare (bass-forward groove)',
+      '  s("white*8").hpf(8000).decay(.03).sustain(0).gain(0.12)',
+      ')',
+    ].join('\n'),
+  },
+  {
+    // 808-king — классический 808 beat через CC0 Freesound-сэмплы.
+    // Банк `drums` регистрируется автоматически при первом eval.
+    // kick 4-on-floor + snare backbeat + closed hat 8ths + clap on 7.
+    id: '808-king',
+    name: '808 king (samples)',
+    artist: 'Freesound CC0',
+    score: [
+      '// 808 king — CC0 Freesound samples, 4-on-floor + backbeat + clap fill',
+      'stack(',
+      '  // Kick — каждый бит (808-стиль)',
+      '  s("bd*4").gain(0.55),',
+      '  // Snare — backbeat (2 и 4)',
+      '  s("~ sd ~ sd").gain(0.40),',
+      '  // Closed hat — 8-е ноты',
+      '  s("hh*8").gain(0.22),',
+      '  // Clap — на 7-м шаге как fill',
+      '  s("~ ~ ~ ~ ~ ~ ~ cp").gain(0.35),',
+      '  // Sub-bass — тоническая основа',
+      '  note("<a1 a1 a1 a1>").s("sine").lpf(120).gain(0.30)',
+      ')',
+    ].join('\n'),
+  },
+  {
+    // Lush pad — CC0 Vanyamba choir/Fantasy pad + CAT-FOX IDM Atmosphare.
+    // Long attack + release for cinematic feel. C-E-G-A chord progression.
+    id: 'lush-pad',
+    name: 'Lush pad',
+    artist: 'CC0 Choir+IDM',
+    score: [
+      '// Lush pad — CC0 sustained pads (synth:pad-*) + strings + soft bass',
+      'stack(',
+      '  // Sustained chord pad — slow attack/release для cinematic feel',
+      '  note("[c3,e3,g3] [e3,g3,b3] [g3,b3,d4] [a3,c4,e4]")',
+      '    .s("synth:pad-c3").attack(0.5).release(2).gain(0.32).room(.6),',
+      '  // High pad layer — fifth up, для shimmer',
+      '  note("[g3,b3,d4] [b3,d4,f#4] [d4,f#4,a4] [e4,g4,c5]")',
+      '    .s("synth:pad-e3").attack(0.7).release(2.5).gain(0.20).room(.7),',
+      '  // Strings — sustained C4 sample как foundation',
+      '  note("[c4,g4] [e4,b4] [g4,d5] [a4,e5]")',
+      '    .s("synth:strings-c4").attack(1.0).release(3).gain(0.18).room(.5),',
+      '  // Sub-bass — root notes на каждый аккорд',
+      '  note("<c2 e2 g2 a2>").s("synth:bass-c2").gain(0.18).lpf(300).room(.3)',
+      ')',
+    ].join('\n'),
+  },
+  {
+    // Retro lead — CC0 Garzul Minimoog vibrating E-4 + G-4. Classic
+    // 80s-style lead line with vibrato + delay.
+    id: 'retro-lead',
+    name: 'Retro lead',
+    artist: 'CC0 Minimoog',
+    score: [
+      '// Retro lead — CC0 Minimoog (synth:lead-*) + delay, classic 80s feel',
+      'stack(',
+      '  // Lead line — восходящая фраза E G E B A G E',
+      '  note("e4 ~ g4 ~ e5 ~ b4 ~ a4 g4 e4 ~").s("synth:lead-e4")',
+      '    .gain(0.35).delay(.25).room(.4),',
+      '  // Octave-down echo (двойная линия через полтакта)',
+      '  note("~ ~ e3 ~ ~ ~ g3 ~ ~ ~ ~ e3 ~").s("synth:lead-g4")',
+      '    .gain(0.20).delay(.375).room(.4),',
+      '  // Soft kick — backbeat minimal (1 и 3)',
+      '  s("bd ~ ~ ~ bd ~ ~ ~").decay(.10).sustain(0).gain(0.18),',
+      '  // Bass — root notes (поддержка lead линии)',
+      '  note("<e2 e2 e2 e2 g2 e2 b2 e2>").s("synth:bass-c2").gain(0.25).lpf(400)',
+      ')',
+    ].join('\n'),
+  },
+  {
+    // toms-funk — функ-том филинг через 3 toms (low/mid/high).
+    // Использует cc0 сэмплы tom-l / tom-m / tom-h.
+    id: 'toms-funk',
+    name: 'Toms funk (samples)',
+    artist: 'Freesound CC0',
+    score: [
+      '// toms funk — филинг через 3 toms (low/mid/high), CC0 Freesound',
+      'stack(',
+      '  // Tom fill — low → mid → high, по такту',
+      '  s("~ ~ tom-l ~ tom-m ~ tom-h ~").gain(0.45),',
+      '  // Креш — на каждом такте как fill-акцент',
+      '  s("~ ~ ~ ~ ~ ~ ~ crash").gain(0.30),',
+      '  // Райд — длинный «шум» на фоне (время от времени)',
+      '  s("ride ~ ~ ~ ~ ~ ~ ~").gain(0.25),',
+      '  // Лёгкий kick для басовой основы',
+      '  s("bd ~ ~ ~ ~ ~ ~ ~").gain(0.30)',
+      ')',
+    ].join('\n'),
+  },
 ];

@@ -2,8 +2,8 @@ import { describe, it, expect } from 'vitest';
 import { BUILTIN_PRESETS } from './presets';
 
 describe('BUILTIN_PRESETS', () => {
-  it('has 20 entries (8 original + 10 genre + 2 sample-pack demos)', () => {
-    expect(BUILTIN_PRESETS).toHaveLength(20);
+  it('has 25 entries (8 original + 10 genre + 2 piano demos + 2 drum demos + 3 synth demos)', () => {
+    expect(BUILTIN_PRESETS).toHaveLength(25);
   });
 
   it('has unique ids', () => {
@@ -46,6 +46,34 @@ describe('BUILTIN_PRESETS', () => {
     for (const id of expected) {
       expect(BUILTIN_PRESETS.find((p) => p.id === id), `missing ${id}`).toBeDefined();
     }
+  });
+
+  it('all 3 new synth-pack demos are present (CC0 analog bass / lush pad / retro lead)', () => {
+    const expected = ['analog-bass', 'lush-pad', 'retro-lead'];
+    for (const id of expected) {
+      const p = BUILTIN_PRESETS.find((p) => p.id === id);
+      expect(p, `missing ${id}`).toBeDefined();
+      // Every synth-pack demo references the `synth:` bank (Strudel
+      // bank prefix). Verifies the bank wiring is in place.
+      expect(p?.score).toMatch(/s\("synth:/);
+    }
+  });
+
+  it('sample-pack drum presets (808-king, toms-funk) use the drums bank', () => {
+    const eightOhEightKing = BUILTIN_PRESETS.find((p) => p.id === '808-king');
+    const tomsFunk = BUILTIN_PRESETS.find((p) => p.id === 'toms-funk');
+    expect(eightOhEightKing).toBeDefined();
+    expect(tomsFunk).toBeDefined();
+    // Score strings contain `"bd"`, `"sd"`, etc. (possibly with `*N` repeat suffix or `~` rests).
+    expect(eightOhEightKing?.score).toMatch(/s\("bd/);
+    expect(eightOhEightKing?.score).toMatch(/s\("~? ?sd/);
+    expect(eightOhEightKing?.score).toMatch(/s\("hh/);
+    expect(eightOhEightKing?.score).toMatch(/s\([^)]*\bcp\b[^)]*\)/);
+    expect(tomsFunk?.score).toContain('tom-l');
+    expect(tomsFunk?.score).toContain('tom-m');
+    expect(tomsFunk?.score).toContain('tom-h');
+    expect(tomsFunk?.score).toContain('crash');
+    expect(tomsFunk?.score).toContain('ride');
   });
 
   it('every preset has balanced stack() with same-line closing or proper newlines', () => {
