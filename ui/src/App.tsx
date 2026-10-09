@@ -102,10 +102,10 @@ export function App() {
     // от тестов transportState (там эта ф-ция не вызывается).
     installTransportAudioSync();
 
-    // Register Salamander piano samples (CC0) with Strudel — lazy,
-    // idempotent (no-op on second call within a session).
-    void import('./infrastructure/audio/PianoSampleLoader').then((m) =>
-      m.loadPianoSamples(),
+    // Register CC0 sample banks (Salamander piano + 808-style drums)
+    // with Strudel — lazy, idempotent (no-op on second call within a session).
+    void import('./infrastructure/audio/SampleLoader').then((m) =>
+      m.loadAllSamples(),
     );
 
     // Lazy: подгружаем сохранённый score, но НЕ дёргаем Strudel.

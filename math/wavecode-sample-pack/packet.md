@@ -52,7 +52,7 @@ status: applied
 axiom: A1
 witness:
   applied_at: 2026-10-09
-  commit: pending
+  commit: fb3c8c0
   supersedes: null
 epistemics:
   - statement: "Salamander Grand Piano v3 by Alexander Holm — CC0 1.0
