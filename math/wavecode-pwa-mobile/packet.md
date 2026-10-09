@@ -64,7 +64,7 @@ substrate: |
   − **НЕ** push notifications, **НЕ** background sync,
     **НЕ** offline mode улучшения (Strudel + IDB already
     работают offline после загрузки).
-status: draft
+status: applied
 axiom: A1
 epistemics:
   - statement: "vite-plugin-pwa совместимо с Vite 5 (project use
