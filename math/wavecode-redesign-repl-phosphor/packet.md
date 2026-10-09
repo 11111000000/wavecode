@@ -87,9 +87,12 @@ substrate: |
   − `ui/src/debug.css` (kept, не используется после редизайна — но
     файл оставлен для совместимости с dev-режимом; можно позже
     удалить отдельным пакетом).
-status: draft
+status: applied
 axiom: A4
-witness: null
+witness:
+  applied_at: 2026-10-09
+  commit: 390e429
+  supersedes: null
 epistemics:
   - statement: "JetBrains Mono — open source SIL OFL 1.1, доступен
       через Google Fonts CDN"
