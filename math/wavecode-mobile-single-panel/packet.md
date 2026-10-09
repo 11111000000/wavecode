@@ -45,7 +45,7 @@ substrate: |
     - `.score-panel` — `flex: 1 1 auto; min-height: calc(100vh -
       100pt)` (полный viewport)
   − ничего не удалено.
-status: draft
+status: applied
 axiom: A1
 epistemics:
   - statement: "iPhone SE 3rd gen = 375×667pt CSS; 1st gen = 320×568

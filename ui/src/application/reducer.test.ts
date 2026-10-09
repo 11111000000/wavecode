@@ -177,7 +177,6 @@ describe('reduceAppEvent', () => {
     expect(b.audio.lastError).toBeUndefined();
   });
 
-<<<<<<< HEAD
   it('setLayerGain updates gain for the targeted layer only', () => {
     const start = withLayerMix([makeLayerMix(0), makeLayerMix(1), makeLayerMix(2)]);
     const next = reduceAppEvent(start, { type: 'setLayerGain', index: 1, gain: 0.3 });
