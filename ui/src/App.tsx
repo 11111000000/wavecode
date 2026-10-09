@@ -11,6 +11,9 @@ import { appStore, dispatch } from './presentation/state/appStore';
 import { installTypingTracker } from './presentation/state/editorTypingTracker';
 import { evalScore, stopAudio, beep } from './presentation/state/audioActions';
 import { RecordButton } from './presentation/components/RecordButton';
+import { ShareButton } from './presentation/components/ShareButton';
+import { shareState, setPendingShare, markIdbHasScore, startLoadingShared, finishLoadingShared } from './presentation/state/shareState';
+import { decodeSnippet } from '~/domain/urlCodec';
 import { AppLayer } from '~/infrastructure/composition';
 import { Repo } from '~/domain/services';
 import {
@@ -65,7 +68,27 @@ export function App() {
       Effect.gen(function* () {
         const repo = yield* Repo;
         const saved = yield* repo.loadScore();
-        if (saved) dispatch({ type: 'replaceScore', text: saved });
+        if (saved) {
+          // IDB выигрывает: локальная работа не перезаписывается автоматом.
+          // Если при этом в URL был `?s=...` — оставляем pending для модалки
+          // «Load shared snippet» (юзер сам решает, перезаписывать ли).
+          dispatch({ type: 'replaceScore', text: saved });
+          markIdbHasScore(true);
+        } else {
+          // IDB пуст — auto-apply pending share, если он был.
+          const pending = shareState.pendingEncoded();
+          if (pending) {
+            const text = decodeSnippet(pending);
+            if (text) {
+              startLoadingShared();
+              dispatch({ type: 'replaceScore', text });
+              finishLoadingShared();
+              setPendingShare(null);
+            } else {
+              setPendingShare(null);
+            }
+          }
+        }
       }).pipe(Effect.provide(AppLayer)),
     );
 
@@ -255,6 +278,7 @@ export function App() {
           >
             💾
           </button>
+          <ShareButton />
           <Show when={presetId().startsWith('custom-')}>
             <button
               type="button"
