@@ -1,0 +1,35 @@
+---
+sha: 4e37507
+date: 2026-10-09
+applied_at_system: 2026-10-09T07:22:44Z
+kind: creation
+files:
+  - math/wavecode-llm-cors-explicit-allowlist/packet.md
+  - math/README.md
+  - ui/.env.example
+  - ui/src/infrastructure/llm/LiveLLMClient.ts
+cross_repo:
+  - repo: ~/Projects/AngaraConfig
+    file: configuration.nix
+    anchor: services.llm-proxy.publicInstance.corsAllowedOrigins
+    hunk: '+ "https://wavecode.kosov.online"'
+    commit: 9a3e0082c5d7f14e3db27a26b64a8992f743fbd3
+    rebuild_kind: nixos-rebuild switch
+    rebuild_rc: 0
+    unit_restarted: llm-proxy-public.service
+    new_config_yaml: /nix/store/2hidavnn9a7c4g9ay2sr91blv3v2bfz1-llm-proxy-public-config.yaml
+notes: |
+  2026-10-09 rebuild applied at 07:22:44Z. CORS verified directly:
+    curl OPTIONS http://127.0.0.1:11436/v1/chat/completions
+      -H 'Origin: https://wavecode.kosov.online'
+      -H 'Access-Control-Request-Method: POST'
+      -H 'Access-Control-Request-Headers: authorization, content-type'
+    → 200, access-control-allow-origin: https://wavecode.kosov.online
+
+  NB 2026-10-07: llm vhost tier=public-auth добавил basic-auth gate на
+  Caddy-уровне (см. configuration.nix:622-632). Browser-side CORS preflight
+  через llm.kosov.online теперь требует basic-auth credentials — wavecode
+  UI должен пробрасывать их на каждый запрос, иначе Caddy отвечает 401
+  ДО того, как запрос дойдёт до LiteLLM (preflight не получит CORS headers).
+  Out of scope для этого пакета; новый wavecode-side backlog в KB
+  wavecode-llm-cors.
