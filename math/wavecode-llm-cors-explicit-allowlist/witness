@@ -1,0 +1,25 @@
+---
+sha: 4e37507
+date: 2026-10-09
+kind: creation
+files:
+  - math/wavecode-llm-cors-explicit-allowlist/packet.md
+  - math/README.md
+  - ui/.env.example
+  - ui/src/infrastructure/llm/LiveLLMClient.ts
+notes: |
+  Cross-repo decision. Wavecode-side commit on
+  feat-you/fix-llm-cors-fetch (SHA above). Complementary change in
+  AngaraConfig/configuration.nix (+1 line, separate commit) brings
+  public LiteLLM CORS allowlist into alignment.
+
+  Packet status moves draft → applied once both repos are committed;
+  the AngaraConfig SHA will be recorded in a follow-up witness
+  amendment so reviewers can cross-reference the runtime config
+  change.
+cross_repo:
+  - repo: ~/Projects/AngaraConfig
+    file: configuration.nix
+    anchor: services.llm-proxy.publicInstance.corsAllowedOrigins
+    hunk: '+ "https://wavecode.kosov.online"'
+    commit: pending
