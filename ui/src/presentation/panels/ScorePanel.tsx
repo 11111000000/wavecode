@@ -6,6 +6,7 @@ import { MidiIOButtons } from '../components/MidiIOButtons';
 import { MixerPanel } from '../components/MixerPanel';
 import { MiniNotationToolbar } from '../components/MiniNotationToolbar';
 import { StepGrid } from '../components/StepGrid';
+import { PianoKeyboard } from '../components/PianoKeyboard';
 
 /**
  * Score panel — ТОЛЬКО редактор + debug-info.
@@ -19,25 +20,37 @@ import { StepGrid } from '../components/StepGrid';
 export function ScorePanel() {
   const [debug, setDebug] = createSignal(getDebug());
   const [showStepGrid, setShowStepGrid] = createSignal(false);
+  const [showPiano, setShowPiano] = createSignal(false);
   let editorApi: CodeMirrorEditorApi | undefined;
 
   const pollId = window.setInterval(() => setDebug(getDebug()), 500);
   onCleanup(() => window.clearInterval(pollId));
 
-  // Listen for App-level "🎹 Step" toggle events (CustomEvent from App).
+  // Listen for App-level "🎹 Step" / "🎹 Piano" toggle events.
   if (typeof window !== 'undefined') {
-    const handler = (e: Event) => {
+    const stepHandler = (e: Event) => {
       const detail = (e as CustomEvent<{ open: boolean }>).detail;
       setShowStepGrid(detail.open);
     };
-    window.addEventListener('wavecode:step-grid', handler as EventListener);
-    onCleanup(() => window.removeEventListener('wavecode:step-grid', handler as EventListener));
+    const pianoHandler = (e: Event) => {
+      const detail = (e as CustomEvent<{ open: boolean }>).detail;
+      setShowPiano(detail.open);
+    };
+    window.addEventListener('wavecode:step-grid', stepHandler as EventListener);
+    window.addEventListener('wavecode:piano', pianoHandler as EventListener);
+    onCleanup(() => {
+      window.removeEventListener('wavecode:step-grid', stepHandler as EventListener);
+      window.removeEventListener('wavecode:piano', pianoHandler as EventListener);
+    });
   }
 
   return (
     <div class="score-panel-inner">
       <Show when={showStepGrid()}>
         <StepGrid />
+      </Show>
+      <Show when={showPiano()}>
+        <PianoKeyboard />
       </Show>
 
       <CodeMirrorEditor
