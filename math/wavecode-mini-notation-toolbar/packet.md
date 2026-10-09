@@ -59,7 +59,7 @@ substrate: |
     set CSS-var `--visual-viewport-height`.
   − ничего не удалено. CodeMirror dispatch — additive к
     `updateListener`.
-status: draft
+status: applied
 axiom: A1
 epistemics:
   - statement: "iOS Safari `visualViewport` API поддерживается

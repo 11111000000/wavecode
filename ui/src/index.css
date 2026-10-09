@@ -1223,3 +1223,61 @@ code {
     min-height: 220px;
   }
 }
+
+/* Mini-notation toolbar — mobile-only sticky strip above native VKB. */
+.mini-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  gap: 4px;
+  padding: 4px;
+  background: var(--bg-elev);
+  border-top: 1px solid var(--border);
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.mini-toolbar-btn {
+  min-height: 44px;
+  min-width: 36px;
+  padding: 4px 8px;
+  background: var(--bg);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-family: 'SF Mono', 'JetBrains Mono', Menlo, monospace;
+  font-size: 16px;
+  line-height: 1.2;
+  cursor: pointer;
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.mini-toolbar-btn:hover { border-color: var(--accent); }
+.mini-toolbar-btn:active { background: var(--accent); color: var(--bg); }
+
+@media (max-width: 720px) {
+  .score-panel-inner > .mini-toolbar {
+    display: flex;
+    position: sticky;
+    bottom: 0;
+    z-index: 10;
+  }
+
+  /* Когда native VKB открыта — toolbar приподнимается над ней
+     через inline-CSS-var, выставленный visualViewport listener. */
+  .mini-toolbar[data-vkb-visible='true'] {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: calc(100vh - var(--visual-viewport-height, 100vh));
+  }
+}
+
+@media (min-width: 721px) {
+  .score-panel-inner > .mini-toolbar {
+    display: none;
+  }
+}
