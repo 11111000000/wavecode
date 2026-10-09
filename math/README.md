@@ -26,6 +26,7 @@
 | `wavecode-effect-ts-architecture` | applied | none | Effect-TS как архитектурный рантайм (4 слоя + Layer DI) |
 | `wavecode-codemirror-6` | applied | none | CodeMirror 6 для редактора (over Monaco) |
 | `wavecode-llm-litellm-proxy` | applied | none | LLM через llm.kosov.online (LiteLLM), raw fetch |
+| `wavecode-llm-cors-explicit-allowlist` | draft | 3 files (cross-repo) | Explicit finite allowlist в `services.llm-proxy.publicInstance.corsAllowedOrigins`; wavecode добавлен в список. Попутно убран дубль `console.log` в `LiveLLMClient.ts`. |
 | `wavecode-static-spa-deployment` | applied | none | Деплой как статический SPA, без Nix/Docker |
 | `wavecode-test-strategy` | applied | none | vitest + playwright (пирамида) |
 | `wavecode-strict-layering` | applied | none | ESLint no-restricted-imports per-layer |
