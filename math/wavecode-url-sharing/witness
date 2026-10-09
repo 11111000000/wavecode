@@ -1,0 +1,54 @@
+- sha: 33fbab2
+  date: 2026-10-08
+  kind: creation
+  files:
+    - ui/package.json
+    - ui/package-lock.json
+    - ui/src/domain/urlCodec.ts
+    - ui/src/domain/urlCodec.test.ts
+    - ui/src/presentation/state/shareState.ts
+    - ui/src/presentation/components/ShareButton.tsx
+    - ui/src/main.tsx
+    - ui/src/App.tsx
+    - ui/src/index.css
+    - math/wavecode-url-sharing/packet.md
+  notes: |
+    Реализация URL-шаринга через lz-string.compressToEncodedURIComponent.
+
+    Отступление от буквального workflow-шага #6:
+      "main.tsx ПЕРЕД repo.loadScore(): ... dispatch replaceScore"
+    Workflow-формулировка противоречила packet proposition
+    ("если ?s= есть И repo.loadScore() пусто, тогда dispatch ... если IDB
+    не пуст, кнопка Load shared snippet в модалке"). При буквальном
+    чтении workflow'а IDB-load перезаписывал бы только что
+    задиспатченный shared snippet.
+
+    Принятое решение:
+      - main.tsx парсит URL и кладёт encoded payload в pending state
+        (module-level signal в shareState.ts). Никакого dispatch в
+        main.tsx.
+      - App.tsx onMount: load IDB →
+          • IDB has content → markIdbHasScore(true) + dispatch normal
+            load. pending остаётся, в модалке появится "Load shared
+            snippet" если юзер её откроет.
+          • IDB empty → проверить pending, если есть — dispatch +
+            clear pending. Если pending пуст — оставить дефолтный
+            initialAppState.score.
+      - Modal "Load shared snippet" виден только если pending !== null
+        AND hasIdbScore. Это manual override: юзер явно подтверждает
+        перезапись локальной работы.
+
+    Clipboard: navigator.clipboard.writeText + textarea + execCommand
+    fallback для не-secure контекста (mobile http, file:// на iOS).
+
+    Тесты: 13 unit-тестов в urlCodec.test.ts — round-trip (ASCII +
+    Cyrillic + emoji), too-large на incompressible шуме (lz-string
+    плохо сжимает random → 16KB шума даёт >8KB encoded, корректно
+    триггерит reason: 'too-large'), malformed decode не кидает
+    (возвращает ''), parseShareUrl edge cases (empty, missing, with
+    other params, без leading ?).
+
+    lz-string 1.5.0 уже был в root node_modules (положен руками при
+    setup), но не был в package.json. Теперь tracked как runtime dep
+    (не dev) — code в domain/urlCodec.ts, который попадает в main
+    bundle, не в test-only chunk.
