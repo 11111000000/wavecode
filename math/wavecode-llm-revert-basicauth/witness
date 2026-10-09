@@ -1,0 +1,39 @@
+---
+sha: pending
+date: 2026-10-09
+applied_at_system: 2026-10-09T08:52:00Z
+kind: revert
+files:
+  - math/wavecode-llm-revert-basicauth/packet.md
+cross_repo:
+  - repo: ~/Projects/AngaraConfig
+    file: configuration.nix
+    anchor: services.kinetic.services."llm"
+    commit: 3b2d362f1ac4f8a98cc61eaa6c5b8c25f50d4e62
+    summary: "tier=public-auth → tier=public; auth = { … } блок удалён"
+    rebuild_kind: nixos-rebuild switch
+    rebuild_rc: 0
+    applied_sha: 04a1c5e8ae3c7a6aaf3b2a7a3f747fa73197b5f5
+    new_system: /nix/store/72am384h6xhj7khqxnp77q7f6jqkyrvs-nixos-system-nixos-25.11.20260630.b6018f8
+  - repo: ~/Projects/AngaraConfig
+    file: configuration.nix
+    anchor: kinetic close brace (line 864)
+    commit: 04a1c5e8ae3c7a6aaf3b2a7a3f747fa73197b5f5
+    summary: "indent kinetic close brace 2 spaces; подвинуть trailing services.tree-stend.enable = true; в module scope — side-effect bug от Paseo commit f6c7a1b"
+notes: |
+  Verification curl (после rebuild 04a1c5e в 08:52Z):
+    POST http://127.0.0.1:443/v1/chat/completions
+      Host: llm.kosov.online
+      Authorization: Bearer sk-litellm-ea6d97e9…(genium key)
+      → 200 OK, 548 bytes LiteLLM JSON
+    OPTIONS http://127.0.0.1:443/v1/chat/completions
+      Host: llm.kosov.online
+      Origin: https://wavecode.kosov.online
+      Access-Control-Request-Method: POST
+      → 200 OK, Access-Control-Allow-Origin:
+        https://wavecode.kosov.online (correct)
+
+  Backlog (cross-cutting с wavecode-llm-cors-explicit-allowlist):
+  - Per-app Bearer keys через /key/generate когда починим backend.
+  - /etc/secrets/llm-htpasswd остаётся файлом, неиспользуемый.
+    Cleanup — отдельная тикета.
