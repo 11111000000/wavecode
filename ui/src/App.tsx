@@ -102,11 +102,10 @@ export function App() {
     // от тестов transportState (там эта ф-ция не вызывается).
     installTransportAudioSync();
 
-    // Register all sample banks (piano + drums + synth, all CC0) with
+    // Register all CC0 sample banks (piano + drums + synth) with
     // Strudel — lazy, idempotent (no-op on second call within a
-    // session). The aggregator in SampleLoader.ts handles missing
-    // sub-loaders gracefully (drums module may not be present until
-    // wavecode-sample-drums merges into master).
+    // session). The aggregator in SampleLoader.ts handles all three
+    // banks.
     void import('./infrastructure/audio/SampleLoader').then((m) =>
       m.loadAllSamples(),
     );

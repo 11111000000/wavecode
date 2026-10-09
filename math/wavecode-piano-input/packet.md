@@ -57,7 +57,7 @@ status: applied
 axiom: A1
 witness:
   applied_at: 2026-10-09
-  commit: pending
+  commit: 2409f82
   supersedes: null
 epistemics:
   - statement: "WebMIDI API: `navigator.requestMIDIAccess` Promise →
