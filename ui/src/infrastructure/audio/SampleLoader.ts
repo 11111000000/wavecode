@@ -15,19 +15,24 @@
  */
 
 declare global {
-  function samples(map: Record<string, string>): void;
+  function samples(arg: string | Record<string, unknown>): void;
 }
 
 let pianoLoaded = false;
 let drumsLoaded = false;
 let synthLoaded = false;
 
+// Strudel's `samples()` API:
+// - String arg: fetchSampleMap — fetches the URL, parses as JSON, registers
+//   each entry under the entry name. URL must point to a strudel.json manifest.
+// - Object arg: direct name→urls map (no bank prefix).
+// We use the string form (manifests) because each bank has 10+ files.
 const PIANO_BANK = './samples/piano/strudel.json';
 const DRUMS_BANK = './samples/drums/strudel.json';
 const SYNTH_BANK = './samples/synth/strudel.json';
 
 const registerBank = (
-  bank: Record<string, string>,
+  manifestPath: string,
   flag: 'piano' | 'drums' | 'synth',
 ): void => {
   if (typeof samples === 'undefined') {
@@ -35,7 +40,12 @@ const registerBank = (
     return;
   }
   try {
-    samples(bank);
+    // samples() with a string arg fetches the URL, parses as strudel.json,
+    // and registers each entry under its name. The sample name in the score
+    // (e.g. `s("bd")` or `s("drums:bd")` after a bank prefix) is then
+    // resolved against the global soundMap. We use bare names (no bank
+    // prefix) so `s("bd")` resolves directly.
+    samples(manifestPath);
     if (flag === 'piano') pianoLoaded = true;
     if (flag === 'drums') drumsLoaded = true;
     if (flag === 'synth') synthLoaded = true;
@@ -49,12 +59,12 @@ const registerBank = (
 
 export const loadPianoSamples = (): void => {
   if (pianoLoaded) return;
-  registerBank({ piano: PIANO_BANK }, 'piano');
+  registerBank(PIANO_BANK, 'piano');
 };
 
 export const loadDrumSamples = (): void => {
   if (drumsLoaded) return;
-  registerBank({ drums: DRUMS_BANK }, 'drums');
+  registerBank(DRUMS_BANK, 'drums');
 };
 
 /**
@@ -63,7 +73,7 @@ export const loadDrumSamples = (): void => {
  */
 export const loadSynthSamples = (): void => {
   if (synthLoaded) return;
-  registerBank({ synth: SYNTH_BANK }, 'synth');
+  registerBank(SYNTH_BANK, 'synth');
 };
 
 export const loadAllSamples = (): void => {

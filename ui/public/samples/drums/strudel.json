@@ -1,17 +1,45 @@
 {
-  "_base": "./",
-  "bd": ["bd.mp3"],
-  "bd-sub": ["bd-sub.mp3"],
-  "sd": ["sd.mp3"],
-  "rim": ["rim.mp3"],
-  "hh": ["hh.mp3"],
-  "oh": ["oh.mp3"],
-  "cp": ["cp.mp3"],
-  "cb": ["cb.mp3"],
-  "sh": ["sh.mp3"],
-  "tom-l": ["tom-l.mp3"],
-  "tom-m": ["tom-m.mp3"],
-  "tom-h": ["tom-h.mp3"],
-  "crash": ["crash.mp3"],
-  "ride": ["ride.mp3"]
+  "_base": "/samples/drums/",
+  "drums:bd": [
+    "bd.mp3"
+  ],
+  "drums:bd-sub": [
+    "bd-sub.mp3"
+  ],
+  "drums:sd": [
+    "sd.mp3"
+  ],
+  "drums:rim": [
+    "rim.mp3"
+  ],
+  "drums:hh": [
+    "hh.mp3"
+  ],
+  "drums:oh": [
+    "oh.mp3"
+  ],
+  "drums:cp": [
+    "cp.mp3"
+  ],
+  "drums:cb": [
+    "cb.mp3"
+  ],
+  "drums:sh": [
+    "sh.mp3"
+  ],
+  "drums:tom-l": [
+    "tom-l.mp3"
+  ],
+  "drums:tom-m": [
+    "tom-m.mp3"
+  ],
+  "drums:tom-h": [
+    "tom-h.mp3"
+  ],
+  "drums:crash": [
+    "crash.mp3"
+  ],
+  "drums:ride": [
+    "ride.mp3"
+  ]
 }
