@@ -1,0 +1,105 @@
+/*
+ * design tokens — единственный источник правды для палитры, шрифтов,
+ * spacing, motion и shape. Все остальные CSS-слои читают только эти
+ * переменные; правки цветов / шрифтов делаются здесь, а не в
+ * компонентах.
+ *
+ * Reference: math/wavecode-redesign-repl-phosphor/packet.md
+ * Phosphor-amber на тёплом чёрном, моноширинный UI, VT220/SGI IRIX vibe.
+ */
+
+:root {
+  /* phosphor amber: vt220 phosphor on warm-black tube.
+     contrast fg/bg-base = 9.4:1 (WCAG AAA). */
+  --bg-base:    #0c0d0e;
+  --bg-elev:    #15110d;
+  --bg-screen:  #0a0807;
+  --bg-overlay: rgba(12, 13, 14, 0.72);
+
+  --fg:         #f4a62b;
+  --fg-dim:     #b8801e;
+  --fg-ghost:   #6a4e16;
+
+  --amber:      #ffb547;
+  --amber-glow: rgba(255, 181, 71, 0.35);
+  --amber-soft: rgba(255, 181, 71, 0.10);
+
+  --ok:         #94e344;
+  --ok-soft:    rgba(148, 227, 68, 0.12);
+  --warn:       #ffd87a;
+  --warn-soft:  rgba(255, 216, 122, 0.12);
+  --err:        #ff5c3a;
+  --err-soft:   rgba(255, 92, 58, 0.12);
+
+  --border:        #2a201a;
+  --border-strong: #4a3a2a;
+  --border-active: var(--amber);
+
+  /* shapes: terminal sharp, no rounded corners by default. */
+  --radius:        0;
+  --radius-pill:   999px;
+
+  /* type stack — везде моно, всегда. font-family inheritance через
+     html → body → всё остальное; явное переопределение не нужно. */
+  --font-mono: 'JetBrains Mono', 'IBM Plex Mono', 'SF Mono', Menlo,
+               'DejaVu Sans Mono', Consolas, monospace;
+  --font-sans: 'IBM Plex Sans', 'Inter', system-ui, -apple-system, sans-serif;
+
+  --fs-xs:  10px;
+  --fs-sm:  11px;
+  --fs-md:  12px;
+  --fs-base: 13px;
+  --fs-lg:  14px;
+  --fs-xl:  16px;
+  --fs-display: 18px;
+
+  --lh-base:  1.4;
+  --lh-tight: 1.2;
+
+  /* spacing scale — степеней 4 и 2. */
+  --space-2xs: 2px;
+  --space-xs:  4px;
+  --space-sm:  8px;
+  --space-md:  12px;
+  --space-lg:  16px;
+  --space-xl:  24px;
+  --space-2xl: 32px;
+
+  /* motion — fast enough to feel responsive, slow enough to read. */
+  --dur-fast:  80ms;
+  --dur-base:  160ms;
+  --dur-slow:  320ms;
+  --ease:      cubic-bezier(0.2, 0.6, 0.2, 1);
+
+  /* sizing. */
+  --icon-size:     14px;
+  --icon-size-lg:  18px;
+  --control-h:     26px;
+  --control-h-lg:  32px;
+  --gutter:        var(--space-md);
+
+  /* shadows. */
+  --shadow-glow:  0 0 6px var(--amber-glow);
+  --shadow-glow-strong: 0 0 12px var(--amber-glow);
+  --shadow-frame: inset 0 0 0 1px var(--border-strong);
+
+  /* layout. */
+  --header-h:      auto;
+  --panel-min-h:   180px;
+  --panel-max-h:   60vh;
+
+  /* z-index scale. */
+  --z-ios:    100;
+  --z-modal:  1000;
+  --z-toast:  2000;
+
+  color-scheme: dark;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --dur-fast: 0ms;
+    --dur-base: 0ms;
+    --dur-slow: 0ms;
+  }
+}

@@ -1,0 +1,54 @@
+/*
+ * icons layer — стили для SVG-иконок.
+ *
+ * Все SVG используют currentColor; иконка выглядит как текущий
+ * текст приложения, никаких emoji, никаких раскрасок.
+ */
+
+.wc-icon {
+  display: inline-block;
+  vertical-align: middle;
+  flex-shrink: 0;
+  width: var(--icon-size);
+  height: var(--icon-size);
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linecap: square;
+  stroke-linejoin: miter;
+}
+
+.wc-icon-stack {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--control-h);
+  height: var(--control-h);
+  flex-shrink: 0;
+}
+
+.wc-icon[data-size='sm'] { width: 12px; height: 12px; stroke-width: 1.5; }
+.wc-icon[data-size='lg'] {
+  width: var(--icon-size-lg);
+  height: var(--icon-size-lg);
+  stroke-width: 1.6;
+}
+
+/* logo в title bar — пульсирующая phosphor-волна. */
+.wc-logo-wave {
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: var(--fs-lg);
+  color: var(--amber);
+  text-shadow: var(--shadow-glow);
+  letter-spacing: 0.04em;
+}
+
+.wc-logo-wave[data-active='true'] {
+  animation: wc-logo-glow 2.2s ease-in-out infinite;
+}
+
+@keyframes wc-logo-glow {
+  0%, 100% { opacity: 0.7; text-shadow: 0 0 4px var(--amber-glow); }
+  50%      { opacity: 1.0; text-shadow: 0 0 12px var(--amber); }
+}
