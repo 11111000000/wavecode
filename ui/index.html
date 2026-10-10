@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <meta name="theme-color" content="#0c0d0e" />
+    <meta name="theme-color" content="#0a0a0e" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
@@ -19,71 +19,88 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
       rel="stylesheet"
-      href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap"
     />
 
     <style>
       :root {
-        --bg-base: #0c0d0e;
-        --fg: #f4a62b;
-        --fg-dim: #b8801e;
-        --amber: #ffb547;
-        --amber-glow: rgba(255, 181, 71, 0.45);
+        --bg: #0a0a0e;
+        --fg: #f4f4f5;
+        --fg-dim: #a1a1aa;
+        --amber: #ffaa3b;
+        --amber-glow: rgba(255, 170, 59, 0.5);
+        --cyan: #5eead4;
+        --magenta: #f472b6;
       }
       * { box-sizing: border-box; }
       html, body {
         margin: 0;
         padding: 0;
         height: 100%;
-        background: var(--bg-base);
+        background: var(--bg);
         color: var(--fg);
-        font-family: 'JetBrains Mono', 'SF Mono', Menlo, monospace;
-        font-size: 13px;
+        font-family: 'Geist', 'Inter', system-ui, -apple-system, sans-serif;
+        font-size: 14px;
         overflow: hidden;
       }
       #root { height: 100%; }
-
-      .boot-screen {
+      .boot {
         height: 100%;
         display: flex;
         flex-direction: column;
         align-items: center;
         justify-content: center;
         gap: 16px;
-        text-shadow: 0 0 8px var(--amber-glow);
+        background:
+          radial-gradient(ellipse at 30% 20%, rgba(255, 170, 59, 0.08), transparent 50%),
+          radial-gradient(ellipse at 70% 80%, rgba(94, 234, 212, 0.06), transparent 50%),
+          var(--bg);
       }
-      .boot-screen .logo {
+      .boot .logo {
+        display: flex;
+        align-items: center;
+        gap: 8px;
         font-size: 22px;
-        font-weight: 700;
-        letter-spacing: 0.12em;
-        color: var(--amber);
+        font-weight: 600;
+        color: var(--fg);
+        letter-spacing: -0.02em;
       }
-      .boot-screen .tagline {
+      .boot .logo .wave {
+        color: var(--amber);
+        font-family: 'Geist Mono', monospace;
+        font-size: 16px;
+        text-shadow: 0 0 12px var(--amber-glow);
+      }
+      .boot .tagline {
         font-size: 11px;
         color: var(--fg-dim);
         letter-spacing: 0.08em;
-        text-transform: lowercase;
+        text-transform: uppercase;
+        font-family: 'Geist Mono', monospace;
       }
-      .boot-screen .bar {
+      .boot .bar {
+        font-family: 'Geist Mono', monospace;
         font-size: 12px;
         color: var(--amber);
-        font-family: inherit;
         letter-spacing: 0.06em;
+        margin-top: 8px;
       }
-      .boot-screen .bar .dot {
+      .boot .bar .dot {
+        display: inline-block;
         animation: blink 1s steps(2, start) infinite;
       }
-      @keyframes blink {
-        to { visibility: hidden; }
-      }
+      @keyframes blink { to { visibility: hidden; } }
     </style>
   </head>
   <body>
     <div id="root">
-      <div class="boot-screen">
-        <div class="logo">∿∿∿ wavecode</div>
+      <div class="boot">
+        <div class="logo">
+          <span class="wave">∿∿∣</span>
+          wavecode
+        </div>
         <div class="tagline">live-coding · ai · strudel</div>
-        <div class="bar">boot 1.0 [▓▓▓░░░]<span class="dot">_</span></div>
+        <div class="bar">boot 1.1 <span style="color:var(--cyan)">[▓▓▓▓░░]</span><span class="dot" style="color:var(--magenta)">_</span></div>
       </div>
     </div>
     <script type="module" src="/src/main.tsx"></script>

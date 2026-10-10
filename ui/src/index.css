@@ -1,28 +1,25 @@
 /*
- * wavecode — REPL Phosphor design system
+ * wavecode — Synthwave Modern Terminal.
  *
- * Five-layer architecture (cascade order matters — earlier layers
- * yield to later ones, but legacy selectors in `legacy.css` may
- * override `components.css` if a component was not yet migrated).
+ * 5-слойная архитектура (mobile-first):
  *
- *   tokens.css      CSS custom properties (palette, fonts, spacing)
- *   base.css        reset, html/body, CRT scanlines, focus ring
- *   components.css  new "wc-*" components (for new code)
- *   icons.css       SVG icon styles (currentColor)
- *   legacy.css      shim layer — old selectors in new style
+ *   tokens.css      палитра spectrum (amber+cyan+magenta), surface-0..4,
+ *                   motion (--ease-spring), radius scale, z-scale
+ *   base.css        reset, Geist typography, focus ring, scrollbars,
+ *                   safe-area padding
+ *   components.css  новые «wc-*» компоненты: btn, card, chip, pill,
+ *                   led, slider, big-slider, tabbar, fab, toast,
+ *                   topbar, stat-grid, chat
+ *   sheets.css      bottom-sheet, side-drawer, snap-points, drag-handle,
+ *                   body-scroll-lock
+ *   legacy.css      shim для старых селекторов в modern-палитре
  *
- * Reference: math/wavecode-redesign-repl-phosphor/packet.md
+ * Reference: math/wavecode-modern-mobile-redesign/packet.md
  */
 
 @import './styles/tokens.css';
 @import './styles/base.css';
 @import './styles/components.css';
+@import './styles/sheets.css';
 @import './styles/icons.css';
 @import './styles/legacy.css';
-
-/* App-level top-level: заполнить всю высоту, column-flex. */
-.app {
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-}

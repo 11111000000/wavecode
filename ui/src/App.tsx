@@ -1,4 +1,6 @@
-import { Show, onMount, createEffect, createSignal, For, onCleanup } from 'solid-js';
+import {
+  Show, onMount, createEffect, createSignal, For, onCleanup, type JSX,
+} from 'solid-js';
 import { Effect } from 'effect';
 import { HelloPanel } from './presentation/panels/HelloPanel';
 import { ScorePanel } from './presentation/panels/ScorePanel';
@@ -7,40 +9,34 @@ import { DebugPanel } from './presentation/panels/DebugPanel';
 import { TransportPanel } from './presentation/components/TransportPanel';
 import { installTransportAudioSync } from './presentation/state/useTransportAudioSync';
 import {
-  uiState,
-  toggleScore,
-  toggleAI,
-  toggleStatus,
-  installKeyboardShortcuts,
-  getMobileMode,
-  setMobileMode,
+  uiState, toggleAI, toggleStatus, installKeyboardShortcuts,
+  getMobileMode, setMobileMode,
   type MobileMode,
+  openSheet, closeSheet, setTab, getActiveTab,
 } from './presentation/state/uiState';
 import { appStore, dispatch } from './presentation/state/appStore';
 import { installTypingTracker } from './presentation/state/editorTypingTracker';
 import { evalScore, stopAudio, beep } from './presentation/state/audioActions';
-import { RecordButton } from './presentation/components/RecordButton';
 import { ShareButton } from './presentation/components/ShareButton';
 import { shareState, setPendingShare, markIdbHasScore, startLoadingShared, finishLoadingShared } from './presentation/state/shareState';
-import {
-  PlayIcon, StopIcon, StepIcon, PianoIcon, SpeakerIcon,
-  SaveIcon, TrashIcon, ResetIcon, NewIcon, PhoneIcon,
-  UndoIcon, RedoIcon,
-} from './presentation/icons';
 import { decodeSnippet } from '~/domain/urlCodec';
 import { AppLayer } from '~/infrastructure/composition';
 import { Repo } from '~/domain/services';
+import { ensureAudioLoaded, getAudioContextState } from '~/infrastructure/audio/LiveAudioEngine';
 import {
-  ensureAudioLoaded,
-  getAudioContextState,
-} from '~/infrastructure/audio/LiveAudioEngine';
-import {
-  allPresets,
-  getPreset,
-  saveCustomPreset,
-  deleteCustomPreset,
-  resetAllBrowserData,
+  allPresets, getPreset, saveCustomPreset, deleteCustomPreset, resetAllBrowserData,
 } from './presentation/state/presetsStore';
+import {
+  StepIcon, PianoIcon,
+  SaveIcon, TrashIcon, ResetIcon, NewIcon, PhoneIcon,
+  UndoIcon, RedoIcon,
+} from './presentation/icons';
+import { TabBar } from './presentation/components/TabBar';
+import { FAB } from './presentation/components/FAB';
+import { BottomSheet } from './presentation/components/BottomSheet';
+import { MixerPanel } from './presentation/components/MixerPanel';
+import { StepGrid } from './presentation/components/StepGrid';
+import { PianoKeyboard } from './presentation/components/PianoKeyboard';
 
 function CollapsibleHeader(props: {
   title: string;
@@ -48,7 +44,7 @@ function CollapsibleHeader(props: {
   onToggle: () => void;
   hint: string;
   ariaLabel: string;
-}) {
+}): JSX.Element {
   return (
     <header class="panel-header" onClick={() => props.onToggle()}>
       <span class="collapse-toggle" aria-expanded={props.open} aria-label={props.ariaLabel}>
@@ -60,33 +56,25 @@ function CollapsibleHeader(props: {
   );
 }
 
-export function App() {
+export function App(): JSX.Element {
   const [ctxState, setCtxState] = createSignal(getAudioContextState());
   const [presetId, setPresetId] = createSignal('creep');
   const [showSavePreset, setShowSavePreset] = createSignal(false);
   const [showStepGrid, setShowStepGrid] = createSignal(false);
   const [showPiano, setShowPiano] = createSignal(false);
-
-  // Emit step-grid toggle events so ScorePanel can render/remove the grid
-  // without owning its own state. Decoupled — both App and ScorePanel listen
-  // independently, no direct prop drilling needed.
-  const toggleStepGrid = () => {
-    const next = !showStepGrid();
-    setShowStepGrid(next);
-    window.dispatchEvent(
-      new CustomEvent('wavecode:step-grid', { detail: { open: next } }),
-    );
-  };
-  const togglePiano = () => {
-    const next = !showPiano();
-    setShowPiano(next);
-    window.dispatchEvent(
-      new CustomEvent('wavecode:piano', { detail: { open: next } }),
-    );
-  };
-  const [newPresetName, setNewPresetName] = createSignal('');
+  const [audioRunning, setAudioRunning] = createSignal(false);
   const [mobileMode, setMobileModeSignal] = createSignal<MobileMode>(getMobileMode());
   const [showMobileMenu, setShowMobileMenu] = createSignal(false);
+  const [newPresetName, setNewPresetName] = createSignal('');
+
+  const toggleStepGrid = (): void => {
+    if (showStepGrid()) { setShowStepGrid(false); closeSheet(); }
+    else { setShowStepGrid(true); openSheet('step', 'peek'); }
+  };
+  const togglePiano = (): void => {
+    if (showPiano()) { setShowPiano(false); closeSheet(); }
+    else { setShowPiano(true); openSheet('piano', 'peek'); }
+  };
 
   const chooseMobileMode = (mode: MobileMode): void => {
     setMobileMode(mode);
@@ -94,38 +82,27 @@ export function App() {
     setShowMobileMenu(false);
   };
 
-  const pollId = window.setInterval(() => setCtxState(getAudioContextState()), 500);
+  const pollId = window.setInterval(() => {
+    const s = getAudioContextState();
+    setCtxState(s);
+    setAudioRunning(s.state === 'running');
+  }, 500);
   onCleanup(() => window.clearInterval(pollId));
 
   onMount(() => {
-    // Side-channel: cps signal → AudioEngine.setCps (debounced). Изолировано
-    // от тестов transportState (там эта ф-ция не вызывается).
     installTransportAudioSync();
-
-    // Register all CC0 sample banks (piano + drums + synth) with
-    // Strudel — lazy, idempotent (no-op on second call within a
-    // session). The aggregator in SampleLoader.ts handles all three
-    // banks.
-    void import('./infrastructure/audio/SampleLoader').then((m) =>
-      m.loadAllSamples(),
+    void import('./infrastructure/audio/PianoSampleLoader').then((m) =>
+      m.loadPianoSamples(),
     );
 
-    // Lazy: подгружаем сохранённый score, но НЕ дёргаем Strudel.
-    // Strudel (≈676KB / 216KB gzip — половина initial bundle) нужен только
-    // для аудио, которое юзер запросит кнопкой «Запуск» / «440» / «Применить».
-    // Без ensureAudioLoaded() initial бандл падает с ~415KB до ~200KB gzip.
     void Effect.runPromise(
       Effect.gen(function* () {
         const repo = yield* Repo;
         const saved = yield* repo.loadScore();
         if (saved) {
-          // IDB выигрывает: локальная работа не перезаписывается автоматом.
-          // Если при этом в URL был `?s=...` — оставляем pending для модалки
-          // «Load shared snippet» (юзер сам решает, перезаписывать ли).
           dispatch({ type: 'replaceScore', text: saved });
           markIdbHasScore(true);
         } else {
-          // IDB пуст — auto-apply pending share, если он был.
           const pending = shareState.pendingEncoded();
           if (pending) {
             const text = decodeSnippet(pending);
@@ -142,12 +119,8 @@ export function App() {
       }).pipe(Effect.provide(AppLayer)),
     );
 
-    // Preload Strudel по первому user-gesture. Пока юзер просто смотрит
-    // на партитуру — chunk не качается (важно для слабых сетей). Как только
-    // юзер кликнул / нажал клавишу / ткнул в тач — стартуем фоном, чтобы
-    // к моменту «Запуск» chunk уже был тёплый в кэше.
     let preloaded = false;
-    const preload = () => {
+    const preload = (): void => {
       if (preloaded) return;
       preloaded = true;
       void ensureAudioLoaded();
@@ -177,9 +150,6 @@ export function App() {
     const messages = appStore.messages;
     if (saveMessagesTimer !== undefined) window.clearTimeout(saveMessagesTimer);
     saveMessagesTimer = window.setTimeout(() => {
-      // Глубокая копия: Solid-store proxy не сериализуется через
-      // structured-clone (см. DataCloneError в IDB). JSON-roundtrip
-      // снимает proxy-обёртки и оставляет plain-object массив.
       const plain = JSON.parse(JSON.stringify(messages));
       void Effect.runPromise(
         Effect.gen(function* () {
@@ -195,8 +165,6 @@ export function App() {
     if (!preset) return;
     setPresetId(id);
     dispatch({ type: 'replaceScore', text: preset.score });
-    // Auto-eval: заменяем score и сразу играем. Если уже играло — стоп
-    // предыдущего цикла происходит внутри LiveAudioEngine.eval (repl.stop).
     void evalScore();
   };
 
@@ -246,16 +214,23 @@ export function App() {
     void stopAudio();
     dispatch({ type: 'undoScore' });
   };
-
   const onRedo = (): void => {
     void stopAudio();
     dispatch({ type: 'redoScore' });
   };
 
+  const onPrimaryAction = (): void => {
+    if (audioRunning()) {
+      void stopAudio();
+    } else {
+      void evalScore();
+    }
+  };
+
   installTypingTracker(dispatch);
 
   onMount(() => {
-    const onDocClick = (e: MouseEvent) => {
+    const onDocClick = (e: MouseEvent): void => {
       if (!showMobileMenu()) return;
       const target = e.target as HTMLElement | null;
       if (target && target.closest('.mobile-menu-wrap')) return;
@@ -267,77 +242,89 @@ export function App() {
 
   installKeyboardShortcuts({
     focusAI: () => {
-      const ta = document.querySelector<HTMLTextAreaElement>('[data-ai-textarea]');
-      ta?.focus();
+      setTab('chat');
+      window.setTimeout(() => {
+        const ta = document.querySelector<HTMLTextAreaElement>('[data-ai-textarea]');
+        ta?.focus();
+      }, 200);
     },
     focusScore: () => {
-      const cm = document.querySelector<HTMLElement>('.cm-content');
-      cm?.focus();
+      setTab('score');
+      window.setTimeout(() => {
+        const cm = document.querySelector<HTMLElement>('.cm-content');
+        cm?.focus();
+      }, 100);
     },
     undoScore: onRollback,
     redoScore: onRedo,
   });
 
   return (
-    <main class="app">
-      <header class="app-header">
-        <div class="app-title">
-          <h1>
-            <span class="wc-logo-wave" aria-hidden="true">∿∿∿</span>
-            wavecode
-          </h1>
-          <span class="app-subtitle">live-coding · ai · strudel</span>
-        </div>
-        <div class="app-preset-row">
-          <select
-            class="preset-select"
-            value={presetId()}
-            onChange={(e) => loadPreset(e.currentTarget.value)}
-            title="Готовые пресеты"
-          >
-            <optgroup label="Встроенные">
-              <For each={allPresets().filter((p) => !p.custom)}>
-                {(p) => <option value={p.id}>{p.name}{p.artist ? ` · ${p.artist}` : ''}</option>}
-              </For>
-            </optgroup>
-            <Show when={allPresets().some((p) => p.custom)}>
-              <optgroup label="Мои">
-                <For each={allPresets().filter((p) => p.custom)}>
-                  {(p) => <option value={p.id}>⭐ {p.name}</option>}
-                </For>
-              </optgroup>
-            </Show>
-          </select>
+    <main class="app wc-app">
+      {/* ─── TopBar — brand + status + actions ─── */}
+      <header class="wc-topbar">
+        <span class="wc-topbar__logo" aria-hidden="true">∿∿∣</span>
+        <h1 class="wc-topbar__title">wavecode</h1>
+        <span class="wc-topbar__led" data-tone={audioRunning() ? 'running' : 'idle'}>
+          <span class="wc-led" data-tone={audioRunning() ? 'running' : 'idle'}>
+            {audioRunning() ? `▶ ${ctxState().state}` : `● ${ctxState().state}`}
+          </span>
+        </span>
+        <div class="wc-topbar__actions">
           <button
             type="button"
-            class="preset-btn"
+            class="wc-icon-btn"
+            data-tone="ghost"
             onClick={onRollback}
             disabled={appStore.history.length === 0}
-            title="Отменить последнюю правку (Ctrl+Z)"
+            aria-label="Отменить"
+            title="Отменить (Ctrl+Z)"
           >
-            <UndoIcon />
-            <span>Undo</span>
+            <UndoIcon size={18} />
           </button>
           <button
             type="button"
-            class="preset-btn"
+            class="wc-icon-btn"
+            data-tone="ghost"
             onClick={onRedo}
             disabled={appStore.future.length === 0}
-            title="Повторить отменённую правку (Ctrl+Y)"
+            aria-label="Повторить"
+            title="Повторить (Ctrl+Y)"
           >
-            <RedoIcon />
-            <span>Redo</span>
+            <RedoIcon size={18} />
           </button>
+          <button
+            type="button"
+            class="wc-icon-btn"
+            data-tone="ghost"
+            onClick={onNewComposition}
+            aria-label="Новая"
+            title="Новая композиция"
+          >
+            <NewIcon size={18} />
+          </button>
+          <button
+            type="button"
+            class="wc-icon-btn"
+            data-tone="ghost"
+            onClick={() => setShowSavePreset((v) => !v)}
+            aria-label="Сохранить"
+            title="Сохранить как пресет"
+          >
+            <SaveIcon size={18} />
+          </button>
+          <ShareButton />
           <div class="mobile-menu-wrap">
             <button
               type="button"
-              class="preset-btn mobile-menu-btn"
+              class="wc-icon-btn"
+              data-tone="ghost"
               onClick={() => setShowMobileMenu((v) => !v)}
-              title={`Мобильный режим: ${mobileMode()}`}
+              aria-label="Мобильный режим"
               aria-haspopup="true"
               aria-expanded={showMobileMenu()}
             >
-              <PhoneIcon />
+              <PhoneIcon size={18} />
             </button>
             <Show when={showMobileMenu()}>
               <div class="mobile-menu" role="menu">
@@ -355,7 +342,7 @@ export function App() {
                         {mode === 'auto' ? 'Авто' : mode === 'compact' ? 'Компактно' : 'Полно'}
                       </span>
                       <span class="mobile-menu-hint">
-                        {mode === 'auto' ? 'по ширине экрана' : mode === 'compact' ? 'только партитура' : 'все 3 панели'}
+                        {mode === 'auto' ? 'по ширине' : mode === 'compact' ? 'только партитура' : 'все 3 панели'}
                       </span>
                     </button>
                   )}
@@ -363,94 +350,73 @@ export function App() {
               </div>
             </Show>
           </div>
-          <button
-            type="button"
-            class="preset-btn preset-btn-new"
-            onClick={onNewComposition}
-            title="Создать новую композицию"
-          >
-            <NewIcon />
-            <span>Новая</span>
-          </button>
-          <button
-            type="button"
-            class="preset-btn"
-            onClick={() => setShowSavePreset((v) => !v)}
-            title="Сохранить партитуру как пресет"
-            aria-label="Сохранить партитуру как пресет"
-          >
-            <SaveIcon />
-          </button>
-          <ShareButton />
           <Show when={presetId().startsWith('custom-')}>
             <button
               type="button"
-              class="preset-btn preset-btn-danger"
+              class="wc-icon-btn"
+              data-tone="ghost"
               onClick={onDeletePreset}
-              title="Удалить пресет"
               aria-label="Удалить пресет"
             >
-              <TrashIcon />
+              <TrashIcon size={18} />
             </button>
           </Show>
           <button
             type="button"
-            class="preset-btn preset-btn-danger"
+            class="wc-icon-btn"
+            data-tone="ghost"
             onClick={onResetAll}
-            title="Сбросить всё"
             aria-label="Сбросить всё"
           >
-            <ResetIcon />
+            <ResetIcon size={18} />
           </button>
-        </div>
-        <div class="app-controls-row">
-          <button
-            type="button"
-            class="ctrl-btn ctrl-btn-primary"
-            onClick={() => void evalScore()}
-          >
-            <PlayIcon />
-            <span>Запуск</span>
-          </button>
-          <button type="button" class="ctrl-btn" onClick={() => void stopAudio()}>
-            <StopIcon />
-            <span>Стоп</span>
-          </button>
-          <RecordButton />
-          <button
-            type="button"
-            class={`ctrl-btn${showStepGrid() ? ' ctrl-btn-primary' : ''}`}
-            onClick={toggleStepGrid}
-            title="Toggle step sequencer (4×8 drum pads)"
-            aria-pressed={showStepGrid()}
-          >
-            <StepIcon />
-            <span>Step</span>
-          </button>
-          <button
-            type="button"
-            class={`ctrl-btn${showPiano() ? ' ctrl-btn-primary' : ''}`}
-            onClick={togglePiano}
-            title="Toggle 2-octave piano (WebMIDI auto-bind on supported browsers)"
-            aria-pressed={showPiano()}
-          >
-            <PianoIcon />
-            <span>Piano</span>
-          </button>
-          <button type="button" class="ctrl-btn" onClick={() => beep(440)} title="440 Гц">
-            <SpeakerIcon />
-            <span>440</span>
-          </button>
-          <button type="button" class="ctrl-btn" onClick={() => beep(220)} title="220 Гц">
-            <SpeakerIcon />
-            <span>220</span>
-          </button>
-          <TransportPanel />
-          <span class="ctx-state">
-            контекст: <strong class={`status-${ctxState().state}`}>{ctxState().state}</strong>
-          </span>
         </div>
       </header>
+
+      {/* ─── Preset row (sticky strip) ─── */}
+      <div class="app-preset-row" style={{"padding":"var(--space-sm) var(--space-md)","border-bottom":"1px solid var(--border)","background":"var(--surface-0)"}}>
+        <select
+          class="preset-select"
+          value={presetId()}
+          onChange={(e) => loadPreset(e.currentTarget.value)}
+          title="Готовые пресеты"
+        >
+          <optgroup label="Встроенные">
+            <For each={allPresets().filter((p) => !p.custom)}>
+              {(p) => <option value={p.id}>{p.name}{p.artist ? ` · ${p.artist}` : ''}</option>}
+            </For>
+          </optgroup>
+          <Show when={allPresets().some((p) => p.custom)}>
+            <optgroup label="Мои">
+              <For each={allPresets().filter((p) => p.custom)}>
+                {(p) => <option value={p.id}>⭐ {p.name}</option>}
+              </For>
+            </optgroup>
+          </Show>
+        </select>
+        <div style={{"flex":"1"}} />
+        <button
+          type="button"
+          class="wc-chip"
+          data-active={showStepGrid() ? 'true' : 'false'}
+          onClick={toggleStepGrid}
+        >
+          <StepIcon size={14} />
+          <span>Step</span>
+        </button>
+        <button
+          type="button"
+          class="wc-chip"
+          data-active={showPiano() ? 'true' : 'false'}
+          onClick={togglePiano}
+        >
+          <PianoIcon size={14} />
+          <span>Piano</span>
+        </button>
+        <button type="button" class="wc-chip" onClick={() => beep(440)}>440</button>
+        <button type="button" class="wc-chip" onClick={() => beep(220)}>220</button>
+        <TransportPanel />
+      </div>
 
       <Show when={showSavePreset()}>
         <div class="save-preset-bar">
@@ -460,53 +426,88 @@ export function App() {
             value={newPresetName()}
             onInput={(e) => setNewPresetName(e.currentTarget.value)}
             onKeyDown={(e) => { if (e.key === 'Enter') onSavePreset(); }}
-            class="save-preset-input"
           />
-          <button type="button" onClick={onSavePreset} disabled={!newPresetName().trim()}>OK</button>
-          <button type="button" onClick={() => { setShowSavePreset(false); setNewPresetName(''); }}>Отмена</button>
+          <button type="button" class="ctrl-btn ctrl-btn-primary" onClick={onSavePreset} disabled={!newPresetName().trim()}>OK</button>
+          <button type="button" class="ctrl-btn" onClick={() => { setShowSavePreset(false); setNewPresetName(''); }}>Отмена</button>
         </div>
       </Show>
 
+      {/* ─── Body — full-screen score, sheets overlay ─── */}
       <div class="app-body">
-        <section class="score-panel collapsible" data-open={uiState().scoreOpen}>
-          <CollapsibleHeader
-            title="Партитура"
-            open={uiState().scoreOpen}
-            onToggle={toggleScore}
-            hint="live-редактирование · Ctrl+Shift+E"
-            ariaLabel="Панель партитуры"
-          />
+        <section class="score-panel">
           <Show when={uiState().scoreOpen}>
             <ScorePanel />
           </Show>
         </section>
 
-        <section class="ai-panel collapsible" data-open={uiState().aiOpen}>
-          <CollapsibleHeader
-            title="ИИ"
-            open={uiState().aiOpen}
-            onToggle={toggleAI}
-            hint="Ctrl+. фокус · Ctrl+↵ отправить"
-            ariaLabel="Панель ИИ"
-          />
-          <Show when={uiState().aiOpen}>
+        <Show when={uiState().aiOpen && getActiveTab() === 'score'}>
+          <section class="ai-panel collapsible" data-open="true">
+            <CollapsibleHeader
+              title="ИИ"
+              open={uiState().aiOpen}
+              onToggle={toggleAI}
+              hint="Ctrl+. фокус · Ctrl+↵ отправить"
+              ariaLabel="Панель ИИ"
+            />
             <AIEditPanel />
-          </Show>
-        </section>
+          </section>
+        </Show>
 
-        <aside class="status-panel collapsible" data-open={uiState().statusOpen}>
-          <CollapsibleHeader
-            title="Состояние"
-            open={uiState().statusOpen}
-            onToggle={toggleStatus}
-            hint="Ctrl+Shift+S"
-            ariaLabel="Панель состояния"
-          />
-          <Show when={uiState().statusOpen}>
-            <HelloPanel />
-          </Show>
-        </aside>
+        <Show when={uiState().statusOpen && getActiveTab() === 'score'}>
+          <aside class="status-panel collapsible" data-open="true">
+            <CollapsibleHeader
+              title="Состояние"
+              open={uiState().statusOpen}
+              onToggle={toggleStatus}
+              hint="Ctrl+Shift+S"
+              ariaLabel="Панель состояния"
+            />
+            <Show when={uiState().statusOpen}>
+              <HelloPanel />
+            </Show>
+          </aside>
+        </Show>
       </div>
+
+      {/* ─── FAB — primary Run/Stop ─── */}
+      <FAB
+        onClick={onPrimaryAction}
+        tone={audioRunning() ? 'magenta' : 'amber'}
+        variant={audioRunning() ? 'stop' : 'play'}
+        ariaLabel={audioRunning() ? 'Стоп' : 'Запуск'}
+      />
+
+      {/* ─── AI bottom-sheet ─── */}
+      <BottomSheet kind="ai" title="ИИ-ассистент" subtitle="live-coding chat">
+        <AIEditPanel />
+      </BottomSheet>
+
+      {/* ─── Mixer bottom-sheet ─── */}
+      <BottomSheet kind="mixer" title="Микшер" subtitle="M/S · gain">
+        <MixerPanel />
+      </BottomSheet>
+
+      {/* ─── Step bottom-sheet ─── */}
+      <Show when={showStepGrid()}>
+        <BottomSheet kind="step" title="Step grid" subtitle="4×8 pads">
+          <div style={{"padding":"var(--space-md) var(--space-lg)"}}>
+            <StepGrid />
+          </div>
+        </BottomSheet>
+      </Show>
+
+      {/* ─── Piano bottom-sheet ─── */}
+      <Show when={showPiano()}>
+        <BottomSheet kind="piano" title="Piano" subtitle="WebMIDI auto-bind">
+          <div style={{"padding":"var(--space-md) 0"}}>
+            <PianoKeyboard />
+          </div>
+        </BottomSheet>
+      </Show>
+
+      {/* ─── Bottom TabBar (mobile-first) ─── */}
+      <TabBar />
+
       <DebugPanel />
     </main>
   );

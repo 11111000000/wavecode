@@ -105,6 +105,63 @@ export const toggleStatus = (): void => {
   setUiState((s) => ({ ...s, statusOpen: !s.statusOpen }));
 };
 
+// =========================================================================
+// Bottom Sheet (mobile-first)
+// =========================================================================
+
+export type SheetKind = 'ai' | 'mixer' | 'step' | 'piano' | 'share' | 'record' | null;
+export type SheetSnap = 'closed' | 'peek' | 'half' | 'full';
+export type TabId = 'score' | 'chat' | 'mixer' | 'status';
+
+const [activeSheet, setActiveSheetRaw] = createSignal<SheetKind>(null);
+const [sheetSnap, setSheetSnap] = createSignal<SheetSnap>('closed');
+const [activeTab, setActiveTab] = createSignal<TabId>('score');
+
+export const getActiveSheet = activeSheet;
+export const getSheetSnap = sheetSnap;
+export const getActiveTab = activeTab;
+
+export const openSheet = (kind: NonNullable<SheetKind>, snap: SheetSnap = 'half'): void => {
+  setActiveSheetRaw(kind);
+  setSheetSnap(snap);
+  if (typeof document !== 'undefined') {
+    document.body.setAttribute('data-sheet-open', 'true');
+  }
+};
+export const closeSheet = (): void => {
+  setSheetSnap('closed');
+  setActiveSheetRaw(null);
+  if (typeof document !== 'undefined') {
+    document.body.setAttribute('data-sheet-open', 'false');
+  }
+};
+export const snapTo = (snap: SheetSnap): void => { setSheetSnap(snap); };
+export const setTab = (tab: TabId): void => {
+  setActiveTab(tab);
+  if (tab === 'chat') {
+    openSheet('ai', 'half');
+  } else if (tab === 'mixer') {
+    openSheet('mixer', 'peek');
+  } else if (tab === 'status') {
+    openSheet('ai', 'full');
+  } else if (tab === 'score') {
+    closeSheet();
+  }
+};
+
+/** Toggle the Status overlay (full-screen on mobile, in-place on desktop). */
+const [statusOverlayOpen, setStatusOverlayRaw] = createSignal(false);
+export const getStatusOverlayOpen = statusOverlayOpen;
+export const openStatusOverlay = (): void => {
+  setStatusOverlayRaw(true);
+  setActiveTab('status');
+};
+export const closeStatusOverlay = (): void => {
+  setStatusOverlayRaw(false);
+  setActiveTab('score');
+};
+
+// =========================================================================
 // Keyboard shortcuts (emacs-inspired).
 //   Ctrl+.        → focus AI textarea (also expands if collapsed)
 //   Ctrl+,        → focus Score editor (also expands if collapsed)
