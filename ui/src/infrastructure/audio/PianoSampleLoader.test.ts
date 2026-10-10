@@ -22,7 +22,10 @@ describe('PianoSampleLoader (uses globalThis.samples from Strudel evalScope)', (
     loadPianoSamples();
     const samplesFn = (globalThis as Record<string, unknown>).samples as ReturnType<typeof vi.fn>;
     expect(samplesFn).toHaveBeenCalledTimes(1);
-    expect(samplesFn).toHaveBeenCalledWith({ piano: './samples/piano/' });
+    // New API: pass strudel.json manifest URL (string)
+    expect(samplesFn).toHaveBeenCalledWith(
+      expect.stringMatching(/piano\/strudel\.json$/),
+    );
   });
 
   it('does not re-register on subsequent calls (idempotent)', async () => {

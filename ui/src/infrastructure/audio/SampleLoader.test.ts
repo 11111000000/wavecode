@@ -137,7 +137,11 @@ describe('SampleLoader (uses globalThis.samples from Strudel evalScope)', () => 
     loadDrumSamples();
     const samplesFn = (globalThis as Record<string, unknown>).samples as ReturnType<typeof vi.fn>;
     expect(samplesFn).toHaveBeenCalledTimes(1);
-    expect(samplesFn).toHaveBeenCalledWith({ drums: './samples/drums/' });
+    // New API: pass strudel.json manifest URL (string) — doughsamples
+    // fetches it, parses, registers bank entries.
+    expect(samplesFn).toHaveBeenCalledWith(
+      expect.stringMatching(/samples\/drums\/strudel\.json$/),
+    );
   });
 
   it('loadDrumSamples is idempotent (single registration per session)', async () => {
@@ -154,7 +158,9 @@ describe('SampleLoader (uses globalThis.samples from Strudel evalScope)', () => 
     loadSynthSamples();
     const samplesFn = (globalThis as Record<string, unknown>).samples as ReturnType<typeof vi.fn>;
     expect(samplesFn).toHaveBeenCalledTimes(1);
-    expect(samplesFn).toHaveBeenCalledWith({ synth: './samples/synth/' });
+    expect(samplesFn).toHaveBeenCalledWith(
+      expect.stringMatching(/samples\/synth\/strudel\.json$/),
+    );
   });
 
   it('loadSynthSamples is idempotent (single registration per session)', async () => {
@@ -171,10 +177,10 @@ describe('SampleLoader (uses globalThis.samples from Strudel evalScope)', () => 
     loadAllSamples();
     const samplesFn = (globalThis as Record<string, unknown>).samples as ReturnType<typeof vi.fn>;
     expect(samplesFn).toHaveBeenCalledTimes(3);
-    const calls = samplesFn.mock.calls.map((c) => c[0]);
-    expect(calls).toContainEqual({ piano: './samples/piano/' });
-    expect(calls).toContainEqual({ drums: './samples/drums/' });
-    expect(calls).toContainEqual({ synth: './samples/synth/' });
+    const calls = samplesFn.mock.calls.map((c) => String(c[0]));
+    expect(calls.some((u) => /piano/.test(u) && /strudel\.json$/.test(u))).toBe(true);
+    expect(calls.some((u) => /drums/.test(u) && /strudel\.json$/.test(u))).toBe(true);
+    expect(calls.some((u) => /synth/.test(u) && /strudel\.json$/.test(u))).toBe(true);
   });
 
   it('loadAllSamples is idempotent — second call does not re-register', async () => {
@@ -210,7 +216,9 @@ describe('SampleLoader (uses globalThis.samples from Strudel evalScope)', () => 
     const { loadPianoSamples } = await import('./SampleLoader');
     loadPianoSamples();
     const samplesFn = (globalThis as Record<string, unknown>).samples as ReturnType<typeof vi.fn>;
-    expect(samplesFn).toHaveBeenCalledWith({ piano: './samples/piano/' });
+    expect(samplesFn).toHaveBeenCalledWith(
+      expect.stringMatching(/piano\/strudel\.json$/),
+    );
   });
 
   it('areAllSamplesLoaded reflects registration state for all three banks', async () => {
