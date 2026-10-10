@@ -1,39 +1,39 @@
 {
   "_base": "/samples/synth/",
-  "synth:bass-c1": [
+  "synth/bass-c1": [
     "bass-c1.mp3"
   ],
-  "synth:bass-c2": [
+  "synth/bass-c2": [
     "bass-c2.mp3"
   ],
-  "synth:bass-e1": [
+  "synth/bass-e1": [
     "bass-e1.mp3"
   ],
-  "synth:bass-a1": [
+  "synth/bass-a1": [
     "bass-a1.mp3"
   ],
-  "synth:pad-c3": [
+  "synth/pad-c3": [
     "pad-c3.mp3"
   ],
-  "synth:pad-e3": [
+  "synth/pad-e3": [
     "pad-e3.mp3"
   ],
-  "synth:pad-g3": [
+  "synth/pad-g3": [
     "pad-g3.mp3"
   ],
-  "synth:pad-a3": [
+  "synth/pad-a3": [
     "pad-a3.mp3"
   ],
-  "synth:lead-e4": [
+  "synth/lead-e4": [
     "lead-e4.mp3"
   ],
-  "synth:lead-g4": [
+  "synth/lead-g4": [
     "lead-g4.mp3"
   ],
-  "synth:strings-c4": [
+  "synth/strings-c4": [
     "strings-c4.mp3"
   ],
-  "synth:brass-c3": [
+  "synth/brass-c3": [
     "brass-c3.mp3"
   ]
 }
