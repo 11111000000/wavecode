@@ -87,12 +87,14 @@ substrate: |
   − `ui/src/debug.css` (kept, не используется после редизайна — но
     файл оставлен для совместимости с dev-режимом; можно позже
     удалить отдельным пакетом).
-status: applied
+status: retired
 axiom: A4
 witness:
   applied_at: 2026-10-09
   commit: 390e429
+  retired_at: 2026-10-10
   supersedes: null
+supersession_reason: superseded by wavecode-modern-mobile-redesign (synthwave modern terminal, mobile-first)
 epistemics:
   - statement: "JetBrains Mono — open source SIL OFL 1.1, доступен
       через Google Fonts CDN"

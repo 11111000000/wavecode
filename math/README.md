@@ -31,6 +31,7 @@
 | `wavecode-static-spa-deployment` | applied | none | Деплой как статический SPA, без Nix/Docker |
 | `wavecode-test-strategy` | applied | none | vitest + playwright (пирамида) |
 | `wavecode-strict-layering` | applied | none | ESLint no-restricted-imports per-layer |
-| `wavecode-redesign-repl-phosphor` | applied | 11 files (5 CSS-слоёв + icons + App.tsx + index.html + manifest + test) | REPL Phosphor: phosphor-amber палитра, моноширинный UI, ASCII-волна, 14 SVG-иконок вместо emoji, 5-слойная CSS-иерархия (tokens/base/components/icons/legacy), docs/design.md фиксирует систему |
+| `wavecode-redesign-repl-phosphor` | retired | superseded | REPL Phosphor (амбер-only, sharp, mono) — superseded by modern-mobile-redesign |
+| `wavecode-modern-mobile-redesign` | applied | 19 files (5 CSS-слоёв + 8 компонентов + App.tsx + index.html + manifest + test) | Synthwave Modern Terminal: палитра spectrum (amber+cyan+magenta) на amoled-black, mobile-first с BottomSheet (snap-points) + TabBar + FAB, Geist Sans+Mono, 8 новых компонентов, soft corners 8-12px, touch-таргеты ≥44px. Задеплоено на prod. |
 | `wavecode-sample-pack` | applied | piano pack | Salamander Grand Piano v3 (CC0, 10 MP3) + PianoSampleLoader + 2 demo presets. Синт-808 как bonus через pure Strudel synthesis. |
 | `wavecode-sample-synth` | applied | synth pack | 12 CC0 analog-synth MP3 (4 bass + 4 pad + 2 lead + 1 strings + 1 brass, 1.3MB), Freesound preview CDN. SampleLoader.ts unified aggregator (piano + drums + synth). 3 demo presets. |
