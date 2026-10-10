@@ -15,19 +15,19 @@
  */
 
 declare global {
-  function samples(map: Record<string, string>): void;
+  function samples(arg: string | Record<string, unknown>): void;
 }
 
 let pianoLoaded = false;
 let drumsLoaded = false;
 let synthLoaded = false;
 
-const PIANO_BANK = './samples/piano/strudel.json';
-const DRUMS_BANK = './samples/drums/strudel.json';
-const SYNTH_BANK = './samples/synth/strudel.json';
+const PIANO_MANIFEST = '/samples/piano/strudel.json';
+const DRUMS_MANIFEST = '/samples/drums/strudel.json';
+const SYNTH_MANIFEST = '/samples/synth/strudel.json';
 
 const registerBank = (
-  bank: Record<string, string>,
+  manifestUrl: string,
   flag: 'piano' | 'drums' | 'synth',
 ): void => {
   if (typeof samples === 'undefined') {
@@ -35,7 +35,7 @@ const registerBank = (
     return;
   }
   try {
-    samples(bank);
+    samples(manifestUrl);
     if (flag === 'piano') pianoLoaded = true;
     if (flag === 'drums') drumsLoaded = true;
     if (flag === 'synth') synthLoaded = true;
@@ -49,12 +49,12 @@ const registerBank = (
 
 export const loadPianoSamples = (): void => {
   if (pianoLoaded) return;
-  registerBank({ piano: PIANO_BANK }, 'piano');
+  registerBank(PIANO_MANIFEST, 'piano');
 };
 
 export const loadDrumSamples = (): void => {
   if (drumsLoaded) return;
-  registerBank({ drums: DRUMS_BANK }, 'drums');
+  registerBank(DRUMS_MANIFEST, 'drums');
 };
 
 /**
@@ -63,7 +63,7 @@ export const loadDrumSamples = (): void => {
  */
 export const loadSynthSamples = (): void => {
   if (synthLoaded) return;
-  registerBank({ synth: SYNTH_BANK }, 'synth');
+  registerBank(SYNTH_MANIFEST, 'synth');
 };
 
 export const loadAllSamples = (): void => {

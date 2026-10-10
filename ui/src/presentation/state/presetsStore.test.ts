@@ -122,17 +122,18 @@ describe('presetsStore', () => {
 
   it('drops custom presets whose name shadows a builtin on load', async () => {
     // Stale custom preset saved from an older version of a builtin.
+    // (Using 'Creep' as the shadow since it's a current builtin.)
     localStorage.setItem(
       'wavecode-custom-presets-v1',
       JSON.stringify([
-        { id: 'custom-stale', name: 'Für Elise', score: 'old code', custom: true },
+        { id: 'custom-stale', name: 'Creep', score: 'old code', custom: true },
         { id: 'custom-fresh', name: 'My Sketch', score: 's("bd")', custom: true },
       ]),
     );
     const { allPresets } = await import('./presetsStore');
     const list = allPresets();
-    // 'Für Elise' builtin remains, but the custom 'Für Elise' is dropped.
-    expect(list.filter((p) => p.name === 'Für Elise')).toHaveLength(1);
+    // 'Creep' builtin remains, but the custom 'Creep' is dropped.
+    expect(list.filter((p) => p.name === 'Creep')).toHaveLength(1);
     expect(list.some((p) => p.id === 'custom-stale')).toBe(false);
     expect(list.some((p) => p.id === 'custom-fresh')).toBe(true);
 
