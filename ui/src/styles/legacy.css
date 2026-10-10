@@ -1267,14 +1267,58 @@ textarea.ai-textarea:focus-visible {
 }
 
 .step-grid {
-  display: grid;
-  grid-template-columns: repeat(8, 1fr);
+  display: flex;
+  flex-direction: column;
   gap: var(--space-xs);
   padding: var(--space-md);
   background: var(--surface-1);
   border-top: 1px solid var(--border);
   font-family: var(--font-mono);
   font-size: var(--fs-sm);
+}
+
+.step-grid-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2xs);
+  align-items: center;
+}
+.step-grid-toolbar .step-grid-hint {
+  flex-basis: 100%;
+  font-size: var(--fs-xs);
+  color: var(--fg-dim);
+  margin-top: var(--space-2xs);
+}
+
+.step-grid-rows {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2xs);
+}
+.step-grid-row {
+  display: grid;
+  grid-template-columns: 64px repeat(8, 1fr);
+  gap: var(--space-2xs);
+  align-items: center;
+}
+.step-grid-row-label {
+  display: flex;
+  flex-direction: column;
+  font-size: var(--fs-2xs);
+  line-height: 1.1;
+  text-align: right;
+  color: var(--fg-dim);
+  padding-right: var(--space-xs);
+  min-width: 0;
+}
+.step-grid-row-sample {
+  color: var(--amber);
+  font-weight: var(--fw-semibold);
+  text-transform: lowercase;
+}
+.step-grid-row-name {
+  color: var(--fg-ghost);
+  font-size: 9px;
 }
 .step-grid-btn {
   height: 48px;

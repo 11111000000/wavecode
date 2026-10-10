@@ -12,7 +12,7 @@ import {
   uiState, toggleAI, toggleStatus, installKeyboardShortcuts,
   getMobileMode, setMobileMode,
   type MobileMode,
-  openSheet, closeSheet, setTab, getActiveTab,
+  openSheet, closeSheet, openKindSheet, closeKindSheet, setTab, getActiveTab,
 } from './presentation/state/uiState';
 import { appStore, dispatch } from './presentation/state/appStore';
 import { installTypingTracker } from './presentation/state/editorTypingTracker';
@@ -68,12 +68,22 @@ export function App(): JSX.Element {
   const [newPresetName, setNewPresetName] = createSignal('');
 
   const toggleStepGrid = (): void => {
-    if (showStepGrid()) { setShowStepGrid(false); closeSheet(); }
-    else { setShowStepGrid(true); openSheet('step', 'peek'); }
+    if (showStepGrid()) { setShowStepGrid(false); closeKindSheet('step'); }
+    else {
+      setShowPiano(false);
+      closeKindSheet('piano');
+      setShowStepGrid(true);
+      openKindSheet('step', 'full');
+    }
   };
   const togglePiano = (): void => {
-    if (showPiano()) { setShowPiano(false); closeSheet(); }
-    else { setShowPiano(true); openSheet('piano', 'peek'); }
+    if (showPiano()) { setShowPiano(false); closeKindSheet('piano'); }
+    else {
+      setShowStepGrid(false);
+      closeKindSheet('step');
+      setShowPiano(true);
+      openKindSheet('piano', 'full');
+    }
   };
 
   const chooseMobileMode = (mode: MobileMode): void => {

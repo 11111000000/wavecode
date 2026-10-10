@@ -91,8 +91,8 @@ export function PianoKeyboard() {
         <Show when={midiAvailable()}>
           <span class={`piano-midi-status piano-midi-${midiInputs().length > 0 ? 'ok' : 'pending'}`}>
             {midiInputs().length > 0
-              ? `🎹 MIDI: ${midiInputs().length} device${midiInputs().length === 1 ? '' : 's'}`
-              : '🎹 MIDI: no device'}
+              ? `MIDI: ${midiInputs().length} device${midiInputs().length === 1 ? '' : 's'}`
+              : 'MIDI: no device'}
           </span>
         </Show>
       </div>
@@ -100,68 +100,81 @@ export function PianoKeyboard() {
         class="piano-keys"
         style={{
           height: `${keyHeight()}px`,
-          width: `${whiteNotes.length * (isMobile() ? 50 : PIANO_WHITE_W)}px`,
+          'min-width': '100%',
+          'max-width': '100%',
+          'overflow-x': 'auto',
           position: 'relative',
         }}
       >
-        <For each={whiteNotes}>
-          {(midi) => {
-            const active = (): boolean => activeNotes().has(midi);
-            return (
-              <button
-                type="button"
-                class={`piano-key white${active() ? ' active' : ''}`}
-                style={{
-                  width: `${isMobile() ? 50 : PIANO_WHITE_W}px`,
-                  height: `${keyHeight()}px`,
-                }}
-                aria-label={noteNumberToName(midi) as NoteName}
-                aria-pressed={active()}
-                onPointerDown={(e) => {
-                  e.preventDefault();
-                  playNote(midi);
-                }}
-                onPointerUp={() => stopNote(midi)}
-                onPointerLeave={() => activeNotes().has(midi) && stopNote(midi)}
-              >
-                {whiteIndex(midi) % 7 === 0 && (
+        <div
+          class="piano-keys-inner"
+          style={{
+            width: `${whiteNotes.length * (isMobile() ? 50 : PIANO_WHITE_W)}px`,
+            height: `${keyHeight()}px`,
+            position: 'relative',
+          }}
+        >
+          <For each={whiteNotes}>
+            {(midi) => {
+              const active = (): boolean => activeNotes().has(midi);
+              return (
+                <button
+                  type="button"
+                  class={`piano-key white${active() ? ' active' : ''}`}
+                  style={{
+                    width: `${isMobile() ? 50 : PIANO_WHITE_W}px`,
+                    height: `${keyHeight()}px`,
+                  }}
+                  aria-label={noteNumberToName(midi) as NoteName}
+                  aria-pressed={active()}
+                  onPointerDown={(e) => {
+                    e.preventDefault();
+                    playNote(midi);
+                  }}
+                  onPointerUp={() => stopNote(midi)}
+                  onPointerLeave={() => activeNotes().has(midi) && stopNote(midi)}
+                >
+                  {whiteIndex(midi) % 7 === 0 && (
+                    <span class="piano-key-label">{noteNumberToName(midi)}</span>
+                  )}
+                </button>
+              );
+            }}
+          </For>
+          {/* Black keys overlaid absolute */}
+          <For each={notes}>
+            {(midi) => {
+              if (!isBlackKey(midi)) return null;
+              const wIdx = whiteIndex(midi - 1);
+              if (wIdx < 0) return null;
+              const wW = isMobile() ? 50 : PIANO_WHITE_W;
+              const bW = isMobile() ? 32 : PIANO_BLACK_W;
+              const left = (wIdx + 1) * wW - bW / 2;
+              const active = (): boolean => activeNotes().has(midi);
+              return (
+                <button
+                  type="button"
+                  class={`piano-key black${active() ? ' active' : ''}`}
+                  style={{
+                    width: `${bW}px`,
+                    height: `${keyHeight() * 0.62}px`,
+                    left: `${left}px`,
+                  }}
+                  aria-label={noteNumberToName(midi) as NoteName}
+                  aria-pressed={active()}
+                  onPointerDown={(e) => {
+                    e.preventDefault();
+                    playNote(midi);
+                  }}
+                  onPointerUp={() => stopNote(midi)}
+                  onPointerLeave={() => activeNotes().has(midi) && stopNote(midi)}
+                >
                   <span class="piano-key-label">{noteNumberToName(midi)}</span>
-                )}
-              </button>
-            );
-          }}
-        </For>
-        {/* Black keys overlaid absolute */}
-        <For each={notes}>
-          {(midi) => {
-            if (!isBlackKey(midi)) return null;
-            const wIdx = whiteIndex(midi - 1);
-            if (wIdx < 0) return null;
-            const wW = isMobile() ? 50 : PIANO_WHITE_W;
-            const bW = isMobile() ? 32 : PIANO_BLACK_W;
-            const left = (wIdx + 1) * wW - bW / 2;
-            const active = (): boolean => activeNotes().has(midi);
-            return (
-              <button
-                type="button"
-                class={`piano-key black${active() ? ' active' : ''}`}
-                style={{
-                  width: `${bW}px`,
-                  height: `${keyHeight() * 0.62}px`,
-                  left: `${left}px`,
-                }}
-                aria-label={noteNumberToName(midi) as NoteName}
-                aria-pressed={active()}
-                onPointerDown={(e) => {
-                  e.preventDefault();
-                  playNote(midi);
-                }}
-                onPointerUp={() => stopNote(midi)}
-                onPointerLeave={() => activeNotes().has(midi) && stopNote(midi)}
-              />
-            );
-          }}
-        </For>
+                </button>
+              );
+            }}
+          </For>
+        </div>
       </div>
     </div>
   );
