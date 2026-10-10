@@ -76,3 +76,16 @@
   0%, 100% { opacity: 0.8; text-shadow: 0 0 4px var(--amber-glow); }
   50%      { opacity: 1.0; text-shadow: 0 0 12px var(--amber); }
 }
+
+/* BrandLogo — SVG-логотип «W waveform + spectrum» */
+.wc-brand-logo {
+  display: inline-block;
+  vertical-align: middle;
+  flex-shrink: 0;
+  color: var(--amber);
+  filter: drop-shadow(0 0 6px var(--amber-glow));
+  transition: filter var(--dur-sm) var(--ease);
+}
+.wc-brand-logo:hover {
+  filter: drop-shadow(0 0 10px var(--amber));
+}

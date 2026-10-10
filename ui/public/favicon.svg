@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 16" width="48" height="16">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="48" y2="0" gradientUnits="userSpaceOnUse">
+      <stop offset="0"   stop-color="#ffaa3b"/>
+      <stop offset="0.5" stop-color="#5eead4"/>
+      <stop offset="1"   stop-color="#f472b6"/>
+    </linearGradient>
+  </defs>
+  <path d="M2 8 L4 8 L5 4 L6 12 L7 5 L8 11 L9 8 L11 8" stroke="url(#g)" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+  <circle cx="14" cy="8" r="1.4" fill="#ffaa3b"/>
+  <path d="M17 8 L19 8 L20 5 L21 11 L22 8 L24 8" stroke="url(#g)" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round" fill="none" opacity="0.55"/>
+  <rect x="26" y="6" width="1.6" height="4" fill="#f472b6"/>
+  <path d="M30 8 L32 6 M30 8 L32 10" stroke="#a1a1aa" stroke-width="0.9" stroke-linecap="round" stroke-linejoin="round" fill="none" opacity="0.7"/>
+  <rect x="34" y="4.5" width="2" height="7" stroke="#5eead4" stroke-width="0.9" fill="none" opacity="0.7"/>
+  <g font-family="monospace" font-size="3.4" fill="#a1a1aa" opacity="0.65">
+    <text x="38" y="11.5">wc</text>
+  </g>
+  <circle cx="2"  cy="2"  r="0.4" fill="#52525b"/>
+  <circle cx="46" cy="2"  r="0.4" fill="#52525b"/>
+  <circle cx="2"  cy="14" r="0.4" fill="#52525b"/>
+  <circle cx="46" cy="14" r="0.4" fill="#52525b"/>
+</svg>
