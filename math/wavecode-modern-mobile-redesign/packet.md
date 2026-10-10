@@ -125,9 +125,12 @@ substrate: |
     touch-target rules, sheet-snap, anti-patterns.
   * `math/README.md`: retire `wavecode-redesign-repl-phosphor`,
     index `wavecode-modern-mobile-redesign`.
-status: draft
+status: applied
 axiom: A4
-witness: null
+witness:
+  applied_at: 2026-10-10
+  commit: ad4ad8c
+  supersedes: math/wavecode-redesign-repl-phosphor
 supersedes: math/wavecode-redesign-repl-phosphor
 epistemics:
   - statement: "Geist Sans + Geist Mono — SIL OFL 1.1, доступны
