@@ -50,8 +50,8 @@ describe('pwa manifest', () => {
     expect(manifest.short_name).toBe('wavecode');
     expect(manifest.start_url).toBe('/');
     expect(manifest.display).toBe('standalone');
-    expect(manifest.theme_color).toBe('#0c0d0e');
-    expect(manifest.background_color).toBe('#0c0d0e');
+    expect(manifest.theme_color).toBe('#0a0a0e');
+    expect(manifest.background_color).toBe('#0a0a0e');
   });
 
   it('declares 192 and 512 icons', () => {
@@ -97,6 +97,6 @@ describe('pwa index.html wiring', () => {
     expect(html).toMatch(/name="apple-mobile-web-app-capable"\s+content="yes"/);
     expect(html).toMatch(/name="mobile-web-app-capable"\s+content="yes"/);
     expect(html).toMatch(/name="viewport"[^>]+viewport-fit=cover/);
-    expect(html).toMatch(/name="theme-color"\s+content="#0c0d0e"/);
+    expect(html).toMatch(/name="theme-color"\s+content="#0a0a0e"/);
   });
 });

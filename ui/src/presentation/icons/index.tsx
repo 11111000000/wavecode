@@ -13,8 +13,8 @@ const base = (size: number): JSX.SvgSVGAttributes<SVGSVGElement> => ({
   fill: 'none',
   stroke: 'currentColor',
   'stroke-width': 1.5,
-  'stroke-linecap': 'square' as const,
-  'stroke-linejoin': 'miter' as const,
+  'stroke-linecap': 'round' as const,
+  'stroke-linejoin': 'round' as const,
   'aria-hidden': 'true',
 });
 
@@ -126,5 +126,94 @@ export const SpeakerIcon = (p: Props): JSX.Element => (
   <svg {...base(p.size ?? 14)} class={`wc-icon ${p.class ?? ''}`}>
     <path d="M2 6 L5 6 L8 3 L8 13 L5 10 L2 10 Z" />
     <path d="M10 5 Q13 8 10 11" />
+  </svg>
+);
+
+export const CloseIcon = (p: Props): JSX.Element => (
+  <svg {...base(p.size ?? 16)} class={`wc-icon ${p.class ?? ''}`}>
+    <line x1="3.5" y1="3.5" x2="12.5" y2="12.5" />
+    <line x1="12.5" y1="3.5" x2="3.5" y2="12.5" />
+  </svg>
+);
+
+export const PlusIcon = (p: Props): JSX.Element => (
+  <svg {...base(p.size ?? 16)} class={`wc-icon ${p.class ?? ''}`}>
+    <line x1="8" y1="2" x2="8" y2="14" />
+    <line x1="2" y1="8" x2="14" y2="8" />
+  </svg>
+);
+
+export const ChevronLeftIcon = (p: Props): JSX.Element => (
+  <svg {...base(p.size ?? 16)} class={`wc-icon ${p.class ?? ''}`}>
+    <polyline points="10 3 5 8 10 13" />
+  </svg>
+);
+
+export const ChevronRightIcon = (p: Props): JSX.Element => (
+  <svg {...base(p.size ?? 16)} class={`wc-icon ${p.class ?? ''}`}>
+    <polyline points="6 3 11 8 6 13" />
+  </svg>
+);
+
+export const ChevronUpIcon = (p: Props): JSX.Element => (
+  <svg {...base(p.size ?? 16)} class={`wc-icon ${p.class ?? ''}`}>
+    <polyline points="3 10 8 5 13 10" />
+  </svg>
+);
+
+export const ChevronDownIcon = (p: Props): JSX.Element => (
+  <svg {...base(p.size ?? 16)} class={`wc-icon ${p.class ?? ''}`}>
+    <polyline points="3 6 8 11 13 6" />
+  </svg>
+);
+
+export const SettingsIcon = (p: Props): JSX.Element => (
+  <svg {...base(p.size ?? 16)} class={`wc-icon ${p.class ?? ''}`}>
+    <circle cx="8" cy="8" r="2.5" />
+    <path d="M8 1.5 L8 3.5 M8 12.5 L8 14.5 M1.5 8 L3.5 8 M12.5 8 L14.5 8 M3.5 3.5 L5 5 M11 11 L12.5 12.5 M3.5 12.5 L5 11 M11 5 L12.5 3.5" />
+  </svg>
+);
+
+export const TabScoreIcon = (p: Props): JSX.Element => (
+  <svg {...base(p.size ?? 18)} class={`wc-icon ${p.class ?? ''}`}>
+    <line x1="3" y1="5" x2="13" y2="5" />
+    <line x1="3" y1="8" x2="13" y2="8" />
+    <line x1="3" y1="11" x2="13" y2="11" />
+    <circle cx="5" cy="5" r="0.6" fill="currentColor" stroke="none" />
+    <circle cx="9" cy="8" r="0.6" fill="currentColor" stroke="none" />
+    <circle cx="11" cy="11" r="0.6" fill="currentColor" stroke="none" />
+  </svg>
+);
+
+export const TabChatIcon = (p: Props): JSX.Element => (
+  <svg {...base(p.size ?? 18)} class={`wc-icon ${p.class ?? ''}`}>
+    <path d="M2.5 3 L13.5 3 Q14.5 3 14.5 4 L14.5 10 Q14.5 11 13.5 11 L6 11 L3 13.5 L3 11 Q2 11 2 10 L2 4 Q2 3 2.5 3 Z" />
+    <line x1="5" y1="6" x2="11" y2="6" />
+    <line x1="5" y1="8" x2="9" y2="8" />
+  </svg>
+);
+
+export const TabMixerIcon = (p: Props): JSX.Element => (
+  <svg {...base(p.size ?? 18)} class={`wc-icon ${p.class ?? ''}`}>
+    <line x1="4" y1="2" x2="4" y2="14" />
+    <line x1="8" y1="2" x2="8" y2="14" />
+    <line x1="12" y1="2" x2="12" y2="14" />
+    <rect x="2" y="5" width="4" height="2" fill="currentColor" stroke="none" />
+    <rect x="6" y="9" width="4" height="2" fill="currentColor" stroke="none" />
+    <rect x="10" y="3" width="4" height="2" fill="currentColor" stroke="none" />
+  </svg>
+);
+
+export const TabStatusIcon = (p: Props): JSX.Element => (
+  <svg {...base(p.size ?? 18)} class={`wc-icon ${p.class ?? ''}`}>
+    <circle cx="8" cy="8" r="5" />
+    <circle cx="8" cy="8" r="2" fill="currentColor" stroke="none" />
+  </svg>
+);
+
+export const DragHandleIcon = (p: Props): JSX.Element => (
+  <svg {...base(p.size ?? 24)} class={`wc-icon ${p.class ?? ''}`}>
+    <line x1="8" y1="5" x2="8" y2="5.01" />
+    <line x1="8" y1="11" x2="8" y2="11.01" />
   </svg>
 );
