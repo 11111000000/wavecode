@@ -1,0 +1,191 @@
+/*
+ * sheets layer — bottom-sheet, side-drawer, snap points, drag-handle,
+ * body-scroll-lock. CSS-only geometry; JS только для drag.
+ *
+ * Snap points (как в Apple Music / Google Maps):
+ *   - closed:  translateY(100%)
+ *   - peek:    translateY(60%)  — для быстрых actions
+ *   - half:    translateY(40%)  — для чата / mixer
+ *   - full:    translateY(0)     — для редактора / step grid
+ */
+
+.wc-sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  background: var(--surface-overlay);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+  z-index: var(--z-sheet);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--dur-md) var(--ease);
+}
+.wc-sheet-backdrop[data-open='true'] {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.wc-sheet {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: calc(var(--z-sheet) + 1);
+  background: var(--surface-1);
+  border-top: 1px solid var(--border-strong);
+  border-radius: var(--radius-sheet);
+  box-shadow: var(--shadow-overlay);
+  display: flex;
+  flex-direction: column;
+  max-height: 92vh;
+  min-height: 56px;
+  touch-action: none;
+  transform: translateY(100%);
+  transition: transform var(--dur-sheet) var(--ease-out);
+  will-change: transform;
+}
+.wc-sheet[data-snap='closed'] { transform: translateY(100%); pointer-events: none; }
+.wc-sheet[data-snap='peek']   { transform: translateY(60%); }
+.wc-sheet[data-snap='half']   { transform: translateY(40%); }
+.wc-sheet[data-snap='full']   { transform: translateY(0); }
+@media (min-width: 1024px) {
+  .wc-sheet {
+    left: auto;
+    width: 480px;
+    right: 0;
+    bottom: 0;
+    top: var(--header-h);
+    max-height: none;
+    height: calc(100vh - var(--header-h));
+    border-radius: var(--radius-lg) 0 0 var(--radius-lg);
+    border-top: none;
+    border-left: 1px solid var(--border-strong);
+    transform: translateX(100%);
+  }
+  .wc-sheet[data-snap='closed'] { transform: translateX(100%); }
+  .wc-sheet[data-snap='peek']   { transform: translateX(0);    }
+  .wc-sheet[data-snap='half']   { transform: translateX(0);    }
+  .wc-sheet[data-snap='full']   { transform: translateX(0);    width: 720px; }
+}
+
+.wc-sheet__handle-area {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-sm) 0 var(--space-xs);
+  cursor: grab;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: pan-y;
+}
+.wc-sheet__handle-area:active { cursor: grabbing; }
+
+.wc-sheet__handle {
+  width: 40px;
+  height: 4px;
+  background: var(--border-strong);
+  border-radius: var(--radius-pill);
+  transition: background var(--dur-xs) var(--ease);
+}
+.wc-sheet__handle-area:hover .wc-sheet__handle { background: var(--fg-dim); }
+
+.wc-sheet__header {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-xs) var(--space-md) var(--space-sm);
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-1);
+}
+.wc-sheet__title {
+  font-family: var(--font-display);
+  font-size: var(--fs-base);
+  font-weight: var(--fw-semibold);
+  letter-spacing: var(--ls-tight);
+  color: var(--fg);
+  margin: 0;
+}
+.wc-sheet__subtitle {
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  color: var(--fg-dim);
+  margin-left: var(--space-sm);
+}
+.wc-sheet__actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+.wc-sheet__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.wc-sheet__body--scroll { overflow-y: auto; -webkit-overflow-scrolling: touch; }
+
+.wc-sheet__snap-row {
+  display: flex;
+  gap: var(--space-xs);
+  padding: var(--space-xs) var(--space-md);
+  border-top: 1px solid var(--border);
+  background: var(--surface-0);
+}
+
+/* Modaal (centered) — для dialogs, не для sheets */
+.wc-modal {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-modal);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-md);
+}
+.wc-modal__backdrop {
+  position: absolute;
+  inset: 0;
+  background: var(--surface-overlay);
+  backdrop-filter: blur(4px);
+}
+.wc-modal__panel {
+  position: relative;
+  width: 100%;
+  max-width: 480px;
+  background: var(--surface-1);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-overlay);
+  display: flex;
+  flex-direction: column;
+  max-height: 80vh;
+}
+
+/* Side drawer — used for left/right nav (если нужно) */
+.wc-drawer {
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  z-index: var(--z-sheet);
+  width: 280px;
+  background: var(--surface-1);
+  border-right: 1px solid var(--border);
+  transform: translateX(-100%);
+  transition: transform var(--dur-md) var(--ease);
+  display: flex;
+  flex-direction: column;
+  padding-top: var(--safe-top);
+  padding-bottom: var(--safe-bottom);
+}
+.wc-drawer[data-open='true'] { transform: translateX(0); }
+.wc-drawer--right { left: auto; right: 0; border-right: none; border-left: 1px solid var(--border); transform: translateX(100%); }
+.wc-drawer--right[data-open='true'] { transform: translateX(0); }
+
+/* Body-scroll-lock (для open sheet) */
+body[data-sheet-open='true'] {
+  overflow: hidden;
+}

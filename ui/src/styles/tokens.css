@@ -1,105 +1,194 @@
 /*
- * design tokens — единственный источник правды для палитры, шрифтов,
- * spacing, motion и shape. Все остальные CSS-слои читают только эти
- * переменные; правки цветов / шрифтов делаются здесь, а не в
- * компонентах.
+ * design tokens — Synthwave Modern Terminal.
  *
- * Reference: math/wavecode-redesign-repl-phosphor/packet.md
- * Phosphor-amber на тёплом чёрном, моноширинный UI, VT220/SGI IRIX vibe.
+ * Палитра: spectrum amber (primary) + cyan (playing) + magenta (record)
+ * на amoled-black. Surface scale с 4 уровнями elevation, motion
+ * spring-based, radius — мягкий modern (8-12px), z-scale пересмотрен.
+ *
+ * Reference: math/wavecode-modern-mobile-redesign/packet.md
  */
 
 :root {
-  /* phosphor amber: vt220 phosphor on warm-black tube.
-     contrast fg/bg-base = 9.4:1 (WCAG AAA). */
-  --bg-base:    #0c0d0e;
-  --bg-elev:    #15110d;
-  --bg-screen:  #0a0807;
-  --bg-overlay: rgba(12, 13, 14, 0.72);
+  /* ── AMOLID BLACK + SURFACE SCALE ─────────────────────────── */
+  --surface-0:  #0a0a0e;
+  --surface-1:  #11121a;
+  --surface-2:  #181a25;
+  --surface-3:  #1f2230;
+  --surface-4:  #272a3b;
+  --surface-overlay: rgba(10, 10, 14, 0.72);
 
-  --fg:         #f4a62b;
-  --fg-dim:     #b8801e;
-  --fg-ghost:   #6a4e16;
+  /* legacy aliases — старые CSS-правила читают эти токены */
+  --bg-base:    var(--surface-0);
+  --bg-elev:    var(--surface-1);
+  --bg-screen:  var(--surface-0);
 
-  --amber:      #ffb547;
-  --amber-glow: rgba(255, 181, 71, 0.35);
-  --amber-soft: rgba(255, 181, 71, 0.10);
+  /* ── FOREGROUND ───────────────────────────────────────────── */
+  --fg:         #f4f4f5;
+  --fg-dim:     #a1a1aa;
+  --fg-ghost:   #52525b;
+  --fg-inverse: #0a0a0e;
 
-  --ok:         #94e344;
-  --ok-soft:    rgba(148, 227, 68, 0.12);
-  --warn:       #ffd87a;
-  --warn-soft:  rgba(255, 216, 122, 0.12);
-  --err:        #ff5c3a;
-  --err-soft:   rgba(255, 92, 58, 0.12);
+  /* ── SPECTRUM ACCENTS (semantic) ──────────────────────────── */
+  --amber:      #ffaa3b;   /* primary — actions, identity, brand */
+  --amber-soft: rgba(255, 170, 59, 0.14);
+  --amber-glow: rgba(255, 170, 59, 0.45);
 
-  --border:        #2a201a;
-  --border-strong: #4a3a2a;
+  --cyan:       #5eead4;   /* playing-state, audio-active */
+  --cyan-soft:  rgba(94, 234, 212, 0.14);
+  --cyan-glow:  rgba(94, 234, 212, 0.45);
+
+  --magenta:    #f472b6;   /* record-state, error accent */
+  --magenta-soft: rgba(244, 114, 182, 0.14);
+  --magenta-glow: rgba(244, 114, 182, 0.45);
+
+  --ok:         #4ade80;   /* ok / success — slightly green, distinct from cyan */
+  --ok-soft:    rgba(74, 222, 128, 0.14);
+  --warn:       #fbbf24;   /* warning */
+  --warn-soft:  rgba(251, 191, 36, 0.14);
+  --err:        #fb7185;   /* error — rose, not orange-red */
+  --err-soft:   rgba(251, 113, 133, 0.14);
+
+  /* ── BORDERS ──────────────────────────────────────────────── */
+  --border:        #27272a;  /* zinc-800 */
+  --border-strong: #3f3f46;  /* zinc-700 */
   --border-active: var(--amber);
+  --border-focus:  var(--cyan);
 
-  /* shapes: terminal sharp, no rounded corners by default. */
-  --radius:        0;
-  --radius-pill:   999px;
+  /* ── RADIUS (modern, soft) ───────────────────────────────── */
+  --radius-xs:   4px;
+  --radius-sm:   6px;
+  --radius-md:   8px;
+  --radius-lg:   12px;
+  --radius-xl:   16px;
+  --radius-2xl:  24px;
+  --radius-pill: 999px;
+  --radius-sheet: 20px 20px 0 0;     /* bottom-sheet top corners */
+  --radius-full: 50%;
 
-  /* type stack — везде моно, всегда. font-family inheritance через
-     html → body → всё остальное; явное переопределение не нужно. */
-  --font-mono: 'JetBrains Mono', 'IBM Plex Mono', 'SF Mono', Menlo,
-               'DejaVu Sans Mono', Consolas, monospace;
-  --font-sans: 'IBM Plex Sans', 'Inter', system-ui, -apple-system, sans-serif;
+  /* ── TYPOGRAPHY ───────────────────────────────────────────── */
+  --font-sans: 'Geist', 'Inter', system-ui, -apple-system,
+               BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-mono: 'Geist Mono', 'JetBrains Mono', 'IBM Plex Mono',
+               'SF Mono', Menlo, monospace;
+  --font-display: 'Geist', var(--font-sans);
 
-  --fs-xs:  10px;
-  --fs-sm:  11px;
-  --fs-md:  12px;
-  --fs-base: 13px;
-  --fs-lg:  14px;
-  --fs-xl:  16px;
-  --fs-display: 18px;
+  --fs-3xs:  9px;
+  --fs-2xs:  10px;
+  --fs-xs:   11px;
+  --fs-sm:   12px;
+  --fs-md:   13px;
+  --fs-base: 14px;
+  --fs-lg:   16px;
+  --fs-xl:   18px;
+  --fs-2xl:  22px;
+  --fs-3xl:  28px;
+  --fs-display: 22px;
 
-  --lh-base:  1.4;
-  --lh-tight: 1.2;
+  --lh-tight:  1.15;
+  --lh-base:   1.4;
+  --lh-relaxed: 1.6;
 
-  /* spacing scale — степеней 4 и 2. */
-  --space-2xs: 2px;
-  --space-xs:  4px;
+  --fw-regular: 400;
+  --fw-medium:  500;
+  --fw-semibold: 600;
+  --fw-bold:    700;
+
+  /* letter-spacing (UI) — tighter for display, looser for caps */
+  --ls-tight:  -0.02em;
+  --ls-base:   0;
+  --ls-wide:   0.04em;
+  --ls-caps:   0.08em;
+
+  /* ── SPACING SCALE (extended) ─────────────────────────────── */
+  --space-3xs: 2px;
+  --space-2xs: 4px;
+  --space-xs:  6px;
   --space-sm:  8px;
   --space-md:  12px;
   --space-lg:  16px;
   --space-xl:  24px;
   --space-2xl: 32px;
+  --space-3xl: 48px;
+  --space-4xl: 64px;
 
-  /* motion — fast enough to feel responsive, slow enough to read. */
-  --dur-fast:  80ms;
-  --dur-base:  160ms;
-  --dur-slow:  320ms;
-  --ease:      cubic-bezier(0.2, 0.6, 0.2, 1);
+  /* ── SIZING ───────────────────────────────────────────────── */
+  --icon-size:       16px;
+  --icon-size-sm:    14px;
+  --icon-size-lg:    20px;
+  --icon-size-xl:    24px;
 
-  /* sizing. */
-  --icon-size:     14px;
-  --icon-size-lg:  18px;
-  --control-h:     26px;
-  --control-h-lg:  32px;
-  --gutter:        var(--space-md);
+  --control-h:       32px;
+  --control-h-sm:    28px;
+  --control-h-lg:    40px;
+  --control-h-xl:    48px;
 
-  /* shadows. */
-  --shadow-glow:  0 0 6px var(--amber-glow);
-  --shadow-glow-strong: 0 0 12px var(--amber-glow);
-  --shadow-frame: inset 0 0 0 1px var(--border-strong);
+  --touch-target:    44px;   /* WCAG 2.5.5 AAA, Apple HIG */
+  --hit-slop:        8px;
 
-  /* layout. */
-  --header-h:      auto;
-  --panel-min-h:   180px;
-  --panel-max-h:   60vh;
+  /* ── LAYOUT ───────────────────────────────────────────────── */
+  --header-h:        56px;
+  --tabbar-h:        60px;
+  --fab-size:        56px;
+  --fab-size-mini:   40px;
+  --gutter:          16px;
+  --safe-top:        env(safe-area-inset-top, 0);
+  --safe-bottom:     env(safe-area-inset-bottom, 0);
+  --safe-left:       env(safe-area-inset-left, 0);
+  --safe-right:      env(safe-area-inset-right, 0);
 
-  /* z-index scale. */
-  --z-ios:    100;
-  --z-modal:  1000;
-  --z-toast:  2000;
+  /* ── MOTION ───────────────────────────────────────────────── */
+  --dur-2xs:  60ms;
+  --dur-xs:   100ms;
+  --dur-sm:   160ms;
+  --dur-md:   240ms;
+  --dur-lg:   320ms;
+  --dur-xl:   480ms;
+  --dur-sheet: 380ms;
+  --ease:        cubic-bezier(0.2, 0.6, 0.2, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);  /* gentle overshoot */
+  --ease-out:    cubic-bezier(0, 0, 0.2, 1);
+  --ease-in:     cubic-bezier(0.4, 0, 1, 1);
+
+  /* ── SHADOWS ──────────────────────────────────────────────── */
+  --shadow-glow-amber:   0 0 12px var(--amber-glow);
+  --shadow-glow-cyan:    0 0 12px var(--cyan-glow);
+  --shadow-glow-magenta: 0 0 12px var(--magenta-glow);
+  --shadow-pop:    0 8px 32px rgba(0, 0, 0, 0.6);
+  --shadow-overlay: 0 16px 48px rgba(0, 0, 0, 0.7);
+  --shadow-inset:  inset 0 0 0 1px var(--border-strong);
+  --shadow-fab:    0 6px 20px rgba(0, 0, 0, 0.5),
+                   0 0 0 1px rgba(255, 255, 255, 0.04);
+
+  /* ── Z-INDEX SCALE ────────────────────────────────────────── */
+  --z-base:      0;
+  --z-body:      1;
+  --z-sticky:    10;
+  --z-fab:       20;
+  --z-tabbar:    30;
+  --z-sheet:     40;
+  --z-toast:     50;
+  --z-modal:     60;
 
   color-scheme: dark;
 }
 
+/* Reduced motion: убираем transitions, но не states. */
 @media (prefers-reduced-motion: reduce) {
   :root {
-    --dur-fast: 0ms;
-    --dur-base: 0ms;
-    --dur-slow: 0ms;
+    --dur-2xs:  0ms;
+    --dur-xs:   0ms;
+    --dur-sm:   0ms;
+    --dur-md:   0ms;
+    --dur-lg:   0ms;
+    --dur-xl:   0ms;
+    --dur-sheet: 0ms;
+  }
+}
+
+/* High-contrast: усиливаем границы и focus. */
+@media (prefers-contrast: more) {
+  :root {
+    --border:        #52525b;
+    --border-strong: #71717a;
   }
 }
