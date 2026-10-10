@@ -1,17 +1,20 @@
 /**
  * Sample loaders — register CC0 sample banks (piano + drums + synth)
- * with Strudel. Lazy: each loader is called on first `s('bank:...')`
- * use and is idempotent within a session.
+ * with Strudel. Each loader is called from `loadAllSamples()` at
+ * app boot.
  *
  * Strudel exposes `samples` globally via `evalScope` (set up by
- * LiveAudioEngine on first audio init). We declare it here as a
- * global function.
+ * LiveAudioEngine on first audio init).
+ *
+ * We pass the absolute path of the strudel.json manifest, which
+ * fetchSampleMap() reads, parses, and registers each entry as a
+ * sound name in the global soundMap. Sample names with a `:`
+ * become bank prefix lookups (`s("drums:bd")` → key `drums:bd`).
  *
  * Samples bundled in `public/samples/` (Vite copies to dist/).
  *   - piano/ — Salamander Grand Piano v3 (CC0, 10 MP3s)
- *   - drums/ — 14 808-style one-shots (CC0, see LICENSE.txt)
- *   - synth/ — 12 analog-synth notes (CC0, bass + pad + lead +
- *              strings + brass, ~1.3MB)
+ *   - drums/ — 14 808-style one-shots (CC0, Freesound previews)
+ *   - synth/ — 12 analog-synth notes (CC0, Freesound previews)
  */
 
 declare global {
@@ -57,10 +60,6 @@ export const loadDrumSamples = (): void => {
   registerBank(DRUMS_MANIFEST, 'drums');
 };
 
-/**
- * Register the synth sample bank (CC0 analog bass + pad + lead +
- * strings + brass, ~1.3MB). Idempotent: no-op on second call.
- */
 export const loadSynthSamples = (): void => {
   if (synthLoaded) return;
   registerBank(SYNTH_MANIFEST, 'synth');

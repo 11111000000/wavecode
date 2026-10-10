@@ -59,21 +59,21 @@ describe('BUILTIN_PRESETS', () => {
     }
   });
 
-  it('sample-pack drum presets (808-king, toms-funk) use the drums bank', () => {
+  it('sample-pack drum presets (808-king, toms-funk) use the drums bank prefix', () => {
     const eightOhEightKing = BUILTIN_PRESETS.find((p) => p.id === '808-king');
     const tomsFunk = BUILTIN_PRESETS.find((p) => p.id === 'toms-funk');
     expect(eightOhEightKing).toBeDefined();
     expect(tomsFunk).toBeDefined();
-    // Score strings contain `"bd"`, `"sd"`, etc. (possibly with `*N` repeat suffix or `~` rests).
-    expect(eightOhEightKing?.score).toMatch(/s\("bd/);
-    expect(eightOhEightKing?.score).toMatch(/s\("~? ?sd/);
-    expect(eightOhEightKing?.score).toMatch(/s\("hh/);
-    expect(eightOhEightKing?.score).toMatch(/s\([^)]*\bcp\b[^)]*\)/);
-    expect(tomsFunk?.score).toContain('tom-l');
-    expect(tomsFunk?.score).toContain('tom-m');
-    expect(tomsFunk?.score).toContain('tom-h');
-    expect(tomsFunk?.score).toContain('crash');
-    expect(tomsFunk?.score).toContain('ride');
+    // Score strings use the `drums:` bank prefix (Strudel bank:sound syntax).
+    expect(eightOhEightKing?.score).toMatch(/s\("drums:bd/);
+    expect(eightOhEightKing?.score).toMatch(/s\("~? ?drums:sd/);
+    expect(eightOhEightKing?.score).toMatch(/s\("drums:hh/);
+    expect(eightOhEightKing?.score).toMatch(/s\([^)]*\bdrums:cp\b[^)]*\)/);
+    expect(tomsFunk?.score).toContain('drums:tom-l');
+    expect(tomsFunk?.score).toContain('drums:tom-m');
+    expect(tomsFunk?.score).toContain('drums:tom-h');
+    expect(tomsFunk?.score).toContain('drums:crash');
+    expect(tomsFunk?.score).toContain('drums:ride');
   });
 
   it('every preset has balanced stack() with same-line closing or proper newlines', () => {
