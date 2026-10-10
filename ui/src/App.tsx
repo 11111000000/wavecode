@@ -29,7 +29,7 @@ import {
 import {
   StepIcon, PianoIcon,
   SaveIcon, TrashIcon, ResetIcon, NewIcon, PhoneIcon,
-  UndoIcon, RedoIcon,
+  UndoIcon, RedoIcon, BrandLogo,
 } from './presentation/icons';
 import { TabBar } from './presentation/components/TabBar';
 import { FAB } from './presentation/components/FAB';
@@ -263,7 +263,7 @@ export function App(): JSX.Element {
     <main class="app wc-app">
       {/* ─── TopBar — brand + status + actions ─── */}
       <header class="wc-topbar">
-        <span class="wc-topbar__logo" aria-hidden="true">∿∿∣</span>
+        <BrandLogo size={22} />
         <h1 class="wc-topbar__title">wavecode</h1>
         <span class="wc-topbar__led" data-tone={audioRunning() ? 'running' : 'idle'}>
           <span class="wc-led" data-tone={audioRunning() ? 'running' : 'idle'}>
