@@ -91,8 +91,13 @@ export function App(): JSX.Element {
 
   onMount(() => {
     installTransportAudioSync();
-    void import('./infrastructure/audio/PianoSampleLoader').then((m) =>
-      m.loadPianoSamples(),
+    // Register CC0 sample banks (Salamander piano + 808-style drums
+    // + analog synth) with Strudel — lazy, idempotent (no-op on second
+    // call within a session). The aggregator in SampleLoader.ts handles
+    // all three banks; the legacy PianoSampleLoader shim is kept for
+    // back-compat.
+    void import('./infrastructure/audio/SampleLoader').then((m) =>
+      m.loadAllSamples(),
     );
 
     void Effect.runPromise(
