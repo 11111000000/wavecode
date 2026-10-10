@@ -30,6 +30,8 @@
   left: 0;
   right: 0;
   bottom: 0;
+  width: 100%;
+  max-width: 100vw;
   z-index: calc(var(--z-sheet) + 1);
   background: var(--surface-1);
   border-top: 1px solid var(--border-strong);
@@ -43,6 +45,7 @@
   transform: translateY(100%);
   transition: transform var(--dur-sheet) var(--ease-out);
   will-change: transform;
+  overflow: hidden;
 }
 .wc-sheet[data-snap='closed'] { transform: translateY(100%); pointer-events: none; }
 .wc-sheet[data-snap='peek']   { transform: translateY(60%); }
@@ -122,11 +125,14 @@
 .wc-sheet__body {
   flex: 1 1 auto;
   min-height: 0;
-  overflow: hidden;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
   display: flex;
   flex-direction: column;
 }
-.wc-sheet__body--scroll { overflow-y: auto; -webkit-overflow-scrolling: touch; }
+.wc-sheet__body--no-scroll { overflow: hidden; }
+.wc-sheet__body--scroll { overflow-y: auto; overflow-x: auto; }
 
 .wc-sheet__snap-row {
   display: flex;

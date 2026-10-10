@@ -2,7 +2,7 @@ import {
   type JSX, type ParentProps, createSignal, onCleanup, onMount, Show,
 } from 'solid-js';
 import { CloseIcon } from '../icons';
-import { getSheetSnap, closeSheet, snapTo, type SheetKind, type SheetSnap } from '../state/uiState';
+import { closeSheet, snapTo, getKindSnap, type SheetKind, type SheetSnap } from '../state/uiState';
 
 type Props = ParentProps<{
   kind: NonNullable<SheetKind>;
@@ -49,7 +49,7 @@ export function BottomSheet(props: Props): JSX.Element {
     (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
     setDragDelta(0);
 
-    const current = getSheetSnap();
+    const current = currentSnap();
     // Snap decision: down if released below current, up if above
     if (dy > 80 || v > 0.5) {
       // swipe down — go to next-larger snap (peek→closed, half→peek, full→half)
@@ -67,8 +67,11 @@ export function BottomSheet(props: Props): JSX.Element {
   const onBackdropClick = (): void => closeSheet();
   const onClose = (): void => {
     props.onClose?.();
+    closeKindSheet(props.kind);
     closeSheet();
   };
+
+  const currentSnap = (): SheetSnap => getKindSnap(props.kind);
 
   const onKey = (e: KeyboardEvent): void => {
     if (e.key === 'Escape') closeSheet();
@@ -85,11 +88,11 @@ export function BottomSheet(props: Props): JSX.Element {
   };
 
   return (
-    <Show when={getSheetSnap() !== 'closed'}>
+    <Show when={currentSnap() !== 'closed'}>
       <div class="wc-sheet-backdrop" data-open="true" onClick={onBackdropClick} aria-hidden="true" />
       <div
         class="wc-sheet"
-        data-snap={getSheetSnap()}
+        data-snap={currentSnap()}
         data-kind={props.kind}
         style={style()}
         onPointerDown={onPointerDown}

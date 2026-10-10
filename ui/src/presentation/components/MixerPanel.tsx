@@ -30,8 +30,8 @@ export function MixerPanel() {
   });
 
   return (
-    <details class="mixer-panel">
-      <summary class="mixer-summary">🎛 Mixer ({layers().length} слоёв)</summary>
+    <div class="mixer-panel" role="group" aria-label="Mixer">
+      <div class="mixer-summary">Mixer · {layers().length} слоёв</div>
       <Show when={layers().length > 0} fallback={<div class="mixer-empty">нет слоёв</div>}>
         <div class="mixer-list" data-count={reconcile()}>
           <For each={layers()}>
@@ -88,6 +88,6 @@ export function MixerPanel() {
           </For>
         </div>
       </Show>
-    </details>
+    </div>
   );
 }
