@@ -136,12 +136,37 @@ export const closeSheet = (): void => {
   }
 };
 export const snapTo = (snap: SheetSnap): void => { setSheetSnap(snap); };
+
+/** Snap per-kind — несколько sheet'ов могут быть открыты каждый со своим snap. */
+const [snapsByKind, setSnapsByKindRaw] = createSignal<Record<NonNullable<SheetKind>, SheetSnap>>({
+  ai: 'closed', mixer: 'closed', step: 'closed', piano: 'closed', share: 'closed', record: 'closed',
+});
+export const getSnapsByKind = snapsByKind;
+export const getKindSnap = (kind: NonNullable<SheetKind>): SheetSnap => snapsByKind()[kind];
+export const openKindSheet = (kind: NonNullable<SheetKind>, snap: SheetSnap = 'half'): void => {
+  setSnapsByKindRaw((m) => ({ ...m, [kind]: snap }));
+  setActiveSheetRaw(kind);
+  setSheetSnap(snap);
+  if (typeof document !== 'undefined') {
+    document.body.setAttribute('data-sheet-open', 'true');
+  }
+};
+export const closeKindSheet = (kind: NonNullable<SheetKind>): void => {
+  setSnapsByKindRaw((m) => ({ ...m, [kind]: 'closed' }));
+  if (snapsByKind()[kind] === 'closed' && getActiveSheet() === kind) {
+    setActiveSheetRaw(null);
+    setSheetSnap('closed');
+  }
+  if (typeof document !== 'undefined') {
+    document.body.setAttribute('data-sheet-open', 'false');
+  }
+};
 export const setTab = (tab: TabId): void => {
   setActiveTab(tab);
   if (tab === 'chat') {
     openSheet('ai', 'half');
   } else if (tab === 'mixer') {
-    openSheet('mixer', 'peek');
+    openSheet('mixer', 'full');
   } else if (tab === 'status') {
     openSheet('ai', 'full');
   } else if (tab === 'score') {
