@@ -1,0 +1,35 @@
+- sha: e087b04be4d30d5b5ee2779748179e78957ad39b
+  date: 2026-10-12
+  kind: feat
+  files:
+    - ui/src/App.tsx
+    - ui/src/presentation/icons/index.tsx
+    - ui/src/presentation/state/uiState.ts
+    - ui/src/presentation/state/uiState.test.ts
+    - ui/src/styles/components.css
+  notes: |
+    T2 of wavecode-ui-design-overhaul. AI-primary layout on desktop.
+
+    Features:
+    - uiState.layout: 'code-primary' | 'ai-primary' signal
+    - localStorage 'wavecode-layout-v1' persistence (NOT merged with
+      wavecode-ui-state-v1 to preserve backward-compat)
+    - TopBar LayoutSwapIcon toggle button (aria-pressed)
+    - .app-body-wrap wrapper + .app-body data-layout attribute (both)
+    - CSS @media (min-width: 1024px) for AI-primary geometry
+
+    Tests: 279/279 pass (incl. 22 uiState.test). Build OK.
+
+    Smart deviations by agent:
+    1. data-layout placed on BOTH wrapper AND .app-body — defensive.
+    2. saveState strips 'layout' from wavecode-ui-state-v1 payload
+       → legacy format preserved.
+    3. uiState.test existing tests updated to include layout:'ai-primary'
+       in toEqual expectations.
+
+    Supervisor follow-up (in merge commit):
+    - Added `.app-body[data-layout='ai-primary'] { flex-direction: row }`
+      to make drawer go RIGHT not TOP (per packet synthesis prose).
+      Packet CSS alone gave vertical stacking.
+    - Added `.ai-panel { border-right: 1px solid var(--border) }` and
+      `.score-panel { min-width: 0 }` for clean column boundary.
