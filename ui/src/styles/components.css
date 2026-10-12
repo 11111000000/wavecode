@@ -1020,3 +1020,81 @@ textarea.wc-input {
   border-top: 1px solid var(--border);
   padding-bottom: var(--safe-bottom);
 }
+
+/* =========================================================================
+ *  TOUCH TARGETS — minimum 44×44 hit area (WCAG 2.5.5 / Apple HIG).
+ *  .wc-icon-btn уже 44×44 (var(--touch-target)) — повторение безвредно.
+ *  .wc-chip имеет height:24px — min-height:44px поднимет floor без поломки
+ *  visual-padding (24px + 10px line-height = визуально компактно).
+ *  НЕ трогаем .wc-fab (56×56) и <select> (используем padding, не min-height,
+ *  иначе на desktop селект выглядит вытянутым).
+ * ========================================================================= */
+
+.wc-icon-btn,
+.wc-chip,
+.mini-toolbar-btn,
+.ctrl-btn,
+.ai-apply-btn,
+.mobile-menu-item {
+  min-width: 44px;
+  min-height: 44px;
+}
+
+/* =========================================================================
+ *  PRESS-SHRINK — тактильный feedback на :active.
+ *  НЕ применяем к disabled (дёргается визуально если нельзя кликнуть)
+ *  и к .no-shrink (escape-hatch для draggable / long-press элементов).
+ *  Спринговая кривая на transform делает «отскок» после release.
+ * ========================================================================= */
+
+button:not([disabled]):not(.no-shrink):active {
+  transform: scale(0.95);
+  transition: transform var(--dur-xs) var(--ease-spring);
+}
+
+/* =========================================================================
+ *  SCORE EMPTY STATE — показывается над CodeMirror когда score пуст.
+ *  Даёт on-screen guide: 3 подсказки как начать (▶ / Piano / ИИ).
+ * ========================================================================= */
+
+.score-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-md);
+  padding: var(--space-2xl);
+  color: var(--fg-dim);
+  font-size: var(--fs-md);
+  text-align: center;
+  line-height: var(--lh-relaxed);
+  pointer-events: none;
+  user-select: none;
+}
+.score-empty-state p { margin: 0; }
+
+/* =========================================================================
+ *  AUDIO LOADING SKELETON — shimmer-pulse рядом с LED пока AudioContext
+ *  переходит suspended → running после клика play. Скрывается по таймауту
+ *  2s на случай если unlock не сработал.
+ * ========================================================================= */
+
+.audio-loading-skeleton {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2xs);
+  padding: var(--space-xs) var(--space-md);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  color: var(--cyan);
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+  letter-spacing: var(--ls-wide);
+  animation: skeleton-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes skeleton-pulse {
+  0%, 100% { opacity: 0.4; }
+  50%      { opacity: 1;   }
+}
