@@ -32,3 +32,43 @@
     guard on cb.mp3, in-flight coalescing, per-bank failure
     isolation. Full suite 251/251 pass. typecheck clean. vite build
     + PWA precache OK (19 entries, 1421 KiB).
+- sha: 0a37242
+  date: 2026-10-12
+  kind: fix
+  files:
+    - ui/src/domain/presets.ts
+    - ui/src/domain/presets.test.ts
+  notes: |
+    ROOT CAUSE for remaining silent presets (retro-lead, lush-pad,
+    analog-bass, 808-king, toms-funk, etc):
+
+    Strudel transpiler wraps every sound name in mini() (mini-notation
+    parser). mini() treats ':' as a control-modifier separator,
+    splitting "name:n" into [{ s: 'name', n: 'n' }]. So all presets
+    using bank:sound syntax got split:
+        s("synth:lead-e4")  →  s="synth", n="lead-e4"
+        s("drums:bd*4")     →  s="drums", n="bd*4"
+
+    superdough destructured value.s and did getSound(s) — neither
+    "synth" nor "drums" is registered as a sound, so each lookup
+    threw "sound <name> not found! Is it loaded?".
+
+    FIX: rewrite presets to use s("bank_sound") syntax. strudel.json
+    manifests already use bank_sound convention. mini() does NOT
+    split on '_' (only on ':'), so the sound name is preserved as
+    one atom.
+
+    Verified empirically:
+      s("synth:lead-e4").firstCycle() → [{ s: "synth:lead-e4" }]  (raw)
+      s(m('synth:lead-e4', 0)).firstCycle()
+        → [{ s: "synth", n: "lead-e4" }]   ← what transpiled code produces
+      s("synth_lead-e4").firstCycle() → [{ s: "synth_lead-e4" }]  ✓
+      s(m('synth_lead-e4', 0)).firstCycle()
+        → [{ s: "synth_lead-e4" }]         ✓ (correct)
+
+    19 sound-name occurrences rewritten across 7 presets. Tests
+    updated to match bank_ format. Full suite 255/255 pass.
+    typecheck clean. vite build OK. bin/deploy.sh deployed to
+    /var/lib/wavecode/dist. Verified retro-lead now loads
+    synth_lead-e4 / synth_bass-c2 / synth_lead-g4 from the sampler
+    ("sound synth not found" error gone).
