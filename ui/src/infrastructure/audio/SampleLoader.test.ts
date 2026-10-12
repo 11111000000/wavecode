@@ -176,6 +176,7 @@ describe('strudel.json manifests — keys use bank_sound (underscore) for bank:s
  */
 describe('SampleLoader — Strudel API contract (samples, soundMap, static import)', () => {
   let samplesMock: ReturnType<typeof vi.fn>;
+  let loadBufferMock: ReturnType<typeof vi.fn>;
   let soundMapStore: Record<string, { onTrigger: unknown; data: unknown }>;
   let subscribers: Array<() => void>;
 
@@ -211,9 +212,13 @@ describe('SampleLoader — Strudel API contract (samples, soundMap, static impor
         },
       }[input] ?? {};
       for (const [k, v] of Object.entries(map)) {
-        soundMapStore[k] = { onTrigger: vi.fn(), data: { samples: v } };
+        soundMapStore[k] = { onTrigger: vi.fn(), data: { type: 'sample', samples: v } };
       }
     });
+    // loadBufferMock: simulates superdough's preload (fetch+decode).
+    // Returns a fake AudioBuffer-ish object — we only care that loadBuffer
+    // was CALLED for each sample URL with the right bank label.
+    loadBufferMock = vi.fn().mockResolvedValue({} as AudioBuffer);
     vi.doMock('@strudel/webaudio', () => ({
       samples: samplesMock,
       soundMap: {
@@ -223,6 +228,12 @@ describe('SampleLoader — Strudel API contract (samples, soundMap, static impor
           for (const s of subscribers) s();
         },
       },
+      loadBuffer: loadBufferMock,
+      getAudioContext: () => ({
+        // Pretend to be an AudioContext for the type system; tests don't
+        // actually decode anything.
+        decodeAudioData: vi.fn(),
+      } as unknown as AudioContext),
     }));
   });
 
@@ -391,5 +402,30 @@ describe('SampleLoader — Strudel API contract (samples, soundMap, static impor
     const { loadDrumSamples } = await loadSampleLoader();
     await loadDrumSamples();
     expect(soundMapStore['triangle']).toEqual({ onTrigger: 'synth', data: { type: 'synth' } });
+  });
+
+  it('eagerly preloads all sample URLs after samples() registers the bank', async () => {
+    // Regression test for the audio-context-race silence: without preload,
+    // the very first hap of a preset drops with "[sampler] loading sound
+    // 'bd:0' took too long" because fetch+decode (80–160 ms) outpaces
+    // the audio scheduler. We populate superdough's internal `tt[url]`
+    // cache via loadBuffer() so the first haps hit warm cache.
+    const { loadDrumSamples } = await loadSampleLoader();
+    await loadDrumSamples();
+    // Allow microtasks to flush (preloadAllBuffers is fire-and-forget).
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    // Expect loadBuffer to have been called for every drums sample URL
+    // (14 samples in the drums bank — see strudel.json).
+    const drumFilenames = [
+      'bd.mp3', 'bd-sub.mp3', 'sd.mp3', 'rim.mp3', 'hh.mp3', 'oh.mp3',
+      'cp.mp3', 'cb.mp3', 'sh.mp3', 'tom-l.mp3', 'tom-m.mp3', 'tom-h.mp3',
+      'crash.mp3', 'ride.mp3',
+    ];
+    const calledUrls = loadBufferMock.mock.calls.map((c) => c[0]);
+    for (const fname of drumFilenames) {
+      // Mocked samples() returns bare filenames (no _base prefix);
+      // superdough's real loadBuffer would receive full URLs via getBaseURL.
+      expect(calledUrls).toContain(fname);
+    }
   });
 });

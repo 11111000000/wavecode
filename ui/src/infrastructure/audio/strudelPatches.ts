@@ -36,24 +36,13 @@
  *    Integration: apply at the end of `LiveAudioEngine.ensureRepl()`,
  *    immediately after `evalScope(core, mini, tonal)` resolves.
  *
- * 3. applyBankAliasFallback — `s("drums")` (no `:sound` suffix) looks up
- *    `soundMap["drums"]`, which is the BANK NAME not an individual sound.
- *    superdough has no fallback for bare bank names and throws
- *    `sound drums not found! Is it loaded?` in
- *    `superdough/superdough.mjs:572`. The SampleLoader registers
- *    `drums_bd`, `drums_sd`, etc. as keys but NOT a bare `drums` alias.
- *    LLM-generated scores frequently hallucinate `s("drums")` as a generic
- *    drum sound; the missing alias then produces the `[getTrigger]` error
- *    per cycle, ~every 200 ms.
- *
- *    Fix: after each bank's `samples()` resolves, register `drums` →
- *    `drums_bd`, `piano` → `piano_a4`, `synth` → `synth_bass-c2`. The
- *    fallback sound is the most common one in each bank so the user hears
- *    something instead of silence + a scheduler error every cycle.
- *
- *    Integration: apply at the end of `SampleLoader.registerBank()`.
- *
  * All patches are idempotent — safe to call more than once.
+ *
+ * (Historical: `applyBankAliasFallback` / `DEFAULT_BANK_FALLBACKS` lived
+ * here as patch #3 until superseded by `SampleLoader.addBareAliases()` +
+ * `preloadAllBuffers()` in `wavecode-sample-bank-underscore` shas a140d7c /
+ * 6464c35. Bare bank-name lookup (`s("drums")`) is now handled inside
+ * SampleLoader.ts, not as a post-load patch.)
  */
 
 const STRUDEU_CSS_HEURISTIC = /background-color:|color:\s*white|border-radius/;
@@ -153,58 +142,4 @@ export const applyVoicingAliases = (tonal: TonalModule): number => {
     }
   }
   return addedTotal;
-};
-
-type SoundEntry = { onTrigger: unknown; data: unknown };
-type SoundMapSnapshot = Record<string, SoundEntry>;
-
-export type WebaudioModule = {
-  soundMap?: { get(): SoundMapSnapshot; set(value: SoundMapSnapshot): void };
-};
-
-/**
- * Default fallbacks for bare bank-name lookups. Keys are bank names as they
- * appear in user code (`s("drums")` without a colon), values are
- * specific sounds known to exist once `SampleLoader` has run.
- *
- * `drum` (singular) included because many LLM outputs use the singular.
- */
-export const DEFAULT_BANK_FALLBACKS: Readonly<Record<string, string>> = {
-  drums: 'drums_bd',
-  drum: 'drums_bd',
-  piano: 'piano_a4',
-  synth: 'synth_bass-c2',
-};
-
-/**
- * After sample banks have loaded, register bare bank-name aliases pointing
- * to a default sound from each bank. Idempotent: re-running with the same
- * soundMap state is a no-op.
- *
- * Caller must pass the loaded module's namespace. Returns the names of
- * aliases added (for logging).
- */
-export const applyBankAliasFallback = (
-  webaudio: WebaudioModule,
-  fallbacks: Readonly<Record<string, string>> = DEFAULT_BANK_FALLBACKS,
-): string[] => {
-  const soundMap = webaudio.soundMap;
-  if (!soundMap) return [];
-
-  const dict = soundMap.get();
-  const updates: SoundMapSnapshot = {};
-  const added: string[] = [];
-  for (const bank of Object.keys(fallbacks)) {
-    if (dict[bank] !== undefined) continue;
-    const fallback = fallbacks[bank];
-    if (typeof fallback !== 'string') continue;
-    const entry = dict[fallback];
-    if (entry === undefined) continue;
-    updates[bank] = entry;
-    added.push(bank);
-  }
-  if (added.length > 0) {
-    soundMap.set({ ...dict, ...updates });
-  }
-  return added;
 };
