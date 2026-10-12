@@ -1,10 +1,17 @@
 /* <reference types="solid-js" /> */
 import { render } from 'solid-js/web';
+import { wrapStrudelLogger } from './infrastructure/audio/strudelPatches';
 import { App } from './App';
 import './index.css';
 import './debug.css';
 import { setPendingShare } from './presentation/state/shareState';
 import { parseShareUrl } from './domain/urlCodec';
+
+// Wrap strudel logger early, before any Strudel module is dynamically imported.
+// This strips `%c<msg>` + CSS-string emissions from log output so console viewers
+// that don't render `%c` styling don't get `background-color: …` appended to
+// messages. See strudelPatches.ts for the full rationale.
+wrapStrudelLogger();
 
 const root = document.getElementById('root');
 if (!root) throw new Error('#root element not found in index.html');

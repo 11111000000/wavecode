@@ -41,6 +41,7 @@
  */
 
 import { samples, soundMap } from '@strudel/webaudio';
+import { DEFAULT_BANK_FALLBACKS, applyBankAliasFallback } from './strudelPatches';
 
 type BankState = { status: 'idle' | 'loading' | 'loaded' | 'failed'; inflight: Promise<void> | null };
 
@@ -74,6 +75,21 @@ const addBareAliases = (): number => {
   return Object.keys(updates).length;
 };
 
+/**
+ * Re-publish a known-good soundMap snapshot through `applyBankAliasFallback`,
+ * which (a) never mutates user state when no aliases are missing and (b)
+ * only injects if both bank-name slot and the fallback sound key exist.
+ *
+ * We have to ferry the @strudel/webaudio namespace through the dynamic
+ * `import('@strudel/webaudio')` again because SampleLoader was written
+ * before strudelPatches.ts existed and static-importing the `soundMap`
+ * symbol directly is sufficient for `samples()` registration. The patch
+ * helpers accept a module shape object, so feeding `{ soundMap }` keeps
+ * the integration contract uniform across callers.
+ */
+const applyBankFallbacksFromModuleShape = (): string[] =>
+  applyBankAliasFallback({ soundMap }, DEFAULT_BANK_FALLBACKS);
+
 const registerBank = (manifestUrl: string, state: BankState): Promise<void> => {
   if (state.status === 'loaded') return Promise.resolve();
   if (state.inflight) return state.inflight;
@@ -82,6 +98,10 @@ const registerBank = (manifestUrl: string, state: BankState): Promise<void> => {
     try {
       await samples(manifestUrl);
       addBareAliases();
+      const added = applyBankFallbacksFromModuleShape();
+      if (added.length > 0) {
+        console.log(`[SampleLoader] bank-name aliases: ${added.join(', ')}`);
+      }
       state.status = 'loaded';
     } catch (err) {
       state.status = 'failed';

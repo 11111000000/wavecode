@@ -64,7 +64,7 @@ const make = (deps: LiveLLMClientDeps): Context.Tag.Service<typeof LLMClient> =>
             },
             body: JSON.stringify(requestBody),
           }),
-        catch: (err) => new Error(`LLM HTTP request failed: ${err instanceof Error ? err.message : String(err)}`),
+        catch: (err) => classifyLLMTransportError(err, deps.apiUrl),
       });
 
       if (!response.ok) {
@@ -167,6 +167,47 @@ const make = (deps: LiveLLMClientDeps): Context.Tag.Service<typeof LLMClient> =>
       return stream;
     }),
 });
+
+/**
+ * Translate the `fetch()` failure into an `Error` whose `message` tells the
+ * operator what is wrong without a packet capture.
+ *
+ * Chromium throws `TypeError: Failed to fetch` for THREE distinct reasons;
+ * we can't tell them apart from `err.message` alone, so we list the
+ * candidates so the operator can run `curl -X OPTIONS -H 'Origin: …' …`
+ * to disambiguate.
+ *
+ * Non-Chromium browsers throw messages like `NetworkError when attempting
+ * to fetch resource.` — same root causes, different surface form.
+ */
+const classifyLLMTransportError = (err: unknown, apiUrl: string): Error => {
+  const rawMsg = err instanceof Error ? err.message : String(err);
+  const isFetchFailure = /Failed to fetch|NetworkError|fetch failed|load failed/i.test(rawMsg);
+  if (!isFetchFailure) {
+    return new Error(`LLM HTTP request failed: ${rawMsg}`);
+  }
+
+  const hints: string[] = [];
+  try {
+    const u = new URL(apiUrl);
+    if (
+      typeof window !== 'undefined'
+      && (window.location.protocol === 'https:' && u.protocol === 'http:'
+        || window.location.protocol === 'http:' && u.protocol === 'https:')
+    ) {
+      hints.push('mixed-content: http/https-protocol mismatch');
+    }
+    if (typeof window !== 'undefined' && window.location.hostname !== u.hostname) {
+      hints.push(`CORS: добавить ${window.location.origin} в proxy.allow_origins`);
+    }
+  } catch {
+    /* apiUrl invalid → leave hints empty */
+  }
+
+  return new Error(
+    `LLM HTTP request failed: ${rawMsg}${hints.length > 0 ? ` (${hints.join('; ')})` : ''}`,
+  );
+};
 
 export const makeLiveLLMClient = (
   config: Partial<LiveLLMClientDeps> = {},
