@@ -25,6 +25,17 @@
   pointer-events: auto;
 }
 
+/* Mobile: backdrop respects TopBar (top) и TabBar (bottom) — клики по навигации
+ * (Step/Piano chip в preset-row, AI/Mixer/Status tabs, FAB) проходят к своим
+ * элементам, а не тонут под backdrop. Только контентная зона между header-h
+ * и tabbar-h ловит клики для close-on-outside. */
+@media (max-width: 1023px) {
+  .wc-sheet-backdrop {
+    top: var(--header-h);
+    bottom: calc(var(--tabbar-h) + var(--safe-bottom));
+  }
+}
+
 .wc-sheet {
   position: fixed;
   left: 0;

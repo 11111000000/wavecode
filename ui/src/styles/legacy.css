@@ -49,6 +49,10 @@
   gap: var(--space-xs);
   align-items: center;
   flex-wrap: wrap;
+  /* Должен быть выше .wc-sheet-backdrop (z-sheet=40) — чипы открывают
+   * bottom-sheet и должны быть кликабельными пока другой sheet открыт. */
+  position: relative;
+  z-index: calc(var(--z-sheet) + 5);
 }
 .app-controls-row {
   display: flex;
