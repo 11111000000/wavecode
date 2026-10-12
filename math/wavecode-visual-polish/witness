@@ -1,0 +1,41 @@
+- sha: adad44e73580b77fb581d3c67629452d77c330dc
+  date: 2026-10-12
+  kind: polish
+  files:
+    - ui/src/App.tsx
+    - ui/src/presentation/panels/ScorePanel.tsx
+    - ui/src/styles/base.css
+    - ui/src/styles/components.css
+  notes: |
+    T4 of wavecode-ui-design-overhaul. Visual polish (5 fixes, 117 LoC):
+
+    1. Score empty state (ScorePanel.tsx + components.css):
+       <Show when={score.trim() === ''}> with 3 onboarding hints
+       ("Нажми ▶", "Открой Piano", "Или напиши ИИ"). pointer-events:none
+       so clicks fall through to editor.
+
+    2. Audio loading skeleton (App.tsx + components.css):
+       Implemented with audioStarting signal (not my originally-written
+       ctxState.suspended && audioRunning() — those are mutually exclusive
+       per App.tsx poll logic). audioStarting=true on play click, clears
+       when ctxState.state==='running' OR after 2s safety timeout.
+       role="status" aria-live="polite".
+
+    3. Global focus ring (base.css):
+       :focus-visible adds box-shadow: var(--shadow-glow-cyan).
+       .cm-editor focus excluded (own caret ring).
+
+    4. Touch targets 44×44 (components.css):
+       min-width/min-height for wc-icon-btn, wc-chip,
+       mini-toolbar-btn, ctrl-btn, ai-apply-btn, mobile-menu-item.
+       FAB (56×56) and <select> skipped.
+
+    5. Press-shrink (components.css):
+       button:not([disabled]):not(.no-shrink):active
+       { transform: scale(0.95); transition: ... var(--ease-spring) }.
+
+    Tests: 276/276 pass. Build OK. tsc clean.
+
+    Smart deviation: agent correctly identified contradiction in
+    my brief (suspended && audioRunning are mutually exclusive)
+    and implemented invariant properly.
