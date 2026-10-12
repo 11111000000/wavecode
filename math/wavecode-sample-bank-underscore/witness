@@ -72,3 +72,28 @@
     /var/lib/wavecode/dist. Verified retro-lead now loads
     synth_lead-e4 / synth_bass-c2 / synth_lead-g4 from the sampler
     ("sound synth not found" error gone).
+- sha: 5ea8847
+  date: 2026-10-12
+  kind: fix
+  files:
+    - ui/src/domain/presets.ts
+  notes: |
+    IDM-glitch preset was using .bitcrush(), which doesn't exist
+    in Strudel (no such effect). At eval time, the throw:
+        TypeError: s(...).bitcrush is not a function
+    killed the entire stack — no sounds played.
+
+    FIX: replaced .bitcrush(4, 8000) with .crush(4, 8000). Strudel's
+    .crush(bits, rate) defaults to 4-bit reduction and 8000 Hz
+    sample rate — same character the IDM-glitch was going for
+    (bit-reduced noise percussion layer).
+
+    Verified empirically via browser: IDM-glitch now plays the
+    bd / sd / hh layers (after the bank_sound fix) plus the
+    bit-crushed white noise percussion. lastEvalErr=null,
+    samples load (4 in test).
+
+    Reference: superdough/dist/index.mjs:671
+      crush: { node: "crush-processor", param: "crush" }
+    Bitcrush would correspond to crush with extra parameters, but
+    Strudel doesn't expose .bitcrush as a separate control.
