@@ -2,25 +2,50 @@ import { createSignal, createEffect, onCleanup, createRoot } from 'solid-js';
 
 const KEY = 'wavecode-ui-state-v1';
 const MOBILE_MODE_KEY = 'wavecode-mobile-default';
+const LAYOUT_KEY = 'wavecode-layout-v1';
+
+export type Layout = 'code-primary' | 'ai-primary';
 
 type UIState = {
   scoreOpen: boolean;
   aiOpen: boolean;
   statusOpen: boolean;
+  layout: Layout;
 };
 
 export type MobileMode = 'auto' | 'compact' | 'full';
+
+const isDesktopViewport = (): boolean => {
+  if (typeof window === 'undefined' || typeof window.innerWidth !== 'number') {
+    return true;
+  }
+  return window.innerWidth >= 1024;
+};
+
+const defaultLayout = (): Layout => (isDesktopViewport() ? 'ai-primary' : 'code-primary');
+
+const loadStoredLayout = (): Layout | null => {
+  try {
+    const raw = localStorage.getItem(LAYOUT_KEY);
+    if (raw === 'ai-primary' || raw === 'code-primary') return raw;
+  } catch {
+    /* ignore */
+  }
+  return null;
+};
 
 const defaultState: UIState = {
   scoreOpen: true,
   aiOpen: true,
   statusOpen: true,
+  layout: defaultLayout(),
 };
 
 const compactState: UIState = {
   scoreOpen: true,
   aiOpen: false,
   statusOpen: false,
+  layout: defaultLayout(),
 };
 
 const isMobileViewport = (): boolean => {
@@ -49,6 +74,11 @@ export const setMobileMode = (mode: MobileMode): void => {
 };
 
 const resolveInitialState = (): UIState => {
+  // Layout live'ит в отдельном ключе — чтобы не ломать обратную
+  // совместимость с wavecode-ui-state-v1 (там только score/ai/status).
+  const storedLayout = loadStoredLayout();
+  const layout: Layout = storedLayout ?? defaultLayout();
+
   // Explicit per-panel state always wins (localStorage KEY).
   try {
     const raw = localStorage.getItem(KEY);
@@ -58,6 +88,7 @@ const resolveInitialState = (): UIState => {
       return {
         ...defaultState,
         ...rest,
+        layout,
         ...(replOpen !== undefined ? { aiOpen: replOpen } : {}),
       };
     }
@@ -68,14 +99,25 @@ const resolveInitialState = (): UIState => {
   // No explicit per-panel state — fall back to mobile-mode preference.
   // 'auto' consults matchMedia; 'compact'/'full' are explicit user pins.
   const mode = getMobileMode();
-  if (mode === 'compact') return compactState;
-  if (mode === 'full') return defaultState;
-  return isMobileViewport() ? compactState : defaultState;
+  if (mode === 'compact') return { ...compactState, layout };
+  if (mode === 'full') return { ...defaultState, layout };
+  return isMobileViewport() ? { ...compactState, layout } : { ...defaultState, layout };
 };
 
 const saveState = (state: UIState) => {
   try {
-    localStorage.setItem(KEY, JSON.stringify(state));
+    // layout хранится отдельным ключом — вытаскиваем, чтобы не сломать
+    // формат wavecode-ui-state-v1 для legacy-ридеров.
+    const { layout: _layout, ...persisted } = state;
+    localStorage.setItem(KEY, JSON.stringify(persisted));
+  } catch {
+    /* ignore */
+  }
+};
+
+const saveLayout = (layout: Layout) => {
+  try {
+    localStorage.setItem(LAYOUT_KEY, layout);
   } catch {
     /* ignore */
   }
@@ -91,6 +133,9 @@ createRoot(() => {
   createEffect(() => {
     saveState(uiState());
   });
+  createEffect(() => {
+    saveLayout(uiState().layout);
+  });
 });
 
 export const toggleScore = (): void => {
@@ -103,6 +148,17 @@ export const toggleAI = (): void => {
 
 export const toggleStatus = (): void => {
   setUiState((s) => ({ ...s, statusOpen: !s.statusOpen }));
+};
+
+// =========================================================================
+// Layout (desktop AI-primary vs mobile code-primary).
+// =========================================================================
+
+export const getLayout = (): Layout => uiState().layout;
+
+export const setLayout = (layout: Layout): void => {
+  if (uiState().layout === layout) return;
+  setUiState((s) => ({ ...s, layout }));
 };
 
 // =========================================================================

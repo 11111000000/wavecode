@@ -11,6 +11,7 @@ import { installTransportAudioSync } from './presentation/state/useTransportAudi
 import {
   uiState, toggleAI, toggleStatus, installKeyboardShortcuts,
   getMobileMode, setMobileMode,
+  getLayout, setLayout,
   type MobileMode,
   openKindSheet, closeKindSheet, setTab, getActiveTab,
 } from './presentation/state/uiState';
@@ -28,7 +29,7 @@ import {
 } from './presentation/state/presetsStore';
 import {
   StepIcon, PianoIcon,
-  SaveIcon, TrashIcon, ResetIcon, NewIcon, PhoneIcon,
+  SaveIcon, TrashIcon, ResetIcon, NewIcon, PhoneIcon, LayoutSwapIcon,
   UndoIcon, RedoIcon, BrandLogo,
 } from './presentation/icons';
 import { TabBar } from './presentation/components/TabBar';
@@ -365,6 +366,18 @@ export function App(): JSX.Element {
               </div>
             </Show>
           </div>
+          <button
+            type="button"
+            class="wc-icon-btn"
+            data-tone="ghost"
+            data-active={getLayout() === 'ai-primary' ? 'true' : 'false'}
+            onClick={() => setLayout(getLayout() === 'ai-primary' ? 'code-primary' : 'ai-primary')}
+            aria-pressed={getLayout() === 'ai-primary'}
+            aria-label="Переключить layout"
+            title={getLayout() === 'ai-primary' ? 'AI-primary: переключить на code-primary' : 'Code-primary: переключить на AI-primary'}
+          >
+            <LayoutSwapIcon size={20} />
+          </button>
           <Show when={presetId().startsWith('custom-')}>
             <button
               type="button"
@@ -448,7 +461,8 @@ export function App(): JSX.Element {
       </Show>
 
       {/* ─── Body — full-screen score, sheets overlay ─── */}
-      <div class="app-body">
+      <div class="app-body-wrap" data-layout={getLayout()}>
+      <div class="app-body" data-layout={getLayout()}>
         <section class="score-panel">
           <Show when={uiState().scoreOpen}>
             <ScorePanel />
@@ -482,6 +496,7 @@ export function App(): JSX.Element {
             </Show>
           </aside>
         </Show>
+      </div>
       </div>
 
       {/* ─── FAB — primary Run/Stop ─── */}
