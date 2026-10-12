@@ -63,6 +63,7 @@ export function App(): JSX.Element {
   const [showStepGrid, setShowStepGrid] = createSignal(false);
   const [showPiano, setShowPiano] = createSignal(false);
   const [audioRunning, setAudioRunning] = createSignal(false);
+  const [audioStarting, setAudioStarting] = createSignal(false);
   const [mobileMode, setMobileModeSignal] = createSignal<MobileMode>(getMobileMode());
   const [showMobileMenu, setShowMobileMenu] = createSignal(false);
   const [newPresetName, setNewPresetName] = createSignal('');
@@ -96,6 +97,9 @@ export function App(): JSX.Element {
     const s = getAudioContextState();
     setCtxState(s);
     setAudioRunning(s.state === 'running');
+    if (s.state === 'running' && audioStarting()) {
+      setAudioStarting(false);
+    }
   }, 500);
   onCleanup(() => window.clearInterval(pollId));
 
@@ -234,13 +238,22 @@ export function App(): JSX.Element {
     dispatch({ type: 'redoScore' });
   };
 
+  let audioStartingTimer: number | undefined;
   const onPrimaryAction = (): void => {
     if (audioRunning()) {
+      if (audioStartingTimer !== undefined) window.clearTimeout(audioStartingTimer);
+      setAudioStarting(false);
       void stopAudio();
     } else {
+      setAudioStarting(true);
+      if (audioStartingTimer !== undefined) window.clearTimeout(audioStartingTimer);
+      audioStartingTimer = window.setTimeout(() => setAudioStarting(false), 2000);
       void evalScore();
     }
   };
+  onCleanup(() => {
+    if (audioStartingTimer !== undefined) window.clearTimeout(audioStartingTimer);
+  });
 
   installTypingTracker(dispatch);
 
@@ -280,6 +293,16 @@ export function App(): JSX.Element {
       <header class="wc-topbar">
         <BrandLogo size={22} />
         <h1 class="wc-topbar__title">wavecode</h1>
+        <Show when={ctxState().state === 'suspended' && audioStarting()}>
+          <span
+            class="audio-loading-skeleton"
+            role="status"
+            aria-live="polite"
+            aria-label="Аудио загружается"
+          >
+            ♪…
+          </span>
+        </Show>
         <span class="wc-topbar__led" data-tone={audioRunning() ? 'running' : 'idle'}>
           <span class="wc-led" data-tone={audioRunning() ? 'running' : 'idle'}>
             {audioRunning() ? `▶ ${ctxState().state}` : `● ${ctxState().state}`}
