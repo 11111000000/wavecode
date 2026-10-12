@@ -134,7 +134,7 @@ status: applied
 axiom: A1
 witness:
   applied_at: 2026-10-12
-  commit: pending
+  commit: 6464c35
   supersedes:
     - math/wavecode-sample-pack/witness     # fb3c8c0 (piano initial)
     - math/wavecode-sample-synth/witness   # e4ac7be (synth initial)
