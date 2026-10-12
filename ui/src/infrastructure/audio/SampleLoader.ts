@@ -90,8 +90,11 @@ const addBareAliases = (): number => {
 const applyBankFallbacksFromModuleShape = (): string[] =>
   applyBankAliasFallback({ soundMap }, DEFAULT_BANK_FALLBACKS);
 
-const registerBank = (manifestUrl: string, state: BankState): Promise<void> => {
-  if (state.status === 'loaded') return Promise.resolve();
+const registerBank = (manifestUrl: string, state: BankState, onProgress?: (loaded: number, total: number) => void): Promise<void> => {
+  if (state.status === 'loaded') {
+    onProgress?.(piano.status === 'loaded' && drums.status === 'loaded' && synth.status === 'loaded' ? 3 : 0, 3);
+    return Promise.resolve();
+  }
   if (state.inflight) return state.inflight;
   state.status = 'loading';
   state.inflight = (async () => {
@@ -103,8 +106,16 @@ const registerBank = (manifestUrl: string, state: BankState): Promise<void> => {
         console.log(`[SampleLoader] bank-name aliases: ${added.join(', ')}`);
       }
       state.status = 'loaded';
+      const loaded = (piano.status === 'loaded' ? 1 : 0)
+        + (drums.status === 'loaded' ? 1 : 0)
+        + (synth.status === 'loaded' ? 1 : 0);
+      onProgress?.(loaded, 3);
     } catch (err) {
       state.status = 'failed';
+      const loaded = (piano.status === 'loaded' ? 1 : 0)
+        + (drums.status === 'loaded' ? 1 : 0)
+        + (synth.status === 'loaded' ? 1 : 0);
+      onProgress?.(loaded, 3);
       console.warn(`[SampleLoader] failed to register bank (${manifestUrl}):`, err);
     } finally {
       state.inflight = null;
@@ -113,22 +124,22 @@ const registerBank = (manifestUrl: string, state: BankState): Promise<void> => {
   return state.inflight;
 };
 
-export const loadPianoSamples = (): void => {
-  void registerBank(PIANO_MANIFEST, piano);
+export const loadPianoSamples = (onProgress?: (loaded: number, total: number) => void): void => {
+  void registerBank(PIANO_MANIFEST, piano, onProgress);
 };
 
-export const loadDrumSamples = (): void => {
-  void registerBank(DRUMS_MANIFEST, drums);
+export const loadDrumSamples = (onProgress?: (loaded: number, total: number) => void): void => {
+  void registerBank(DRUMS_MANIFEST, drums, onProgress);
 };
 
-export const loadSynthSamples = (): void => {
-  void registerBank(SYNTH_MANIFEST, synth);
+export const loadSynthSamples = (onProgress?: (loaded: number, total: number) => void): void => {
+  void registerBank(SYNTH_MANIFEST, synth, onProgress);
 };
 
-export const loadAllSamples = (): void => {
-  loadPianoSamples();
-  loadDrumSamples();
-  loadSynthSamples();
+export const loadAllSamples = (onProgress?: (loaded: number, total: number) => void): void => {
+  loadPianoSamples(onProgress);
+  loadDrumSamples(onProgress);
+  loadSynthSamples(onProgress);
 };
 
 export const areAllSamplesLoaded = (): boolean =>

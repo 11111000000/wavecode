@@ -1,15 +1,5 @@
-import { EditorState } from '@codemirror/state';
-import { EditorView } from '@codemirror/view';
-import { basicSetup } from 'codemirror';
-import { oneDark } from '@codemirror/theme-one-dark';
-import { autocompletion } from '@codemirror/autocomplete';
-import { createEffect, onCleanup, onMount, untrack } from 'solid-js';
-import { miniNotationHighlight } from '../editor/miniNotationHighlight';
-import { strudelCompletions } from '../editor/strudelCompletions';
-
-export type CodeMirrorEditorApi = {
-  readonly getView: () => EditorView | undefined;
-};
+import { lazy, type Component } from 'solid-js';
+import type { CodeMirrorEditorApi } from './CodeMirrorEditorImpl';
 
 type Props = {
   readonly value: string;
@@ -18,71 +8,24 @@ type Props = {
 };
 
 /**
- * Solid wrapper для CodeMirror 6 vanilla API.
+ * Lazy wrapper вокруг CodeMirrorEditorImpl.
  *
- * Two-way binding:
- *   - при mount инициализируется EditorView с props.value
- *   - onChange диспатчится на каждое doc change
- *   - если props.value меняется извне (например, через agent edit),
- *     editor обновляется через dispatch(changes)
+ * CodeMirror 6 (~400KB gzip со всеми extension-ами) подгружается только
+ * при первом обращении к score tab. До этого момента пользователь уже
+ * видит topbar + preset-row + аудио-pill — initial paint не блокируется
+ * парсером/лесером/LSP-ish подсказками CodeMirror.
  *
- * Imperative handle: после mount вызывает props.onReady(api) с
- * функцией getView() — внешние компоненты (например, mini-toolbar)
- * могут диспатчить транзакции напрямую через view.dispatch.
+ * ScorePanel рендерит <CodeMirrorEditor /> как обычный компонент —
+ * <Suspense> boundary от Solid автоматически обрабатывает ожидание
+ * dynamic-import (Solid render tree = sync, но lazy создаёт
+ * Resource-like pending state, который читает родительский Suspense).
+ *
+ * `lazy` ожидает `{ default: Component }` shape, поэтому маппим named
+ * export → default. Тип Props объявлен здесь, чтобы вызывающий код
+ * получал IntelliSense даже до загрузки chunk-а.
  */
-export function CodeMirrorEditor(props: Props) {
-  let containerRef: HTMLDivElement | undefined;
-  let view: EditorView | undefined;
+export const CodeMirrorEditor: Component<Props> = lazy(() =>
+  import('./CodeMirrorEditorImpl').then((m) => ({ default: m.CodeMirrorEditor })),
+);
 
-  onMount(() => {
-    if (!containerRef) return;
-    const initial = untrack(() => props.value);
-    const state = EditorState.create({
-      doc: initial,
-      extensions: [
-        basicSetup,
-        oneDark,
-        miniNotationHighlight,
-        autocompletion({ override: [strudelCompletions] }),
-        EditorView.contentAttributes.of({
-          autocorrect: 'off',
-          autocapitalize: 'off',
-          spellcheck: 'false',
-          inputmode: 'text',
-        }),
-        EditorView.updateListener.of((u) => {
-          if (u.docChanged) untrack(() => props.onChange(u.state.doc.toString()));
-        }),
-      ],
-    });
-    view = new EditorView({ state, parent: containerRef });
-
-    const api: CodeMirrorEditorApi = {
-      getView: () => view,
-    };
-    untrack(() => props.onReady?.(api));
-  });
-
-  createEffect(() => {
-    const next = props.value;
-    if (!view) return;
-    const current = view.state.doc.toString();
-    if (current !== next) {
-      view.dispatch({ changes: { from: 0, to: current.length, insert: next } });
-    }
-  });
-
-  onCleanup(() => view?.destroy());
-
-  return (
-    <div
-      ref={containerRef}
-      class="cm-host cm-host-fill"
-      style={{
-        border: '1px solid var(--border)',
-        'border-radius': '4px',
-        overflow: 'hidden',
-      }}
-    />
-  );
-}
+export type { CodeMirrorEditorApi };

@@ -1,4 +1,4 @@
-import { Show, createSignal, onCleanup } from 'solid-js';
+import { Show, Suspense, createSignal, onCleanup } from 'solid-js';
 import { appStore, dispatch } from '../state/appStore';
 import { getDebug } from '~/infrastructure/audio/LiveAudioEngine';
 import { CodeMirrorEditor, type CodeMirrorEditorApi } from '../components/CodeMirrorEditor';
@@ -11,6 +11,10 @@ import { MiniNotationToolbar } from '../components/MiniNotationToolbar';
  * TabBar внизу), чтобы не дублировать и не конкурировать за вертикальное
  * место с редактором. App.tsx дёргает `wavecode:step-grid` / `wavecode:piano`
  * events, которые BottomSheet слушает (см. presentation/components/BottomSheet).
+ *
+ * <Suspense> wrapper нужен для lazy CodeMirrorEditor — пока chunk
+ * подгружается (первый scoreOpen), показываем placeholder высотой
+ * редактора, чтобы не схлопывался layout.
  */
 export function ScorePanel() {
   const [debug, setDebug] = createSignal(getDebug());
@@ -21,13 +25,15 @@ export function ScorePanel() {
 
   return (
     <div class="score-panel-inner">
-      <CodeMirrorEditor
-        value={appStore.score}
-        onChange={(v) => dispatch({ type: 'replaceScore', text: v })}
-        onReady={(api) => {
-          editorApi = api;
-        }}
-      />
+      <Suspense fallback={<div class="cm-host cm-host-fill cm-loading">загрузка редактора…</div>}>
+        <CodeMirrorEditor
+          value={appStore.score}
+          onChange={(v) => dispatch({ type: 'replaceScore', text: v })}
+          onReady={(api) => {
+            editorApi = api;
+          }}
+        />
+      </Suspense>
 
       <div class="score-debug">
         <span>триггеры: <strong>{debug().triggers}</strong></span>

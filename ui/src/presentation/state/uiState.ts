@@ -87,11 +87,36 @@ export const [uiState, setUiState] = createSignal<UIState>(initial);
 // Module-level reactive: оборачиваем в createRoot, чтобы не получать
 // warning «computations created outside a createRoot or render will never
 // be disposed» — эффект реально живёт всю сессию страницы.
-createRoot(() => {
+// `import.meta.hot.dispose` сбрасывает root при HMR-reload, иначе
+// старый effect продолжает держаться и каждый save пишет дубликат.
+const _uiStateDispose = createRoot((d) => {
   createEffect(() => {
     saveState(uiState());
   });
+  return d;
 });
+if (import.meta.hot) {
+  import.meta.hot.dispose(() => _uiStateDispose());
+}
+
+// =========================================================================
+// Sample-loader progress (idempotent, обновляется из App.tsx в onMount).
+// TopBar показывает .audio-loading-pill пока status === 'loading'.
+// =========================================================================
+
+export type SampleStatus = 'idle' | 'loading' | 'ready';
+
+const [sampleStatus, setSampleStatusRaw] = createSignal<SampleStatus>('idle');
+const [sampleProgress, setSampleProgressRaw] = createSignal<{ loaded: number; total: number }>({ loaded: 0, total: 3 });
+
+export const getSampleStatus = sampleStatus;
+export const getSampleProgress = sampleProgress;
+export const setSampleStatus = (next: SampleStatus): void => {
+  setSampleStatusRaw(next);
+};
+export const setSampleProgress = (loaded: number, total: number): void => {
+  setSampleProgressRaw({ loaded, total });
+};
 
 export const toggleScore = (): void => {
   setUiState((s) => ({ ...s, scoreOpen: !s.scoreOpen }));

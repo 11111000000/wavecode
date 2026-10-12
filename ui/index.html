@@ -24,15 +24,60 @@
     />
 
     <style>
+      /* ===== CRITICAL: design tokens (≈3KB) =====
+       * Inline to keep FCP fast on throttled 4G. Дублирующиеся правила
+       * в bundled index.css перебиваются inline (source order: inline
+       * идёт раньше, Vite-бандл применяется после). Подмножество —
+       * только то, что читают topbar + preset-row + audio-loading-pill. */
       :root {
-        --bg: #0a0a0e;
-        --fg: #f4f4f5;
-        --fg-dim: #a1a1aa;
-        --amber: #ffaa3b;
-        --amber-glow: rgba(255, 170, 59, 0.5);
-        --cyan: #5eead4;
-        --magenta: #f472b6;
+        --surface-0:  #0a0a0e;
+        --surface-1:  #11121a;
+        --surface-2:  #181a25;
+        --surface-3:  #1f2230;
+        --bg:         var(--surface-0);
+        --fg:         #f4f4f5;
+        --fg-dim:     #a1a1aa;
+        --fg-ghost:   #52525b;
+        --fg-inverse: #0a0a0e;
+        --amber:      #ffaa3b;
+        --amber-soft: rgba(255, 170, 59, 0.14);
+        --amber-glow: rgba(255, 170, 59, 0.45);
+        --cyan:       #5eead4;
+        --cyan-soft:  rgba(94, 234, 212, 0.14);
+        --magenta:    #f472b6;
+        --border:        #27272a;
+        --border-strong: #3f3f46;
+        --radius-xs: 4px;
+        --radius-sm: 6px;
+        --radius-md: 8px;
+        --radius-lg: 12px;
+        --radius-pill: 999px;
+        --fs-2xs: 10px;
+        --fs-xs:  11px;
+        --fs-sm:  12px;
+        --fs-md:  13px;
+        --ls-tight: -0.02em;
+        --ls-wide:  0.04em;
+        --space-2xs: 4px;
+        --space-xs:  6px;
+        --space-sm:  8px;
+        --space-md:  12px;
+        --space-lg:  16px;
+        --fw-medium:   500;
+        --fw-semibold: 600;
+        --font-sans: 'Geist', 'Inter', system-ui, -apple-system, sans-serif;
+        --font-mono: 'Geist Mono', 'JetBrains Mono', monospace;
+        --font-display: 'Geist', var(--font-sans);
+        --header-h:     56px;
+        --tabbar-h:     60px;
+        --touch-target: 44px;
+        --control-h:    32px;
+        --safe-top:     env(safe-area-inset-top, 0);
+        --safe-bottom:  env(safe-area-inset-bottom, 0);
+        --z-sheet: 40;
+        --shadow-glow-amber: 0 0 12px var(--amber-glow);
       }
+
       * { box-sizing: border-box; }
       html, body {
         margin: 0;
@@ -45,6 +90,8 @@
         overflow: hidden;
       }
       #root { height: 100%; }
+
+      /* ===== CRITICAL: boot loader (пока не подгрузился Solid) ===== */
       .boot {
         height: 100%;
         display: flex;
@@ -86,6 +133,143 @@
         animation: blink 1s steps(2, start) infinite;
       }
       @keyframes blink { to { visibility: hidden; } }
+
+      /* ===== CRITICAL: topbar (виден сразу после mount) ===== */
+      .wc-topbar {
+        position: sticky;
+        top: 0;
+        z-index: calc(var(--z-sheet) + 5);
+        display: flex;
+        align-items: center;
+        gap: var(--space-sm);
+        height: var(--header-h);
+        padding: 0 var(--space-md);
+        background: rgba(10, 10, 14, 0.85);
+        backdrop-filter: blur(20px) saturate(180%);
+        -webkit-backdrop-filter: blur(20px) saturate(180%);
+        border-bottom: 1px solid var(--border);
+      }
+      .wc-topbar__title {
+        font-family: var(--font-display);
+        font-size: var(--fs-md);
+        font-weight: var(--fw-semibold);
+        letter-spacing: var(--ls-tight);
+        color: var(--fg);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .wc-topbar__logo {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--space-xs);
+        font-family: var(--font-mono);
+        font-size: var(--fs-xs);
+        color: var(--amber);
+        text-shadow: 0 0 6px var(--amber-glow);
+        letter-spacing: var(--ls-wide);
+        margin-right: var(--space-xs);
+      }
+      .wc-topbar__actions {
+        margin-left: auto;
+        display: flex;
+        align-items: center;
+        gap: var(--space-xs);
+      }
+      .wc-topbar__led {
+        display: flex;
+        align-items: center;
+        gap: var(--space-sm);
+        padding: 0 var(--space-md);
+        height: 32px;
+        background: var(--surface-1);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-pill);
+        font-size: var(--fs-xs);
+        color: var(--fg);
+        font-family: var(--font-mono);
+        white-space: nowrap;
+      }
+      .wc-icon-btn {
+        position: relative;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: var(--touch-target);
+        height: var(--touch-target);
+        background: transparent;
+        border: 1px solid transparent;
+        border-radius: var(--radius-md);
+        color: var(--fg-dim);
+        cursor: pointer;
+        flex-shrink: 0;
+      }
+      .wc-icon-btn[data-active='true'] { color: var(--amber); }
+
+      /* ===== CRITICAL: preset-row + chips (сразу под topbar) ===== */
+      .app-preset-row {
+        display: flex;
+        gap: var(--space-xs);
+        align-items: center;
+        flex-wrap: wrap;
+        position: relative;
+        z-index: calc(var(--z-sheet) + 5);
+      }
+      .preset-select {
+        min-height: var(--control-h);
+        padding: 0 var(--space-lg) 0 var(--space-md);
+        font-family: var(--font-sans);
+        font-size: var(--fs-sm);
+        color: var(--fg);
+        background: var(--surface-1);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-md);
+        cursor: pointer;
+        appearance: none;
+        -webkit-appearance: none;
+      }
+      .wc-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--space-xs);
+        height: 24px;
+        padding: 0 var(--space-sm);
+        font-size: var(--fs-xs);
+        font-weight: var(--fw-medium);
+        background: var(--surface-2);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-pill);
+        color: var(--fg);
+        cursor: pointer;
+        white-space: nowrap;
+      }
+      .wc-chip[data-active='true'] {
+        background: var(--amber);
+        color: var(--fg-inverse);
+        border-color: var(--amber);
+      }
+
+      /* ===== CRITICAL: audio loading pill (sample preload feedback) ===== */
+      .audio-loading-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--space-2xs);
+        padding: 2px var(--space-xs);
+        background: var(--amber-soft);
+        color: var(--amber);
+        border: 1px solid var(--amber);
+        border-radius: var(--radius-pill);
+        font-family: var(--font-mono);
+        font-size: var(--fs-2xs);
+        font-weight: var(--fw-semibold);
+        letter-spacing: var(--ls-wide);
+        text-transform: lowercase;
+        animation: audio-loading-pulse 1.5s ease-in-out infinite;
+      }
+      @keyframes audio-loading-pulse {
+        0%, 100% { opacity: 1; }
+        50%      { opacity: 0.55; }
+      }
     </style>
   </head>
   <body>
