@@ -43,7 +43,7 @@ export function ScorePanel() {
         </Show>
       </div>
 
-      <MiniNotationToolbar editor={editorApi} />
+      <MiniNotationToolbar editor={() => editorApi} />
     </div>
   );
 }
