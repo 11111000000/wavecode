@@ -122,6 +122,18 @@ export const PhoneIcon = (p: Props): JSX.Element => (
   </svg>
 );
 
+/** Layout swap: два прямоугольника один над другим + двунаправленная стрелка.
+ *  Используется в TopBar для toggle code-primary ↔ ai-primary. */
+export const LayoutSwapIcon = (p: Props): JSX.Element => (
+  <svg {...base(p.size ?? 20)} class={`wc-icon ${p.class ?? ''}`}>
+    <rect x="2" y="2" width="12" height="3.5" rx="0.5" />
+    <rect x="2" y="10.5" width="12" height="3.5" rx="0.5" />
+    <line x1="8" y1="6" x2="8" y2="10" />
+    <polyline points="6 8 8 10 10 8" />
+    <polyline points="6 8 8 6 10 8" opacity="0.6" />
+  </svg>
+);
+
 export const SpeakerIcon = (p: Props): JSX.Element => (
   <svg {...base(p.size ?? 14)} class={`wc-icon ${p.class ?? ''}`}>
     <path d="M2 6 L5 6 L8 3 L8 13 L5 10 L2 10 Z" />
