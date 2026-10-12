@@ -37,47 +37,47 @@ describe('uiState mobile mode', () => {
   it('returns desktop default state when no storage and no matchMedia', async () => {
     clearMatchMedia();
     const { uiState } = await import('./uiState');
-    expect(uiState()).toEqual({ scoreOpen: true, aiOpen: true, statusOpen: true });
+    expect(uiState()).toEqual({ scoreOpen: true, aiOpen: true, statusOpen: true, layout: 'ai-primary' });
   });
 
   it('returns compact state when matchMedia matches mobile and no storage', async () => {
     setMatchMedia(true);
     const { uiState } = await import('./uiState');
-    expect(uiState()).toEqual({ scoreOpen: true, aiOpen: false, statusOpen: false });
+    expect(uiState()).toEqual({ scoreOpen: true, aiOpen: false, statusOpen: false, layout: 'ai-primary' });
   });
 
   it('returns desktop default state when matchMedia does not match', async () => {
     setMatchMedia(false);
     const { uiState } = await import('./uiState');
-    expect(uiState()).toEqual({ scoreOpen: true, aiOpen: true, statusOpen: true });
+    expect(uiState()).toEqual({ scoreOpen: true, aiOpen: true, statusOpen: true, layout: 'ai-primary' });
   });
 
   it('explicit per-panel state in localStorage beats matchMedia', async () => {
     setMatchMedia(true); // would normally produce compact
     localStorage.setItem('wavecode-ui-state-v1', JSON.stringify({ scoreOpen: true, aiOpen: true, statusOpen: true }));
     const { uiState } = await import('./uiState');
-    expect(uiState()).toEqual({ scoreOpen: true, aiOpen: true, statusOpen: true });
+    expect(uiState()).toEqual({ scoreOpen: true, aiOpen: true, statusOpen: true, layout: 'ai-primary' });
   });
 
   it('compact mode preference in localStorage beats matchMedia desktop', async () => {
     setMatchMedia(false);
     localStorage.setItem('wavecode-mobile-default', 'compact');
     const { uiState } = await import('./uiState');
-    expect(uiState()).toEqual({ scoreOpen: true, aiOpen: false, statusOpen: false });
+    expect(uiState()).toEqual({ scoreOpen: true, aiOpen: false, statusOpen: false, layout: 'ai-primary' });
   });
 
   it('full mode preference forces default state on mobile', async () => {
     setMatchMedia(true);
     localStorage.setItem('wavecode-mobile-default', 'full');
     const { uiState } = await import('./uiState');
-    expect(uiState()).toEqual({ scoreOpen: true, aiOpen: true, statusOpen: true });
+    expect(uiState()).toEqual({ scoreOpen: true, aiOpen: true, statusOpen: true, layout: 'ai-primary' });
   });
 
   it('auto mode still defers to matchMedia', async () => {
     setMatchMedia(true);
     localStorage.setItem('wavecode-mobile-default', 'auto');
     const { uiState } = await import('./uiState');
-    expect(uiState()).toEqual({ scoreOpen: true, aiOpen: false, statusOpen: false });
+    expect(uiState()).toEqual({ scoreOpen: true, aiOpen: false, statusOpen: false, layout: 'ai-primary' });
   });
 
   it('getMobileMode defaults to auto when nothing in localStorage', async () => {
@@ -108,7 +108,7 @@ describe('uiState mobile mode', () => {
     localStorage.setItem('wavecode-ui-state-v1', JSON.stringify({ replOpen: true, statusOpen: false }));
     setMatchMedia(false);
     const { uiState } = await import('./uiState');
-    expect(uiState()).toEqual({ scoreOpen: true, aiOpen: true, statusOpen: false });
+    expect(uiState()).toEqual({ scoreOpen: true, aiOpen: true, statusOpen: false, layout: 'ai-primary' });
   });
 
   it('falls back to default when stored JSON is malformed', async () => {
@@ -116,7 +116,41 @@ describe('uiState mobile mode', () => {
     localStorage.setItem('wavecode-ui-state-v1', '{not valid json');
     const { uiState } = await import('./uiState');
     // Falls through to mobile-mode resolution → compact on mobile
-    expect(uiState()).toEqual({ scoreOpen: true, aiOpen: false, statusOpen: false });
+    expect(uiState()).toEqual({ scoreOpen: true, aiOpen: false, statusOpen: false, layout: 'ai-primary' });
+  });
+});
+
+describe('uiState layout (code-primary / ai-primary)', () => {
+  let originalInnerWidth: number;
+
+  beforeEach(() => {
+    localStorage.clear();
+    vi.resetModules();
+    originalInnerWidth = window.innerWidth;
+    Object.defineProperty(window, 'innerWidth', { value: 1280, writable: true, configurable: true });
+  });
+
+  afterEach(() => {
+    Object.defineProperty(window, 'innerWidth', { value: originalInnerWidth, writable: true, configurable: true });
+    clearMatchMedia();
+  });
+
+  it('getLayout() defaults to ai-primary on desktop viewport (1280×800)', async () => {
+    const { getLayout } = await import('./uiState');
+    expect(getLayout()).toBe('ai-primary');
+  });
+
+  it('setLayout("code-primary") roundtrips via getLayout()', async () => {
+    const { getLayout, setLayout } = await import('./uiState');
+    expect(getLayout()).toBe('ai-primary');
+    setLayout('code-primary');
+    expect(getLayout()).toBe('code-primary');
+  });
+
+  it('setLayout persists to wavecode-layout-v1 in localStorage', async () => {
+    const { setLayout } = await import('./uiState');
+    setLayout('code-primary');
+    expect(localStorage.getItem('wavecode-layout-v1')).toBe('code-primary');
   });
 });
 
