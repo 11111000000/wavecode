@@ -1,0 +1,52 @@
+- sha: 3878de208d13886e12c89fb856dcbae5cb967cb1
+  date: 2026-10-12
+  kind: perf
+  files:
+    - ui/index.html
+    - ui/src/App.tsx
+    - ui/src/infrastructure/audio/SampleLoader.ts
+    - ui/src/presentation/components/CodeMirrorEditor.tsx
+    - ui/src/presentation/components/CodeMirrorEditorImpl.tsx (new)
+    - ui/src/presentation/components/PianoKeyboard.tsx
+    - ui/src/presentation/panels/ScorePanel.tsx
+    - ui/src/presentation/state/transportState.ts
+    - ui/src/presentation/state/uiState.ts
+    - ui/src/styles/components.css
+    - ui/src/styles/legacy.css
+  notes: |
+    T3 of wavecode-ui-design-overhaul. Performance budget fixes (5 things).
+
+    1. CodeMirrorEditor split into lazy chunk (CodeMirrorEditorImpl):
+       wrapper exports `lazy(() => import('./CodeMirrorEditorImpl'))`.
+       Bundle: new CodeMirrorEditorImpl.js 6.14KB / 2.57KB gzip — lazy,
+       NOT loaded on first paint. Suspense boundary in ScorePanel.
+
+    2. CSS variables for piano (PianoKeyboard.tsx):
+       Removed inline-style sizing, rely on --white-w / --black-w /
+       --piano-h CSS variables + @media (max-width: 720px). 14 inline
+       style objects eliminated.
+
+    3. Critical CSS inline in index.html: topbar + preset-row + tokens
+       (~6KB / 1.5KB gzip). Main stylesheet still blocking (would need
+       vite-plugin-critical-css to make non-blocking — out of scope).
+
+    4. SampleLoader onProgress callback: registerBank emits after each
+       bank. uiState.sampleStatus + sampleProgress signals updated from
+       App.tsx onMount. TopBar shows .audio-loading-pill while loading.
+
+    5. HMR dispose in uiState.ts:90 + transportState.ts:81 via
+       import.meta.hot.dispose — prevents createRoot accumulation on
+       HMR reload.
+
+    Tests: 279/279 pass. Lint: 0 errors. Build OK.
+
+    Supervisor follow-ups in merge commit:
+    - Combined T4 audio skeleton + T3 audio loading pill (both shown).
+    - Combined T4 empty state + T3 Suspense wrapper around CM editor.
+    - Resolved 4 conflicts (App.tsx, ScorePanel.tsx, uiState.ts,
+      components.css) — all kept both additions.
+
+    Not done (agent flagged, out of scope):
+    - Non-blocking main stylesheet (needs vite-plugin-critical-css).
+    - CodeMirror vendor chunk still modulepreloaded (385KB) — would
+      require removing codemirror from manualChunks in vite.config.ts.
