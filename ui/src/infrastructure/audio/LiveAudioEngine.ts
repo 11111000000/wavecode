@@ -9,6 +9,7 @@ import * as superdough from 'superdough';
 import type { NoteEvent } from '~/domain/midi/encoder';
 import { LiveRecorder, pickSupportedMime } from './AudioRecorder';
 import { renderToWav } from './OfflineRender';
+import { applyVoicingAliases } from './strudelPatches';
 
 /**
  * Live AudioEngine — реальный Strudel runtime в main thread.
@@ -172,6 +173,16 @@ const ensureRepl = (audioCtx: AudioContext): Promise<ReplHandle> => {
       console.log('[wavecode] modules loaded');
       await modules.core.evalScope(modules.core, modules.mini, modules.tonal);
       console.log('[wavecode] evalScope done — stack/note/n/s on globalThis');
+
+      // Inject chord-symbol aliases (min7 → m7, maj7 → ^7, …) into every
+      // voicing dictionary BEFORE any preset using `.voicing()` is evaluated.
+      // Otherwise strudel throws per hap and logs `[voicing]: unknown chord`
+      // ~8 times/sec for `<Dmin7 G7 Cmaj7>`-style progressions.
+      // See strudelPatches.ts for the full rationale.
+      const voicingAliasCount = applyVoicingAliases(modules.tonal);
+      if (voicingAliasCount > 0) {
+        console.log(`[wavecode] voicing aliases registered: ${voicingAliasCount}`);
+      }
 
       // Регистрируем дефолтные синты (sawtooth/sine/square/triangle/noise).
       // БЕЗ этого Cyclist триггерит хапы, но superdough падает с
