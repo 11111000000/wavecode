@@ -1,8 +1,10 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, afterEach } from 'vitest';
 import { EditorState, type Extension } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
 import { history, undo, redo } from '@codemirror/commands';
-import { dispatchInsertSnippet, SNIPPETS } from './MiniNotationToolbar';
+import { render, cleanup, fireEvent } from '@solidjs/testing-library';
+import type { CodeMirrorEditorApi } from './CodeMirrorEditor';
+import { dispatchInsertSnippet, SNIPPETS, MiniNotationToolbar } from './MiniNotationToolbar';
 
 /**
  * Build a headless EditorView rooted at a detached DOM node.
@@ -134,5 +136,55 @@ describe('SNIPPETS', () => {
       expect(s.label).not.toBe('');
       expect(s.label).not.toMatch(/^\s+$/);
     }
+  });
+});
+
+/**
+ * Click-test: рендерит реальный <MiniNotationToolbar> в jsdom, с реальным
+ * EditorView (in-memory), переданным через accessor (editor={() => api}).
+ * Проверяет, что клик по кнопке 'note(' вставляет 'note(' в doc —
+ * т.е. реактивность accessor-а работает (без неё view был бы undefined).
+ */
+describe('MiniNotationToolbar click (real EditorView + accessor)', () => {
+  afterEach(() => cleanup());
+
+  function makeApi(view: EditorView): CodeMirrorEditorApi {
+    return { getView: () => view };
+  }
+
+  it("click on 'note(' button inserts 'note(' into the EditorView doc", () => {
+    const view = makeView('', { anchor: 0 });
+    try {
+      const api = makeApi(view);
+      const { getByLabelText } = render(() => (
+        <MiniNotationToolbar editor={() => api} />
+      ));
+
+      const btn = getByLabelText('Insert note function call') as HTMLButtonElement;
+      fireEvent.click(btn);
+
+      expect(view.state.doc.toString()).toContain('note(');
+      expect(view.state.selection.main.from).toBe(5);
+    } finally {
+      destroy(view);
+    }
+  });
+
+  it('accessor returning undefined editor → click is a no-op (no throw)', () => {
+    const { getByLabelText } = render(() => (
+      <MiniNotationToolbar editor={() => undefined} />
+    ));
+
+    const btn = getByLabelText('Insert note function call') as HTMLButtonElement;
+    expect(() => fireEvent.click(btn)).not.toThrow();
+  });
+
+  it('editor prop omitted → click is a no-op (no throw)', () => {
+    const { getByLabelText } = render(() => (
+      <MiniNotationToolbar />
+    ));
+
+    const btn = getByLabelText('Insert note function call') as HTMLButtonElement;
+    expect(() => fireEvent.click(btn)).not.toThrow();
   });
 });
