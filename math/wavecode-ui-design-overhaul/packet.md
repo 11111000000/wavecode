@@ -280,3 +280,356 @@ F4 — после F3 design-system cleanup.
   BottomSheet routing. Этот пакет зависит от него (sheet geometry
   не меняется), но добавляет правило: при AI-primary на desktop
   AI-панель — НЕ BottomSheet, а inline flex-pane.
+
+---
+
+## Deep diagnosis (2nd & 3rd order predictions)
+
+Реальные баги — это верхушка айсберга. Под ними 5 слоёв
+системных проблем, которые всплывут при первом-же серьёзном
+использовании после фикса.
+
+### Слой 2: то, что сломается СРАЗУ после фикса F1+F2
+
+- **F1 fix scope leak.** Переименование `.piano-key.black` →
+  `.piano-keyboard .piano-key.black` в legacy.css работает
+  *только* потому, что legacy.css загружается последним. Если
+  позже кто-то reorder-нет CSS-импорты — конфликт вернётся.
+  **Защитный фикс**: добавить `@layer components { .piano-key.black
+  { ... } }` в components.css. @layer имеет более низкий приоритет
+  чем unlayered правила → legacy.css не сможет перебить components
+  слой ни в каком порядке. Стоимость: 2 строки, выгода: невозврат
+  regression.
+
+- **Sticky toolbar won't stick.** `position: sticky; bottom: 0`
+  работает только если у родителя `overflow: visible`. У
+  `.score-panel-inner` стоит `overflow: hidden` → sticky
+  приклеивается к низу *видимой области*, но при `flex: 1 1 auto`
+  cm-host растягивается на всю высоту, и toolbar уходит за
+  overflow. Правильное решение: `flex-shrink: 0; margin-top: auto`
+  внутри flex-column (без sticky вообще). Это работает всегда.
+
+- **FAB vs toolbar collision.** FAB = `position: fixed; bottom: 16px;
+  z-index: 20` (`--z-fab`). Если toolbar станет sticky на нижней
+  границе viewport, FAB перекроет его правый край. Решение:
+  toolbar имеет `padding-right: var(--fab-size) + var(--space-md)`
+  на ≤720px (где FAB виден), чтобы последняя кнопка не скрывалась.
+
+- **AI-primary на 1024×600 ноутбуках.** 40vh от 600px = 240px.
+  AI-панель с messages-list + textarea в 240px — тесно, footer
+  торчит за пределы. Защитный фикс: `min-height: 320px;
+  flex-basis: 60%; flex-grow: 1`. На 1280×800 и выше — расслабляется
+  естественно.
+
+### Слой 3: перфоманс
+
+Bundle: `codemirror 380KB + strudel 664KB + effect 128KB +
+app 180KB + css 60KB = ~1.4MB` unminified. Gzipped ≈ 400KB.
+First-paint budget на 4G — 1.5s; сейчас — 2.5s+.
+
+- **CodeMirror в initial bundle.** Можно dynamic-import
+  CodeMirrorEditor (lazy при первом фокусе на score tab).
+  Strudel тоже — но он нужен сразу для eval. Compromise:
+  defer CodeMirror + presets UI, не Strudel.
+- **CSS файлов 6, но нет critical-CSS inline.** FCP упирается
+  в render-blocking stylesheet. Inline первые 8KB (topbar +
+  preset-row + tokens) в `<style>` index.html, остальное — async.
+- **Piano inline-styles.** `PianoKeyboard.tsx:124-127` задаёт
+  `style={{ width: ${wW}px }}` на каждой из 14 белых клавиш.
+  Solid реактивен, но 14 inline-style объектов в DOM → дольше
+  parseLayout. Замена: CSS-переменные `.piano-keys-inner
+  { --white-w: 80px }` на родителе + `width: var(--white-w)` на
+  `.piano-key.white`. Без JSX-diff на resize.
+- **Sample loading UX.** 2.1MB samples грузятся лениво через
+  `loadAllSamples()`. На медленном 4G первая нота — через 8-12s.
+  **Защитный фикс**: progress indicator + автоматический preload
+  в `requestIdleCallback` после первого user gesture (есть уже в
+  App.tsx:138-146 preload-логика — добавить туда sample callback).
+- **MIDI inputs enumeration.** `MidiInput.ts` ждёт Promise;
+  если браузер завис на permission prompt — 0 фидбэка. Таймаут
+  1s уже есть в packet, но UI не показывает "запрашиваю...".
+
+### Слой 4: визуальная глубина и delight
+
+Токены уже excellent (motion / shadows / z-index / radius).
+Что отсутствует:
+
+- **Empty states.** Score пустой → editor показывает пустой
+  CodeMirror без подсказки. Messages пустой → "Здесь будет
+  диалог с ИИ..." (есть в `AIEditPanel.tsx:167`). Нет:
+  on-screen guide при первой загрузке ("tap Step/Piano chip
+  чтобы открыть"; "или напиши в ИИ 'дай бит' ").
+- **Loading states.** Audio context стартует лениво, первый
+  звук — через 200-500ms после user gesture. LED в TopBar
+  мигает `● suspended` — но не визуально привлекает внимание.
+  Хорошо: skeleton-pulse на audio-active panel.
+- **No animations on first reveal.** При mount всё всплывает
+  разом. Staggered fade-in (80ms delay между секциями) =
+  качественный скачок за 12 строк CSS.
+- **No focus rings consistency.** CodeMirror focus — свой ring.
+  Topbar buttons — нет ring вообще (только hover). Чекбоксы —
+  дефолтные браузерные. Нужен глобальный `--focus-ring: 0 0 0
+  3px var(--cyan-soft); outline: none`.
+- **Touch target audit.** Большинство кнопок 32-40px — ниже
+  WCAG 2.5.5 AAA (44px). Topbar actions = 18px иконки в 32px
+  контейнере → hit area < 44px. `wc-icon-btn { min-width: 44px;
+  min-height: 44px }` решает.
+- **Контраст.** `--fg-ghost: #52525b` на `--surface-0: #0a0a0e`
+  = contrast 4.7:1 (проходит AA). На `--surface-1: #11121a` =
+  4.4:1 (граница). Labels на piano-key.black (`color: var(--amber)
+  on #1a1a22`) = 7.2:1 (AAA). Минимальный риск, но стоит
+  прогнать axe-core в playwright.
+- **Нет audio feedback для toggle.** Piano chip toggle — нет
+  haptic-like ripple. Добавить `transform: scale(0.95)` 80ms
+  on press — 1 строка CSS, ощутимый эффект.
+
+### Слой 5: архитектурные риски
+
+- **App.tsx 530 строк.** God-component. Делится естественно
+  на 4 sub-components: `<TopBar>`, `<PresetRow>`, `<PanelsLayout>`,
+  `<BottomSheets>`. Каждый 80-120 строк. Чистый выигрыш для
+  читаемости + per-component code-splitting в Vite.
+- **Inline-style в App.tsx:392, 412, 512, 519.** 4 блока.
+  Перенос в `.app-preset-row`, `.save-preset-bar`,
+  `.step-sheet-body`, `.piano-sheet-body` = ~12 строк CSS,
+  удаление 4 style-объектов из JSX. Diff чище.
+- **legacy.css 36KB / 1346 строк.** Содержит правила для уже
+  не-используемых классов (`midi-io-bar`, `mixer-panel`,
+  `share-modal` — перенесены в BottomSheet). Audit через `rg -l
+  '\.classname' ui/src` для каждого → удалить dead rules. Эффект:
+  -10-15KB CSS, -200 строк.
+- **createRoot без dispose.** `uiState.ts:90` создаёт root для
+  saveEffect — но не экспортирует dispose. На HMR в dev —
+  накапливаются roots. В prod — норм. Compromise: добавить
+  `if (import.meta.hot) import.meta.hot.dispose(() => dispose())`.
+
+---
+
+## Subagent implementation playbook
+
+Декомпозиция по 6 трекам, выполняются в 3 фазы. Каждый трек —
+отдельный субагент с focused brief.
+
+### Dependency graph
+
+```
+                ┌─────────────┐
+                │  T1 bugfix  │  (F1+F2, sequential first)
+                │  ~50 LoC    │
+                └──────┬──────┘
+                       │ блокирует T2 (DOM-классы и видимость)
+        ┌──────────────┼──────────────┬──────────────┐
+        │              │              │              │
+   ┌────▼────┐    ┌────▼────┐    ┌────▼────┐    ┌────▼────┐
+   │ T2 AI-  │    │ T3 perf │    │ T4 vis  │    │ T5 arch │
+   │ primary │    │ budget  │    │ polish  │    │ cleanup │
+   │ layout  │    │         │    │         │    │         │
+   └────┬────┘    └────┬────┘    └────┬────┘    └────┬────┘
+        │             │              │              │
+        └─────────────┴──────────────┴──────────────┘
+                              │
+                       ┌──────▼──────┐
+                       │ T6 verify   │  (e2e + perf budget + visual diff)
+                       │ ~100 LoC    │
+                       └─────────────┘
+```
+
+### Phase 0 (sequential, ~1 субагент, ~30 мин)
+
+#### T1 — Bugfix: piano CSS-scope + toolbar reactivity
+
+**Brief для субагента:**
+- Scope: `legacy.css:1257-1265`, `ScorePanel.tsx:46`,
+  `MiniNotationToolbar.tsx:61-66`, `components.css:962-1006`.
+- Защитный фикс @layer:
+  ```
+  /* components.css, top of file */
+  @layer components {
+    .piano-key.black { position: absolute; ... }
+  }
+  ```
+  (без `@layer` тоже работает, но @layer страхует от reorder).
+- Toolbar: ScorePanel передаёт `editor={() => editorApi}`
+  (accessor). MiniNotationToolbar читает `const view = props.editor?.()?.getView();`.
+- Toolbar visibility: НЕ sticky. Использовать
+  `.score-panel-inner { display: flex; flex-direction: column }`
+  + `.mini-toolbar { flex-shrink: 0; margin-top: auto }`.
+  cm-host остаётся `flex: 1 1 auto; min-height: 0`.
+- Не трогать: PianoKeyboard.tsx (он правильный), FAB,
+  BottomSheet geometry.
+- Acceptance: piano chips W-B-W-B-… при viewport 412×900;
+  кнопка 'note(' вставляет snippet; toolbar виден при открытом
+  Piano bottom-sheet.
+- Verification: `npm run build` чисто; `npx vitest run
+  PianoKeyboard.test MiniNotationToolbar.test` — добавить
+  test на click-no-op с реальным EditorView.
+
+### Phase 1 (4 субагента параллельно, ~45-60 мин каждый)
+
+#### T2 — AI-primary layout (F3)
+
+**Brief:**
+- `uiState.layout: 'code-primary' | 'ai-primary'` (default
+  `'ai-primary'` на ≥1024, `'code-primary'` на mobile).
+- TopBar: добавить `LayoutToggleIcon` + кнопку в
+  `.wc-topbar__actions`. Persisted в localStorage.
+- CSS: `.app-body[data-layout='ai-primary'] .ai-panel
+  { flex: 1 1 60%; min-width: 0; min-height: 320px }
+  .app-body[data-layout='ai-primary'] .score-panel
+  { flex: 0 0 360px; overflow-y: auto }`.
+- Mobile: data-layout игнорируется, layout = BottomSheet
+  default (Score виден, AI по табу).
+- Не ломать: TopBar composer (FAB остаётся), мобильный flow,
+  status panel.
+- Acceptance: на 1440×900 AI ≥60% высоты viewport; toggle
+  flip-ит за 240ms transition; на 1024×600 min-height
+  работает; mobile без изменений.
+
+#### T3 — Performance budget
+
+**Brief:**
+- CSS variables для piano:
+  `.piano-keys-inner { --white-w: 80px; --black-w: 50px;
+  --piano-h: 220px }` + media-query для mobile. JSX убирает
+  inline-styles.
+- Dynamic-import CodeMirrorEditor:
+  `const CodeMirror = await import('./CodeMirrorEditor')`
+  при первом открытии score tab (либо сразу, но через
+  `lazy()` HOC).
+- Critical CSS inline в index.html: первые 8KB (topbar +
+  preset-row + tokens) inline, остальное — `<link rel="preload"
+  as="style" onload="this.rel='stylesheet'">`.
+- Sample loader: добавить callback в preload-pre-paint
+  (App.tsx:138-146). Показать progress pill в TopBar.
+- EditorView disposal audit: `ScorePanel` использует
+  `<Show when={uiState().scoreOpen}>` → onCleanup сработает.
+  Тест: rapid toggle scoreOpen 50 раз → 0 leaked views
+  (mock `view.destroy()` spy).
+- createRoot dispose: `uiState.ts:90` обернуть в
+  `import.meta.hot?.dispose(() => dispose())`.
+- Acceptance: Lighthouse perf ≥90 на 1440×900; sample
+  preload виден; bundle не вырос >10%.
+
+#### T4 — Visual polish
+
+**Brief:**
+- Empty state для ScorePanel: `.score-empty-state`
+  с 3-4 подсказками (Piano chip, ИИ, готовые пресеты).
+  Виден когда `appStore.score.trim().length === 0`.
+- Loading state для audio: `.audio-loading-skeleton` с
+  shimmer-pulse, виден при `ctxState().state === 'suspended'`
+  на ≤3s, потом исчезает.
+- Focus rings: `:focus-visible { outline: 2px solid var(--cyan);
+  outline-offset: 2px; box-shadow: var(--shadow-glow-cyan) }`
+  в base.css глобально (с исключениями для `.cm-editor`).
+- Touch targets: `wc-icon-btn, wc-chip, .mini-toolbar-btn
+  { min-width: 44px; min-height: 44px }`.
+- Micro-interactions: press-shrink для кнопок
+  `&:active { transform: scale(0.95); transition: transform
+  var(--dur-xs) var(--ease-spring) }`.
+- Staggered reveal: первая загрузка → opacity 0→1 с
+  delay 0/80/160/240ms для topbar/preset-row/app-body/tabbar.
+- Контраст-проверка: `axe-core` через playwright — должно быть
+  0 violations уровня critical/serious.
+- Acceptance: визуально polished; axe = 0 critical;
+  Lighthouse a11y ≥95.
+
+#### T5 — Architecture cleanup
+
+**Brief:**
+- App.tsx split на 4 components:
+  - `<TopBar>` — строки 280-389 (110 строк).
+  - `<PresetRow>` — строки 391-448 (57 строк).
+  - `<PanelsLayout>` — строки 450-485 (35 строк).
+  - `<BottomSheets>` — строки 487-527 (40 строк).
+  App.tsx остаётся ~50 строк (composition + onMount).
+- Inline-style audit: `rg -n 'style=\{\{' ui/src/App.tsx` →
+  вынести в CSS-классы (`.app-preset-row`, `.save-preset-bar`,
+  `.step-sheet-body`, `.piano-sheet-body`).
+- legacy.css dead-rule removal: для каждого legacy-селектора
+  `rg -l '\.classname' ui/src/` — если 0 файлов, удалить правило.
+  Цель: -30% размера (36KB → 25KB).
+- Z-index audit: все `z-index:` в ui/src/styles → только через
+  токены `--z-*`. Никаких magic numbers.
+- Acceptance: App.tsx <80 строк; legacy.css <28KB;
+  grep `'z-index:'` только в tokens.css.
+
+### Phase 2 (sequential, ~20 мин)
+
+#### T6 — Verify
+
+**Brief:**
+- `tests/e2e/ui-overhaul.spec.ts` — новый файл.
+  Сценарии:
+  1. `/wavecode.kosov.online` @ 412×900 → click Piano chip →
+     snapshot `[aria-label="C3"], [aria-label="C#3"], …`
+     присутствуют в DOM в z-order, никаких overflow.
+  2. Toolbar click 'note(' → CodeMirror doc starts with
+     'note('.
+  3. Toggle AI-primary @ 1440×900 → `.ai-panel` height ≥60vh.
+  4. Lighthouse run @ 1440×900: perf ≥90, a11y ≥95, bp ≥85.
+  5. axe-core @ both viewports: 0 critical/serious.
+- vitest extensions:
+  - PianoKeyboard layout test (DOM-based, jsdom).
+  - MiniNotationToolbar click test (real EditorView).
+  - appStore replaceScore + cleanup test (no leaked views).
+- Manual smoke: dev server, smoke @ localhost, deploy.
+- Acceptance: все 5 сценариев проходят; CI lint/typecheck
+  зелёный; lighthouse baseline записан в packet (для drift).
+
+### Per-track budget (LoC diff, грубо)
+
+| Track | LoC | New files | Risk | Time |
+|-------|-----|-----------|------|------|
+| T1 | ~50 | 0 | low | 30m |
+| T2 | ~80 | 0 | medium | 45m |
+| T3 | ~120 | 1 (lazy CM) | medium | 60m |
+| T4 | ~150 | 1 (axe spec) | low | 60m |
+| T5 | ~-200 (net) | 4 (sub-components) | medium | 60m |
+| T6 | ~100 | 1 (e2e spec) | low | 20m |
+| **Σ** | **~300 net** | **7** | — | **~4.5h** |
+
+### Риски субагентов
+
+- **Конфликт в App.tsx** между T1, T2, T5 (все трогают).
+  **Решение**: T1 не трогает App.tsx (ScorePanel+MiniNotationToolbar),
+  T2 + T5 — последовательно или через единый sub-agent-merge.
+- **CSS-конфликт при reorder imports.** Защита через @layer
+  в T1; далее любая работа с CSS — через токены.
+- **CI красный после T3 dynamic-import.** `vite.config.ts`
+  может потребовать ручной chunk-настройки (`manualChunks`).
+- **Sample progress pill показывает 100% всегда.** Гонка
+  между preload и `requestIdleCallback`. Решение: preload
+  статус = signal в uiState, обновляется по факту.
+
+### Supersession strategy
+
+Каждый T создаёт ОТДЕЛЬНЫЙ мини-пакет (`wavecode-piano-css-fix`,
+`wavecode-toolbar-sticky`, ...) с supersession-of связями к
+этому. Этот packet остаётся координатором — applied в конце,
+когда все track-пакеты applied.
+
+## Verification (расширенная)
+
+### Auto (vitest + playwright + lighthouse)
+
+- `vitest run`: 7 suites (новый `appStore-cleanup.test`,
+  расширенный `PianoKeyboard.test`, `MiniNotationToolbar.test`).
+- `playwright test tests/e2e/ui-overhaul.spec.ts`: 5 сценариев.
+- `lighthouse-ci`: 3 baseline-метрики
+  (perf/a11y/bp @ mobile + desktop).
+
+### Manual
+
+1. **Холодный старт** на throttled 4G: first paint <2.5s,
+   audio context ready <4s, sample preload complete <8s.
+2. **Piano tap** @ 412×900: 24 keys в шахматном порядке,
+   tap = звук без задержки, scroll НЕ требуется.
+3. **Toolbar** в ScorePanel: все 14 кнопок вставляют snippets;
+   виден при любом BottomSheet surface.
+4. **AI-primary** @ 1440×900: AI ≥60vh, Score drawer 360px.
+   Toggle = flip за 240ms.
+5. **Touch targets**: все кнопки попадают в 44×44 hit area.
+6. **Focus**: Tab по странице — focus-ring везде видим.
+7. **prefers-reduced-motion**: все transitions = 0ms.
+8. **prefers-contrast**: borders светлеют до `#71717a`.
