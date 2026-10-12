@@ -20,11 +20,14 @@ Sources (file → original title → author → Freesound URL):
   crash.mp3    gongcrash 2 short        Logicogonist       https://freesound.org/people/Logicogonist/sounds/799186/
   ride.mp3     Long Ride Cymbal 2       Cringegaming64yt   https://freesound.org/people/Cringegaming64yt/sounds/567213/
   sh.mp3       Swipe Shaker             8bitmyketison      https://freesound.org/people/8bitmyketison/sounds/701124/
-  cb.mp3       Cowbell - Tic 03.wav     RP1312             https://freesound.org/people/RP1312/sounds/350713/
+  cb.mp3       808-style cowbell        wavecode           synthesized (aevalsrc: 540Hz + 800Hz sine pair, 500ms, 24kHz mono)
 
-All samples are Freesound "lq" (low-quality) preview MP3s, 24-48 kHz
+13 samples are Freesound "lq" (low-quality) preview MP3s, 24-48 kHz
 mono or joint-stereo, 64-128 kbps. Each preview is <2 seconds and
-sufficient as a one-shot drum hit.
+sufficient as a one-shot drum hit. cb.mp3 is synthesized locally
+(the original Freesound preview for "Cowbell - Tic 03.wav" by RP1312
+downloaded as silent bytes; replaced with a deterministic CC0
+two-oscillator cowbell on 2026-10-12).
 
 License: Creative Commons CC0 1.0 Universal (public domain dedication).
 Full text: https://creativecommons.org/publicdomain/zero/1.0/
