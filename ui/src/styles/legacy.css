@@ -49,10 +49,16 @@
   gap: var(--space-xs);
   align-items: center;
   flex-wrap: wrap;
+  padding: var(--space-sm) var(--space-md);
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-0);
   /* Должен быть выше .wc-sheet-backdrop (z-sheet=40) — чипы открывают
    * bottom-sheet и должны быть кликабельными пока другой sheet открыт. */
   position: relative;
   z-index: calc(var(--z-sheet) + 5);
+}
+.app-preset-row__spacer {
+  flex: 1;
 }
 .app-controls-row {
   display: flex;
@@ -105,7 +111,6 @@
 .preset-btn,
 .ctrl-btn,
 .mixer-btn,
-.midi-io-btn,
 .save-preset-bar button {
   display: inline-flex;
   align-items: center;
@@ -128,8 +133,7 @@
 }
 .preset-btn:hover:not(:disabled),
 .ctrl-btn:hover:not(:disabled),
-.mixer-btn:hover:not(:disabled),
-.midi-io-btn:hover:not(:disabled) {
+.mixer-btn:hover:not(:disabled) {
   background: var(--surface-3);
   border-color: var(--border-strong);
 }
@@ -459,7 +463,7 @@
   background: var(--border);
   overflow: hidden;
   position: relative;
-  z-index: 0;
+  z-index: var(--z-base);
 }
 
 .collapsible {
@@ -755,12 +759,8 @@ textarea.ai-textarea:focus-visible {
   color: var(--amber);
   font-weight: var(--fw-semibold);
 }
-.status-running    { color: var(--cyan); }
-.status-idle,
-.status-stopped,
-.status-uninitialized { color: var(--fg-dim); }
-.status-suspended  { color: var(--warn); }
-.status-closed     { color: var(--err); }
+/* .status-* color classes (running/idle/stopped/uninitialized/suspended/closed)
+ * — REMOVED: dead code, never applied in JSX. */
 
 .score-debug {
   display: flex;
@@ -774,68 +774,8 @@ textarea.ai-textarea:focus-visible {
 .score-debug .debug-err { color: var(--err); word-break: break-word; }
 
 /* =========================================================================
- *  MIDI I/O BAR
+ *  MIDI I/O BAR — REMOVED (dead code: rg finds zero callers in src/)
  * ========================================================================= */
-
-.score-panel-inner > .midi-io-bar {
-  flex-shrink: 0;
-  border-top: 1px solid var(--border);
-  background: var(--surface-1);
-  font-size: var(--fs-sm);
-  font-family: var(--font-sans);
-}
-.midi-io-bar[open] > .midi-io-summary {
-  padding: var(--space-sm) var(--space-md);
-  background: var(--surface-2);
-  border-bottom: 1px solid var(--border);
-  font-weight: var(--fw-semibold);
-  cursor: pointer;
-  user-select: none;
-  min-height: 44px;
-  display: flex;
-  align-items: center;
-}
-.midi-io-summary {
-  padding: var(--space-sm) var(--space-md);
-  cursor: pointer;
-  user-select: none;
-  color: var(--fg-dim);
-  min-height: 44px;
-  display: flex;
-  align-items: center;
-}
-.midi-io-summary:hover { color: var(--fg); }
-.midi-io-row {
-  display: flex;
-  gap: var(--space-lg);
-  align-items: center;
-  flex-wrap: wrap;
-  padding: var(--space-sm) var(--space-md);
-}
-.midi-io-field {
-  display: flex;
-  align-items: center;
-  gap: var(--space-sm);
-  font-family: var(--font-sans);
-}
-.midi-io-label { color: var(--fg-dim); }
-.midi-io-field input[type='number'] {
-  width: 64px;
-  height: 36px;
-  padding: 0 var(--space-sm);
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  color: var(--amber);
-  font-family: var(--font-mono);
-  font-size: var(--fs-sm);
-}
-.midi-io-field input[type='file'] {
-  font-size: var(--fs-sm);
-  font-family: inherit;
-  color: var(--fg-dim);
-  max-width: 220px;
-}
 
 /* =========================================================================
  *  MIXER PANEL
@@ -1109,19 +1049,9 @@ textarea.ai-textarea:focus-visible {
 .mobile-menu-hint { color: var(--fg-ghost); font-size: var(--fs-xs); }
 
 /* =========================================================================
- *  SHARE MODAL
+ *  SHARE MODAL (backdrop REMOVED — dead, never applied; modal itself kept)
  * ========================================================================= */
 
-.share-modal-backdrop {
-  position: fixed;
-  inset: 0;
-  background: var(--surface-overlay);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: var(--z-modal);
-  backdrop-filter: blur(4px);
-}
 .share-modal {
   background: var(--surface-1);
   border: 1px solid var(--amber);
@@ -1260,7 +1190,7 @@ textarea.ai-textarea:focus-visible {
   height: 64px;
   flex: 0 0 22px;
   position: relative;
-  z-index: 1;
+  z-index: var(--z-body);
   margin: 0 -11px;
 }
 .piano-keyboard .piano-key.active {
@@ -1343,4 +1273,14 @@ textarea.ai-textarea:focus-visible {
   color: var(--fg-inverse);
   box-shadow: var(--shadow-glow-amber);
   transform: scale(0.96);
+}
+
+/* =========================================================================
+ *  BOTTOM-SHEET BODY PADDING
+ * ========================================================================= */
+.step-sheet-body {
+  padding: var(--space-md) var(--space-lg);
+}
+.piano-sheet-body {
+  padding: var(--space-md) 0;
 }
