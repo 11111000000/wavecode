@@ -22,13 +22,25 @@
  * prefix with sound name — the same format Strudel builds at runtime via
  * `${bank}_${s}`. Keys like `drums_bd` make `s("drums:bd")` resolve.
  *
+ * Bare-name aliases: many legacy presets use bare sound names like
+ * `s("bd")` (no bank prefix). For each `bank_sound` key in soundMap,
+ * we register a bare `sound` alias that points to the same data. This
+ * makes both syntaxes work:
+ *   s("drums:bd")  → soundMap["drums_bd"]
+ *   s("bd")       → soundMap["bd"]    (alias → drums_bd's data)
+ *
+ * Synth keys like `synth_bass-c2` produce alias `bass-c2` (the part
+ * after the first underscore). Hyphens in the sound name are preserved.
+ * If multiple keys would produce the same alias, the alias is created
+ * only once (first wins) to avoid overwriting.
+ *
  * Samples bundled in `public/samples/` (Vite copies to dist/).
  *   - piano/ — Salamander Grand Piano v3 (CC0, 10 MP3s)
  *   - drums/ — 14 808-style one-shots (CC0, Freesound previews)
  *   - synth/ — 12 analog-synth notes (CC0, Freesound previews)
  */
 
-import { samples } from '@strudel/webaudio';
+import { samples, soundMap } from '@strudel/webaudio';
 
 type BankState = { status: 'idle' | 'loading' | 'loaded' | 'failed'; inflight: Promise<void> | null };
 
@@ -40,6 +52,28 @@ const piano: BankState = { status: 'idle', inflight: null };
 const drums: BankState = { status: 'idle', inflight: null };
 const synth: BankState = { status: 'idle', inflight: null };
 
+type SoundEntry = { onTrigger: unknown; data: unknown };
+type SoundMapSnapshot = Record<string, SoundEntry>;
+
+const addBareAliases = (): number => {
+  const dict = soundMap.get() as SoundMapSnapshot;
+  const updates: SoundMapSnapshot = {};
+  for (const key of Object.keys(dict)) {
+    const idx = key.indexOf('_');
+    if (idx <= 0) continue;
+    const alias = key.slice(idx + 1);
+    if (alias.length === 0 || alias.includes('_')) continue;
+    if (dict[alias] !== undefined) continue;
+    const entry = dict[key];
+    if (entry === undefined) continue;
+    updates[alias] = entry;
+  }
+  if (Object.keys(updates).length > 0) {
+    soundMap.set({ ...dict, ...updates });
+  }
+  return Object.keys(updates).length;
+};
+
 const registerBank = (manifestUrl: string, state: BankState): Promise<void> => {
   if (state.status === 'loaded') return Promise.resolve();
   if (state.inflight) return state.inflight;
@@ -47,6 +81,7 @@ const registerBank = (manifestUrl: string, state: BankState): Promise<void> => {
   state.inflight = (async () => {
     try {
       await samples(manifestUrl);
+      addBareAliases();
       state.status = 'loaded';
     } catch (err) {
       state.status = 'failed';

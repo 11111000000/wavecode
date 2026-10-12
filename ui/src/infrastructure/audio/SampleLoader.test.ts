@@ -67,10 +67,6 @@ describe('drum sample pack — file inventory', () => {
     // returns empty/silent bytes — see math/wavecode-sample-bank-underscore
     // for the original incident (max_volume -39dB → silent).
     const buf = readFileSync(resolve(DRUMS_DIR, 'cb.mp3'));
-    // Compute a coarse RMS over the decoded MP3 file. Cheap proxy:
-    // bytes that are mostly non-zero indicate real audio. We require
-    // at least 30% of bytes to be > 0 (silent downloads have all-zero
-    // payload after the MPEG header).
     let nonZero = 0;
     for (let i = 32; i < buf.length; i++) {
       if (buf[i] !== 0) nonZero++;
@@ -173,21 +169,61 @@ describe('strudel.json manifests — keys use bank_sound (underscore) for bank:s
 });
 
 /**
- * Strudel API contract — `samples()` is re-exported from @strudel/webaudio
- * (which does `export * from "superdough"`). It fetches a strudel.json
- * manifest and writes entries into the shared soundMap. We import via
- * static import so the module instance matches the one webaudioRepl uses
- * (separate `import('superdough')` at runtime would yield a fresh module
- * + fresh soundMap, and registered samples would be invisible to the
- * scheduler).
+ * Strudel API contract — `samples()` and `soundMap` are re-exported from
+ * @strudel/webaudio (which does `export * from "superdough"`). We mock
+ * the surface so we can verify per-bank registration, idempotency,
+ * and bare-name alias generation.
  */
-describe('SampleLoader — Strudel API contract (samples, static import)', () => {
+describe('SampleLoader — Strudel API contract (samples, soundMap, static import)', () => {
   let samplesMock: ReturnType<typeof vi.fn>;
+  let soundMapStore: Record<string, { onTrigger: unknown; data: unknown }>;
+  let subscribers: Array<() => void>;
 
   beforeEach(async () => {
     vi.resetModules();
-    samplesMock = vi.fn().mockResolvedValue(undefined);
-    vi.doMock('@strudel/webaudio', () => ({ samples: samplesMock }));
+    soundMapStore = {};
+    subscribers = [];
+    samplesMock = vi.fn().mockImplementation(async (input: string | Record<string, unknown>) => {
+      if (typeof input !== 'string') return;
+      // Simulate strudel.json fetch + processSampleMap: keys land in
+      // soundMap with `bank_sound` style. Hyphens inside the sound name
+      // (`bass-c2`, `tom-l`) are preserved as-is.
+      const map: Record<string, string[]> = {
+        '/samples/piano/strudel.json': {
+          piano_a1: ['A1.mp3'], piano_a2: ['A2.mp3'], piano_a3: ['A3.mp3'], piano_a4: ['A4.mp3'],
+          piano_c2: ['C2.mp3'], piano_c3: ['C3.mp3'], piano_c4: ['C4.mp3'],
+          piano_c5: ['C5.mp3'], piano_c6: ['C6.mp3'], piano_c7: ['C7.mp3'],
+        },
+        '/samples/drums/strudel.json': {
+          drums_bd: ['bd.mp3'], drums_bd_sub: ['bd-sub.mp3'], drums_sd: ['sd.mp3'],
+          drums_rim: ['rim.mp3'], drums_hh: ['hh.mp3'], drums_oh: ['oh.mp3'],
+          drums_cp: ['cp.mp3'], drums_cb: ['cb.mp3'], drums_sh: ['sh.mp3'],
+          drums_tom_l: ['tom-l.mp3'], drums_tom_m: ['tom-m.mp3'], drums_tom_h: ['tom-h.mp3'],
+          drums_crash: ['crash.mp3'], drums_ride: ['ride.mp3'],
+        },
+        '/samples/synth/strudel.json': {
+          'synth_bass-c1': ['bass-c1.mp3'], 'synth_bass-c2': ['bass-c2.mp3'],
+          'synth_bass-e1': ['bass-e1.mp3'], 'synth_bass-a1': ['bass-a1.mp3'],
+          'synth_pad-c3': ['pad-c3.mp3'], 'synth_pad-e3': ['pad-e3.mp3'],
+          'synth_pad-g3': ['pad-g3.mp3'], 'synth_pad-a3': ['pad-a3.mp3'],
+          'synth_lead-e4': ['lead-e4.mp3'], 'synth_lead-g4': ['lead-g4.mp3'],
+          'synth_strings-c4': ['strings-c4.mp3'], 'synth_brass-c3': ['brass-c3.mp3'],
+        },
+      }[input] ?? {};
+      for (const [k, v] of Object.entries(map)) {
+        soundMapStore[k] = { onTrigger: vi.fn(), data: { samples: v } };
+      }
+    });
+    vi.doMock('@strudel/webaudio', () => ({
+      samples: samplesMock,
+      soundMap: {
+        get: () => soundMapStore,
+        set: (v: Record<string, { onTrigger: unknown; data: unknown }>) => {
+          soundMapStore = v;
+          for (const s of subscribers) s();
+        },
+      },
+    }));
   });
 
   const loadSampleLoader = async () => {
@@ -284,7 +320,6 @@ describe('SampleLoader — Strudel API contract (samples, static import)', () =>
     await p;
     expect(samplesMock).toHaveBeenCalledTimes(3);
     expect(areAllSamplesLoaded()).toBe(false);
-    // After fixing drums manually, the others stay loaded.
     samplesMock.mockResolvedValue(undefined);
     await loadDrumSamples();
     await loadSynthSamples();
@@ -302,5 +337,59 @@ describe('SampleLoader — Strudel API contract (samples, static import)', () =>
     expect(areAllSamplesLoaded()).toBe(false);
     await loadPianoSamples();
     expect(areAllSamplesLoaded()).toBe(true);
+  });
+
+  it('registers bare-name aliases (bd, sd, hh) alongside bank_sound keys', async () => {
+    const { loadDrumSamples } = await loadSampleLoader();
+    await loadDrumSamples();
+    // soundMap has both forms
+    expect(soundMapStore['drums_bd']).toBeDefined();
+    expect(soundMapStore['bd']).toBeDefined();
+    // alias points to the same data as the prefixed key
+    expect(soundMapStore['bd']).toBe(soundMapStore['drums_bd']);
+    expect(soundMapStore['sd']).toBe(soundMapStore['drums_sd']);
+    expect(soundMapStore['hh']).toBe(soundMapStore['drums_hh']);
+    expect(soundMapStore['oh']).toBe(soundMapStore['drums_oh']);
+    expect(soundMapStore['rim']).toBe(soundMapStore['drums_rim']);
+    expect(soundMapStore['sh']).toBe(soundMapStore['drums_sh']);
+    expect(soundMapStore['cp']).toBe(soundMapStore['drums_cp']);
+    expect(soundMapStore['cb']).toBe(soundMapStore['drums_cb']);
+    expect(soundMapStore['crash']).toBe(soundMapStore['drums_crash']);
+    expect(soundMapStore['ride']).toBe(soundMapStore['drums_ride']);
+  });
+
+  it('synth bank produces bare aliases with hyphen preserved (bass-c2, pad-c3, lead-e4)', async () => {
+    const { loadSynthSamples } = await loadSampleLoader();
+    await loadSynthSamples();
+    // synth_bass-c1 → alias bass-c1 (hyphen preserved)
+    expect(soundMapStore['synth_bass-c1']).toBeDefined();
+    expect(soundMapStore['bass-c1']).toBe(soundMapStore['synth_bass-c1']);
+    expect(soundMapStore['synth_pad-c3']).toBeDefined();
+    expect(soundMapStore['pad-c3']).toBe(soundMapStore['synth_pad-c3']);
+    expect(soundMapStore['synth_lead-e4']).toBeDefined();
+    expect(soundMapStore['lead-e4']).toBe(soundMapStore['synth_lead-e4']);
+    expect(soundMapStore['synth_strings-c4']).toBeDefined();
+    expect(soundMapStore['strings-c4']).toBe(soundMapStore['synth_strings-c4']);
+    expect(soundMapStore['synth_brass-c3']).toBeDefined();
+    expect(soundMapStore['brass-c3']).toBe(soundMapStore['synth_brass-c3']);
+  });
+
+  it('piano bank produces bare aliases (a4, c4, c5)', async () => {
+    const { loadPianoSamples } = await loadSampleLoader();
+    await loadPianoSamples();
+    expect(soundMapStore['piano_a4']).toBeDefined();
+    expect(soundMapStore['a4']).toBe(soundMapStore['piano_a4']);
+    expect(soundMapStore['c4']).toBe(soundMapStore['piano_c4']);
+    expect(soundMapStore['c5']).toBe(soundMapStore['piano_c5']);
+  });
+
+  it('does not overwrite pre-existing bare names (e.g. triangle from synth registration)', async () => {
+    // Synth registration happens via superdough.registerSynthSounds() and
+    // populates soundMap with triangle/sawtooth/sine/etc. — verify that
+    // a subsequent bank load does not clobber them.
+    soundMapStore['triangle'] = { onTrigger: 'synth', data: { type: 'synth' } };
+    const { loadDrumSamples } = await loadSampleLoader();
+    await loadDrumSamples();
+    expect(soundMapStore['triangle']).toEqual({ onTrigger: 'synth', data: { type: 'synth' } });
   });
 });
