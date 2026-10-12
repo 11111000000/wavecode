@@ -53,9 +53,11 @@ describe('BUILTIN_PRESETS', () => {
     for (const id of expected) {
       const p = BUILTIN_PRESETS.find((p) => p.id === id);
       expect(p, `missing ${id}`).toBeDefined();
-      // Every synth-pack demo references the `synth:` bank (Strudel
-      // bank prefix). Verifies the bank wiring is in place.
-      expect(p?.score).toMatch(/s\("synth:/);
+      // Every synth-pack demo references the `synth_` bank prefix
+      // (Strudel mini-notation reserves `:` for sound:n split, so we
+      // use `_` as the bank separator; strudel.json keys follow the
+      // same convention).
+      expect(p?.score).toMatch(/s\("synth_/);
     }
   });
 
@@ -64,16 +66,16 @@ describe('BUILTIN_PRESETS', () => {
     const tomsFunk = BUILTIN_PRESETS.find((p) => p.id === 'toms-funk');
     expect(eightOhEightKing).toBeDefined();
     expect(tomsFunk).toBeDefined();
-    // Score strings use the `drums:` bank prefix (Strudel bank:sound syntax).
-    expect(eightOhEightKing?.score).toMatch(/s\("drums:bd/);
-    expect(eightOhEightKing?.score).toMatch(/s\("~? ?drums:sd/);
-    expect(eightOhEightKing?.score).toMatch(/s\("drums:hh/);
-    expect(eightOhEightKing?.score).toMatch(/s\([^)]*\bdrums:cp\b[^)]*\)/);
-    expect(tomsFunk?.score).toContain('drums:tom-l');
-    expect(tomsFunk?.score).toContain('drums:tom-m');
-    expect(tomsFunk?.score).toContain('drums:tom-h');
-    expect(tomsFunk?.score).toContain('drums:crash');
-    expect(tomsFunk?.score).toContain('drums:ride');
+    // Score strings use the `drums_` bank prefix.
+    expect(eightOhEightKing?.score).toMatch(/s\("drums_bd/);
+    expect(eightOhEightKing?.score).toMatch(/s\("~? ?drums_sd/);
+    expect(eightOhEightKing?.score).toMatch(/s\("drums_hh/);
+    expect(eightOhEightKing?.score).toMatch(/s\([^)]*\bdrums_cp\b[^)]*\)/);
+    expect(tomsFunk?.score).toContain('drums_tom-l');
+    expect(tomsFunk?.score).toContain('drums_tom-m');
+    expect(tomsFunk?.score).toContain('drums_tom-h');
+    expect(tomsFunk?.score).toContain('drums_crash');
+    expect(tomsFunk?.score).toContain('drums_ride');
   });
 
   it('every preset has balanced stack() with same-line closing or proper newlines', () => {
