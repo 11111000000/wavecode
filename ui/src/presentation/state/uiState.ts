@@ -109,7 +109,7 @@ export const toggleStatus = (): void => {
 // Bottom Sheet (mobile-first)
 // =========================================================================
 
-export type SheetKind = 'ai' | 'mixer' | 'step' | 'piano' | 'share' | 'record' | null;
+export type SheetKind = 'ai' | 'mixer' | 'step' | 'piano' | 'status' | 'share' | 'record' | null;
 export type SheetSnap = 'closed' | 'peek' | 'half' | 'full';
 export type TabId = 'score' | 'chat' | 'mixer' | 'status';
 
@@ -121,30 +121,62 @@ export const getActiveSheet = activeSheet;
 export const getSheetSnap = sheetSnap;
 export const getActiveTab = activeTab;
 
+/** Close every open sheet — used by "score" tab и для сброса глобального overlay. */
+export const closeAllSheets = (): void => {
+  setSnapsByKindRaw((m) => {
+    const next = { ...m };
+    for (const k of Object.keys(next) as NonNullable<SheetKind>[]) next[k] = 'closed';
+    return next;
+  });
+  setActiveSheetRaw(null);
+  setSheetSnap('closed');
+  if (typeof document !== 'undefined') {
+    document.body.setAttribute('data-sheet-open', 'false');
+  }
+};
+
+/** Синоним для обратной совместимости; делегирует в closeAllSheets. */
+export const closeSheet = closeAllSheets;
+
+/** Открыть sheet и одновременно синхронизировать snapsByKind для этого kind.
+ *  BottomSheet.tsx рендерится по getKindSnap(kind), а не по global activeSheet —
+ *  поэтому обязательно обновлять оба state при каждом открытии. */
 export const openSheet = (kind: NonNullable<SheetKind>, snap: SheetSnap = 'half'): void => {
+  setSnapsByKindRaw((m) => ({ ...m, [kind]: snap }));
   setActiveSheetRaw(kind);
   setSheetSnap(snap);
   if (typeof document !== 'undefined') {
     document.body.setAttribute('data-sheet-open', 'true');
   }
 };
-export const closeSheet = (): void => {
-  setSheetSnap('closed');
-  setActiveSheetRaw(null);
-  if (typeof document !== 'undefined') {
-    document.body.setAttribute('data-sheet-open', 'false');
+
+/** Изменить snap текущего активного sheet (используется BottomSheet при drag).
+ *  Синхронизирует snapsByKind — иначе после drag reopened sheet "забудет" snap. */
+export const snapTo = (snap: SheetSnap): void => {
+  const kind = activeSheet();
+  if (kind !== null) {
+    setSnapsByKindRaw((m) => ({ ...m, [kind]: snap }));
   }
+  setSheetSnap(snap);
 };
-export const snapTo = (snap: SheetSnap): void => { setSheetSnap(snap); };
 
 /** Snap per-kind — несколько sheet'ов могут быть открыты каждый со своим snap. */
 const [snapsByKind, setSnapsByKindRaw] = createSignal<Record<NonNullable<SheetKind>, SheetSnap>>({
-  ai: 'closed', mixer: 'closed', step: 'closed', piano: 'closed', share: 'closed', record: 'closed',
+  ai: 'closed', mixer: 'closed', step: 'closed', piano: 'closed', status: 'closed', share: 'closed', record: 'closed',
 });
 export const getSnapsByKind = snapsByKind;
 export const getKindSnap = (kind: NonNullable<SheetKind>): SheetSnap => snapsByKind()[kind];
+/** Single-active semantics: открыть sheet для kind и закрыть все остальные.
+ *  BottomSheet рендерится по getKindSnap для своего kind; если в этом state
+ *  одновременно "full" у двух sheets — оба оказываются на translateY(0),
+ *  и поверхний прячет нижний. close-on-switch предотвращает это. */
 export const openKindSheet = (kind: NonNullable<SheetKind>, snap: SheetSnap = 'half'): void => {
-  setSnapsByKindRaw((m) => ({ ...m, [kind]: snap }));
+  setSnapsByKindRaw((m) => {
+    const next = { ...m };
+    for (const k of Object.keys(next) as NonNullable<SheetKind>[]) next[k] = 'closed';
+    next[kind] = snap;
+    return next;
+  });
   setActiveSheetRaw(kind);
   setSheetSnap(snap);
   if (typeof document !== 'undefined') {
@@ -164,13 +196,14 @@ export const closeKindSheet = (kind: NonNullable<SheetKind>): void => {
 export const setTab = (tab: TabId): void => {
   setActiveTab(tab);
   if (tab === 'chat') {
-    openSheet('ai', 'half');
+    openKindSheet('ai', 'half');
   } else if (tab === 'mixer') {
-    openSheet('mixer', 'full');
+    openKindSheet('mixer', 'full');
   } else if (tab === 'status') {
-    openSheet('ai', 'full');
+    // Status — отдельный kind со своим BottomSheet, рендерит HelloPanel.
+    openKindSheet('status', 'full');
   } else if (tab === 'score') {
-    closeSheet();
+    closeAllSheets();
   }
 };
 

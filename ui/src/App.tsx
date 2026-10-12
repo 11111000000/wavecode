@@ -12,7 +12,7 @@ import {
   uiState, toggleAI, toggleStatus, installKeyboardShortcuts,
   getMobileMode, setMobileMode,
   type MobileMode,
-  openSheet, closeSheet, openKindSheet, closeKindSheet, setTab, getActiveTab,
+  openKindSheet, closeKindSheet, setTab, getActiveTab,
 } from './presentation/state/uiState';
 import { appStore, dispatch } from './presentation/state/appStore';
 import { installTypingTracker } from './presentation/state/editorTypingTracker';
@@ -492,6 +492,11 @@ export function App(): JSX.Element {
         ariaLabel={audioRunning() ? 'Стоп' : 'Запуск'}
       />
 
+      {/* ─── Status bottom-sheet (mobile) ─── */}
+      <BottomSheet kind="status" title="Состояние" subtitle="run-time telemetry">
+        <HelloPanel />
+      </BottomSheet>
+
       {/* ─── AI bottom-sheet ─── */}
       <BottomSheet kind="ai" title="ИИ-ассистент" subtitle="live-coding chat">
         <AIEditPanel />
@@ -502,23 +507,19 @@ export function App(): JSX.Element {
         <MixerPanel />
       </BottomSheet>
 
-      {/* ─── Step bottom-sheet ─── */}
-      <Show when={showStepGrid()}>
-        <BottomSheet kind="step" title="Step grid" subtitle="4×8 pads">
-          <div style={{"padding":"var(--space-md) var(--space-lg)"}}>
-            <StepGrid />
-          </div>
-        </BottomSheet>
-      </Show>
+      {/* ─── Step bottom-sheet — visibility = getKindSnap('step') ─── */}
+      <BottomSheet kind="step" title="Step grid" subtitle="4×8 pads">
+        <div style={{"padding":"var(--space-md) var(--space-lg)"}}>
+          <StepGrid />
+        </div>
+      </BottomSheet>
 
-      {/* ─── Piano bottom-sheet ─── */}
-      <Show when={showPiano()}>
-        <BottomSheet kind="piano" title="Piano" subtitle="WebMIDI auto-bind">
-          <div style={{"padding":"var(--space-md) 0"}}>
-            <PianoKeyboard />
-          </div>
-        </BottomSheet>
-      </Show>
+      {/* ─── Piano bottom-sheet — visibility = getKindSnap('piano') ─── */}
+      <BottomSheet kind="piano" title="Piano" subtitle="WebMIDI auto-bind">
+        <div style={{"padding":"var(--space-md) 0"}}>
+          <PianoKeyboard />
+        </div>
+      </BottomSheet>
 
       {/* ─── Bottom TabBar (mobile-first) ─── */}
       <TabBar />

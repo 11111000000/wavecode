@@ -29,7 +29,7 @@
   position: fixed;
   left: 0;
   right: 0;
-  bottom: 0;
+  bottom: calc(var(--tabbar-h) + var(--safe-bottom));
   width: 100%;
   max-width: 100vw;
   z-index: calc(var(--z-sheet) + 1);
@@ -39,7 +39,7 @@
   box-shadow: var(--shadow-overlay);
   display: flex;
   flex-direction: column;
-  max-height: 92vh;
+  max-height: calc(100vh - var(--tabbar-h) - var(--safe-bottom) - var(--safe-top) - var(--header-h));
   min-height: 56px;
   touch-action: none;
   transform: translateY(100%);
