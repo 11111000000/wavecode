@@ -217,7 +217,7 @@ export const BUILTIN_PRESETS: ReadonlyArray<Preset> = [
       '  // Hi-hat with random gating (Euclidean-like)',
       '  s("drums_hh*8").euclid(5, 8).decay(.03).gain(0.20),',
       '  // Bit-reduced noise percussion',
-      '  s("white*8").bitcrush(4, 8000).decay(.05).gain(0.10),',
+      '  s("white*8").crush(4, 8000).decay(.05).gain(0.10),',
       '  // Detuned sine melody — irregular rhythm',
       '  n("~ c5 ~ ~ eb5 ~ ~ g4 ~ ~ ~ c5 ~").s("sine").detune(15).gain(0.10).room(.4)',
       ')',
