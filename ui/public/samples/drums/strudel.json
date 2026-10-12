@@ -1,45 +1,45 @@
 {
   "_base": "/samples/drums/",
-  "drums/bd": [
+  "drums_bd": [
     "bd.mp3"
   ],
-  "drums/bd-sub": [
+  "drums_bd-sub": [
     "bd-sub.mp3"
   ],
-  "drums/sd": [
+  "drums_sd": [
     "sd.mp3"
   ],
-  "drums/rim": [
+  "drums_rim": [
     "rim.mp3"
   ],
-  "drums/hh": [
+  "drums_hh": [
     "hh.mp3"
   ],
-  "drums/oh": [
+  "drums_oh": [
     "oh.mp3"
   ],
-  "drums/cp": [
+  "drums_cp": [
     "cp.mp3"
   ],
-  "drums/cb": [
+  "drums_cb": [
     "cb.mp3"
   ],
-  "drums/sh": [
+  "drums_sh": [
     "sh.mp3"
   ],
-  "drums/tom-l": [
+  "drums_tom-l": [
     "tom-l.mp3"
   ],
-  "drums/tom-m": [
+  "drums_tom-m": [
     "tom-m.mp3"
   ],
-  "drums/tom-h": [
+  "drums_tom-h": [
     "tom-h.mp3"
   ],
-  "drums/crash": [
+  "drums_crash": [
     "crash.mp3"
   ],
-  "drums/ride": [
+  "drums_ride": [
     "ride.mp3"
   ]
 }

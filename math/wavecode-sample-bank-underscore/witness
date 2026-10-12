@@ -1,0 +1,34 @@
+- sha: pending
+  date: 2026-10-12
+  kind: fix
+  files:
+    - ui/src/infrastructure/audio/SampleLoader.ts
+    - ui/src/infrastructure/audio/SampleLoader.test.ts
+    - ui/src/infrastructure/audio/PianoSampleLoader.test.ts
+    - ui/src/infrastructure/audio/strudel.d.ts
+    - ui/public/samples/drums/strudel.json
+    - ui/public/samples/drums/cb.mp3
+    - ui/public/samples/drums/LICENSE.txt
+    - ui/public/samples/piano/strudel.json
+    - ui/public/samples/synth/strudel.json
+    - math/wavecode-sample-bank-underscore/packet.md
+  notes: |
+    Three-bug unified fix for "samples don't play":
+    1. SampleLoader now imports `samples` from @strudel/webaudio
+       (static import — same module instance as webaudioRepl).
+       Previous version relied on globalThis.samples which was
+       never set (evalScope was called without webaudio).
+    2. strudel.json keys renamed `bank/name` → `bank_name` to match
+       Strudel's `${bank}_${s}` soundMap lookup convention
+       (see superdough/superdough.mjs:538-539).
+    3. cb.mp3 replaced: original was a silent Freesound download
+       (max_volume -39.0 dB, 100% silence per silencedetect).
+       New file is a synthesized CC0 540+800Hz sine pair, 500ms,
+       24kHz mono, 64kbps. mean -15.7 dB, max -5.1 dB.
+
+    Tests: SampleLoader.test.ts expanded to 25 tests
+    (was 22), PianoSampleLoader.test.ts simplified to 1 back-compat
+    test. New coverage: strudel.json key shape, silent-download
+    guard on cb.mp3, in-flight coalescing, per-bank failure
+    isolation. Full suite 251/251 pass. typecheck clean. vite build
+    + PWA precache OK (19 entries, 1421 KiB).
