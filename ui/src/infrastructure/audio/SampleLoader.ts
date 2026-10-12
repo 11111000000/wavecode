@@ -34,13 +34,23 @@
  * If multiple keys would produce the same alias, the alias is created
  * only once (first wins) to avoid overwriting.
  *
+ * Eager preload: after `samples()` registers the banks, we eagerly
+ * fetch and decode every sample URL via `loadBuffer()`. This populates
+ * superdough's internal `tt[url]` cache so the FIRST haps (which would
+ * lose their audio context race against the decoder) hit a warm cache.
+ * Without this, presets with fast sequences (`s("bd sd hh bd sd hh")`)
+ * drop the first 1-2 haps with the warning:
+ *   "[sampler] loading sound 'bd:0' took too long"
+ * See: superdough/dist/index.mjs:989 — early-return skips playback when
+ * `audioContext.currentTime > scheduled start`.
+ *
  * Samples bundled in `public/samples/` (Vite copies to dist/).
  *   - piano/ — Salamander Grand Piano v3 (CC0, 10 MP3s)
  *   - drums/ — 14 808-style one-shots (CC0, Freesound previews)
  *   - synth/ — 12 analog-synth notes (CC0, Freesound previews)
  */
 
-import { samples, soundMap } from '@strudel/webaudio';
+import { samples, soundMap, loadBuffer, getAudioContext } from '@strudel/webaudio';
 
 type BankState = { status: 'idle' | 'loading' | 'loaded' | 'failed'; inflight: Promise<void> | null };
 
@@ -74,6 +84,49 @@ const addBareAliases = (): number => {
   return Object.keys(updates).length;
 };
 
+/**
+ * Collect every sample URL registered by `samples()` and eagerly
+ * fetch+decode via `loadBuffer()`. Populates superdough's internal
+ * `tt[url]` promise cache so subsequent haps hit it immediately.
+ *
+ * Without this, the very first haps of a preset drop with
+ *   "[sampler] loading sound 'bd:0' took too long"
+ * because `fetch().arrayBuffer().decodeAudioData()` takes 80–160 ms and
+ * the audio context time advances past the scheduled start.
+ */
+const preloadAllBuffers = async (): Promise<void> => {
+  const dict = soundMap.get() as SoundMapSnapshot;
+  // Touch the audio context so `getAudioContext()` returns a live ctx that
+  // can decode. If the user hasn't interacted yet, `getAudioContext()`
+  // returns a suspended ctx — `decodeAudioData` still works on it.
+  // `unlockAudioContext()` is invoked later by LiveAudioEngine.eval() once
+  // the user clicks Play.
+  const ac = getAudioContext();
+  const promises: Promise<unknown>[] = [];
+  for (const [key, entry] of Object.entries(dict)) {
+    const data = entry.data as { type?: string; samples?: unknown };
+    if (data.type !== 'sample' || !data.samples) continue;
+    const samples = data.samples;
+    if (Array.isArray(samples)) {
+      for (const url of samples) {
+        if (typeof url === 'string') promises.push(loadBuffer(url, ac, key));
+      }
+    } else if (typeof samples === 'object' && samples !== null) {
+      for (const urlList of Object.values(samples as Record<string, unknown>)) {
+        if (Array.isArray(urlList)) {
+          for (const url of urlList) {
+            if (typeof url === 'string') promises.push(loadBuffer(url, ac, key));
+          }
+        }
+      }
+    }
+  }
+  // Don't block the registration promise — preload in parallel.
+  // Failures are non-fatal (browser may already have the file under
+  // HTTP cache; subsequent requests retry naturally).
+  void Promise.allSettled(promises);
+};
+
 const registerBank = (manifestUrl: string, state: BankState): Promise<void> => {
   if (state.status === 'loaded') return Promise.resolve();
   if (state.inflight) return state.inflight;
@@ -82,6 +135,7 @@ const registerBank = (manifestUrl: string, state: BankState): Promise<void> => {
     try {
       await samples(manifestUrl);
       addBareAliases();
+      preloadAllBuffers();
       state.status = 'loaded';
     } catch (err) {
       state.status = 'failed';

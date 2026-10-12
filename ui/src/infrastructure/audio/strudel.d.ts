@@ -83,4 +83,14 @@ declare module '@strudel/webaudio' {
     get(): Record<string, { onTrigger: unknown; data: unknown }>;
     set(value: Record<string, { onTrigger: unknown; data: unknown }>): void;
   };
+  // Eager preload: populate superdough's internal `tt[url]` cache
+  // with the AudioBuffer promise so the first haps don't lose the
+  // audio-context-race against the decoder. Used by SampleLoader.
+  export function loadBuffer(
+    url: string,
+    audioContext: AudioContext,
+    label?: string,
+    index?: number,
+  ): Promise<AudioBuffer>;
+  export function getAudioContext(): AudioContext;
 }
