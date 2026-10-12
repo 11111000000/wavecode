@@ -1098,3 +1098,34 @@ button:not([disabled]):not(.no-shrink):active {
   0%, 100% { opacity: 0.4; }
   50%      { opacity: 1;   }
 }
+
+/* =========================================================================
+ *  AI-PRIMARY LAYOUT (desktop ≥1024px)
+ *  Когда .app-body[data-layout='ai-primary'] — AI-чат доминирует по
+ *  площади (≥60% ширины, ≥320px min-height), партитура уходит в
+ *  360px collapsed drawer справа со своим scroll.
+ *  Row-direction нужен чтобы drawer был СПРАВА, а не сверху (column
+ *  flex оставил бы AI над Score).
+ *  На mobile (≤1023px) data-layout атрибут всё равно есть, но
+ *  media-блок не применяется → дефолтная column-геометрия из
+ *  legacy.css остаётся (AI bottom-sheet по табу).
+ * ========================================================================= */
+
+@media (min-width: 1024px) {
+  .app-body[data-layout='ai-primary'] {
+    flex-direction: row;
+  }
+  .app-body[data-layout='ai-primary'] .ai-panel {
+    flex: 1 1 60%;
+    min-width: 0;
+    min-height: 320px;
+    max-height: none;
+    border-right: 1px solid var(--border);
+  }
+  .app-body[data-layout='ai-primary'] .score-panel {
+    flex: 0 0 360px;
+    overflow-y: auto;
+    max-width: 360px;
+    min-width: 0;
+  }
+}
