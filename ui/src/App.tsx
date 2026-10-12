@@ -13,6 +13,7 @@ import {
   getMobileMode, setMobileMode,
   type MobileMode,
   openKindSheet, closeKindSheet, setTab, getActiveTab,
+  getSampleStatus, setSampleStatus, setSampleProgress,
 } from './presentation/state/uiState';
 import { appStore, dispatch } from './presentation/state/appStore';
 import { installTypingTracker } from './presentation/state/editorTypingTracker';
@@ -105,9 +106,15 @@ export function App(): JSX.Element {
     // + analog synth) with Strudel — lazy, idempotent (no-op on second
     // call within a session). The aggregator in SampleLoader.ts handles
     // all three banks; the legacy PianoSampleLoader shim is kept for
-    // back-compat.
+    // back-compat. Progress callback drives `sampleStatus` signal →
+    // TopBar .audio-loading-pill.
+    setSampleStatus('loading');
+    setSampleProgress(0, 3);
     void import('./infrastructure/audio/SampleLoader').then((m) =>
-      m.loadAllSamples(),
+      m.loadAllSamples((loaded, total) => {
+        setSampleProgress(loaded, total);
+        if (loaded >= total) setSampleStatus('ready');
+      }),
     );
 
     void Effect.runPromise(
@@ -280,6 +287,11 @@ export function App(): JSX.Element {
       <header class="wc-topbar">
         <BrandLogo size={22} />
         <h1 class="wc-topbar__title">wavecode</h1>
+        <Show when={getSampleStatus() === 'loading'}>
+          <span class="audio-loading-pill" title="Sample banks loading…">
+            ♪ samples
+          </span>
+        </Show>
         <span class="wc-topbar__led" data-tone={audioRunning() ? 'running' : 'idle'}>
           <span class="wc-led" data-tone={audioRunning() ? 'running' : 'idle'}>
             {audioRunning() ? `▶ ${ctxState().state}` : `● ${ctxState().state}`}

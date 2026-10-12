@@ -953,10 +953,22 @@ textarea.wc-input {
   scrollbar-width: thin;
 }
 .piano-keys-inner {
+  --white-w: 80px;
+  --black-w: 50px;
+  --piano-h: 220px;
   position: relative;
   margin: 0 auto;
   display: flex;            /* white keys = flex children */
   flex-direction: row;
+  width: calc(var(--white-w) * 14);  /* 2 octaves × 7 white keys */
+  height: var(--piano-h);
+}
+@media (max-width: 720px) {
+  .piano-keys-inner {
+    --white-w: 50px;
+    --black-w: 32px;
+    --piano-h: 180px;
+  }
 }
 
 .piano-key {
@@ -981,6 +993,8 @@ textarea.wc-input {
   color: var(--fg-ghost);
   flex: 0 0 auto;
   z-index: 1;
+  width: var(--white-w);
+  height: var(--piano-h);
 }
 .piano-key.black {
   background: linear-gradient(180deg, #1a1a22, #0a0a0e);
@@ -988,6 +1002,8 @@ textarea.wc-input {
   position: absolute;
   top: 0;
   z-index: 2;
+  width: var(--black-w);
+  height: calc(var(--piano-h) * 0.62);
   border-radius: 0 0 var(--radius-sm) var(--radius-sm);
 }
 .piano-key:hover { border-color: var(--amber); }
@@ -1019,4 +1035,31 @@ textarea.wc-input {
   background: var(--surface-1);
   border-top: 1px solid var(--border);
   padding-bottom: var(--safe-bottom);
+}
+
+/* =========================================================================
+ *  AUDIO LOADING PILL — sample-bank preload progress indicator.
+ *  Показывается в TopBar пока registerBank() не завершил все три банка
+ *  (piano / drums / synth). CSS-only pulse, не зависит от JS animation.
+ * ========================================================================= */
+
+.audio-loading-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2xs);
+  padding: 2px var(--space-xs);
+  background: var(--amber-soft);
+  color: var(--amber);
+  border: 1px solid var(--amber);
+  border-radius: var(--radius-pill);
+  font-family: var(--font-mono);
+  font-size: var(--fs-2xs);
+  font-weight: var(--fw-semibold);
+  letter-spacing: var(--ls-wide);
+  text-transform: lowercase;
+  animation: audio-loading-pulse 1.5s ease-in-out infinite;
+}
+@keyframes audio-loading-pulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.55; }
 }

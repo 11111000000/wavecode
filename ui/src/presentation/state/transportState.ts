@@ -78,11 +78,14 @@ export const setSwingDivisorLocal = (divisor: string): void => {
   dispatch({ type: 'setSwingDivisor', divisor });
 };
 
-createRoot(() => {
+createRoot((d) => {
   createEffect(() => {
     const t = appStore.transportState;
     if (t.cps !== untrack(cps)) setCpsSignal(t.cps);
     if (t.swingAmount !== untrack(swingAmount)) setSwingAmountSignal(t.swingAmount);
     if (t.swingDivisor !== untrack(swingDivisor)) setSwingDivisorSignal(t.swingDivisor);
   });
+  if (import.meta.hot) {
+    import.meta.hot.dispose(() => d());
+  }
 });

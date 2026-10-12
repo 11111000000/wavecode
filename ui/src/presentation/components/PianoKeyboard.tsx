@@ -14,15 +14,16 @@ import {
 import { evalScore } from '../state/audioActions';
 import { singleNoteSnippet } from '~/domain/music/notes';
 
-const PIANO_WHITE_W = 80;
-const PIANO_BLACK_W = 50;
-const PIANO_HEIGHT_DESKTOP = 220;
-const PIANO_HEIGHT_MOBILE = 180;
-
 /**
  * On-screen 2-octave piano (C3..B4). Tap to play. WebMIDI input
  * auto-binds when available (Chrome/Edge/Firefox desktop + Android).
  * iOS Safari: only on-screen.
+ *
+ * Sizing (width / height) is fully CSS-driven (see .piano-keys-inner in
+ * components.css with `--white-w` / `--black-w` / `--piano-h`). The only
+ * dynamic inline value is the `left` of each black key, expressed via
+ * `calc(var(--white-w) * <n> - var(--black-w) / 2)` so the @media query
+ * override updates the layout without re-rendering.
  */
 export function PianoKeyboard() {
   const [activeNotes, setActiveNotes] = createSignal<ReadonlySet<number>>(new Set());
@@ -71,19 +72,6 @@ export function PianoKeyboard() {
     });
   });
 
-  // CSS: responsive key sizes via @media (set in index.css).
-  // Here we use viewport detection for inline-style to keep logic in one file.
-  const [isMobile, setIsMobile] = createSignal(
-    typeof window !== 'undefined' && window.innerWidth <= 720,
-  );
-  const keyHeight = (): number => (isMobile() ? PIANO_HEIGHT_MOBILE : PIANO_HEIGHT_DESKTOP);
-
-  onMount(() => {
-    const onResize = () => { setIsMobile(window.innerWidth <= 720); };
-    window.addEventListener('resize', onResize);
-    onCleanup(() => window.removeEventListener('resize', onResize));
-  });
-
   return (
     <div class="piano-wrap" role="group" aria-label="Piano keyboard C3 to B4">
       <div class="piano-toolbar">
@@ -96,24 +84,8 @@ export function PianoKeyboard() {
           </span>
         </Show>
       </div>
-      <div
-        class="piano-keys"
-        style={{
-          height: `${keyHeight()}px`,
-          'min-width': '100%',
-          'max-width': '100%',
-          'overflow-x': 'auto',
-          position: 'relative',
-        }}
-      >
-        <div
-          class="piano-keys-inner"
-          style={{
-            width: `${whiteNotes.length * (isMobile() ? 50 : PIANO_WHITE_W)}px`,
-            height: `${keyHeight()}px`,
-            position: 'relative',
-          }}
-        >
+      <div class="piano-keys">
+        <div class="piano-keys-inner">
           <For each={whiteNotes}>
             {(midi) => {
               const active = (): boolean => activeNotes().has(midi);
@@ -121,10 +93,6 @@ export function PianoKeyboard() {
                 <button
                   type="button"
                   class={`piano-key white${active() ? ' active' : ''}`}
-                  style={{
-                    width: `${isMobile() ? 50 : PIANO_WHITE_W}px`,
-                    height: `${keyHeight()}px`,
-                  }}
                   aria-label={noteNumberToName(midi) as NoteName}
                   aria-pressed={active()}
                   onPointerDown={(e) => {
@@ -141,25 +109,23 @@ export function PianoKeyboard() {
               );
             }}
           </For>
-          {/* Black keys overlaid absolute */}
+          {/* Black keys overlaid absolute. `left` is the only dynamic
+           *  inline value — expressed as calc() with CSS variables so
+           *  the @media (max-width: 720px) override updates the layout
+           *  without re-rendering or re-reading computed styles. */}
           <For each={notes}>
             {(midi) => {
               if (!isBlackKey(midi)) return null;
               const wIdx = whiteIndex(midi - 1);
               if (wIdx < 0) return null;
-              const wW = isMobile() ? 50 : PIANO_WHITE_W;
-              const bW = isMobile() ? 32 : PIANO_BLACK_W;
-              const left = (wIdx + 1) * wW - bW / 2;
+              const boundary = wIdx + 1;
+              const left = `calc((var(--white-w) * ${boundary}) - (var(--black-w) / 2))`;
               const active = (): boolean => activeNotes().has(midi);
               return (
                 <button
                   type="button"
                   class={`piano-key black${active() ? ' active' : ''}`}
-                  style={{
-                    width: `${bW}px`,
-                    height: `${keyHeight() * 0.62}px`,
-                    left: `${left}px`,
-                  }}
+                  style={{ left }}
                   aria-label={noteNumberToName(midi) as NoteName}
                   aria-pressed={active()}
                   onPointerDown={(e) => {
