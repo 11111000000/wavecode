@@ -1004,3 +1004,19 @@ textarea.wc-input {
   pointer-events: none;
   letter-spacing: 0;
 }
+
+/* =========================================================================
+ *  MINI-NOTATION TOOLBAR — visibility (fix: not position: sticky).
+ *  Отдельный блок в components.css, чтобы legacy.css (импортируется ПОСЛЕ
+ *  components.css) не мог перебить эти свойства без повышения специфичности.
+ *  Layout-контракт: родитель — flex-column; toolbar в самом низу через
+ *  margin-top: auto; flex-shrink: 0 защищает от сжатия.
+ * ========================================================================= */
+
+.mini-toolbar {
+  flex-shrink: 0;
+  margin-top: auto;
+  background: var(--surface-1);
+  border-top: 1px solid var(--border);
+  padding-bottom: var(--safe-bottom);
+}

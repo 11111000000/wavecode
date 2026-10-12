@@ -26,7 +26,7 @@ export const SNIPPETS: ReadonlyArray<Snippet> = [
 ];
 
 type Props = {
-  readonly editor?: CodeMirrorEditorApi | undefined;
+  readonly editor?: (() => CodeMirrorEditorApi | undefined) | undefined;
 };
 
 const VISUAL_VIEWPORT_VAR = '--visual-viewport-height';
@@ -59,7 +59,7 @@ export function MiniNotationToolbar(props: Props) {
   const [vkbOpen, setVkbOpen] = createSignal(false);
 
   function insertSnippet(snippet: string): void {
-    const view = props.editor?.getView();
+    const view = props.editor?.()?.getView();
     if (!view) return;
     dispatchInsertSnippet(view, snippet);
     view.focus();

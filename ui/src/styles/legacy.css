@@ -1247,14 +1247,14 @@ textarea.ai-textarea:focus-visible {
   padding-bottom: 4px;
   transition: all var(--dur-xs) var(--ease);
 }
-.piano-key.white {
+.piano-keyboard .piano-key.white {
   background: var(--surface-2);
   color: var(--fg-ghost);
   height: 96px;
   flex: 1 1 0;
   border-color: var(--border-strong);
 }
-.piano-key.black {
+.piano-keyboard .piano-key.black {
   background: var(--surface-3);
   color: var(--amber);
   height: 64px;
@@ -1263,7 +1263,7 @@ textarea.ai-textarea:focus-visible {
   z-index: 1;
   margin: 0 -11px;
 }
-.piano-key.active {
+.piano-keyboard .piano-key.active {
   background: var(--amber);
   color: var(--fg-inverse);
   box-shadow: var(--shadow-glow-amber);
