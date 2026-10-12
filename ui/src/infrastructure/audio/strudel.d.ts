@@ -77,4 +77,10 @@ declare module '@strudel/webaudio' {
     options?: Record<string, unknown>,
   ): Promise<void>;
   export async function fetchSampleMap(url: string): Promise<[Record<string, unknown>, string] | undefined>;
+  // nanostores map. .get() returns the current snapshot; .set(...)
+  // publishes a new snapshot (mutating in place is no-op).
+  export const soundMap: {
+    get(): Record<string, { onTrigger: unknown; data: unknown }>;
+    set(value: Record<string, { onTrigger: unknown; data: unknown }>): void;
+  };
 }

@@ -49,7 +49,7 @@ export const BUILTIN_PRESETS: ReadonlyArray<Preset> = [
       '  // Arpeggio: 8th notes',
       '  n("<55 67 59 67 62 67 59 67>*2").s("sawtooth").gain(0.12).lpf(1500),',
       '  // Kick on 1 and 3',
-      '  s("sbd ~ sbd ~").gain(0.5),',
+      '  s("drums:bd ~ drums:bd ~").gain(0.5),',
       '  // Snare backbeat (2 and 4)',
       '  s("~ white ~ white").decay(.05).sustain(0).gain(0.22),',
       '  // 8th-note hihat',
@@ -114,7 +114,7 @@ export const BUILTIN_PRESETS: ReadonlyArray<Preset> = [
       '  // Brushed snare — soft ghost notes',
       '  s("~ ~ sd ~ ~ ~ sd ~").decay(.15).sustain(0.1).gain(0.18),',
       '  // Ride cymbal — light 8ths',
-      '  s("rd*8").decay(.3).sustain(0.05).gain(0.12).hpf(5000),',
+      '  s("drums:ride*8").decay(.3).sustain(0.05).gain(0.12).hpf(5000),',
       '  // Sparse piano lead — C-E-G arpeggio',
       '  n("c5 e5 g5 e5 c5 e5 g5 e5").s("triangle").gain(0.10).room(.4)',
       ')',
@@ -263,6 +263,9 @@ export const BUILTIN_PRESETS: ReadonlyArray<Preset> = [
   {
     // Piano ballad — Salamander Grand Piano v3 (CC0) + simple chord progression.
     // Piano bank auto-registered on first eval (lazy load).
+    // Uses `piano_a4` for the right hand (range f4..d5, all within ±4 semitones
+    // of A4) and `piano_c4` for the left hand (range f3..d4, all within ±5
+    // semitones of C4). Strudel pitch-shifts the sample to each target note.
     id: 'piano-ballad',
     name: 'Piano ballad',
     artist: 'Salamander',
@@ -270,13 +273,13 @@ export const BUILTIN_PRESETS: ReadonlyArray<Preset> = [
       '// Piano ballad — Salamander Grand Piano v3 (CC0) + vi-IV-I-V',
       'stack(',
       '  // Right hand — 8th-note arpeggio в стиле Billy Joel',
-      '  n("a4 c5 e5 c5 f4 a4 c5 e5 g4 b4 d5 b4 c5 e5 g4 c5 e5").s("piano").gain(0.5).room(.4),',
+      '  n("a4 c5 e5 c5 f4 a4 c5 e5 g4 b4 d5 b4 c5 e5 g4 c5 e5").s("piano_a4").gain(0.5).room(.4),',
       '  // Left hand — vi-IV-I-V chord roots',
-      '  note("<f3 [a3,c4] g3 [b3,d4] a3 [c4,e4] e3 [g3,b3] f3 [a3,c4] g3 [b3,d4] a3 [c4,e4] e3 [g3,b3]>").s("piano").gain(0.4).room(.3),',
+      '  note("<f3 [a3,c4] g3 [b3,d4] a3 [c4,e4] e3 [g3,b3] f3 [a3,c4] g3 [b3,d4] a3 [c4,e4] e3 [g3,b3]>").s("piano_c4").gain(0.4).room(.3),',
       '  // Soft kick on 1 и 3',
-      '  s("bd ~ ~ bd ~ ~ ~ ~").decay(.15).gain(0.18),',
+      '  s("drums:bd ~ ~ drums:bd ~ ~ ~ ~").decay(.15).gain(0.18),',
       '  // Brush snare — light off-beat',
-      '  s("~ ~ sd ~ ~ ~ sd ~").decay(.20).sustain(0.05).gain(0.15)',
+      '  s("~ ~ drums:sd ~ ~ ~ drums:sd ~").decay(.20).sustain(0.05).gain(0.15)',
       ')',
     ].join('\n'),
   },
