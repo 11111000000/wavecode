@@ -17,6 +17,12 @@ declare module 'superdough' {
   export function registerSynthSounds(): void;
   export async function initAudio(options?: Record<string, unknown>): Promise<void>;
   export async function initAudioOnFirstClick(options?: Record<string, unknown>): Promise<void>;
+  export async function samples(
+    sampleMap: string | Record<string, unknown>,
+    baseUrl?: string,
+    options?: Record<string, unknown>,
+  ): Promise<void>;
+  export async function fetchSampleMap(url: string): Promise<[Record<string, unknown>, string] | undefined>;
 }
 
 declare module 'superdough/superdoughoutput.mjs' {
@@ -63,4 +69,12 @@ declare module '@strudel/webaudio' {
     scheduler: unknown;
     state: unknown;
   };
+
+  // Re-exported from superdough via `export * from "superdough"`.
+  export async function samples(
+    sampleMap: string | Record<string, unknown>,
+    baseUrl?: string,
+    options?: Record<string, unknown>,
+  ): Promise<void>;
+  export async function fetchSampleMap(url: string): Promise<[Record<string, unknown>, string] | undefined>;
 }

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { readFileSync, existsSync, statSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 
@@ -43,7 +43,6 @@ describe('drum sample pack — file inventory', () => {
     for (const f of DRUMS_EXPECTED_FILES) {
       if (f === 'LICENSE.txt') continue;
       const buf = readFileSync(resolve(DRUMS_DIR, f));
-      // MPEG audio frame sync: first 11 bits all 1 → first byte 0xFF, second byte 0xE0+ (binary 111xxxxx).
       expect(buf[0], `${f} first byte is 0x${buf[0]?.toString(16)}`).toBe(0xff);
       expect(buf[1]! & 0xe0, `${f} second byte is 0x${buf[1]?.toString(16)}`).toBe(0xe0);
     }
@@ -57,12 +56,28 @@ describe('drum sample pack — file inventory', () => {
 
   it('LICENSE.txt contains attribution for all 14 samples', () => {
     const license = readFileSync(resolve(DRUMS_DIR, 'LICENSE.txt'), 'utf8');
-    // 14 drum files => 14 attribution lines (one per file).
     for (const f of DRUMS_EXPECTED_FILES) {
       if (f === 'LICENSE.txt') continue;
-      // LICENSE lists each by base name (no extension), e.g. "bd.mp3"
       expect(license, `LICENSE missing ${f}`).toContain(f);
     }
+  });
+
+  it('cb.mp3 is audibly non-empty (silent downloads would defeat the bank)', () => {
+    // Guard against a regression where the Freesound preview URL for cb
+    // returns empty/silent bytes — see math/wavecode-sample-bank-underscore
+    // for the original incident (max_volume -39dB → silent).
+    const buf = readFileSync(resolve(DRUMS_DIR, 'cb.mp3'));
+    // Compute a coarse RMS over the decoded MP3 file. Cheap proxy:
+    // bytes that are mostly non-zero indicate real audio. We require
+    // at least 30% of bytes to be > 0 (silent downloads have all-zero
+    // payload after the MPEG header).
+    let nonZero = 0;
+    for (let i = 32; i < buf.length; i++) {
+      if (buf[i] !== 0) nonZero++;
+    }
+    const ratio = nonZero / Math.max(1, buf.length - 32);
+    expect(ratio, `cb.mp3 has ${(ratio * 100).toFixed(1)}% non-zero bytes (silent?)`)
+      .toBeGreaterThan(0.3);
   });
 });
 
@@ -115,116 +130,177 @@ describe('synth sample pack — file inventory (CC0 analog bass + pad + lead + b
   });
 });
 
-describe('SampleLoader (uses globalThis.samples from Strudel evalScope)', () => {
-  let originalSamples: unknown;
+describe('strudel.json manifests — keys use bank_sound (underscore) for bank:sound pattern', () => {
+  const PIANO_KEYS = ['piano_a1', 'piano_a2', 'piano_a3', 'piano_a4',
+    'piano_c2', 'piano_c3', 'piano_c4', 'piano_c5', 'piano_c6', 'piano_c7'];
+  const DRUMS_KEYS = ['drums_bd', 'drums_bd-sub', 'drums_sd', 'drums_rim',
+    'drums_hh', 'drums_oh', 'drums_cp', 'drums_cb', 'drums_sh',
+    'drums_tom-l', 'drums_tom-m', 'drums_tom-h',
+    'drums_crash', 'drums_ride'];
+  const SYNTH_KEYS = ['synth_bass-c1', 'synth_bass-c2', 'synth_bass-e1', 'synth_bass-a1',
+    'synth_pad-c3', 'synth_pad-e3', 'synth_pad-g3', 'synth_pad-a3',
+    'synth_lead-e4', 'synth_lead-g4',
+    'synth_strings-c4', 'synth_brass-c3'];
+
+  const readKeys = (dir: string): Set<string> => {
+    const json = JSON.parse(readFileSync(resolve(__dirname, `../../../public/samples/${dir}/strudel.json`), 'utf8'));
+    return new Set(Object.keys(json).filter((k) => k !== '_base'));
+  };
+
+  it('piano manifest keys are piano_<note> (underscore, not slash)', () => {
+    const keys = readKeys('piano');
+    for (const k of PIANO_KEYS) {
+      expect(keys.has(k), `piano manifest missing key ${k}`).toBe(true);
+    }
+    expect(keys.has('piano/a1'), 'piano manifest still has slash key — Strudel soundMap lookup uses underscore').toBe(false);
+  });
+
+  it('drums manifest keys are drums_<name> (underscore, not slash)', () => {
+    const keys = readKeys('drums');
+    for (const k of DRUMS_KEYS) {
+      expect(keys.has(k), `drums manifest missing key ${k}`).toBe(true);
+    }
+    expect(keys.has('drums/bd'), 'drums manifest still has slash key').toBe(false);
+  });
+
+  it('synth manifest keys are synth_<name> (underscore, not slash)', () => {
+    const keys = readKeys('synth');
+    for (const k of SYNTH_KEYS) {
+      expect(keys.has(k), `synth manifest missing key ${k}`).toBe(true);
+    }
+    expect(keys.has('synth/bass-c1'), 'synth manifest still has slash key').toBe(false);
+  });
+});
+
+/**
+ * Strudel API contract — `samples()` is re-exported from @strudel/webaudio
+ * (which does `export * from "superdough"`). It fetches a strudel.json
+ * manifest and writes entries into the shared soundMap. We import via
+ * static import so the module instance matches the one webaudioRepl uses
+ * (separate `import('superdough')` at runtime would yield a fresh module
+ * + fresh soundMap, and registered samples would be invisible to the
+ * scheduler).
+ */
+describe('SampleLoader — Strudel API contract (samples, static import)', () => {
+  let samplesMock: ReturnType<typeof vi.fn>;
 
   beforeEach(async () => {
     vi.resetModules();
-    originalSamples = (globalThis as Record<string, unknown>).samples;
-    (globalThis as Record<string, unknown>).samples = vi.fn();
+    samplesMock = vi.fn().mockResolvedValue(undefined);
+    vi.doMock('@strudel/webaudio', () => ({ samples: samplesMock }));
   });
 
-  afterEach(() => {
-    if (originalSamples === undefined) {
-      delete (globalThis as Record<string, unknown>).samples;
-    } else {
-      (globalThis as Record<string, unknown>).samples = originalSamples;
-    }
+  const loadSampleLoader = async () => {
+    const mod = await import('./SampleLoader');
+    return {
+      loadPianoSamples: mod.loadPianoSamples,
+      loadDrumSamples: mod.loadDrumSamples,
+      loadSynthSamples: mod.loadSynthSamples,
+      loadAllSamples: mod.loadAllSamples,
+      areAllSamplesLoaded: mod.areAllSamplesLoaded,
+    };
+  };
+
+  const flush = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
+
+  it('loadDrumSamples calls samples with the drums manifest URL', async () => {
+    const { loadDrumSamples } = await loadSampleLoader();
+    const p = loadDrumSamples();
+    expect(samplesMock).toHaveBeenCalledTimes(1);
+    expect(samplesMock).toHaveBeenCalledWith('/samples/drums/strudel.json');
+    await p;
   });
 
-  it('loadDrumSamples registers the drums bank on first call', async () => {
-    const { loadDrumSamples } = await import('./SampleLoader');
-    loadDrumSamples();
-    const samplesFn = (globalThis as Record<string, unknown>).samples as ReturnType<typeof vi.fn>;
-    expect(samplesFn).toHaveBeenCalledTimes(1);
-    // New API: pass strudel.json manifest URL (string) — doughsamples
-    // fetches it, parses, registers bank entries.
-    expect(samplesFn).toHaveBeenCalledWith(
-      expect.stringMatching(/samples\/drums\/strudel\.json$/),
+  it('loadSynthSamples calls samples with the synth manifest URL', async () => {
+    const { loadSynthSamples } = await loadSampleLoader();
+    const p = loadSynthSamples();
+    expect(samplesMock).toHaveBeenCalledTimes(1);
+    expect(samplesMock).toHaveBeenCalledWith('/samples/synth/strudel.json');
+    await p;
+  });
+
+  it('loadPianoSamples calls samples with the piano manifest URL', async () => {
+    const { loadPianoSamples } = await loadSampleLoader();
+    const p = loadPianoSamples();
+    expect(samplesMock).toHaveBeenCalledTimes(1);
+    expect(samplesMock).toHaveBeenCalledWith('/samples/piano/strudel.json');
+    await p;
+  });
+
+  it('per-bank registration is idempotent — second call does not re-invoke samples', async () => {
+    const { loadDrumSamples } = await loadSampleLoader();
+    await loadDrumSamples();
+    await loadDrumSamples();
+    await loadDrumSamples();
+    expect(samplesMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('concurrent calls to loadDrumSamples coalesce to a single samples call', async () => {
+    let resolveSamples!: () => void;
+    samplesMock.mockImplementationOnce(
+      () => new Promise<void>((r) => { resolveSamples = r; }),
+    );
+    const { loadDrumSamples } = await loadSampleLoader();
+    const a = loadDrumSamples();
+    const b = loadDrumSamples();
+    const c = loadDrumSamples();
+    expect(samplesMock).toHaveBeenCalledTimes(1);
+    resolveSamples();
+    await Promise.all([a, b, c]);
+  });
+
+  it('loadAllSamples registers all three banks exactly once', async () => {
+    const { loadAllSamples } = await loadSampleLoader();
+    await loadAllSamples();
+    expect(samplesMock).toHaveBeenCalledTimes(3);
+    const urls = samplesMock.mock.calls.map((c) => String(c[0]));
+    expect(urls).toEqual(
+      expect.arrayContaining([
+        '/samples/piano/strudel.json',
+        '/samples/drums/strudel.json',
+        '/samples/synth/strudel.json',
+      ]),
     );
   });
 
-  it('loadDrumSamples is idempotent (single registration per session)', async () => {
-    const { loadDrumSamples } = await import('./SampleLoader');
-    loadDrumSamples();
-    loadDrumSamples();
-    loadDrumSamples();
-    const samplesFn = (globalThis as Record<string, unknown>).samples as ReturnType<typeof vi.fn>;
-    expect(samplesFn).toHaveBeenCalledTimes(1);
+  it('loadAllSamples is idempotent — second call does not re-register any bank', async () => {
+    const { loadAllSamples } = await loadSampleLoader();
+    await loadAllSamples();
+    await loadAllSamples();
+    await loadAllSamples();
+    expect(samplesMock).toHaveBeenCalledTimes(3);
   });
 
-  it('loadSynthSamples registers the synth bank on first call', async () => {
-    const { loadSynthSamples } = await import('./SampleLoader');
-    loadSynthSamples();
-    const samplesFn = (globalThis as Record<string, unknown>).samples as ReturnType<typeof vi.fn>;
-    expect(samplesFn).toHaveBeenCalledTimes(1);
-    expect(samplesFn).toHaveBeenCalledWith(
-      expect.stringMatching(/samples\/synth\/strudel\.json$/),
-    );
-  });
-
-  it('loadSynthSamples is idempotent (single registration per session)', async () => {
-    const { loadSynthSamples } = await import('./SampleLoader');
-    loadSynthSamples();
-    loadSynthSamples();
-    loadSynthSamples();
-    const samplesFn = (globalThis as Record<string, unknown>).samples as ReturnType<typeof vi.fn>;
-    expect(samplesFn).toHaveBeenCalledTimes(1);
-  });
-
-  it('loadAllSamples registers ALL THREE banks (piano + drums + synth) in one call', async () => {
-    const { loadAllSamples } = await import('./SampleLoader');
-    loadAllSamples();
-    const samplesFn = (globalThis as Record<string, unknown>).samples as ReturnType<typeof vi.fn>;
-    expect(samplesFn).toHaveBeenCalledTimes(3);
-    const calls = samplesFn.mock.calls.map((c) => String(c[0]));
-    expect(calls.some((u) => /piano/.test(u) && /strudel\.json$/.test(u))).toBe(true);
-    expect(calls.some((u) => /drums/.test(u) && /strudel\.json$/.test(u))).toBe(true);
-    expect(calls.some((u) => /synth/.test(u) && /strudel\.json$/.test(u))).toBe(true);
-  });
-
-  it('loadAllSamples is idempotent — second call does not re-register', async () => {
-    const { loadAllSamples } = await import('./SampleLoader');
-    loadAllSamples();
-    loadAllSamples();
-    loadAllSamples();
-    const samplesFn = (globalThis as Record<string, unknown>).samples as ReturnType<typeof vi.fn>;
-    expect(samplesFn).toHaveBeenCalledTimes(3);
-  });
-
-  it('loadDrumSamples defers silently if globalThis.samples is undefined', async () => {
-    delete (globalThis as Record<string, unknown>).samples;
-    const { loadDrumSamples } = await import('./SampleLoader');
-    expect(() => loadDrumSamples()).not.toThrow();
-    (globalThis as Record<string, unknown>).samples = vi.fn();
-    loadDrumSamples();
-    const samplesFn = (globalThis as Record<string, unknown>).samples as ReturnType<typeof vi.fn>;
-    expect(samplesFn).toHaveBeenCalledTimes(1);
-  });
-
-  it('loadSynthSamples defers silently if globalThis.samples is undefined', async () => {
-    delete (globalThis as Record<string, unknown>).samples;
-    const { loadSynthSamples } = await import('./SampleLoader');
-    expect(() => loadSynthSamples()).not.toThrow();
-    (globalThis as Record<string, unknown>).samples = vi.fn();
-    loadSynthSamples();
-    const samplesFn = (globalThis as Record<string, unknown>).samples as ReturnType<typeof vi.fn>;
-    expect(samplesFn).toHaveBeenCalledTimes(1);
-  });
-
-  it('loadPianoSamples back-compat re-export still works', async () => {
-    const { loadPianoSamples } = await import('./SampleLoader');
-    loadPianoSamples();
-    const samplesFn = (globalThis as Record<string, unknown>).samples as ReturnType<typeof vi.fn>;
-    expect(samplesFn).toHaveBeenCalledWith(
-      expect.stringMatching(/piano\/strudel\.json$/),
-    );
-  });
-
-  it('areAllSamplesLoaded reflects registration state for all three banks', async () => {
-    const { loadAllSamples, areAllSamplesLoaded } = await import('./SampleLoader');
+  it('samples rejection on one bank does NOT block the others', async () => {
+    samplesMock.mockImplementation(async (url: string) => {
+      if (String(url).includes('drums')) throw new Error('network down');
+    });
+    const {
+      loadAllSamples, areAllSamplesLoaded,
+      loadDrumSamples, loadSynthSamples, loadPianoSamples,
+    } = await loadSampleLoader();
+    const p = loadAllSamples();
+    await flush();
+    await p;
+    expect(samplesMock).toHaveBeenCalledTimes(3);
     expect(areAllSamplesLoaded()).toBe(false);
-    loadAllSamples();
+    // After fixing drums manually, the others stay loaded.
+    samplesMock.mockResolvedValue(undefined);
+    await loadDrumSamples();
+    await loadSynthSamples();
+    await loadPianoSamples();
+    expect(areAllSamplesLoaded()).toBe(true);
+  });
+
+  it('areAllSamplesLoaded reflects bank readiness AFTER each bank settles', async () => {
+    const { loadDrumSamples, loadSynthSamples, loadPianoSamples, areAllSamplesLoaded } =
+      await loadSampleLoader();
+    expect(areAllSamplesLoaded()).toBe(false);
+    await loadDrumSamples();
+    expect(areAllSamplesLoaded()).toBe(false);
+    await loadSynthSamples();
+    expect(areAllSamplesLoaded()).toBe(false);
+    await loadPianoSamples();
     expect(areAllSamplesLoaded()).toBe(true);
   });
 });
