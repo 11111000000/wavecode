@@ -65,6 +65,15 @@ body {
   outline: 2px solid var(--cyan);
   outline-offset: 2px;
   border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-glow-cyan);
+}
+
+/* CodeMirror owns its own caret/focus visuals (selection ring inside
+ * the editor). Don't double-ring it. */
+.cm-editor:focus-visible,
+.cm-editor :focus-visible {
+  outline: none;
+  box-shadow: none;
 }
 
 /* No outline on click, but visible on keyboard nav. */

@@ -21,6 +21,13 @@ export function ScorePanel() {
 
   return (
     <div class="score-panel-inner">
+      <Show when={appStore.score.trim().length === 0}>
+        <div class="score-empty-state" role="note" aria-label="Подсказки для старта">
+          <p>Нажми ▶ чтобы запустить шаблон</p>
+          <p>Открой Piano → tap для звука</p>
+          <p>Или напиши ИИ: "сделай бит"</p>
+        </div>
+      </Show>
       <CodeMirrorEditor
         value={appStore.score}
         onChange={(v) => dispatch({ type: 'replaceScore', text: v })}
