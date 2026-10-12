@@ -2,7 +2,7 @@ import {
   type JSX, type ParentProps, createSignal, onCleanup, onMount, Show,
 } from 'solid-js';
 import { CloseIcon } from '../icons';
-import { closeSheet, snapTo, getKindSnap, type SheetKind, type SheetSnap } from '../state/uiState';
+import { closeAllSheets, snapTo, getKindSnap, type SheetKind, type SheetSnap } from '../state/uiState';
 
 type Props = ParentProps<{
   kind: NonNullable<SheetKind>;
@@ -55,7 +55,7 @@ export function BottomSheet(props: Props): JSX.Element {
       // swipe down — go to next-larger snap (peek→closed, half→peek, full→half)
       if (current === 'full') snapTo('half');
       else if (current === 'half') snapTo('peek');
-      else if (current === 'peek') closeSheet();
+      else if (current === 'peek') closeAllSheets();
     } else if (dy < -80 || v < -0.5) {
       // swipe up — go to next-smaller (closed→peek, peek→half, half→full)
       if (current === 'peek') snapTo('half');
@@ -64,17 +64,16 @@ export function BottomSheet(props: Props): JSX.Element {
     }
   };
 
-  const onBackdropClick = (): void => closeSheet();
+  const onBackdropClick = (): void => closeAllSheets();
   const onClose = (): void => {
     props.onClose?.();
-    closeKindSheet(props.kind);
-    closeSheet();
+    closeAllSheets();
   };
 
   const currentSnap = (): SheetSnap => getKindSnap(props.kind);
 
   const onKey = (e: KeyboardEvent): void => {
-    if (e.key === 'Escape') closeSheet();
+    if (e.key === 'Escape') closeAllSheets();
   };
 
   onMount(() => {

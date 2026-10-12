@@ -119,3 +119,57 @@ describe('uiState mobile mode', () => {
     expect(uiState()).toEqual({ scoreOpen: true, aiOpen: false, statusOpen: false });
   });
 });
+
+describe('uiState bottom-sheet sync', () => {
+  beforeEach(() => {
+    localStorage.clear();
+    vi.resetModules();
+  });
+
+  it('openSheet synchronizes snapsByKind[kind]', async () => {
+    const { openSheet, getKindSnap } = await import('./uiState');
+    openSheet('mixer', 'full');
+    expect(getKindSnap('mixer')).toBe('full');
+    expect(getKindSnap('ai')).toBe('closed');
+  });
+
+  it('openKindSheet closes other sheets (single-active)', async () => {
+    const { openKindSheet, getKindSnap } = await import('./uiState');
+    openKindSheet('mixer', 'full');
+    openKindSheet('status', 'full');
+    expect(getKindSnap('mixer')).toBe('closed');
+    expect(getKindSnap('status')).toBe('full');
+  });
+
+  it('closeAllSheets clears every kind', async () => {
+    const { openKindSheet, closeAllSheets, getKindSnap } = await import('./uiState');
+    openKindSheet('ai', 'half');
+    openKindSheet('mixer', 'full');
+    closeAllSheets();
+    expect(getKindSnap('ai')).toBe('closed');
+    expect(getKindSnap('mixer')).toBe('closed');
+    expect(getKindSnap('status')).toBe('closed');
+    expect(getKindSnap('step')).toBe('closed');
+  });
+
+  it('setTab(mixer) opens mixer sheet at full', async () => {
+    const { setTab, getKindSnap, getActiveTab } = await import('./uiState');
+    setTab('mixer');
+    expect(getActiveTab()).toBe('mixer');
+    expect(getKindSnap('mixer')).toBe('full');
+  });
+
+  it('setTab(status) opens status sheet at full (not AI)', async () => {
+    const { setTab, getKindSnap } = await import('./uiState');
+    setTab('status');
+    expect(getKindSnap('status')).toBe('full');
+    expect(getKindSnap('ai')).toBe('closed');
+  });
+
+  it('setTab(score) closes all sheets', async () => {
+    const { setTab, openKindSheet, getKindSnap } = await import('./uiState');
+    openKindSheet('mixer', 'full');
+    setTab('score');
+    expect(getKindSnap('mixer')).toBe('closed');
+  });
+});

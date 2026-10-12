@@ -385,7 +385,7 @@ textarea.wc-input {
   border-top: 1px solid var(--border);
   display: flex;
   align-items: stretch;
-  z-index: var(--z-tabbar);
+  z-index: calc(var(--z-sheet) + 10);
 }
 
 .wc-tab {
