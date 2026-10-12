@@ -1,0 +1,38 @@
+- sha: 943d4be (agent commit) + supervisor follow-up commit (post-merge)
+  date: 2026-10-12
+  kind: refactor
+  files:
+    - ui/src/App.tsx (530 → 173 lines)
+    - ui/src/presentation/components/app/TopBar.tsx (new)
+    - ui/src/presentation/components/app/PresetRow.tsx (new)
+    - ui/src/presentation/components/app/PanelsLayout.tsx (new)
+    - ui/src/presentation/components/app/BottomSheets.tsx (new)
+    - ui/src/presentation/state/useAppBootstrap.ts (new)
+    - ui/src/presentation/state/useAutoSave.ts (new)
+  notes: |
+    T5 of wavecode-ui-design-overhaul. Architectural cleanup.
+
+    Agent commit 943d4be:
+    - App.tsx split into 4 sub-components + 2 state hooks
+    - useAppBootstrap: audio poll + sample load + IDB restore + keyboard
+      shortcuts (extracted from App.tsx onMount)
+    - useAutoSave: debounced IDB score/messages persistence
+    - All magic z-index values → var(--z-*) tokens
+
+    Supervisor follow-up (because T5 worktree forked pre-T1-T4 merges,
+    so it didn't see audio-loading-skeleton, sample-loading-pill,
+    layout toggle that T2/T3/T4 added):
+    - TopBar: added audio-loading-skeleton (T4), audio-loading-pill
+      (T3), LayoutSwapIcon toggle button (T2) + 3 new props
+    - App.tsx: audioStarting signal + 2s safety timeout, onToggleLayout
+      handler, sampleStatus wiring
+    - Fixed TopBar to import LayoutSwapIcon from icons.tsx
+    - useAppBootstrap kept clean (sample progress already in master)
+
+    Tests: 279/279 pass. Build OK. 20 PWA entries (1 added: critical CSS).
+
+    Sub-agent was killed mid-task (model timed out after my "commit
+    NOW" prompt). Commit landed automatically via workspace archive
+    hook (commit 943d4be already on branch refactor/t5-app-split).
+    Supervisor manually integrated T5 + restored T2/T3/T4 features
+    into the new sub-components.
