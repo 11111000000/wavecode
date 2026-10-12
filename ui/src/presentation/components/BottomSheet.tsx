@@ -1,7 +1,7 @@
 import {
   type JSX, type ParentProps, createSignal, onCleanup, onMount, Show,
 } from 'solid-js';
-import { CloseIcon } from '../icons';
+import { CloseIcon, ExpandIcon, CollapseIcon } from '../icons';
 import { closeAllSheets, snapTo, getKindSnap, type SheetKind, type SheetSnap } from '../state/uiState';
 
 type Props = ParentProps<{
@@ -13,13 +13,17 @@ type Props = ParentProps<{
   onClose?: () => void;
 }>;
 
+const TAP_THRESHOLD_PX = 8;
+const TAP_MAX_MS = 300;
+
 /**
  * BottomSheet — draggable sheet с 3 snap-точками.
  * Mobile:    bottom sheet, snap = closed | peek(60%) | half(40%) | full(0)
  * Desktop ≥1024px: right-side drawer, snap = closed | open (width 480/720)
  *
  * Drag реализован на pointer events; snap выбирается по release-velocity
- * + position. Fallback: tap on handle toggles peek/full.
+ * + position. Tap на handle-area или header toggle-ит snap (full ↔ half);
+ * кнопка expand/collapse в шапке даёт явный affordance.
  */
 export function BottomSheet(props: Props): JSX.Element {
   const [dragging, setDragging] = createSignal(false);
@@ -27,10 +31,12 @@ export function BottomSheet(props: Props): JSX.Element {
   let startY = 0;
   let startTime = 0;
   let contentRef: HTMLDivElement | undefined;
+  let didDrag = false;
 
   const onPointerDown = (e: PointerEvent): void => {
-    if ((e.target as HTMLElement | null)?.closest('[data-no-drag]')) return;
+    if ((e.target as HTMLElement | null)?.closest('[data-no-drag="true"]')) return;
     setDragging(true);
+    didDrag = false;
     startY = e.clientY;
     startTime = Date.now();
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
@@ -38,6 +44,7 @@ export function BottomSheet(props: Props): JSX.Element {
   const onPointerMove = (e: PointerEvent): void => {
     if (!dragging()) return;
     const dy = e.clientY - startY;
+    if (Math.abs(dy) > TAP_THRESHOLD_PX) didDrag = true;
     setDragDelta(Math.max(dy, -50));  // small overshoot up
   };
   const onPointerUp = (e: PointerEvent): void => {
@@ -48,6 +55,14 @@ export function BottomSheet(props: Props): JSX.Element {
     const v = dy / dt;  // px/ms
     (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
     setDragDelta(0);
+
+    // Tap (no drag, fast) → cycle snap full ↔ half
+    if (!didDrag && dt < TAP_MAX_MS) {
+      const current = currentSnap();
+      if (current === 'full') snapTo('half');
+      else snapTo('full');
+      return;
+    }
 
     const current = currentSnap();
     // Snap decision: down if released below current, up if above
@@ -86,6 +101,12 @@ export function BottomSheet(props: Props): JSX.Element {
     return { transform: `translateY(${dragDelta()}px)`, transition: 'none' };
   };
 
+  const onToggleExpand = (): void => {
+    const current = currentSnap();
+    if (current === 'full') snapTo('half');
+    else snapTo('full');
+  };
+
   return (
     <Show when={currentSnap() !== 'closed'}>
       <div class="wc-sheet-backdrop" data-open="true" onClick={onBackdropClick} aria-hidden="true" />
@@ -102,19 +123,31 @@ export function BottomSheet(props: Props): JSX.Element {
         aria-modal="true"
         aria-label={props.title}
       >
-        <div class="wc-sheet__handle-area" data-no-drag={false}>
+        <div class="wc-sheet__handle-area">
           <div class="wc-sheet__handle" />
         </div>
-        <div class="wc-sheet__header" data-no-drag={true}>
+        <div class="wc-sheet__header">
           <h2 class="wc-sheet__title">{props.title}</h2>
           <Show when={props.subtitle}>
             <span class="wc-sheet__subtitle">{props.subtitle}</span>
           </Show>
-          <div class="wc-sheet__actions" data-no-drag={true}>
+          <div class="wc-sheet__actions">
             <button
               type="button"
               class="wc-icon-btn"
               data-tone="ghost"
+              data-no-drag="true"
+              onClick={onToggleExpand}
+              aria-label={currentSnap() === 'full' ? 'Свернуть' : 'Развернуть'}
+              title={currentSnap() === 'full' ? 'Свернуть (handle ↑)' : 'Развернуть (handle ↓)'}
+            >
+              {currentSnap() === 'full' ? <CollapseIcon size={16} /> : <ExpandIcon size={16} />}
+            </button>
+            <button
+              type="button"
+              class="wc-icon-btn"
+              data-tone="ghost"
+              data-no-drag="true"
               onClick={onClose}
               aria-label="Закрыть"
             >
@@ -124,7 +157,7 @@ export function BottomSheet(props: Props): JSX.Element {
         </div>
         <div
           class={`wc-sheet__body ${props.scrollBody ? 'wc-sheet__body--scroll' : ''}`}
-          data-no-drag={true}
+          data-no-drag="true"
           ref={contentRef}
         >
           {props.children}

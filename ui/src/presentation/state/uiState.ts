@@ -196,7 +196,7 @@ export const closeKindSheet = (kind: NonNullable<SheetKind>): void => {
 export const setTab = (tab: TabId): void => {
   setActiveTab(tab);
   if (tab === 'chat') {
-    openKindSheet('ai', 'half');
+    openKindSheet('ai', 'full');
   } else if (tab === 'mixer') {
     openKindSheet('mixer', 'full');
   } else if (tab === 'status') {

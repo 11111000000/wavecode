@@ -136,6 +136,20 @@ export const CloseIcon = (p: Props): JSX.Element => (
   </svg>
 );
 
+/** Expand chevron (sheet collapsed → tap to expand). Points up = развернуть. */
+export const ExpandIcon = (p: Props): JSX.Element => (
+  <svg {...base(p.size ?? 16)} class={`wc-icon ${p.class ?? ''}`}>
+    <polyline points="3 6 8 11 13 6" />
+  </svg>
+);
+
+/** Collapse chevron (sheet full → tap to collapse). Points down = свернуть. */
+export const CollapseIcon = (p: Props): JSX.Element => (
+  <svg {...base(p.size ?? 16)} class={`wc-icon ${p.class ?? ''}`}>
+    <polyline points="3 10 8 5 13 10" />
+  </svg>
+);
+
 export const PlusIcon = (p: Props): JSX.Element => (
   <svg {...base(p.size ?? 16)} class={`wc-icon ${p.class ?? ''}`}>
     <line x1="8" y1="2" x2="8" y2="14" />

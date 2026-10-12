@@ -471,7 +471,9 @@ textarea.wc-input {
   font-weight: var(--fw-semibold);
   letter-spacing: var(--ls-tight);
   cursor: pointer;
-  z-index: var(--z-fab);
+  /* Должен быть выше .wc-sheet-backdrop (z-sheet=40), чтобы play/stop
+   * работали при открытом bottom-sheet. */
+  z-index: calc(var(--z-sheet) + 5);
   box-shadow: var(--shadow-fab), var(--shadow-glow-amber);
   transition: transform var(--dur-xs) var(--ease-spring), box-shadow var(--dur-xs) var(--ease);
 }
@@ -559,7 +561,9 @@ textarea.wc-input {
 .wc-topbar {
   position: sticky;
   top: 0;
-  z-index: var(--z-sticky);
+  /* Должен быть выше .wc-sheet-backdrop (z-sheet=40), чтобы при открытом
+   * bottom-sheet кнопки TopBar оставались кликабельными. */
+  z-index: calc(var(--z-sheet) + 5);
   display: flex;
   align-items: center;
   gap: var(--space-sm);
@@ -757,3 +761,246 @@ textarea.wc-input {
 }
 .wc-chat__status[data-tone='ok']  { color: var(--ok); }
 .wc-chat__status[data-tone='err'] { color: var(--err); }
+
+/* =========================================================================
+ *  STEP GRID — 4×8 drum pads (mobile-first)
+ *  Используется компонентом <StepGrid />. См. legacy.css для старой
+ *  реализации (.step-grid-row-label в legacy для старого grid-template).
+ * ========================================================================= */
+
+.step-grid {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  padding: var(--space-md) var(--space-lg);
+  background: var(--surface-1);
+  font-family: var(--font-mono);
+}
+
+.step-grid-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+  align-items: center;
+}
+.step-grid-toolbar .step-grid-hint {
+  flex-basis: 100%;
+  font-size: var(--fs-xs);
+  color: var(--fg-dim);
+  line-height: var(--lh-relaxed);
+  margin-top: var(--space-2xs);
+}
+
+.step-grid-rows {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+.step-grid-row {
+  display: grid;
+  grid-template-columns: 56px repeat(8, minmax(0, 1fr));
+  gap: var(--space-2xs);
+  align-items: stretch;
+}
+.step-grid-row-label {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  font-size: var(--fs-2xs);
+  line-height: 1.1;
+  text-align: right;
+  color: var(--fg-dim);
+  padding-right: var(--space-xs);
+  min-width: 0;
+}
+.step-grid-row-sample {
+  color: var(--amber);
+  font-weight: var(--fw-semibold);
+  text-transform: lowercase;
+}
+.step-grid-row-name {
+  color: var(--fg-ghost);
+  font-size: 9px;
+  letter-spacing: var(--ls-wide);
+  text-transform: uppercase;
+}
+
+.step-grid-btn {
+  height: 36px;
+  padding: 0 var(--space-sm);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--fg-dim);
+  font-family: inherit;
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all var(--dur-xs) var(--ease);
+  min-height: var(--touch-target);
+}
+.step-grid-btn:hover { border-color: var(--amber); color: var(--amber); }
+.step-grid-btn.active,
+.step-grid-btn:active { transform: scale(0.97); }
+
+.step-cell {
+  position: relative;
+  height: 44px;
+  min-height: 44px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition:
+    transform var(--dur-xs) var(--ease),
+    background-color var(--dur-xs) var(--ease),
+    border-color var(--dur-xs) var(--ease),
+    box-shadow var(--dur-xs) var(--ease);
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+.step-cell:hover { border-color: var(--amber); }
+.step-cell:active { transform: scale(0.94); }
+.step-cell.active {
+  background: var(--amber);
+  border-color: var(--amber);
+  box-shadow: var(--shadow-glow-amber);
+}
+.step-cell.beat::before {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  border: 1px solid var(--cyan);
+  border-radius: calc(var(--radius-md) + 2px);
+  pointer-events: none;
+  opacity: 0.6;
+}
+.step-cell.tap-flash {
+  animation: step-cell-flash 200ms var(--ease-out);
+}
+.step-cell-dot {
+  display: block;
+  width: 10px;
+  height: 10px;
+  background: var(--fg-inverse);
+  border-radius: var(--radius-full);
+  pointer-events: none;
+}
+@keyframes step-cell-flash {
+  0%   { transform: scale(1.18); box-shadow: 0 0 14px var(--amber-glow); }
+  100% { transform: scale(1);    box-shadow: none; }
+}
+
+/* =========================================================================
+ *  PIANO — 2-octave on-screen keyboard (C3..B4)
+ *  Используется компонентом <PianoKeyboard />. Белая клавиша = flex child,
+ *  чёрная клавиша = position:absolute поверх (overlap -11px как в legacy).
+ * ========================================================================= */
+
+.piano-wrap {
+  display: flex;
+  flex-direction: column;
+  background: var(--surface-1);
+  border-top: 1px solid var(--border);
+  user-select: none;
+  -webkit-user-select: none;
+  font-family: var(--font-mono);
+}
+
+.piano-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  padding: var(--space-sm) var(--space-md);
+  font-size: var(--fs-xs);
+  color: var(--fg-dim);
+  flex-wrap: wrap;
+  background: var(--surface-1);
+}
+.piano-hint { color: var(--fg-dim); }
+
+.piano-midi-status {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2xs);
+  padding: 2px var(--space-xs);
+  border-radius: var(--radius-pill);
+  font-size: var(--fs-2xs);
+  font-weight: var(--fw-semibold);
+  text-transform: uppercase;
+  letter-spacing: var(--ls-wide);
+}
+.piano-midi-status::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: var(--radius-full);
+  background: currentColor;
+}
+.piano-midi-ok      { color: var(--ok);   background: rgba(94, 234, 212, 0.1); }
+.piano-midi-pending { color: var(--warn); background: rgba(255, 170, 59, 0.1); }
+
+.piano-keys {
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  padding: var(--space-md) 0;
+  scrollbar-width: thin;
+}
+.piano-keys-inner {
+  position: relative;
+  margin: 0 auto;
+  display: flex;            /* white keys = flex children */
+  flex-direction: row;
+}
+
+.piano-key {
+  border: 1px solid var(--border-strong);
+  background: var(--surface-2);
+  color: var(--fg-dim);
+  font-family: var(--font-mono);
+  font-size: var(--fs-2xs);
+  cursor: pointer;
+  padding: 0;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding-bottom: 4px;
+  transition: all var(--dur-xs) var(--ease);
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  position: relative;       /* black keys overlay using absolute; white stays in flow */
+}
+.piano-key.white {
+  background: linear-gradient(180deg, var(--surface-2), var(--surface-3));
+  color: var(--fg-ghost);
+  flex: 0 0 auto;
+  z-index: 1;
+}
+.piano-key.black {
+  background: linear-gradient(180deg, #1a1a22, #0a0a0e);
+  color: var(--amber);
+  position: absolute;
+  top: 0;
+  z-index: 2;
+  border-radius: 0 0 var(--radius-sm) var(--radius-sm);
+}
+.piano-key:hover { border-color: var(--amber); }
+.piano-key:active { transform: scaleY(0.97); }
+.piano-key.active {
+  background: var(--amber);
+  color: var(--fg-inverse);
+  box-shadow: var(--shadow-glow-amber);
+  transform: scaleY(0.95);
+}
+.piano-key-label {
+  font-size: 9px;
+  opacity: 0.6;
+  pointer-events: none;
+  letter-spacing: 0;
+}
