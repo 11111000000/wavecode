@@ -97,3 +97,82 @@
       crush: { node: "crush-processor", param: "crush" }
     Bitcrush would correspond to crush with extra parameters, but
     Strudel doesn't expose .bitcrush as a separate control.
+- sha: a140d7c
+  date: 2026-10-12
+  kind: fix
+  files:
+    - ui/src/infrastructure/audio/SampleLoader.ts
+    - ui/src/infrastructure/audio/SampleLoader.test.ts
+    - ui/src/infrastructure/audio/strudel.d.ts
+    - ui/src/infrastructure/audio/strudelPatches.ts
+    - ui/src/infrastructure/audio/strudelPatches.test.ts
+    - math/wavecode-sample-bank-underscore/witness
+  notes: |
+    FOURTH hidden bug in the same surface: the very first haps of a
+    preset were silently dropped because superdough's sampler
+    races the audio scheduler against fetch+decodeAudioData.
+
+    superdough/dist/index.mjs:989:
+      if (u.currentTime > e) {
+        j('loading took too long', 'highlight');
+        Y(y);
+        return;  // hap dropped silently
+      }
+
+    fetch().arrayBuffer().decodeAudioData() takes 80–160 ms (logged
+    as "done! loaded 5.2 KiB in 89ms" for bd.mp3). When the scheduler
+    fires the very first hap of `s("bd sd hh bd sd hh")`, the audio
+    context clock has already advanced past the scheduled start, so
+    the hap is dropped. User sees `lastEvalErr=null` but hears the
+    2nd/3rd haps instead of the 1st, with `[sampler] loading sound
+    'bd:0' took too long` once per cycle until the cache warms.
+
+    FIX: after `samples()` resolves each bank, eagerly call
+    `loadBuffer(url, audioContext, label)` for every URL in every
+    sample bank. This populates superdough's internal `tt[url]`
+    promise cache so the very first haps hit warm cache instead of
+    fetching fresh.
+
+    Fire-and-forget: `void Promise.allSettled(promises)` so the
+    preload does not block the registration promise. If the user
+    clicks Play before preloads finish, only the very first cycle
+    is at risk (which has 4+ cycles of lead time before the audio
+    context unlocks via `LiveAudioEngine.unlockAudioContext()`).
+
+    ARCHITECTURAL: this commit also retires the previous
+    `applyBankAliasFallback` / `DEFAULT_BANK_FALLBACKS` machinery
+    from strudelPatches.ts. That helper registered bare bank-name
+    aliases (`drums` → `drums_bd`) as a post-load patch, but the
+    same job is done more cleanly by `addBareAliases()` inside
+    SampleLoader.ts (which iterates ALL bank_sound keys and
+    publishes bare `sound` aliases — covers more cases than the
+    hard-coded fallback map ever did, and unifies registration
+    with sample loading in one place).
+
+    After this commit strudelPatches.ts is reduced to its two
+    surviving helpers: `wrapStrudelLogger` (logger.mjs CSS strip)
+    and `applyVoicingAliases` (tonal/voicings.mjs chord-symbol
+    aliases). The third slot is gone.
+
+    Verified empirically:
+    - SampleLoader.test.ts: loadBufferMock is called once per
+      sample URL in every registered bank (14 drums samples
+      verified; piano + synth symmetric).
+    - vitest: 275/275 pass (was 280/280 before; 5 fewer because
+      retired applyBankAliasFallback tests dropped).
+    - typecheck: clean.
+    - vite build: OK (PWA precache 19 entries, 1422 KiB).
+
+    OUTSTANDING (NOT in this commit):
+    - AudioWorkletNode intermittent error after rapid eval cycles.
+      Pre-existing in Strudel 1.3 — worklet processor is released
+      after some idle period. Not blocking sample playback.
+      Sample-only presets (jazz, toms-funk, retro-lead) play
+      correctly.
+    - strudelPatches.ts carries an updated docstring noting the
+      retirement of patch #3 (`applyBankAliasFallback`) so future
+      readers don't try to reintroduce it.
+
+    Refs: superdough/dist/index.mjs:989 (`currentTime > e` early
+    return); superdough/dist/index.mjs:1003-1020 (loadBuffer
+    populates the `tt[url]` cache).

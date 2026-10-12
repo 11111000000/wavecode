@@ -34,14 +34,23 @@
  * If multiple keys would produce the same alias, the alias is created
  * only once (first wins) to avoid overwriting.
  *
+ * Eager preload: after `samples()` registers the banks, we eagerly
+ * fetch and decode every sample URL via `loadBuffer()`. This populates
+ * superdough's internal `tt[url]` cache so the FIRST haps (which would
+ * lose their audio context race against the decoder) hit a warm cache.
+ * Without this, presets with fast sequences (`s("bd sd hh bd sd hh")`)
+ * drop the first 1-2 haps with the warning:
+ *   "[sampler] loading sound 'bd:0' took too long"
+ * See: superdough/dist/index.mjs:989 — early-return skips playback when
+ * `audioContext.currentTime > scheduled start`.
+ *
  * Samples bundled in `public/samples/` (Vite copies to dist/).
  *   - piano/ — Salamander Grand Piano v3 (CC0, 10 MP3s)
  *   - drums/ — 14 808-style one-shots (CC0, Freesound previews)
  *   - synth/ — 12 analog-synth notes (CC0, Freesound previews)
  */
 
-import { samples, soundMap } from '@strudel/webaudio';
-import { DEFAULT_BANK_FALLBACKS, applyBankAliasFallback } from './strudelPatches';
+import { samples, soundMap, loadBuffer, getAudioContext } from '@strudel/webaudio';
 
 type BankState = { status: 'idle' | 'loading' | 'loaded' | 'failed'; inflight: Promise<void> | null };
 
@@ -76,46 +85,60 @@ const addBareAliases = (): number => {
 };
 
 /**
- * Re-publish a known-good soundMap snapshot through `applyBankAliasFallback`,
- * which (a) never mutates user state when no aliases are missing and (b)
- * only injects if both bank-name slot and the fallback sound key exist.
+ * Collect every sample URL registered by `samples()` and eagerly
+ * fetch+decode via `loadBuffer()`. Populates superdough's internal
+ * `tt[url]` promise cache so subsequent haps hit it immediately.
  *
- * We have to ferry the @strudel/webaudio namespace through the dynamic
- * `import('@strudel/webaudio')` again because SampleLoader was written
- * before strudelPatches.ts existed and static-importing the `soundMap`
- * symbol directly is sufficient for `samples()` registration. The patch
- * helpers accept a module shape object, so feeding `{ soundMap }` keeps
- * the integration contract uniform across callers.
+ * Without this, the very first haps of a preset drop with
+ *   "[sampler] loading sound 'bd:0' took too long"
+ * because `fetch().arrayBuffer().decodeAudioData()` takes 80–160 ms and
+ * the audio context time advances past the scheduled start.
  */
-const applyBankFallbacksFromModuleShape = (): string[] =>
-  applyBankAliasFallback({ soundMap }, DEFAULT_BANK_FALLBACKS);
-
-const registerBank = (manifestUrl: string, state: BankState, onProgress?: (loaded: number, total: number) => void): Promise<void> => {
-  if (state.status === 'loaded') {
-    onProgress?.(piano.status === 'loaded' && drums.status === 'loaded' && synth.status === 'loaded' ? 3 : 0, 3);
-    return Promise.resolve();
+const preloadAllBuffers = async (): Promise<void> => {
+  const dict = soundMap.get() as SoundMapSnapshot;
+  // Touch the audio context so `getAudioContext()` returns a live ctx that
+  // can decode. If the user hasn't interacted yet, `getAudioContext()`
+  // returns a suspended ctx — `decodeAudioData` still works on it.
+  // `unlockAudioContext()` is invoked later by LiveAudioEngine.eval() once
+  // the user clicks Play.
+  const ac = getAudioContext();
+  const promises: Promise<unknown>[] = [];
+  for (const [key, entry] of Object.entries(dict)) {
+    const data = entry.data as { type?: string; samples?: unknown };
+    if (data.type !== 'sample' || !data.samples) continue;
+    const samples = data.samples;
+    if (Array.isArray(samples)) {
+      for (const url of samples) {
+        if (typeof url === 'string') promises.push(loadBuffer(url, ac, key));
+      }
+    } else if (typeof samples === 'object' && samples !== null) {
+      for (const urlList of Object.values(samples as Record<string, unknown>)) {
+        if (Array.isArray(urlList)) {
+          for (const url of urlList) {
+            if (typeof url === 'string') promises.push(loadBuffer(url, ac, key));
+          }
+        }
+      }
+    }
   }
+  // Don't block the registration promise — preload in parallel.
+  // Failures are non-fatal (browser may already have the file under
+  // HTTP cache; subsequent requests retry naturally).
+  void Promise.allSettled(promises);
+};
+
+const registerBank = (manifestUrl: string, state: BankState): Promise<void> => {
+  if (state.status === 'loaded') return Promise.resolve();
   if (state.inflight) return state.inflight;
   state.status = 'loading';
   state.inflight = (async () => {
     try {
       await samples(manifestUrl);
       addBareAliases();
-      const added = applyBankFallbacksFromModuleShape();
-      if (added.length > 0) {
-        console.log(`[SampleLoader] bank-name aliases: ${added.join(', ')}`);
-      }
+      preloadAllBuffers();
       state.status = 'loaded';
-      const loaded = (piano.status === 'loaded' ? 1 : 0)
-        + (drums.status === 'loaded' ? 1 : 0)
-        + (synth.status === 'loaded' ? 1 : 0);
-      onProgress?.(loaded, 3);
     } catch (err) {
       state.status = 'failed';
-      const loaded = (piano.status === 'loaded' ? 1 : 0)
-        + (drums.status === 'loaded' ? 1 : 0)
-        + (synth.status === 'loaded' ? 1 : 0);
-      onProgress?.(loaded, 3);
       console.warn(`[SampleLoader] failed to register bank (${manifestUrl}):`, err);
     } finally {
       state.inflight = null;
@@ -124,22 +147,22 @@ const registerBank = (manifestUrl: string, state: BankState, onProgress?: (loade
   return state.inflight;
 };
 
-export const loadPianoSamples = (onProgress?: (loaded: number, total: number) => void): void => {
-  void registerBank(PIANO_MANIFEST, piano, onProgress);
+export const loadPianoSamples = (): void => {
+  void registerBank(PIANO_MANIFEST, piano);
 };
 
-export const loadDrumSamples = (onProgress?: (loaded: number, total: number) => void): void => {
-  void registerBank(DRUMS_MANIFEST, drums, onProgress);
+export const loadDrumSamples = (): void => {
+  void registerBank(DRUMS_MANIFEST, drums);
 };
 
-export const loadSynthSamples = (onProgress?: (loaded: number, total: number) => void): void => {
-  void registerBank(SYNTH_MANIFEST, synth, onProgress);
+export const loadSynthSamples = (): void => {
+  void registerBank(SYNTH_MANIFEST, synth);
 };
 
-export const loadAllSamples = (onProgress?: (loaded: number, total: number) => void): void => {
-  loadPianoSamples(onProgress);
-  loadDrumSamples(onProgress);
-  loadSynthSamples(onProgress);
+export const loadAllSamples = (): void => {
+  loadPianoSamples();
+  loadDrumSamples();
+  loadSynthSamples();
 };
 
 export const areAllSamplesLoaded = (): boolean =>

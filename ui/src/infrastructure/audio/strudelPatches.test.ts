@@ -2,10 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
   wrapStrudelLogger,
   applyVoicingAliases,
-  applyBankAliasFallback,
-  DEFAULT_BANK_FALLBACKS,
   type TonalModule,
-  type WebaudioModule,
 } from './strudelPatches';
 
 describe('wrapStrudelLogger', () => {
@@ -133,81 +130,5 @@ describe('applyVoicingAliases', () => {
     expect(dictionary.min7).toEqual(dictionary.m7);
     expect(dictionary.maj7).toBeUndefined();
     expect(added).toBe(1);
-  });
-});
-
-describe('applyBankAliasFallback', () => {
-  it('registers drums→drums_bd, piano→piano_a4, synth→synth_bass-c2 when keys exist', () => {
-    const dict: Record<string, { onTrigger: unknown; data: unknown }> = {
-      drums_bd: { onTrigger: () => {}, data: {} },
-      piano_a4: { onTrigger: () => {}, data: {} },
-      'synth_bass-c2': { onTrigger: () => {}, data: {} },
-    };
-    const soundMap = {
-      get: () => dict,
-      set: vi.fn(),
-    };
-    const webaudio: WebaudioModule = { soundMap };
-
-    const added = applyBankAliasFallback(webaudio);
-
-    expect(added).toEqual(expect.arrayContaining(['drums', 'piano', 'synth', 'drum']));
-    expect(added).not.toContain('drum_bd'); // sanity: no fabricated names
-    expect(soundMap.set).toHaveBeenCalledTimes(1);
-    const setSpy = soundMap.set as ReturnType<typeof vi.fn>;
-    const newDict = setSpy.mock.calls[0]?.[0] as typeof dict;
-    expect(newDict.drums).toBe(dict.drums_bd);
-    expect(newDict.drum).toBe(dict.drums_bd);
-    expect(newDict.piano).toBe(dict.piano_a4);
-    expect(newDict.synth).toBe(dict['synth_bass-c2']);
-  });
-
-  it('does nothing when every bank-name slot is already present', () => {
-    const dict: Record<string, { onTrigger: unknown; data: unknown }> = {
-      drums: { onTrigger: () => {}, data: {} },
-      drum: { onTrigger: () => {}, data: {} },
-      piano: { onTrigger: () => {}, data: {} },
-      synth: { onTrigger: () => {}, data: {} },
-      drums_bd: { onTrigger: () => {}, data: {} },
-      piano_a4: { onTrigger: () => {}, data: {} },
-      'synth_bass-c2': { onTrigger: () => {}, data: {} },
-    };
-    const soundMap = { get: () => dict, set: vi.fn() };
-    const webaudio: WebaudioModule = { soundMap };
-
-    const added = applyBankAliasFallback(webaudio);
-
-    expect(added).toEqual([]);
-    expect(soundMap.set).not.toHaveBeenCalled();
-  });
-
-  it('is a no-op when the fallback sound key is missing', () => {
-    const dict: Record<string, { onTrigger: unknown; data: unknown }> = {};
-    const soundMap = { get: () => dict, set: vi.fn() };
-    const webaudio: WebaudioModule = { soundMap };
-
-    const added = applyBankAliasFallback(webaudio);
-
-    expect(added).toEqual([]);
-    expect(soundMap.set).not.toHaveBeenCalled();
-  });
-
-  it('accepts a custom fallback map', () => {
-    const dict: Record<string, { onTrigger: unknown; data: unknown }> = {
-      drums_bd: { onTrigger: 'a', data: 'b' },
-      piano_a4: { onTrigger: 'c', data: 'd' },
-    };
-    const soundMap = { get: () => dict, set: vi.fn() };
-    const webaudio: WebaudioModule = { soundMap };
-
-    const added = applyBankAliasFallback(webaudio, { kick: 'drums_bd', grand: 'piano_a4' });
-
-    expect(added).toEqual(['kick', 'grand']);
-  });
-
-  it('DEFAULT_BANK_FALLBACKS matches the union of expected bare names', () => {
-    expect(Object.keys(DEFAULT_BANK_FALLBACKS)).toEqual(
-      expect.arrayContaining(['drums', 'drum', 'piano', 'synth']),
-    );
   });
 });
