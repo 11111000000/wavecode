@@ -10,6 +10,7 @@ import type { NoteEvent } from '~/domain/midi/encoder';
 import { LiveRecorder, pickSupportedMime } from './AudioRecorder';
 import { renderToWav } from './OfflineRender';
 import { applyVoicingAliases } from './strudelPatches';
+import { wrapSuperdoughLoadBuffer } from './SampleLoader';
 
 /**
  * Live AudioEngine — реальный Strudel runtime в main thread.
@@ -173,6 +174,16 @@ const ensureRepl = (audioCtx: AudioContext): Promise<ReplHandle> => {
       console.log('[wavecode] modules loaded');
       await modules.core.evalScope(modules.core, modules.mini, modules.tonal);
       console.log('[wavecode] evalScope done — stack/note/n/s on globalThis');
+
+      // Install the warm-cache wrapper on superdough's loadBuffer so
+      // the runtime hap path consults SampleLoader's warm cache first.
+      // Idempotent — safe to call on every ensureRepl invocation.
+      // The cache itself is populated by SampleLoader.preloadAllBuffers
+      // (called from useAppBootstrap onMount) and shared across all
+      // banks. The wrap is installed AFTER modules load so the
+      // dynamic import inside the wrap resolves to the same module
+      // instance that the runtime uses.
+      wrapSuperdoughLoadBuffer();
 
       // Inject chord-symbol aliases (min7 → m7, maj7 → ^7, …) into every
       // voicing dictionary BEFORE any preset using `.voicing()` is evaluated.
