@@ -173,8 +173,8 @@ substrate: |
     оставлен для возможного reuse.
 status: applied
 witness:
-  applied_at: TBD
-  commit: TBD
+  applied_at: 2026-10-13
+  commit: 3855be2
   supersedes: math/wavecode-piano-polyphony/packet.md
   notes: |
     Implementation: PianoSynth (infrastructure/audio/PianoSynth.ts)
