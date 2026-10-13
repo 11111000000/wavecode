@@ -75,5 +75,5 @@ synthesis: |
     TabBar mobile: [Score] [AI] [Status]   ← 3 таба, чище
     Pulse animations: off для reduce-motion + на mobile (через
     media query или просто глобально через 2.).
-status: draft
+status: applied
 ---
