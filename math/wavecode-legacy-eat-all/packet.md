@@ -93,5 +93,5 @@ synthesis: |
   This packet retires `math/wavecode-css-consolidate/packet.md`
   (its Phase 2 gradual eating is now complete). Final cascade:
   tokens < base < components < sheets < icons < landing (6 layers).
-status: draft
+status: applied
 ---
