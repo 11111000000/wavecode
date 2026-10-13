@@ -1,7 +1,6 @@
 import { Show, For, type JSX } from 'solid-js';
 import { allPresets } from '~/presentation/state/presetsStore';
 import { StepIcon, PianoIcon } from '~/presentation/icons';
-import { beep } from '~/presentation/state/audioActions';
 
 export type PresetRowProps = {
   presetId: string;
@@ -59,8 +58,6 @@ export function PresetRow(props: PresetRowProps): JSX.Element {
           <PianoIcon size={14} />
           <span>Piano</span>
         </button>
-        <button type="button" class="wc-chip" onClick={() => beep(440)}>440</button>
-        <button type="button" class="wc-chip" onClick={() => beep(220)}>220</button>
       </div>
 
       <Show when={props.showSavePreset}>
