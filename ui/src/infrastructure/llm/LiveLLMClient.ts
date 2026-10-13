@@ -219,6 +219,12 @@ export const makeLiveLLMClient = (
 
   if (!apiKey) {
     console.warn('[llm] VITE_LLM_PROXY_KEY is not set; LLM calls will fail.');
+  } else if (!apiKey.startsWith('sk-')) {
+    console.warn(
+      `[llm] VITE_LLM_PROXY_KEY does not start with 'sk-' — LiteLLM ` +
+      `expects the 'sk-litellm-…' format. If you see "Malformed API ` +
+      `Key" 401s, prepend 'sk-litellm-' to the key.`,
+    );
   }
 
   return Layer.succeed(LLMClient, make({ apiUrl, apiKey, defaultModel, defaultThinking }) as never);
