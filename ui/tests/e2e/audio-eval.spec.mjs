@@ -16,7 +16,7 @@ test('Eval button plays audio without errors', async ({ page }) => {
   console.log('initial:', JSON.stringify(initialStatus));
 
   // Click Eval (play).
-  await page.locator('button:has-text("Eval (play)")').click();
+  await page.locator('button[aria-label="Запуск"]').click();
   await page.waitForTimeout(5000);
 
   const afterStatus = await page.locator('dl.status-grid dd').allTextContents();

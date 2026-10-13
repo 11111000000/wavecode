@@ -23,7 +23,7 @@ test('Selecting the Creep preset loads its score and plays audio', async ({ page
   expect(editorText || '').toContain('Creep (Radiohead)');
 
   console.log('=== clicking Eval ===');
-  await page.locator('button:has-text("▶ Eval")').click();
+  await page.locator('button[aria-label="Запуск"]').click();
   await page.waitForTimeout(5000);
 
   const audioStatus = await page.locator('dl.status-grid dd').nth(1).textContent();
