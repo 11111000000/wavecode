@@ -5,7 +5,8 @@ import { AppLayer } from '~/infrastructure/composition';
 import { AudioEngine } from '~/domain/services';
 import { unlockAudioContext } from '~/infrastructure/audio/LiveAudioEngine';
 import { applyEdit, getLastRawLLMResponse, type DialogTurn } from '~/application/useCases/llmEdit';
-import { getLLMSettings, setModel, setThinking } from '../state/llmSettings';
+import { getLLMSettings } from '../state/llmSettings';
+import { LLMSettingsPopover } from '~/presentation/components/LLMSettingsPopover';
 import type { Role } from '~/domain/types';
 
 /**
@@ -37,7 +38,7 @@ export function AIEditPanel() {
   const [instruction, setInstruction] = createSignal('');
   const [busy, setBusy] = createSignal(false);
   const [status, setStatus] = createSignal<{ kind: 'idle' | 'ok' | 'err'; msg: string }>({ kind: 'idle', msg: '' });
-  const [settings, setSettings] = createSignal(getLLMSettings());
+  const [settings] = createSignal(getLLMSettings());
   // Последний запрос, упавший с ошибкой. Нужен для кнопки «Попробовать
   // исправить» — повторяет ровно тот же текст + текущие настройки модели/
   // thinking. Очищается при успехе (новом или повторном).
@@ -133,17 +134,7 @@ export function AIEditPanel() {
     void submit(f.text);
   };
 
-  const onModelChange = (e: Event) => {
-    const value = (e.currentTarget as HTMLSelectElement).value as 'smart' | 'fast';
-    setModel(value);
-    setSettings(getLLMSettings());
-  };
-
-  const onThinkingChange = (e: Event) => {
-    const value = (e.currentTarget as HTMLSelectElement).value as 'low' | 'high' | 'off';
-    setThinking(value);
-    setSettings(getLLMSettings());
-  };
+  
 
   createEffect(() => {
     // Следим за длиной истории: при изменении auto-scroll в конец.
@@ -215,27 +206,7 @@ export function AIEditPanel() {
           disabled={busy()}
         />
         <div class="ai-controls-row1">
-          <select
-            class="llm-select"
-            value={settings().model}
-            onChange={onModelChange}
-            disabled={busy()}
-            title="Модель: умная = M3 (код, медленнее), быстрая = M2.1"
-          >
-            <option value="smart">умная · M3</option>
-            <option value="fast">быстрая · M2.1</option>
-          </select>
-          <select
-            class="llm-select"
-            value={settings().thinking}
-            onChange={onThinkingChange}
-            disabled={busy()}
-            title="Размышление: low = быстрее и дешевле, high = глубже, off = отключить"
-          >
-            <option value="low">размышление · мало</option>
-            <option value="high">размышление · много</option>
-            <option value="off">размышление · выкл</option>
-          </select>
+          <LLMSettingsPopover />
           <button
             type="button"
             class="ai-apply-btn"
