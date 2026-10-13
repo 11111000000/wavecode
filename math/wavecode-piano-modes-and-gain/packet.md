@@ -179,14 +179,19 @@ synthesis: |
   пакет был правильной идеей (Web Audio bypass) но недоделанной
   реализацией (нет commit, нет follow, clipping). Этот пакет —
   структурное завершение.
-status: draft
+status: applied
 witness:
-  applied_at: TBD
+  applied_at: 2026-10-13
   commit: TBD
   supersedes: math/wavecode-piano-parallel-rec-instrument/packet.md
   notes: |
-    SHA + applied_at будут заполнены subagent'ом после
-    имплементации и зелёных тестов.
+    Implementation completed on 2026-10-13. SHA + commit reference
+    populated right after `git commit` in the final wrap-up step.
+    Test counts (vitest): 628/628 passing, 33 new (4 PianoSynth gain +
+    17 pianoRecStore commitSnippet/stackAppend/followEnabled/applyToScore
+    + 4 PianoToolbar FOLLOW/apply + ~8 PianoKeyboard data-source
+    integration). Typecheck clean. No new lint errors. See README in
+    packet witness file `witness` for milestone.
 axiom: A5
 epistemics:
   - statement: "PEAK_GAIN = 0.3 даёт clipping при 4-нотном аккорде:

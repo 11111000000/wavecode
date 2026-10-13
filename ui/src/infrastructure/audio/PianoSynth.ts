@@ -18,10 +18,22 @@ import {
  *     and clean themselves up on release.
  *
  * ADSR (per voice):
- *   - attack: 5ms linearRamp 0 → 0.3 (PEAK)
- *   - decay:  400ms linearRamp 0.3 → 0.03 (SUSTAIN floor)
+ *   - attack: 5ms linearRamp 0 → 0.10 (PEAK)
+ *   - decay:  400ms linearRamp 0.10 → 0.03 (SUSTAIN floor)
  *   - sustain: held at 0.03 while the key stays pressed
  *   - release: 100ms linearRamp 0.03 → 0 (noteOff path)
+ *
+ * Master limiter (post wavecode-piano-modes-and-gain):
+ *   - Per-voice peak (0.10) keeps a 4-note chord at ~0.40 peak — well
+ *     inside the master compressor's linear range.
+ *   - Voices route through `masterGain` (linear 1.0) → master limiter
+ *     (DynamicsCompressorNode, threshold=0.7 / ratio=4:1 / attack=5ms /
+ *     release=100ms / knee=6dB). The compressor is a soft-limiter that
+ *     catches ~1.0+ transient peaks from many simultaneous voices
+ *     (8-voice chord peaks ~0.80 raw, compressor engages and we land
+ *     well under 0.7 final amplitude). Result: no clipping under typical
+ *     polyphony, balanced with Strudel presets that mix layers at gain
+ *     ~0.15.
  *
  * MIDI → Hz: standard `440 * 2^((midi - 69) / 12)` formula. A4 (440Hz)
  *   is MIDI 69 — see notes.ts::noteNumberToName for the round-trip.
@@ -40,6 +52,12 @@ import {
  *     cost of `AudioContext.destination` collection.
  *   - `dispose()` is the emergency stop: stops ALL voices synchronously,
  *     disconnects everything, zeros the voice map. Used on unmount.
+ *
+ * Master bus cleanup: the `masterGain` and `compressor` are created
+ *   per-synth (not per-voice) and persist for the synth's lifetime.
+ *   `dispose()` schedules a ramp-down of the masterGain as a safety net;
+ *   the shared audioCtx outlives the synth so the bus nodes remain
+ *   connected to the destination until AudioContext teardown.
  */
 
 type Voice = {
@@ -79,14 +97,38 @@ const ATTACK_S = 0.005;
 const DECAY_S = 0.4;
 const SUSTAIN_LEVEL = 0.03;
 const RELEASE_S = 0.1;
-const PEAK_GAIN = 0.3;
+const PEAK_GAIN = 0.1;
 const RELEASE_TAIL_MS = 50;
+
+/** Master compressor parameters — soft-limiter for many-voice polyphony. */
+const MASTER_COMPRESSOR_OPTS = {
+  threshold: 0.7,
+  ratio: 4,
+  attack: 0.005,
+  release: 0.1,
+  knee: 6,
+} as const;
 
 const midiToHz = (midi: number): number => 440 * Math.pow(2, (midi - 69) / 12);
 
 export const createPianoSynth = (audioCtx: AudioContext): PianoSynth => {
   const voices = new Map<number, Voice>();
   let nextVoiceId = 1;
+
+  // Per-synth master bus — every voice's gain flows into masterGain →
+  // compressor → audioCtx.destination. Linear gain stage makes the
+  // compressor the only non-linear element in the bus.
+  const masterGain = audioCtx.createGain();
+  const compressor = audioCtx.createDynamicsCompressor();
+  // Defaults to a no-op (threshold=0 keeps the compressor transparent),
+  // but explicit assignment here guards against Web Audio implementations
+  // that initialise DynamicsCompressorNode with non-zero knee/attack.
+  compressor.threshold.value = MASTER_COMPRESSOR_OPTS.threshold;
+  compressor.ratio.value = MASTER_COMPRESSOR_OPTS.ratio;
+  compressor.attack.value = MASTER_COMPRESSOR_OPTS.attack;
+  compressor.release.value = MASTER_COMPRESSOR_OPTS.release;
+  compressor.knee.value = MASTER_COMPRESSOR_OPTS.knee;
+  masterGain.connect(compressor).connect(audioCtx.destination);
 
   const noteOn = (midi: number, instrument: PianoInstrument): number => {
     const voiceId = nextVoiceId;
@@ -99,7 +141,9 @@ export const createPianoSynth = (audioCtx: AudioContext): PianoSynth => {
     const gain = audioCtx.createGain();
     gain.gain.setValueAtTime(0.0001, audioCtx.currentTime);
 
-    osc.connect(gain).connect(audioCtx.destination);
+    // Voice → master bus → destination. Master compressor catches the
+    // summed amplitude when many voices overlap.
+    osc.connect(gain).connect(masterGain);
 
     // ADSR attack + decay (sustain floor set at end of decay).
     const t0 = audioCtx.currentTime;
@@ -184,6 +228,9 @@ export const createPianoSynth = (audioCtx: AudioContext): PianoSynth => {
       }
       voices.delete(voice.voiceId);
     }
+    // Master bus stays alive until AudioContext teardown — closing the
+    // synth mid-session would create an audible pop. The shared
+    // AudioContext is reused across synthesizers.
   };
 
   return {

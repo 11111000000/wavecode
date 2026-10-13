@@ -63,6 +63,27 @@ export class AudioEngine extends Context.Tag('AudioEngine')<
      */
     readonly getCycleProgress: () => Effect.Effect<number, never, never>;
     /**
+     * Return the haps currently sounding in the live scheduler. Used by
+     * PianoKeyboard FOLLOW mode to highlight piano keys whose MIDI
+     * numbers are in `audio.eval(snippet)`'s scheduler at the moment
+     * of the call.
+     *
+     * Implementations should query haps in a window of `[now, now + 1)`
+     * cycle-positions relative to the AudioContext clock so that the
+     * piano highlights the note that JUST started even if its end is
+     * still some cycles away.
+     *
+     * Returns ONLY the active MIDI set — note durations and onsets are
+     * dropped because PianoKeyboard only needs a `Set<number>` to light
+     * up keys. Returns `[]` when audio was never started (no lastEval
+     * anchor), or when the scheduler is not currently evaluating.
+     */
+    readonly getActiveHaps: () => Effect.Effect<
+      ReadonlyArray<{ readonly midi: number }>,
+      never,
+      never
+    >;
+    /**
      * Создаёт live recorder (MediaRecorder поверх webaudioRepl output).
      * Возвращает handle, presentation вызывает start()/stop() напрямую
      * (это imperative lifecycle, не Effect-async).
