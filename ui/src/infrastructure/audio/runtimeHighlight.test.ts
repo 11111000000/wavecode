@@ -20,7 +20,7 @@ import {
   type QueryablePattern,
 } from './runtimeHighlight';
 
-type FakeHap = { context?: { locations?: Array<{ from: number; to: number }> } };
+type FakeHap = { context?: { locations?: Array<{ from?: number; to?: number; start?: number; end?: number }> } };
 
 const makePattern = (haps: ReadonlyArray<FakeHap>): QueryablePattern => ({
   queryArc: (_a: number, _b: number): ReadonlyArray<unknown> => [...haps],
@@ -134,6 +134,29 @@ describe('computeRanges — pure projection', () => {
     const state: ActiveState = { pattern: makePattern(haps), ctx: makeCtx(2.0), anchor: 0.0, cps: 1 };
     // nowCycle = (2.0 - 0.0) * 1 = 2.0; queryArc(1.5, 2.5) returns haps. Expect [[4, 9]].
     expect(computeRanges(state)).toEqual([[4, 9]]);
+  });
+
+  it('accepts `start`/`end` location format (Strudel core/pattern.mjs:558)', () => {
+    // `Pattern.withLoc(start, end)` stores the location as `{ start, end }`,
+    // not `{ from, to }` — this is the format the runtime produces. The
+    // bridge must accept both for forward-compat with older Strudel.
+    const haps: FakeHap[] = [
+      { context: { locations: [{ start: 30, end: 35 }] } },
+      { context: { locations: [{ start: 40, end: 50 }] } },
+    ];
+    const state: ActiveState = { pattern: makePattern(haps), ctx: makeCtx(2.0), anchor: 1.0, cps: 1 };
+    expect(computeRanges(state)).toEqual([[30, 35], [40, 50]]);
+  });
+
+  it('mixed `start`/`end` and `from`/`to` formats within the same result set', () => {
+    // Some Haps may carry legacy `from`/`to`, others the modern `start`/`end`.
+    // Both should project to CharRanges.
+    const haps: FakeHap[] = [
+      { context: { locations: [{ from: 5, to: 7 }] } },
+      { context: { locations: [{ start: 20, end: 30 }] } },
+    ];
+    const state: ActiveState = { pattern: makePattern(haps), ctx: makeCtx(2.0), anchor: 1.0, cps: 1 };
+    expect(computeRanges(state)).toEqual([[5, 7], [20, 30]]);
   });
 });
 
