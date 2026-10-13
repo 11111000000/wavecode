@@ -1,4 +1,4 @@
-import type { JSX } from 'solid-js';
+import { Show, type JSX } from 'solid-js';
 import { BottomSheet } from '~/presentation/components/BottomSheet';
 import { MixerPanel } from '~/presentation/components/MixerPanel';
 import { StepGrid } from '~/presentation/components/StepGrid';
@@ -7,6 +7,28 @@ import { HelloPanel } from '~/presentation/panels/HelloPanel';
 import { AIEditPanel } from '~/presentation/panels/AIEditPanel';
 
 export type BottomSheetsProps = Record<string, never>;
+
+/**
+ * Piano split (wavecode-piano-rec-clarity):
+ *   - Desktop (≥1024px) → no piano BottomSheet here. The piano is
+ *     rendered inline in ScorePanel under a collapsible header
+ *     (`▼ Piano`). Showing a BottomSheet-piano on desktop would
+ *     duplicate the component AND cover the editor that the inline
+ *     piano is meant to coexist with.
+ *   - Mobile (<1024px) → BottomSheet-piano at the bottom, full-height
+ *     snap. ScorePanel hides its inline piano on the same breakpoint.
+ *   - The TabBar "Piano" tab still exists on both viewports — on
+ *     desktop, tapping it is a no-op (no BottomSheet renders).
+ *     That's a small UX wart tracked for a follow-up packet.
+ *
+ * The viewport match is evaluated at render-time. If the user
+ * resizes across the breakpoint, BottomSheets re-renders via Solid's
+ * reactive scope and the sheet opens/closes accordingly.
+ */
+const isDesktopViewport = (): boolean => {
+  if (typeof window === 'undefined') return false;
+  return window.matchMedia('(min-width: 1024px)').matches;
+};
 
 export function BottomSheets(_: BottomSheetsProps): JSX.Element {
   void _;
@@ -30,11 +52,13 @@ export function BottomSheets(_: BottomSheetsProps): JSX.Element {
         </div>
       </BottomSheet>
 
-      <BottomSheet kind="piano" title="Piano" subtitle="WebMIDI auto-bind">
-        <div class="piano-sheet-body">
-          <PianoKeyboard />
-        </div>
-      </BottomSheet>
+      <Show when={!isDesktopViewport()}>
+        <BottomSheet kind="piano" title="Piano" subtitle="WebMIDI auto-bind">
+          <div class="piano-sheet-body">
+            <PianoKeyboard variant="sheet" />
+          </div>
+        </BottomSheet>
+      </Show>
     </>
   );
 }

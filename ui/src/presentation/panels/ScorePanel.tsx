@@ -1,27 +1,134 @@
-import { Show, Suspense, createSignal, onCleanup } from 'solid-js';
+import {
+  Show,
+  Suspense,
+  createSignal,
+  createEffect,
+  onCleanup,
+  onMount,
+} from 'solid-js';
 import { appStore, dispatch } from '../state/appStore';
 import { getDebug } from '~/infrastructure/audio/LiveAudioEngine';
 import { CodeMirrorEditor, type CodeMirrorEditorApi } from '../components/CodeMirrorEditor';
 import { MiniNotationToolbar } from '../components/MiniNotationToolbar';
+import { PianoKeyboard } from '../components/PianoKeyboard';
+import {
+  setEditorFocused,
+  setPianoEditorApi,
+} from '../state/pianoRecStore';
 
 /**
- * Score panel — ТОЛЬКО редактор + debug-info + mini-notation toolbar.
+ * Score panel — редактор + debug-info + mini-notation toolbar +
+ * (опционально на desktop) inline-пианино под collapsible header'ом.
  *
- * Mixer / Step / Piano / MIDI I/O перенесены в BottomSheet (через табы
- * TabBar внизу), чтобы не дублировать и не конкурировать за вертикальное
- * место с редактором. App.tsx дёргает `wavecode:step-grid` / `wavecode:piano`
- * events, которые BottomSheet слушает (см. presentation/components/BottomSheet).
+ * Piano behavior split:
+ *   - Desktop (≥1024px) → inline `<PianoKeyboard variant="inline" />`
+ *     renders ABOVE the editor when the `▼ Piano` header is expanded.
+ *     Default = collapsed (one thin button) so the editor gets full
+ *     width; user expands explicitly to record. Collapsed state is
+ *     persisted in `wavecode-piano-collapse-v1` localStorage.
+ *   - Mobile (<1024px) → no inline piano here; BottomSheet-piano
+ *     (rendered from app/BottomSheets.tsx) takes over. The BottomSheet
+ *     is gated by the same viewport breakpoint.
  *
- * <Suspense> wrapper нужен для lazy CodeMirrorEditor — пока chunk
- * подгружается (первый scoreOpen), показываем placeholder высотой
- * редактора, чтобы не схлопывался layout.
+ * Editor wiring:
+ *   - `editorApi` is captured in `onReady` and used by MiniNotationToolbar
+ *     (cursor inserts via `dispatchInsertSnippet`) and by the
+ *     pianoRecStore at-cursor slot (insert at the editor cursor).
+ *   - focus/blur listeners on `view.contentDOM` drive the
+ *     `editorFocused` signal — the `⌖ cursor` slot button stays
+ *     disabled until the user actually taps into the editor.
+ *
+ * <Suspense> wrapper is for lazy CodeMirrorEditor — first open
+ * downloads the chunk (~400KB); until then we show a placeholder so
+ * the panel doesn't collapse to zero height.
  */
+
+const PIANO_COLLAPSE_KEY = 'wavecode-piano-collapse-v1';
+const DESKTOP_QUERY = '(min-width: 1024px)';
+
+const readStoredCollapsed = (): boolean => {
+  try {
+    const v = localStorage.getItem(PIANO_COLLAPSE_KEY);
+    if (v === 'false') return false;
+    if (v === 'true') return true;
+  } catch {
+    /* localStorage unavailable (e.g. SSR / private mode) */
+  }
+  return true;
+};
+
+const writeStoredCollapsed = (v: boolean): void => {
+  try {
+    localStorage.setItem(PIANO_COLLAPSE_KEY, String(v));
+  } catch {
+    /* localStorage unavailable — silently no-op */
+  }
+};
+
+const readDesktopMatch = (): boolean => {
+  if (typeof window === 'undefined') return false;
+  return window.matchMedia(DESKTOP_QUERY).matches;
+};
+
 export function ScorePanel() {
   const [debug, setDebug] = createSignal(getDebug());
+  const [pianoCollapsed, setPianoCollapsed] = createSignal(true);
+  const [isDesktop, setIsDesktop] = createSignal(readDesktopMatch());
   let editorApi: CodeMirrorEditorApi | undefined;
 
   const pollId = window.setInterval(() => setDebug(getDebug()), 500);
   onCleanup(() => window.clearInterval(pollId));
+
+  // Restore persisted collapse state + listen for viewport changes.
+  onMount(() => {
+    setPianoCollapsed(readStoredCollapsed());
+    const mql = window.matchMedia(DESKTOP_QUERY);
+    const onChange = (e: MediaQueryListEvent): void => {
+      setIsDesktop(e.matches);
+    };
+    mql.addEventListener('change', onChange);
+    onCleanup(() => mql.removeEventListener('change', onChange));
+  });
+
+  // Wire the editor API + focus state into pianoRecStore. Re-runs if
+  // `editorApi` is reassigned (lazy CodeMirror chunk finishes loading),
+  // so the listeners always point at the current EditorView.
+  createEffect(() => {
+    const api = editorApi;
+    if (!api) {
+      setPianoEditorApi(undefined);
+      setEditorFocused(false);
+      return;
+    }
+    setPianoEditorApi(api);
+    const view = api.getView();
+    if (!view) {
+      setEditorFocused(false);
+      return;
+    }
+    const dom = view.contentDOM;
+    const onFocus = (): void => setEditorFocused(true);
+    const onBlur = (): void => setEditorFocused(false);
+    // Capture initial state — if the editor was already focused when
+    // we attached, surface that.
+    if (dom.contains(document.activeElement) && document.activeElement === dom) {
+      setEditorFocused(true);
+    }
+    dom.addEventListener('focus', onFocus);
+    dom.addEventListener('blur', onBlur);
+    onCleanup(() => {
+      dom.removeEventListener('focus', onFocus);
+      dom.removeEventListener('blur', onBlur);
+      setEditorFocused(false);
+      setPianoEditorApi(undefined);
+    });
+  });
+
+  const togglePiano = (): void => {
+    const next = !pianoCollapsed();
+    setPianoCollapsed(next);
+    writeStoredCollapsed(next);
+  };
 
   return (
     <div class="score-panel-inner">
@@ -31,6 +138,29 @@ export function ScorePanel() {
           <p>Открой Piano → tap для звука</p>
           <p>Или напиши ИИ: "сделай бит"</p>
         </div>
+      </Show>
+      <Show when={isDesktop()}>
+        <div class="score-piano-header">
+          <button
+            type="button"
+            class="piano-toggle"
+            data-collapsed={pianoCollapsed() ? 'true' : 'false'}
+            aria-expanded={!pianoCollapsed()}
+            aria-controls="score-piano-inline"
+            aria-label={pianoCollapsed() ? 'Развернуть пианино' : 'Свернуть пианино'}
+            onClick={togglePiano}
+          >
+            <span class="piano-toggle__caret" aria-hidden="true">
+              {pianoCollapsed() ? '▶' : '▼'}
+            </span>
+            <span class="piano-toggle__label">Piano</span>
+          </button>
+        </div>
+        <Show when={!pianoCollapsed()}>
+          <div id="score-piano-inline" class="score-piano-inline">
+            <PianoKeyboard variant="inline" />
+          </div>
+        </Show>
       </Show>
       <Suspense fallback={<div class="cm-host cm-host-fill cm-loading">загрузка редактора…</div>}>
         <CodeMirrorEditor
