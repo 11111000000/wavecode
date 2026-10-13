@@ -171,17 +171,23 @@ substrate: |
   − DELETED: notes.ts `multiNoteSnippet` / `buildPianoSnippet`
     (больше не нужны — обход через PianoSynth). singleNoteSnippet
     оставлен для возможного reuse.
-status: draft
+status: applied
 witness:
-  applied_at: TBD
-  commit: TBD
+  applied_at: 2026-10-13
+  commit: 3855be2
   supersedes: math/wavecode-piano-polyphony/packet.md
   notes: |
-    SHA + applied_at будут заполнены subagent'ом.
-    Supersedes wavecode-piano-polyphony потому что тот
-    пакет предполагал `evalScore` как корректный путь —
-    но это и есть source of "interrupts main track" бага.
-    Web Audio bypass — структурное исправление.
+    Implementation: PianoSynth (infrastructure/audio/PianoSynth.ts)
+    exposes typed Web Audio wrapper with noteOn/noteOff/setInstrument/
+    activeCount/dispose. PianoKeyboard now routes audio through it
+    instead of evalScore — recBuffer accumulates notes only when REC
+    is on (no score mutation). PianoToolbar exposes REC toggle +
+    instrument selector. 41 test files / 487 tests pass. PianoKeyboard
+    test guards `evalScore not called` as a regression for the
+    "interrupts main track" bug. Supersedes wavecode-piano-polyphony
+    because that packet assumed `evalScore` was the correct path —
+    but that is the source of the "interrupts main track" bug. Web
+    Audio bypass is the structural fix.
 axiom: A5
 epistemics:
   - statement: "Web Audio OscillatorNode + GainNode —

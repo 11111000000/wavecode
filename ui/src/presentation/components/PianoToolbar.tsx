@@ -1,0 +1,109 @@
+import { For, Show, type JSX } from 'solid-js';
+import { RecordIcon } from '../icons';
+import {
+  recEnabled,
+  toggleRec,
+  instrument,
+  setInstrument,
+} from '../state/pianoRecStore';
+import type { PianoInstrument } from '~/domain/music/notes';
+
+/**
+ * PianoToolbar — REC toggle + instrument selector for the piano.
+ *
+ * Rendered inline inside `.piano-toolbar` (next to the existing
+ * `.piano-hint` text and optional MIDI status pill). The component
+ * is intentionally dumb: it reads from `pianoRecStore` (a module-
+ * level Solid signal bag) and calls its setters. The actual audio
+ * routing lives in PianoKeyboard; this component owns only the UI
+ * affordances.
+ *
+ * Visual contract:
+ *   - Rec button: outlined when off; magenta pulse when on. Icon is
+ *     a filled circle (RecordIcon). aria-pressed mirrors recEnabled.
+ *   - Instrument selector: 4 inline buttons, the active one amber-
+ *     filled. Icons are unicode glyphs (△ ∿ ⊿ ⊓) — chosen for
+ *     legibility at 24px without external SVG.
+ *
+ * The MIDI status pill (when present) is rendered in the same row via
+ * the `midiStatus` prop. PianoKeyboard owns the actual pill markup
+ * (including the active-notes suffix) so the styling stays consistent
+ * with the legacy version.
+ */
+export type PianoToolbarProps = {
+  /** Optional MIDI status text (e.g. "MIDI: 1 device · 3 ноты").
+   *  Under `exactOptionalPropertyTypes` the explicit `| undefined`
+   *  is required so callers can pass `undefined` (e.g. when MIDI is
+   *  unavailable). */
+  midiStatus?: string | undefined;
+  /** True if there's at least one active note — drives the green
+   *  "has-active" pulse on the MIDI status pill. */
+  midiActive?: boolean | undefined;
+  /** Count of active notes — reflected in the data-active-count
+   *  attribute of the MIDI status pill. */
+  midiActiveCount?: number | undefined;
+};
+
+const INSTRUMENTS: ReadonlyArray<PianoInstrument> = ['triangle', 'sine', 'sawtooth', 'square'];
+
+const instrumentGlyph = (inst: PianoInstrument): string => {
+  switch (inst) {
+    case 'triangle': return '△';
+    case 'sine': return '∿';
+    case 'sawtooth': return '⊿';
+    case 'square': return '⊓';
+    default: return inst;
+  }
+};
+
+export const PianoToolbar = (props: PianoToolbarProps): JSX.Element => {
+  const midiPillTone = (): 'ok' | 'pending' => {
+    // The label "MIDI: 1 device" vs "MIDI: no device" determines tone.
+    // Without inspecting the string we use a heuristic: if the
+    // string starts with "MIDI: N device" → ok; otherwise pending.
+    const s = props.midiStatus ?? '';
+    return /^MIDI:\s+\d+\s+device/.test(s) ? 'ok' : 'pending';
+  };
+
+  return (
+    <div class="piano-toolbar-row">
+      <button
+        type="button"
+        class="piano-rec-btn"
+        data-active={recEnabled() ? 'true' : 'false'}
+        onClick={() => toggleRec()}
+        title={recEnabled() ? 'Rec ON — нажатия пишутся в score' : 'Rec OFF — играю параллельно'}
+        aria-label="Запись"
+        aria-pressed={recEnabled()}
+      >
+        <RecordIcon size={14} />
+        REC
+      </button>
+      <div class="piano-instrument-selector" role="group" aria-label="Инструмент">
+        <For each={INSTRUMENTS}>
+          {(inst) => (
+            <button
+              type="button"
+              class="piano-inst-btn"
+              data-active={instrument() === inst ? 'true' : 'false'}
+              onClick={() => setInstrument(inst)}
+              title={inst}
+              aria-label={`Инструмент: ${inst}`}
+            >
+              {instrumentGlyph(inst)}
+            </button>
+          )}
+        </For>
+      </div>
+      <Show when={props.midiStatus}>
+        <span
+          class={`piano-midi-status piano-midi-${midiPillTone()}${props.midiActive ? ' has-active' : ''}`}
+          data-active-count={props.midiActiveCount ?? 0}
+          aria-live="polite"
+        >
+          {props.midiStatus}
+        </span>
+      </Show>
+    </div>
+  );
+};

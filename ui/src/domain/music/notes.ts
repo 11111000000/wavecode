@@ -113,3 +113,31 @@ export const isBlackKey = (midi: number): boolean => {
   const pc = ((midi % 12) + 12) % 12;
   return pc === 1 || pc === 3 || pc === 6 || pc === 8 || pc === 10;
 };
+
+// =========================================================================
+// Piano instrument — waveform selector for the Web Audio piano synth.
+// =========================================================================
+//
+// Lives in domain (pure type, no audio imports) because:
+//   - It's a string literal union, identical to the OscillatorType
+//     strings exposed by Web Audio API.
+//   - The mapping `PianoInstrument -> OscillatorType` is a pure cast
+//     (no runtime work); both infrastructure/audio/PianoSynth and
+//     presentation/state/pianoRecStore need the type.
+//
+// The infrastructure layer imports `PianoInstrument` from here and uses
+// `pianoInstrumentToOscType()` to pass it to `OscillatorNode.type`.
+// The presentation layer imports the type as the value held in the
+// pianoRecStore instrument signal.
+
+/** Oscillator waveform for the on-screen piano. Matches Web Audio
+ *  `OscillatorType` string literal union (excluding 'custom'). */
+export type PianoInstrument = 'triangle' | 'sine' | 'sawtooth' | 'square';
+
+/** Coerce the domain `PianoInstrument` to a Web Audio `OscillatorType`.
+ *  The mapping is identity (the string union values match the W3C
+ *  OscillatorType string literal union exactly), but the function
+ *  exists so the cast is explicit at the boundary — protects against
+ *  future drift if the W3C spec adds a literal to one union but not the
+ *  other. */
+export const pianoInstrumentToOscType = (inst: PianoInstrument): OscillatorType => inst;
