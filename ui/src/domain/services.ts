@@ -1,5 +1,5 @@
 import { Context, type Effect } from 'effect';
-import type { Message } from './types';
+import type { LayerMix, Message } from './types';
 import type { NoteEvent } from './midi/encoder';
 import type { LiveRecorderHandle } from '~/infrastructure/audio/AudioRecorder';
 import type {
@@ -56,6 +56,24 @@ export class AudioEngine extends Context.Tag('AudioEngine')<
      * Used by the Transport panel — debounced 100ms from UI.
      */
     readonly setCps: (cps: number) => Effect.Effect<void, never, never>;
+    /**
+     * Push mixer edits (gain / mute / solo) into the live Strudel pattern
+     * without a full `eval` cycle. Rebuilds the snippet via `injectMix`,
+     * parses it back to a Pattern and calls `repl.setPattern(newPat,
+     * autostart=false)` so the scheduler swaps the pattern at its next
+     * lookahead (no stop/start, no `beforeEval` side-effects).
+     *
+     * Used by the MixerPanel — debounced 50 ms from UI. Implementations
+     * must be idempotent and silent on parse failure: on error, the
+     * existing `repl.scheduler.pattern` is left untouched and audio
+     * continues uninterrupted.
+     *
+     * Companion of `setCps` — both are runtime state pushers.
+     * See `math/wavecode-mixer-live-update` for trade-offs.
+     */
+    readonly setLayerMix: (
+      layerMix: ReadonlyArray<LayerMix>,
+    ) => Effect.Effect<void, never, never>;
     /**
      * Synchronous read of current playback cycle position (0..1).
      * Computed from AudioContext clock + last successful eval start time.
