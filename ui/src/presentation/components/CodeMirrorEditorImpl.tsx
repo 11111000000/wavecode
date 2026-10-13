@@ -5,6 +5,7 @@ import { oneDark } from '@codemirror/theme-one-dark';
 import { autocompletion } from '@codemirror/autocomplete';
 import { createEffect, onCleanup, onMount, untrack } from 'solid-js';
 import { miniNotationHighlight } from '../editor/miniNotationHighlight';
+import { runtimeMiniHighlight } from '../editor/runtimeMiniHighlight';
 import { strudelCompletions } from '../editor/strudelCompletions';
 
 export type CodeMirrorEditorApi = {
@@ -47,6 +48,7 @@ export function CodeMirrorEditor(props: Props) {
         basicSetup,
         oneDark,
         miniNotationHighlight,
+        runtimeMiniHighlight,
         autocompletion({ override: [strudelCompletions] }),
         EditorView.contentAttributes.of({
           autocorrect: 'off',
