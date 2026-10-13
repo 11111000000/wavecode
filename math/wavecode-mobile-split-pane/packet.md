@@ -288,7 +288,19 @@ synthesis: |
     inline-piano в ScorePanel остаётся.
   - FUTURE: v2 — drag-handle для landscape orientation; resize
     observer для re-clamp при rotate.
-status: draft
+status: applied
+witness:
+  applied_at: 2026-10-13
+  branch: feat/mobile-sheet-push
+  commit: a79534ed4f5630521f8bb904883f6825ab6e0e21
+  supersedes: null
+  notes: |
+    Implementation completed on 2026-10-13 on branch
+    `feat/mobile-sheet-push`. Test counts (vitest): 712/712
+    passing across 52 files. Net new tests: +17 (9 uiState
+    sheetHeightPx cases + 8 SheetTabs cases). New e2e spec
+    mobile-sheet-push.spec.ts (5 cases). tsc --noEmit clean;
+    vite build succeeds. No new lint errors.
 axiom: A5
 epistemics:
   - statement: "BottomSheet (kind=ai/mixer/status/step/piano) сейчас position:fixed с z-sheet=40+1; перекрывает ScorePanel снизу"
