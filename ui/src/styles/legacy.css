@@ -54,6 +54,25 @@
   position: relative;
   z-index: calc(var(--z-sheet) + 5);
 }
+
+@media (max-width: 720px) {
+  /* На мобиле делаем PresetRow липким сразу под TopBar. Иначе
+   * при открытой AI-панели (max-height: 50vh) пользователь
+   * теряет доступ к play/cps — единственный способ прервать
+   * воспроизведение оказывается за пределами viewport.
+   * Sticky + компактный TransportPanel выше решают обе задачи:
+   * транспорт всегда виден и занимает 1 строку.
+   */
+  .app-preset-row {
+    position: sticky;
+    top: var(--header-h);
+    padding: var(--space-xs) var(--space-md);
+    background: rgba(10, 10, 14, 0.92);
+    backdrop-filter: blur(12px) saturate(160%);
+    -webkit-backdrop-filter: blur(12px) saturate(160%);
+    border-bottom: 1px solid var(--border);
+  }
+}
 .app-controls-row {
   display: flex;
   gap: var(--space-sm);
@@ -411,13 +430,29 @@
 }
 
 @media (max-width: 720px) {
-  .swing-control {
-    flex-basis: 100%;
-    border-left: none;
-    padding-left: 0;
-    margin-top: var(--space-xs);
+  /* На мобиле сворачиваем TransportPanel в компактный чип:
+   *   play · cps · bpm. Swing и CPS-пресеты прячем — они нужны
+   *   только при тонком тюнинге, и при включённой AI-панели они
+   *   "раздувают" PresetRow до 3 строк, выдавливая редактор.
+   *   Скрытие деталей, а не функциональности: swing/пресеты
+   *   живут в keyboard shortcuts / persistent state.
+   */
+  .swing-control,
+  .cps-presets,
+  .transport-panel > .playhead-track {
+    display: none;
   }
-  .swing-slider { width: 100%; max-width: 200px; }
+  .transport-controls {
+    flex-wrap: nowrap;
+    gap: var(--space-sm);
+  }
+  .cps-control {
+    flex: 1 1 auto;
+    min-width: 100px;
+  }
+  .transport-panel {
+    min-height: 40px;
+  }
 }
 
 /* =========================================================================
@@ -478,7 +513,7 @@
   display: flex;
   flex-direction: column;
   flex: 1 1 auto;
-  min-height: 0;
+  min-height: 220px;
   overflow: hidden;
 }
 
@@ -500,8 +535,8 @@
 .ai-panel { background: var(--surface-0); }
 .ai-panel[data-open='true'] {
   flex: 0 0 auto;
-  min-height: 200px;
-  max-height: 40vh;
+  min-height: 240px;
+  max-height: 50vh;
 }
 .status-panel {
   background: var(--surface-1);
