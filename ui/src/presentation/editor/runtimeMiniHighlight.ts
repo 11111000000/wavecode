@@ -22,6 +22,12 @@
  * user typing that reduces doc length can never throw, and stale ranges
  * pointing past the end are silently dropped (the highlight naturally
  * disappears until next eval).
+ *
+ * Pattern follows miniNotationHighlight.ts — the `ViewPlugin.fromClass`
+ * shape with `decorations: (v) => v.decorations` accessor. Alternative
+ * APIs (`EditorView.decorations.compute([field], …)`) are only in CM6
+ * post-SCENT, and wavecode pins the base CM6 release without that
+ * extension.
  */
 
 import { StateEffect, StateField, type Extension, type StateEffectType } from '@codemirror/state';
@@ -77,38 +83,51 @@ const buildDecorationSet = (
 
 export const runtimeMiniHighlight: Extension = [
   activeRangesField,
-  EditorView.decorations.compute([activeRangesField], (state) => {
-    const ranges = state.field(activeRangesField);
-    return buildDecorationSet(ranges, state.doc.length);
-  }),
   ViewPlugin.fromClass(
     class {
+      decorations: DecorationSet;
+      private prevRanges: ReadonlyArray<CharRange> = EMPTY_RANGES;
+      private prevDocLength = -1;
       private readonly unsub: () => void;
 
       constructor(view: EditorView) {
+        const ranges = view.state.field(activeRangesField);
+        const docLen = view.state.doc.length;
+        this.prevRanges = ranges;
+        this.prevDocLength = docLen;
+        this.decorations = buildDecorationSet(ranges, docLen);
         this.unsub = subscribe((next) => {
-          // The bridge calls us from the rAF tick — outside any CM update
-          // cycle. Wrap dispatch in microtask defensively in case the
-          // callback fires during a transaction in some odd browser state.
-          const dispatch = (): void => {
-            view.dispatch({ effects: setActiveRangesEffect.of(next) });
-          };
-          if (typeof queueMicrotask === 'function') queueMicrotask(dispatch);
-          else setTimeout(dispatch, 0);
+          // The bridge calls us from the rAF tick — outside any CM
+          // update cycle. Dispatch directly; effects flow through
+          // `setActiveRangesEffect` → the field is updated →
+          // `update()` below rebuilds decorations on the next doc
+          // tick.
+          view.dispatch({ effects: setActiveRangesEffect.of(next) });
         });
       }
 
-      // CRITICAL: do NOT mutate state in update(); the
-      // `EditorView.decorations.compute` already re-reads the field on
-      // every transaction, so this method just observes for diagnostics.
-      update(_update: ViewUpdate): void {
-        // no-op — pure observer. Decorations are recomputed via the
-        // facet bound to `activeRangesField`.
+      // CodeMirror calls this on every transaction. Rebuild decorations
+      // ONLY when (a) the active ranges changed (via the effect above)
+      // or (b) the doc length changed (clamping ranges to a shorter
+      // doc is the only state we have to refresh).
+      update(update: ViewUpdate): void {
+        const ranges = update.state.field(activeRangesField);
+        const docLen = update.state.doc.length;
+        const rangesChanged = ranges !== this.prevRanges;
+        const docChanged = docLen !== this.prevDocLength;
+        if (rangesChanged || docChanged) {
+          this.prevRanges = ranges;
+          this.prevDocLength = docLen;
+          this.decorations = buildDecorationSet(ranges, docLen);
+        }
       }
 
       destroy(): void {
         this.unsub();
       }
+    },
+    {
+      decorations: (v) => v.decorations,
     },
   ),
 ];
