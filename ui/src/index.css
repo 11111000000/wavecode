@@ -1,26 +1,36 @@
 /*
  * wavecode — Synthwave Modern Terminal.
  *
- * 5-слойная архитектура (mobile-first):
+ * 7-слойная архитектура через CSS cascade layers (mobile-first):
  *
- *   tokens.css      палитра spectrum (amber+cyan+magenta), surface-0..4,
- *                   motion (--ease-spring), radius scale, z-scale
- *   base.css        reset, Geist typography, focus ring, scrollbars,
- *                   safe-area padding
- *   components.css  новые «wc-*» компоненты: btn, card, chip, pill,
- *                   led, slider, big-slider, tabbar, fab, toast,
- *                   topbar, stat-grid, chat
- *   sheets.css      bottom-sheet, side-drawer, snap-points, drag-handle,
- *                   body-scroll-lock
- *   legacy.css      shim для старых селекторов в modern-палитре
+ *   tokens      палитра spectrum (amber+cyan+magenta), surface-0..4,
+ *               motion (--ease-spring), radius scale, z-scale
+ *   base        reset, Geist typography, focus ring, scrollbars,
+ *               safe-area padding, prefers-reduced-motion override
+ *   legacy      shim для старых селекторов в modern-палитре (постепенно
+ *               вытесняется components)
+ *   components  новые «wc-*» компоненты: btn, card, chip, pill,
+ *               led, slider, big-slider, tabbar, fab, toast,
+ *               topbar, stat-grid, chat, overflow-menu, toolstrip
+ *   sheets      bottom-sheet, side-drawer, snap-points, drag-handle,
+ *               body-scroll-lock
+ *   icons       иконки и анимации
+ *   landing     page-specific для лендинга (#/)
  *
- * Reference: math/wavecode-modern-mobile-redesign/packet.md
+ * Cascade order: tokens < base < legacy < components < sheets < icons
+ * < landing. Первый в объявлении = низший приоритет. Установлено
+ * через `@layer` декларацию в index.css, чтобы cascade был
+ * декларативным, а не зависел от порядка @import.
+ *
+ * Reference: math/wavecode-css-consolidate/packet.md
  */
 
-@import './styles/tokens.css';
-@import './styles/base.css';
-@import './styles/components.css';
-@import './styles/sheets.css';
-@import './styles/icons.css';
-@import './styles/legacy.css';
-@import './styles/landing.css';
+@layer tokens, base, legacy, components, sheets, icons, landing;
+
+@import './styles/tokens.css' layer(tokens);
+@import './styles/base.css' layer(base);
+@import './styles/components.css' layer(components);
+@import './styles/sheets.css' layer(sheets);
+@import './styles/icons.css' layer(icons);
+@import './styles/legacy.css' layer(legacy);
+@import './styles/landing.css' layer(landing);
