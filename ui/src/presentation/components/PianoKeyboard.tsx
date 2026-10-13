@@ -40,6 +40,17 @@ import { buildPianoSnippet } from './pianoSynth';
  */
 const EVAL_DEBOUNCE_MS = 30;
 
+/** Russian pluralisation for "нота/ноты/нот". Fewer surprises when
+ *  gluing into a localisation system later. Pure helper at module scope
+ *  (no closures over component state). */
+const formatActiveLabel = (count: number): string => {
+  const mod10 = count % 10;
+  const mod100 = count % 100;
+  if (mod10 === 1 && mod100 !== 11) return `${count} нота`;
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return `${count} ноты`;
+  return `${count} нот`;
+};
+
 export function PianoKeyboard() {
   const [activeNotes, setActiveNotes] = createSignal<ReadonlySet<number>>(new Set());
   const [midiAvailable, setMidiAvailable] = createSignal(false);
@@ -116,14 +127,26 @@ export function PianoKeyboard() {
     });
   });
 
+  // Active-note count for the MIDI status pill. Same `activeNotes()`
+  // signal that drives the key highlight — single source of truth for
+  // on-screen taps + WebMIDI events. `activeCount()` is a derived
+  // value; Solid recomputes it lazily so there's no re-render storm
+  // when MIDI keyboards fire 50 events/sec.
+  const activeCount = (): number => activeNotes().size;
+  const hasActive = (): boolean => activeCount() > 0;
+
   return (
     <div class="piano-wrap" role="group" aria-label="Piano keyboard C3 to B4">
       <div class="piano-toolbar">
         <span class="piano-hint">2 octaves (C3–B4) — tap or use MIDI keyboard</span>
         <Show when={midiAvailable()}>
-          <span class={`piano-midi-status piano-midi-${midiInputs().length > 0 ? 'ok' : 'pending'}`}>
+          <span
+            class={`piano-midi-status piano-midi-${midiInputs().length > 0 ? 'ok' : 'pending'}${hasActive() ? ' has-active' : ''}`}
+            data-active-count={activeCount()}
+            aria-live="polite"
+          >
             {midiInputs().length > 0
-              ? `MIDI: ${midiInputs().length} device${midiInputs().length === 1 ? '' : 's'}`
+              ? `MIDI: ${midiInputs().length} device${midiInputs().length === 1 ? '' : 's'}${hasActive() ? ` · ${formatActiveLabel(activeCount())}` : ''}`
               : 'MIDI: no device'}
           </span>
         </Show>
