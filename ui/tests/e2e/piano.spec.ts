@@ -37,7 +37,7 @@ import { test, expect } from '@playwright/test';
  *     source the existing piano-input tests rely on.
  */
 
-const BASE_URL = 'http://127.0.0.1:5173';
+const BASE_URL = 'http://127.0.0.1:4173';
 
 async function unlockAudio(page: import('@playwright/test').Page): Promise<void> {
   // The Piano toggle click counts as a user gesture.

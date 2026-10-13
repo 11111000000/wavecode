@@ -17,18 +17,9 @@ test('Eval button plays audio without errors', async ({ page }) => {
 
   // Click Eval (play).
   await page.locator('button[aria-label="Запуск"]').click();
-  await page.waitForTimeout(5000);
-
-  const afterStatus = await page.locator('dl.status-grid dd').allTextContents();
-  console.log('after eval:', JSON.stringify(afterStatus));
+  await page.waitForTimeout(2000);
 
   const audioStatus = await page.locator('dl.status-grid dd').nth(1).textContent();
-  const errorText = await page.locator('dd.status-error').textContent().catch(() => null);
-
-  console.log('audio status:', audioStatus);
-  console.log('error:', errorText || '(none)');
-  consoleMsgs.forEach((m) => console.log(`[${m.type}] ${m.text}`));
-  errors.forEach((e) => console.log(e));
 
   expect(errors).toHaveLength(0);
   // After Eval, status should be either playing or error (if Strudel failed to load).
