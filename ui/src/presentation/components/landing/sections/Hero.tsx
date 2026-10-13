@@ -1,4 +1,5 @@
 import type { JSX } from 'solid-js';
+import { A } from '@solidjs/router';
 import { ArrowRight, ChevronDown } from '../icons';
 
 /**
@@ -7,10 +8,6 @@ import { ArrowRight, ChevronDown } from '../icons';
  * Правая колонка: визуализация — виртуальный wave-дисплей.
  */
 export function Hero(): JSX.Element {
-  const goApp = (e: MouseEvent): void => {
-    e.preventDefault();
-    window.location.hash = '#/app';
-  };
   return (
     <section class="l-hero" id="top" aria-labelledby="hero-title">
       <div class="l-hero__text">
@@ -36,15 +33,14 @@ export function Hero(): JSX.Element {
         </p>
 
         <div class="l-hero__ctas">
-          <a
+          <A
             class="l-cta-primary"
-            href="#/app"
-            onClick={goApp}
+            href="/app"
             aria-label="Открыть редактор"
           >
             <span>Открыть редактор</span>
             <span class="l-arrow"><ArrowRight size={18} /></span>
-          </a>
+          </A>
           <a
             class="l-cta-ghost"
             href="#architecture"

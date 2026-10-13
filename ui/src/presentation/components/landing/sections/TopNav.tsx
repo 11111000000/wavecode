@@ -5,14 +5,10 @@ import { ArrowRight, GitHubIcon, WavecodeLogo } from '../icons';
 /**
  * TopNav — sticky nav лендинга.
  * Лого + навигация по якорям + CTA «Открыть редактор».
- * Реализован на @solidjs/router A: навигация — SPA-friendly, назад
- * попадаем на «/» (#/) — на ту же страницу.
+ * Реализован на @solidjs/router A: навигация — SPA-friendly, без
+ * перезагрузки страницы. BrowserRouter (clean URL, без hash).
  */
 export function TopNav(): JSX.Element {
-  const goApp = (e: MouseEvent): void => {
-    e.preventDefault();
-    window.location.hash = '#/app';
-  };
   return (
     <nav class="l-topnav" aria-label="Главная навигация">
       <A class="l-topnav__brand" href="/" aria-label="wavecode — на главную">
@@ -30,7 +26,7 @@ export function TopNav(): JSX.Element {
 
       <a
         class="l-topnav__github"
-        href="https://github.com/anomalyco/wavecode"
+        href="https://github.com/11111000000/wavecode"
         target="_blank"
         rel="noopener noreferrer"
         aria-label="GitHub"
@@ -39,15 +35,14 @@ export function TopNav(): JSX.Element {
         <GitHubIcon size={18} />
       </a>
 
-      <a
+      <A
         class="l-topnav__cta"
-        href="#/app"
-        onClick={goApp}
+        href="/app"
         aria-label="Открыть редактор"
       >
         <span>Открыть редактор</span>
         <ArrowRight size={14} />
-      </a>
+      </A>
     </nav>
   );
 }

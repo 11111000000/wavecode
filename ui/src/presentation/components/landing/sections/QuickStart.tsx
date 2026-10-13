@@ -1,10 +1,6 @@
 import type { JSX } from 'solid-js';
+import { A } from '@solidjs/router';
 import { ArrowRight } from '../icons';
-
-const goApp = (e: MouseEvent): void => {
-  e.preventDefault();
-  window.location.hash = '#/app';
-};
 
 export function QuickStart(): JSX.Element {
   return (
@@ -33,7 +29,7 @@ export function QuickStart(): JSX.Element {
           <pre class="l-step__cmd">
             <span class="prompt">$</span>{' '}
             <span style={{ color: 'var(--fg)' }}>open</span>{' '}
-            <span style={{ color: 'var(--ok)' }}>wavecode/#/app</span>
+            <span style={{ color: 'var(--ok)' }}>wavecode.kosov.online/app</span>
           </pre>
         </article>
 
@@ -81,15 +77,14 @@ export function QuickStart(): JSX.Element {
       </div>
 
       <div style={{ 'margin-top': 'var(--space-2xl)', display: 'flex', 'justify-content': 'center' }}>
-        <a
+        <A
           class="l-cta-primary"
-          href="#/app"
-          onClick={goApp}
+          href="/app"
           aria-label="Запустить редактор"
         >
           <span>Запустить редактор</span>
           <span class="l-arrow"><ArrowRight size={18} /></span>
-        </a>
+        </A>
       </div>
     </section>
   );
