@@ -16,6 +16,7 @@ import {
   type SheetSnap,
 } from '../state/uiState';
 import { SheetTabs } from './SheetTabs';
+import { triggerHaptic, triggerSnapPulse } from '~/infrastructure/haptics';
 
 type Props = ParentProps<{
   kind: NonNullable<SheetKind>;
@@ -59,6 +60,10 @@ export function BottomSheet(props: Props): JSX.Element {
   let startSheetH = 0;
   let contentRef: HTMLDivElement | undefined;
   let didDrag = false;
+  /** Last snap target the drag crossed — used to fire haptic only
+   *  when the pointer position crosses a snap threshold (not on
+   *  every move). */
+  let lastHapticSnap: SheetSnap | null = null;
 
   // Re-evaluate viewport on mount + on resize. Determines which
   // drag-handle behavior is active (mobile vertical-resize vs
@@ -111,15 +116,22 @@ export function BottomSheet(props: Props): JSX.Element {
     if (Math.abs(dy) > TAP_THRESHOLD_PX) didDrag = true;
     if (isMobileViewport()) {
       // Mobile: vertical drag resizes sheet height.
-      const next = startSheetH - dy;
+      const nextH = startSheetH - dy;
       const clamped = Math.max(
         SHEET_HEIGHT_MIN_PX,
-        Math.min(SHEET_HEIGHT_MAX_PX, next),
+        Math.min(SHEET_HEIGHT_MAX_PX, nextH),
       );
       setSheetHeightPx(clamped);
       // Update snap-target live so the 3-dot indicator + feedback
       // pill reflect the current pointer position.
-      setSnapTarget(targetSnapForHeight(clamped));
+      const target = targetSnapForHeight(clamped);
+      setSnapTarget(target);
+      // Haptic on snap-threshold crossings only — not every move.
+      // Gives the user a tactile cue when they cross peek/half/full.
+      if (target !== lastHapticSnap) {
+        lastHapticSnap = target;
+        triggerHaptic(5);
+      }
       return;
     }
     setDragDelta(Math.max(dy, -50));  // small overshoot up
@@ -133,24 +145,31 @@ export function BottomSheet(props: Props): JSX.Element {
     (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
     setDragDelta(0);
     setSnapTarget(null);
+    lastHapticSnap = null;
 
     if (isMobileViewport()) {
-      // Mobile: snap decision on release.
+      // Mobile: snap decision on release. Also fires a stronger
+      // haptic pulse on commit so the user gets a "snap confirmed"
+      // tactile signal.
       const finalH = getSheetHeightPx() ?? snapHeightFor(currentSnap());
       const vh = window.innerHeight;
       if (finalH < SHEET_HEIGHT_MIN_PX) {
         resetSheetHeightPx();
         snapTo('closed');
+        triggerSnapPulse();
       } else if (finalH > 0.6 * vh) {
         // Snap to 'full' — override user height with snap default.
         resetSheetHeightPx();
         snapTo('full');
+        triggerSnapPulse();
       } else if (finalH > 0.42 * vh) {
         resetSheetHeightPx();
         snapTo('half');
+        triggerSnapPulse();
       } else {
         resetSheetHeightPx();
         snapTo('peek');
+        triggerSnapPulse();
       }
       return;
     }

@@ -315,6 +315,45 @@ describe('uiState sheetHeightPx (mobile split-pane drag-resize)', () => {
   });
 });
 
+// =========================================================================
+// wavecode-mobile-split-pane polish (c) — hasOpenSheet
+// =========================================================================
+
+describe('uiState hasOpenSheet (pulse Score tab)', () => {
+  beforeEach(() => {
+    localStorage.clear();
+    vi.resetModules();
+  });
+
+  it('returns false when no sheet is open (all snaps closed)', async () => {
+    const s = await import('./uiState');
+    expect(s.hasOpenSheet()).toBe(false);
+  });
+
+  it('returns true after openKindSheet("mixer", "half")', async () => {
+    const s = await import('./uiState');
+    s.openKindSheet('mixer', 'half');
+    expect(s.hasOpenSheet()).toBe(true);
+  });
+
+  it('returns false after closeAllSheets (back to baseline)', async () => {
+    const s = await import('./uiState');
+    s.openKindSheet('mixer', 'half');
+    expect(s.hasOpenSheet()).toBe(true);
+    s.closeAllSheets();
+    expect(s.hasOpenSheet()).toBe(false);
+  });
+
+  it('returns true if ANY kind is open, regardless of which one', async () => {
+    const s = await import('./uiState');
+    s.openKindSheet('ai', 'peek');
+    expect(s.hasOpenSheet()).toBe(true);
+    s.closeAllSheets();
+    s.openKindSheet('piano', 'full');
+    expect(s.hasOpenSheet()).toBe(true);
+  });
+});
+
 describe('uiState keyboard shortcuts (multi-undo)', () => {
   let originalAdd: typeof window.addEventListener;
   let originalRemove: typeof window.removeEventListener;

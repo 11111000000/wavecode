@@ -267,6 +267,17 @@ export const getActiveSheet = activeSheet;
 export const getSheetSnap = sheetSnap;
 export const getActiveTab = activeTab;
 
+/** True when at least one sheet (per-kind) is in a non-closed snap.
+ *  Used by TabBar to apply a pulse to the "Score" tab (primary
+ *  navigation back to the editor). */
+export const hasOpenSheet = (): boolean => {
+  const snaps = snapsByKind();
+  for (const k of Object.keys(snaps) as NonNullable<SheetKind>[]) {
+    if (snaps[k] !== 'closed') return true;
+  }
+  return false;
+};
+
 /** Close every open sheet — used by "score" tab и для сброса глобального overlay. */
 export const closeAllSheets = (): void => {
   setSnapsByKindRaw((m) => {

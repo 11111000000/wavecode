@@ -15,6 +15,12 @@ import {
   setEditorFocused,
   setPianoEditorApi,
 } from '../state/pianoRecStore';
+import {
+  getKindSnap,
+  hasOpenSheet,
+  snapTo,
+  type SheetKind,
+} from '../state/uiState';
 
 /**
  * Score panel — редактор + debug-info + mini-notation toolbar +
@@ -154,7 +160,26 @@ export function ScorePanel() {
       return;
     }
     const dom = view.contentDOM;
-    const onFocus = (): void => setEditorFocused(true);
+    const onFocus = (): void => {
+      setEditorFocused(true);
+      // wavecode-mobile-split-pane polish (b): if a sheet is open at
+      // 'full' (70vh) the editor is squeezed to ~200px — too small
+      // for active editing. Auto-resize the sheet to 'half' (50vh)
+      // so the user gets a comfortable editor without manually
+      // dragging the handle.
+      if (isDesktop()) return;
+      if (!hasOpenSheet()) return;
+      // Find the active full-snap sheet (any kind) and shrink it.
+      const kinds: ReadonlyArray<NonNullable<SheetKind>> = [
+        'ai', 'mixer', 'status', 'step', 'piano',
+      ];
+      for (const k of kinds) {
+        if (getKindSnap(k) === 'full') {
+          snapTo('half');
+          break;
+        }
+      }
+    };
     const onBlur = (): void => setEditorFocused(false);
     // Capture initial state — if the editor was already focused when
     // we attached, surface that.
