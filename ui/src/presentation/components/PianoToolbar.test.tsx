@@ -17,6 +17,10 @@ beforeEach(async () => {
   rec.setInstrument('triangle');
   rec.clearRec();
   if (rec.recEnabled()) rec.toggleRec();
+  if (rec.followEnabled()) rec.toggleFollow();
+  // Reset score so applyToScore tests start from empty editor.
+  const { dispatch } = await import('../state/appStore');
+  dispatch({ type: 'replaceScore', text: '' });
 });
 
 afterEach(() => {
@@ -141,5 +145,87 @@ describe('PianoToolbar — MIDI status pill (optional)', () => {
     const pill = container.querySelector<HTMLSpanElement>('.piano-midi-status');
     expect(pill!.classList.contains('has-active')).toBe(true);
     expect(pill!.getAttribute('data-active-count')).toBe('1');
+  });
+});
+
+describe('PianoToolbar — FOLLOW toggle (wavecode-piano-modes-and-gain)', () => {
+  it('renders a FOLLOW toggle button next to REC', () => {
+    const { container } = render(() => <PianoToolbar />);
+    const follow = container.querySelector<HTMLButtonElement>('.piano-follow-btn');
+    expect(follow).toBeTruthy();
+    expect(follow!.getAttribute('aria-label')).toBe('Подсветка от scheduler');
+    expect(follow!.getAttribute('aria-pressed')).toBe('false');
+    expect(follow!.getAttribute('data-active')).toBe('false');
+  });
+
+  it('clicking FOLLOW flips data-active + aria-pressed (independent of REC)', async () => {
+    const rec = await import('../state/pianoRecStore');
+    if (rec.recEnabled()) rec.toggleRec();
+    const { container } = render(() => <PianoToolbar />);
+    const follow = container.querySelector<HTMLButtonElement>('.piano-follow-btn')!;
+    fireEvent.click(follow);
+    expect(rec.followEnabled()).toBe(true);
+    // Re-query (Solid re-renders)
+    const after = container.querySelector<HTMLButtonElement>('.piano-follow-btn')!;
+    expect(after.getAttribute('aria-pressed')).toBe('true');
+    expect(after.getAttribute('data-active')).toBe('true');
+  });
+
+  it('FOLLOW and REC can be on simultaneously (orthogonal toggles)', async () => {
+    const rec = await import('../state/pianoRecStore');
+    if (rec.recEnabled()) rec.toggleRec();
+    const { container } = render(() => <PianoToolbar />);
+    const recBtn = container.querySelector<HTMLButtonElement>('.piano-rec-btn')!;
+    const followBtn = container.querySelector<HTMLButtonElement>('.piano-follow-btn')!;
+    fireEvent.click(recBtn);
+    fireEvent.click(followBtn);
+    expect(rec.recEnabled()).toBe(true);
+    expect(rec.followEnabled()).toBe(true);
+    // Both attributes flip independently.
+    const recAfter = container.querySelector<HTMLButtonElement>('.piano-rec-btn')!;
+    const followAfter = container.querySelector<HTMLButtonElement>('.piano-follow-btn')!;
+    expect(recAfter.getAttribute('data-active')).toBe('true');
+    expect(followAfter.getAttribute('data-active')).toBe('true');
+  });
+});
+
+describe('PianoToolbar — ↑ apply button (wavecode-piano-modes-and-gain)', () => {
+  it('is hidden when REC is off (regardless of buffer length)', async () => {
+    const rec = await import('../state/pianoRecStore');
+    if (rec.recEnabled()) rec.toggleRec();
+    rec.appendNote(60, 0, 100); // non-empty buffer but REC is OFF
+    const { container } = render(() => <PianoToolbar />);
+    expect(container.querySelector('.piano-apply-btn')).toBeNull();
+  });
+
+  it('is hidden when REC is on but buffer is empty', async () => {
+    const rec = await import('../state/pianoRecStore');
+    if (!rec.recEnabled()) rec.toggleRec();
+    expect(rec.recBuffer()).toHaveLength(0);
+    const { container } = render(() => <PianoToolbar />);
+    expect(container.querySelector('.piano-apply-btn')).toBeNull();
+  });
+
+  it('is visible with correct aria-label when REC on + buffer non-empty', async () => {
+    const rec = await import('../state/pianoRecStore');
+    if (!rec.recEnabled()) rec.toggleRec();
+    rec.appendNote(60, 0, 100);
+    const { container } = render(() => <PianoToolbar />);
+    const apply = container.querySelector<HTMLButtonElement>('.piano-apply-btn');
+    expect(apply).toBeTruthy();
+    expect(apply!.getAttribute('aria-label')).toBe('Применить записанные ноты к score');
+    expect(apply!.textContent).toContain('apply');
+  });
+
+  it('clicking apply dispatches replaceScore via applyToScore (orchestrator)', async () => {
+    const rec = await import('../state/pianoRecStore');
+    const { appStore } = await import('../state/appStore');
+    if (!rec.recEnabled()) rec.toggleRec();
+    rec.appendNote(60, 0, 100); // C4
+    const { container } = render(() => <PianoToolbar />);
+    const apply = container.querySelector<HTMLButtonElement>('.piano-apply-btn')!;
+    fireEvent.click(apply);
+    expect(appStore.score).toContain('note("c4")');
+    expect(rec.recBuffer()).toEqual([]); // buffer cleared after apply
   });
 });

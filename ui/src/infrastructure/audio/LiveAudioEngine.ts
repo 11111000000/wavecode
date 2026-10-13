@@ -98,6 +98,13 @@ type DebugState = {
   lastEvalClock: number;
   /** cps, актуальный на момент eval (для прогресса playhead). */
   evalCps: number;
+  /**
+   * Последний snippet, переданный в `eval` — используется
+   * `getActiveHaps` для повторного `compileAndQuery` без повторного eval
+   * scheduler. Это позволяет piano FOLLOW-режиму опрашивать активные haps
+   * каждые 50ms без перезапуска scheduler.
+   */
+  lastEvaluatedSnippet: string;
 };
 
 let cachedRepl: Promise<ReplHandle> | null = null;
@@ -111,6 +118,7 @@ let debugState: DebugState = {
   cps: 0,
   lastEvalClock: 0,
   evalCps: 0,
+  lastEvaluatedSnippet: '',
 };
 
 const setDebug = (patch: Partial<DebugState>): void => {
@@ -305,6 +313,44 @@ const fractionToNumber = (v: unknown): number => {
   return NaN;
 };
 
+/**
+ * Sync-first version of the transpile + queryArc + extract pipeline that
+ * `compileAndQuery` uses. Extracted so `getActiveHaps` can re-run the
+ * SAME pipeline against the last evaluated snippet without going through
+ * `compileAndQuery`'s effect wrapper (which would re-import modules and
+ * re-allocate state on every 50ms poll).
+ */
+const rawCompileAndQuery = async (
+  snippet: string,
+  cycles: number,
+): Promise<ReadonlyArray<NoteEvent>> => {
+  const modules = await loadModules();
+  await modules.core.evalScope(modules.core, modules.mini, modules.tonal);
+  const transpilerMod = modules.transpilerMod as unknown as {
+    evaluate?: (code: string, transpiler: unknown) => Promise<{ pattern?: unknown }>;
+    transpiler?: unknown;
+  };
+  if (!transpilerMod.evaluate) throw new Error('transpilerMod.evaluate недоступен');
+  const result = await transpilerMod.evaluate(snippet, transpilerMod.transpiler);
+  const pattern = result.pattern as { queryArc?: (a: number, b: number) => unknown[] } | undefined;
+  if (!pattern || typeof pattern.queryArc !== 'function') {
+    throw new Error('compiled pattern не поддерживает queryArc');
+  }
+  const haps = pattern.queryArc(0, Math.max(1, Math.min(32, cycles | 0)));
+  const coreMod = modules.core as unknown as {
+    getFrequency?: (h: unknown) => unknown;
+  };
+  const getFreq = coreMod.getFrequency ?? ((h: unknown) => {
+    const v = (h as { value?: unknown }).value;
+    return typeof v === 'number' ? v : NaN;
+  });
+  const events: NoteEvent[] = [];
+  for (const hap of haps) {
+    extractFromHap(hap, getFreq, events);
+  }
+  return events;
+};
+
 const extractFromHap = (
   hap: unknown,
   getFrequency: (h: unknown) => unknown,
@@ -374,6 +420,11 @@ export const LiveAudioEngine: Layer.Layer<AudioEngine, never, never> = Layer.suc
           // user-gesture state for subsequent context-stable resumes).
           if (audioCtx.state === 'suspended') await audioCtx.resume();
           await repl.evaluate(snippet);
+          // Snapshot the snippet SOON AS POSSIBLE — even before the
+          // scheduler's first lookahead resolves. `getActiveHaps` uses
+          // this to re-run `compileAndQuery` against the latest score
+          // without re-starting the scheduler.
+          setDebug({ lastEvaluatedSnippet: snippet });
         },
         catch: (err) => {
           const msg = err instanceof Error ? err.message : String(err);
@@ -392,34 +443,7 @@ export const LiveAudioEngine: Layer.Layer<AudioEngine, never, never> = Layer.suc
       }).pipe(Effect.catchAll(() => Effect.void)),
     compileAndQuery: (snippet: string, cycles: number) =>
       Effect.tryPromise({
-        try: async () => {
-          const modules = await loadModules();
-          // ensure evalScope has been called so globalThis has stack/note/n/s
-          await modules.core.evalScope(modules.core, modules.mini, modules.tonal);
-          const transpilerMod = modules.transpilerMod as unknown as {
-            evaluate?: (code: string, transpiler: unknown) => Promise<{ pattern?: unknown }>;
-            transpiler?: unknown;
-          };
-          if (!transpilerMod.evaluate) throw new Error('transpilerMod.evaluate недоступен');
-          const result = await transpilerMod.evaluate(snippet, transpilerMod.transpiler);
-          const pattern = result.pattern as { queryArc?: (a: number, b: number) => unknown[] } | undefined;
-          if (!pattern || typeof pattern.queryArc !== 'function') {
-            throw new Error('compiled pattern не поддерживает queryArc');
-          }
-          const haps = pattern.queryArc(0, Math.max(1, Math.min(32, cycles | 0)));
-          const coreMod = modules.core as unknown as {
-            getFrequency?: (h: unknown) => unknown;
-          };
-          const getFreq = coreMod.getFrequency ?? ((h: unknown) => {
-            const v = (h as { value?: unknown }).value;
-            return typeof v === 'number' ? v : NaN;
-          });
-          const events: NoteEvent[] = [];
-          for (const hap of haps) {
-            extractFromHap(hap, getFreq, events);
-          }
-          return events;
-        },
+        try: async () => rawCompileAndQuery(snippet, cycles),
         catch: (err) => {
           const msg = err instanceof Error ? err.message : String(err);
           console.error('[wavecode/LiveAudioEngine.compileAndQuery]', msg, err);
@@ -461,6 +485,54 @@ export const LiveAudioEngine: Layer.Layer<AudioEngine, never, never> = Layer.suc
         const progress = (elapsed * cps) - Math.floor(elapsed * cps);
         return Number.isFinite(progress) ? progress : 0;
       }),
+    getActiveHaps: () =>
+      Effect.tryPromise({
+        try: async (): Promise<ReadonlyArray<{ readonly midi: number }>> => {
+          // No snippet was ever evaluated → scheduler is silent, return
+          // an empty set rather than synthesising a query.
+          const snippet = debugState.lastEvaluatedSnippet;
+          if (!snippet) return [];
+
+          // Determine current cycle position relative to the eval
+          // anchor (same math as getCycleProgress).
+          const ctx = (window as unknown as { __wavecodeAudioCtx?: AudioContext }).__wavecodeAudioCtx;
+          const cps = debugState.evalCps;
+          const anchor = debugState.lastEvalClock;
+          if (!ctx || cps <= 0 || anchor <= 0) return [];
+          const elapsed = ctx.currentTime - anchor;
+          const nowCycle = elapsed * cps;
+
+          // Query a 2-cycle window so we catch haps whose begin is just
+          // before "now" but whose end is past "now" (a note that
+          // started 50ms ago should still be lit up).
+          const events = await rawCompileAndQuery(snippet, 2);
+          const windowStart = nowCycle - 0.05; // 50ms tolerance backwards
+          const windowEnd = nowCycle + 0.95;   // up to ~1 cycle ahead
+
+          const seen = new Set<number>();
+          const out: { midi: number }[] = [];
+          for (const e of events) {
+            if (!Number.isFinite(e.midi)) continue;
+            if (e.endCycle <= windowStart) continue;
+            if (e.startCycle >= windowEnd) continue;
+            if (seen.has(e.midi)) continue;
+            seen.add(e.midi);
+            out.push({ midi: e.midi });
+          }
+          return out;
+        },
+        catch: (err) => {
+          // Defensive: if anything fails (transpiler hiccup, modules
+          // not loaded), swallow it — caller (piano FOLLOW poll) just
+          // highlights nothing. NEVER throw: that would pull
+          // Effect-Error plumbing into presentation callers.
+          const msg = err instanceof Error ? err.message : String(err);
+          if (process.env.NODE_ENV !== 'production') {
+            console.warn('[wavecode/LiveAudioEngine.getActiveHaps]', msg);
+          }
+          return null;
+        },
+      }).pipe(Effect.catchAll(() => Effect.succeed<ReadonlyArray<{ readonly midi: number }>>([]))),
     recordLive: () =>
       Effect.try({
         try: () => {

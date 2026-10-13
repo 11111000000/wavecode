@@ -44,8 +44,8 @@ export const strudelNoteToMidi = (note: string): number => {
 export const SILENCE_SNIPPET = 'silence';
 
 /** Triangle-wave voice with a short piano-like envelope. Shared by
- *  `singleNoteSnippet` and each layer of `multiNoteSnippet` so both
- *  shapes stay byte-identical for a single note. */
+ *  `singleNoteSnippet`, `multiNoteSnippet`, and `noteToneSnippet` so
+ *  all three shapes stay byte-identical for a single note. */
 const pianoVoice = (noteLc: string, gainLit: string): string =>
   `note("${noteLc}").s("triangle").attack(0.005).decay(0.4).sustain(0.1).gain(${gainLit})`;
 
@@ -57,6 +57,27 @@ export const singleNoteSnippet = (note: string): string => {
   // explicitly with Number.isFinite rather than `midi >= 0` alone.
   const safe = Number.isFinite(midi) && midi >= 0 ? note.toLowerCase() : 'a4';
   return pianoVoice(safe, '0.3');
+};
+
+/**
+ * Instrument-aware Strudel snippet for a single MIDI note.
+ *
+ * Maps a MIDI number → Strudel note name (e.g. 60 → "c4") and emits a
+ * one-voice pattern with the selected `PianoInstrument` (triangle/sine/
+ * sawtooth/square). Used by `pianoRecStore.commitSnippet` so the buffer
+ * committed to the editor mirrors what the user just played on the
+ * on-screen piano.
+ *
+ * Out-of-range MIDI (NaN, negative, > 127) falls back to `a4` with
+ * triangle — matches `singleNoteSnippet`'s tolerance and keeps snippet
+ * output always parseable by Strudel's transpiler.
+ */
+export const noteToneSnippet = (midi: number, instrument: PianoInstrument): string => {
+  let noteLc = 'a4';
+  if (Number.isFinite(midi) && midi >= 0 && midi <= 127) {
+    noteLc = noteNumberToName(midi).toLowerCase();
+  }
+  return `note("${noteLc}").s("${instrument}").attack(0.005).decay(0.4).sustain(0.1).gain(0.3)`;
 };
 
 /**
