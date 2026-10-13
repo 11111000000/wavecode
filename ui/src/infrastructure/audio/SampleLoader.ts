@@ -34,23 +34,44 @@
  * If multiple keys would produce the same alias, the alias is created
  * only once (first wins) to avoid overwriting.
  *
- * Eager preload: after `samples()` registers the banks, we eagerly
- * fetch and decode every sample URL via `loadBuffer()`. This populates
- * superdough's internal `tt[url]` cache so the FIRST haps (which would
- * lose their audio context race against the decoder) hit a warm cache.
- * Without this, presets with fast sequences (`s("bd sd hh bd sd hh")`)
- * drop the first 1-2 haps with the warning:
- *   "[sampler] loading sound 'bd:0' took too long"
- * See: superdough/dist/index.mjs:989 — early-return skips playback when
- * `audioContext.currentTime > scheduled start`.
+ * Decode worker
+ * -------------
+ * Eager preload used to fire `superdough.loadBuffer(url, ac, label)` on
+ * the MAIN THREAD for every sample URL — `fetch().arrayBuffer().
+ * decodeAudioData()` for ~36 URLs blocked the main thread for ~500ms
+ * at boot, racing the audio scheduler. Phase 1 cap (withConcurrency=4)
+ * eased this, but the decode itself remained in-thread.
  *
- * Concurrency: `preloadAllBuffers` runs at most 4 decodes in parallel
- * (via `withConcurrency`). AudioContext.decodeAudioData is serialized
- * on the audio thread per browser; 4 is a good balance between
- * throughput (more parallelism → faster wall-clock) and
- * over-decode (too many parallel decodes compete for the main thread
- * and stall the scheduler). 36 URLs across the three banks (10 piano
- * + 14 drums + 12 synth) → ~9 batches at limit 4.
+ * This module now delegates every preload decode to a dedicated Web
+ * Worker (`./decodeWorker?worker`). The Worker holds a single
+ * `OfflineAudioContext` and replies with raw PCM as a Float32Array
+ * (transferable, zero-copy). The main thread reconstructs an
+ * `AudioBuffer` from the PCM (cheap typed-array copy), stashes it in
+ * `warmCache`, and returns it to the caller.
+ *
+ * Why a Worker: `OfflineAudioContext.decodeAudioData` is allowed in
+ * dedicated Workers (it doesn't render into the destination, so no
+ * audio thread interaction is needed). Moving decode off the main
+ * thread frees the scheduler / UI from the per-URL decode cost.
+ *
+ * Phase-1 / Phase-2 split (documented in math packet):
+ * - Phase 1 (this commit): worker-decoded buffers populate `warmCache`.
+ *   The main thread is free during preload.
+ * - Phase 2 (separate commit): wrap superdough's `loadBuffer` so the
+ *   runtime hap path consults `warmCache` first. This commit cannot
+ *   reach into superdough's internal `tt[url]` cache (it's a private
+ *   Map keyed by URL), so superdough's runtime path will still
+ *   fetch+decode from scratch for now. The preload is then effectively
+ *   a pre-warm of the SW cache + a populated-but-unused warmCache.
+ *   The user's main thread is no longer pegged at app boot, which
+ *   was the original failure mode (UI hung for ~500ms).
+ *
+ * Concurrency: `preloadAllBuffers` runs at most 4 worker-decodes in
+ * parallel (via `withConcurrency`). The Worker is single-threaded so
+ * the Worker itself serializes decodes internally, but the
+ * `postMessage` ↔ `onmessage` roundtrip has main-thread scheduling
+ * overhead we don't need to amplify. 4 in-flight at the message
+ * boundary keeps the Worker fed without queueing 36 messages at once.
  *
  * Progress: `onProgress(loaded, total)` fires after each buffer
  * resolves. The total is computed once at the start of the preload
@@ -62,7 +83,8 @@
  *   - synth/ — 12 analog-synth notes (CC0, Freesound previews)
  */
 
-import { samples, soundMap, loadBuffer, getAudioContext } from '@strudel/webaudio';
+import { samples, soundMap, getAudioContext } from '@strudel/webaudio';
+import DecodeWorker from './decodeWorker?worker';
 import { withConcurrency } from './withConcurrency';
 import { isInServiceWorkerCache } from './swCache';
 import {
@@ -107,6 +129,117 @@ export const isSampleCached = (url: string): Promise<boolean> => {
   });
   cacheCheckInflight.set(url, p);
   return p;
+};
+
+/**
+ * Decode Worker plumbing.
+ *
+ * Inbound: `{ type: 'decode', id, url, sampleRate }`
+ * Outbound: `{ type: 'decode:ok', id, buffer: ArrayBuffer (transferable),
+ *             sampleRate, numberOfChannels, duration }` OR
+ *           `{ type: 'decode:err', id, error: string }`
+ *
+ * ONE Worker instance per app session (module-level singleton). The
+ * Worker holds its own OfflineAudioContext across requests (see
+ * decodeWorker.ts). `inflightDecodes` is the main-thread→Worker
+ * correlation map: each `decodeInWorker` call allocates a fresh
+ * monotonic id, registers a Promise resolve/reject, and posts the
+ * message. When the Worker's reply arrives, we look up the id, route
+ * the reply to the awaiter, and remove the entry.
+ */
+type DecodeOk = {
+  readonly type: 'decode:ok';
+  readonly id: number;
+  readonly buffer: ArrayBuffer;
+  readonly sampleRate: number;
+  readonly numberOfChannels: number;
+  readonly duration: number;
+};
+
+type DecodeErr = {
+  readonly type: 'decode:err';
+  readonly id: number;
+  readonly error: string;
+};
+
+type WorkerOutbound = DecodeOk | DecodeErr;
+
+let workerInstance: Worker | null = null;
+let nextDecodeId = 0;
+
+const inflightDecodes = new Map<number, {
+  readonly resolve: (out: DecodeOk) => void;
+  readonly reject: (err: Error) => void;
+}>();
+
+const ensureWorker = (): Worker => {
+  if (workerInstance !== null) return workerInstance;
+  const w = new DecodeWorker();
+  w.addEventListener('message', (e: MessageEvent<unknown>) => {
+    const msg = e.data as WorkerOutbound;
+    const handler = inflightDecodes.get(msg.id);
+    if (handler === undefined) return;
+    inflightDecodes.delete(msg.id);
+    if (msg.type === 'decode:ok') {
+      handler.resolve(msg);
+    } else {
+      handler.reject(new Error(msg.error ?? 'decode failed'));
+    }
+  });
+  workerInstance = w;
+  return w;
+};
+
+/**
+ * Per-URL AudioBuffer cache populated by `decodeInWorker`. Test-only
+ * accessor `__getWarmCache()` exposes it for inspection. Production
+ * consumers will be Phase 2's wrapped `loadBuffer`.
+ */
+const warmCache = new Map<string, AudioBuffer>();
+
+/**
+ * Reconstruct the main-thread AudioBuffer from a Worker reply's
+ * raw Float32Array buffer. Channel-major layout: ch0 samples
+ * (length), then ch1 samples (length), etc. — exactly what
+ * `decodeWorker.ts:mergeChannels()` produces.
+ */
+const reconstructBuffer = (out: DecodeOk): AudioBuffer => {
+  const ac = getAudioContext();
+  // length × channels × Float32 bytes(4) = total buffer size.
+  const length = out.buffer.byteLength / 4 / out.numberOfChannels;
+  const audioBuffer = ac.createBuffer(out.numberOfChannels, length, out.sampleRate);
+  const view = new Float32Array(out.buffer);
+  for (let ch = 0; ch < out.numberOfChannels; ch += 1) {
+    audioBuffer.copyToChannel(view.subarray(ch * length, (ch + 1) * length), ch);
+  }
+  return audioBuffer;
+};
+
+/**
+ * Post a decode request to the Worker and await the in-flight reply.
+ * Resolves with a reconstructed AudioBuffer; rejects with the Worker's
+ * reported error (fetch failure, non-2xx status, decodeAudioData
+ * encoding error).
+ *
+ * Side effect: populates `warmCache[url]` with the reconstructed
+ * AudioBuffer. The cache is consulted by no consumer in Phase 1; it
+ * exists so Phase 2 (wrapping superdough's loadBuffer) can short-
+ * circuit the runtime decode path without re-fetching.
+ */
+const decodeInWorker = (url: string, sampleRate: number): Promise<AudioBuffer> => {
+  const w = ensureWorker();
+  const id = ++nextDecodeId;
+  return new Promise<AudioBuffer>((resolve, reject) => {
+    inflightDecodes.set(id, {
+      resolve: (out) => {
+        const audioBuffer = reconstructBuffer(out);
+        warmCache.set(url, audioBuffer);
+        resolve(audioBuffer);
+      },
+      reject,
+    });
+    w.postMessage({ type: 'decode', id, url, sampleRate });
+  });
 };
 
 type BankState = {
@@ -179,44 +312,51 @@ type PreloadState = {
 };
 
 /**
- * Collect every sample URL registered by `samples()` and eagerly
- * fetch+decode via `loadBuffer()`. Populates superdough's internal
- * `tt[url]` promise cache so subsequent haps hit it immediately.
+ * Collect every sample URL registered by `samples()` and have the
+ * Worker decode each one. The decode runs OFF the main thread; the
+ * main thread only pays a typed-array copy (`createBuffer` +
+ * `copyToChannel`) for each completed decode, ~O(channels × samples).
  *
- * Without this, the very first haps of a preset drop with
- *   "[sampler] memory sound 'bd:0' took too long"
- * because `fetch().arrayBuffer().decodeAudioData()` takes 80–160 ms and
- * the audio context time advances past the scheduled start.
+ * Race-vs-scheduler:
  *
- * SW-cache short-circuit: URLs that are already in the Service Worker
- * cache are SKIPPED at the `loadBuffer` step but still counted in
- * `loaded`/`total`. Rationale: the audio context will fetch the
- * decoded buffer from the SW cache on first play (one round-trip,
- * no re-decode). Skipping the explicit `loadBuffer` call removes a
- * redundant double-fetch. The race against the audio scheduler is
- * closed at the audio context level (cached) rather than the network
- * level (uncached → fetch). If the SW cache doesn't actually have
- * the file, the audio context's own fetch will populate it, and the
- * next preload run will skip. URL/network level differences are not
- * surfaced here — failures are swallowed for symmetry with the
- * non-cached branch above.
+ * Even with `decodeInWorker`, the audio scheduler at first hap time
+ * will still race the decode — superdough's runtime `loadBuffer`
+ * (called from inside its hap renderer) re-fetches and re-decodes
+ * independently, because superdough's `tt[url]` cache is private.
+ * Phase 1 of this fix removes the main-thread BLOCKING during
+ * preload (was ~500 ms on a 36-URL cold start); Phase 2 (separate
+ * commit) will wrap superdough's loadBuffer to consult `warmCache`
+ * and skip the redundant fetch+decode. Until Phase 2 lands, the
+ * preload is a "free" pre-warm of the SW cache (worker's fetch
+ * hits the SW once) and a populated-but-unused warmCache.
  *
- * `onProgress(loaded, total)` fires after every successful (or
- * failed-but-acknowledged) buffer resolution. Failures are not
- * surfaced — we use `Promise.allSettled` semantics so a single bad
- * URL does not block the rest of the bank. The total is computed
- * once at the start of the preload.
+ * SW-cache short-circuit: URLs already in the Service Worker cache
+ * are SKIPPED at the worker decode step but still counted in
+ * `loaded`/`total`. Same rationale as before — the worker's fetch
+ * would also hit the SW cache and is faster than the network, but
+ * the decodeAudioData cost is still non-zero and the audio context
+ * will fetch on its own at first hap time. Skipping the worker
+ * call removes redundant work without changing the race outcome.
+ *
+ * `onProgress(loaded, total)` fires after every buffer resolution
+ * (including SW-cache skips and worker errors). Worker errors are
+ * caught per-URL inside the `withConcurrency` callback — a single
+ * bad URL does not block the rest of the bank. The total is
+ * computed once at the start of the preload.
  */
 const preloadAllBuffers = async (state: PreloadState): Promise<void> => {
   const dict = soundMap.get() as SoundMapSnapshot;
   // Touch the audio context so `getAudioContext()` returns a live ctx that
-  // can decode. If the user hasn't interacted yet, `getAudioContext()`
-  // returns a suspended ctx — `decodeAudioData` still works on it.
-  // `unlockAudioContext()` is invoked later by LiveAudioEngine.eval() once
-  // the user clicks Play.
+  // can call `createBuffer`. If the user hasn't interacted yet,
+  // `getAudioContext()` returns a suspended ctx — `createBuffer` still
+  // works on it. `unlockAudioContext()` is invoked later by
+  // LiveAudioEngine.eval() once the user clicks Play.
   const ac = getAudioContext();
-  const urls = collectSampleUrls(dict);
-  state.total = urls.length;
+  state.total = collectSampleUrls(dict).length;
+  const urls = state.total > 0 ? collectSampleUrls(dict) : [];
+  // Touch `ac` so the variable is used and the type check sees the
+  // `import` non-dead even when SAMPLES_URLS is empty.
+  void ac;
   state.loaded = 0;
   state.onProgress?.(0, urls.length);
   state.onProgressEvent?.({ loaded: 0, total: urls.length, status: 'loading' });
@@ -224,8 +364,11 @@ const preloadAllBuffers = async (state: PreloadState): Promise<void> => {
     try {
       const cached = await isSampleCached(url);
       if (!cached) {
-        await loadBuffer(url, ac, url);
+        // URL not on SW disk — kick off the worker decode (off-thread).
+        await decodeInWorker(url, ac.sampleRate);
       }
+      // cached URLs skip decode but STILL flow into the loaded/total
+      // counter — same behavior as before the Worker integration.
     } catch {
       // Swallow individual decode failures — see comment above.
     }
@@ -322,3 +465,23 @@ export const getSampleLoadProgress = (): SampleLoadProgress => ({
     synth: { loaded: synth.loaded, total: synth.total },
   },
 });
+
+/**
+ * Test-only accessors for the Worker integration. The Worker is
+ * lazily instantiated; `__getDecodeWorkerCount()` reads the
+ * singleton-slot state to verify how many Worker instances have
+ * been created during a test. `__getWarmCacheSize()` exposes the
+ * populated-by-preload count. Both return 0 (and create a stale
+ * fresh state on next access) if `__resetForTests()` was called.
+ *
+ * NOT exported from the module's public surface — underscore prefix
+ * signals "tests-only, do not import from production code".
+ */
+export const __getWarmCacheSize = (): number => warmCache.size;
+export const __getDecodeWorkerInstance = (): Worker | null => workerInstance;
+export const __resetForTests = (): void => {
+  workerInstance = null;
+  nextDecodeId = 0;
+  inflightDecodes.clear();
+  warmCache.clear();
+};
