@@ -36,9 +36,63 @@ export const strudelNoteToMidi = (note: string): number => {
   return (octave + 1) * 12 + ((base[letter.toLowerCase()] ?? 0) + offset);
 };
 
+/**
+ * Strudel snippet that produces silence. Used by the on-screen piano to
+ * explicitly silence the synth when the last key is released (otherwise
+ * the previous note keeps ringing until its envelope decays).
+ */
+export const SILENCE_SNIPPET = 'silence';
+
+/** Triangle-wave voice with a short piano-like envelope. Shared by
+ *  `singleNoteSnippet` and each layer of `multiNoteSnippet` so both
+ *  shapes stay byte-identical for a single note. */
+const pianoVoice = (noteLc: string, gainLit: string): string =>
+  `note("${noteLc}").s("triangle").attack(0.005).decay(0.4).sustain(0.1).gain(${gainLit})`;
+
 /** Synthesize a single-note Strudel snippet with short envelope. */
-export const singleNoteSnippet = (note: string): string =>
-  `note("${(strudelNoteToMidi(note) >= 0 ? note : 'a4').toLowerCase()}").s("triangle").attack(0.005).decay(0.4).sustain(0.1).gain(0.3)`;
+export const singleNoteSnippet = (note: string): string => {
+  const midi = strudelNoteToMidi(note);
+  // NaN from unparseable names (e.g. "xx99") → fall back to A4. NaN
+  // comparisons are all false, including NaN >= 0; we therefore guard
+  // explicitly with Number.isFinite rather than `midi >= 0` alone.
+  const safe = Number.isFinite(midi) && midi >= 0 ? note.toLowerCase() : 'a4';
+  return pianoVoice(safe, '0.3');
+};
+
+/**
+ * Multi-note piano snippet for polyphony.
+ *
+ * Rules:
+ *   - 0 notes  → `SILENCE_SNIPPET` (Strudel silently plays nothing).
+ *   - 1 note   → bare single voice (matches `singleNoteSnippet`).
+ *   - 2+ notes → `stack(v1, v2, …)`, each voice carrying its own
+ *                `.gain(0.3)` envelope.
+ *
+ * Per-voice gain stays at 0.3 (NOT scaled by sqrt(n)) — Strudel's
+ * per-layer mixer in `application/useCases/injectMix` operates on each
+ * top-level stack layer; pre-emptively dividing the gain would mask the
+ * user's mixer choices. Downstream the user can solo/mute/trim via the
+ * Mixer panel.
+ *
+ * Notes that fail to parse are dropped silently (matches single-note
+ * behaviour, where an invalid name falls back to 'a4' — but here we
+ * drop because a fallback would surprise the user by adding an extra
+ * note they didn't press).
+ */
+export const multiNoteSnippet = (notes: ReadonlySet<string>): string => {
+  const voices: string[] = [];
+  for (const n of notes) {
+    const midi = strudelNoteToMidi(n);
+    // `NaN >= 0` is false but NaN is the actual unparseable signal —
+    // not < 0 (negative MIDI numbers are not a thing in Strudel, but
+    // the proper invariant here is "did we get a number back at all?").
+    if (!Number.isFinite(midi) || midi < 0) continue;
+    voices.push(pianoVoice(n.toLowerCase(), '0.3'));
+  }
+  if (voices.length === 0) return SILENCE_SNIPPET;
+  if (voices.length === 1) return voices[0]!;
+  return `stack(\n  ${voices.join(',\n  ')}\n)`;
+};
 
 /** Range we support on on-screen + MIDI input. */
 export const PIANO_RANGE = { min: 48, max: 71 } as const; // C3..B4

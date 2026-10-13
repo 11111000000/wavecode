@@ -1,0 +1,11 @@
+applied: piano polyphony + note-off (2026-10-13)
+branch: feat/piano-polyphony
+tests: 293 passing (15 in notes.test.ts, 21 in PianoKeyboard.test.ts),
+       pre-existing 257 unchanged
+typecheck: clean
+lint: 0 errors (1 pre-existing warning unrelated)
+files: domain/music/notes.ts, presentation/components/pianoSynth.ts,
+       presentation/components/PianoKeyboard.tsx, plus tests
+design: stack() per note in multiNoteSnippet, gain(0.3) per voice
+        (NOT sqrt-div) so Mixer can take over per-layer; trailing
+        30ms debounce on evalScore calls.
