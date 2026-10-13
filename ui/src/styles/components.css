@@ -2966,17 +2966,20 @@ textarea.ai-textarea:focus-visible {
   /* wavecode-preset-row-and-toast-z: выведен из flow (position:fixed)
    * и поставлен сразу под TopBar'ом. Раньше был position:relative, и
    * .app-controls-row (z-sheet+12, position:fixed) перекрывал его
-   * целиком, скрывая <select> композиции. */
+   * целиком, скрывая <select> композиции.
+   *
+   * wavecode-toast-overhead-and-toolbar-toggle: убран background,
+   * border-bottom, backdrop-filter — preset-row визуально
+   * прозрачен, <select> «парит» в чистом пространстве. Только
+   * .app-controls-row ниже даёт визуальный каркас команд-панели
+   * (свой border-top). Без этого две сложенные тёмные полосы
+   * (preset-row + controls-row) читались как «двойной бордюр». */
   position: fixed;
   top: var(--header-h);
   left: 0;
   right: 0;
   z-index: calc(var(--z-sheet) + 13);
   padding: var(--space-2xs) var(--space-md);
-  background: rgba(10, 10, 14, 0.88);
-  backdrop-filter: blur(12px) saturate(160%);
-  -webkit-backdrop-filter: blur(12px) saturate(160%);
-  border-bottom: 1px solid var(--border);
 }
 
 @media (max-width: 720px) {
@@ -3001,7 +3004,13 @@ textarea.ai-textarea:focus-visible {
    *
    * wavecode-preset-row-and-toast-z: сдвинут вниз на --preset-row-h,
    * потому что .app-preset-row теперь занимает слот сразу под
-   * TopBar'ом. */
+   * TopBar'ом.
+   *
+   * wavecode-toast-overhead-and-toolbar-toggle: border-bottom →
+   * border-top. После удаления фона у preset-row, controls-row
+   * становится единственным «каркасом» командной панели; top-border
+   * отделяет его от прозрачного preset-row (вместо двух stacked
+   * borders, которые читались как «двойная чёрная полоса»). */
   position: fixed;
   top: calc(var(--header-h) + var(--preset-row-h));
   left: 0;
@@ -3015,7 +3024,7 @@ textarea.ai-textarea:focus-visible {
   background: rgba(10, 10, 14, 0.92);
   backdrop-filter: blur(12px) saturate(160%);
   -webkit-backdrop-filter: blur(12px) saturate(160%);
-  border-bottom: 1px solid var(--border);
+  border-top: 1px solid var(--border);
 }
 
 /* =========================================================================
@@ -3165,8 +3174,41 @@ textarea.ai-textarea:focus-visible {
   color: var(--fg-dim);
   font-family: var(--font-mono);
   flex-wrap: wrap;
+  align-items: center;
 }
 .score-debug .debug-err { color: var(--err); word-break: break-word; }
+
+/* wavecode-toast-overhead-and-toolbar-toggle: маленькая кнопка
+ * в score-debug row для toggle MiniNotationToolbar. Compact chip
+ * style — height 28px (ниже touch-target floor 44, но это
+ * secondary control рядом с debug-info, не primary action).
+ * data-active=true → cyan outline (toolbar открыт). */
+.snippet-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2xs);
+  height: 28px;
+  padding: 0 var(--space-sm);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  color: var(--fg-dim);
+  font-family: var(--font-mono);
+  font-size: var(--fs-2xs);
+  cursor: pointer;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  transition:
+    color var(--dur-2xs) var(--ease),
+    border-color var(--dur-2xs) var(--ease),
+    background var(--dur-2xs) var(--ease);
+}
+.snippet-toggle:hover { color: var(--fg); border-color: var(--fg-dim); }
+.snippet-toggle[data-active='true'] {
+  color: var(--cyan);
+  border-color: var(--cyan);
+  background: var(--cyan-soft);
+}
 
 /* =========================================================================
  *  MIDI I/O BAR
@@ -3527,6 +3569,16 @@ textarea.ai-textarea:focus-visible {
   color: var(--fg);
 }
 .cm-host .cm-editor .cm-content { font-family: var(--font-mono); }
+/* wavecode-toast-overhead-and-toolbar-toggle: на mobile
+ * (≤720px) font-size CodeMirror уменьшен с 12px (--fs-sm) до
+ * 11px (--fs-xs) + line-height 1.4. На 412px viewport'е
+ * комфортно показывает 5-6 строк snippet'а (было 1-2). */
+@media (max-width: 720px) {
+  .cm-host .cm-editor .cm-content {
+    font-size: var(--fs-xs);
+    line-height: 1.4;
+  }
+}
 .cm-host .cm-editor.cm-focused { outline: none; }
 .cm-host .cm-editor .cm-gutters {
   background: var(--surface-0);
