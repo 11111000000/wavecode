@@ -1,26 +1,34 @@
 ---
 proposition: |
-  Когда открыт любой bottom-sheet (AI / Step / Piano / Mixer /
-  Status), транспорт-панель с Play/Stop уезжает из видимости —
-  sheet перекрывает её, и юзер теряет возможность остановить
-  воспроизведение.
+  **Два связанных дефекта от недавней работы:**
 
-  В компонентах уже есть mobile-only `position: sticky` на
-  `.app-controls-row` (components.css:2776), но он не
-  работает: родитель `.wc-app` имеет `height: 100%` без
-  `overflow`, sticky pinning требует scroll-контекст. В
-  результате rule — no-op, и при открытом sheet транспорт
-  скрыт под ним.
+  1. **Play panel исчезает под bottom-sheet.** Mobile-only
+     `position: sticky` на `.app-controls-row` (legacy rule)
+     не работает: `.wc-app` — `height: 100%` без `overflow`,
+     sticky требует scroll-контекст. В результате sheet
+     (AI/Step/Piano/Mixer/Status) перекрывает транспорт,
+     юзер теряет возможность остановить воспроизведение.
 
-  Решение: перевести `.app-controls-row` в `position: fixed`
-  + `z-index` выше sheet-стэка + blur-фон. Фиксированное
-  позиционирование гарантирует видимость независимо от
-  scroll-контекста, blur-фон отделяет визуально от
-  контента под ним.
+  2. **Legacy duplicate CSS rules silently override modern.**
+     Пакет `wavecode-legacy-eat-all` перенёс секцию PIANO &
+     STEP GRID из `legacy.css` в конец `components.css`. Но
+     `.step-grid*` (8 классов) и `.piano-key` уже были в
+     components.css раньше! Из-за source-order cascade
+     legacy-стили (с другими значениями gap, padding, grid
+     template) ПОБЕЖДАЮТ современные. Step Grid сейчас
+     рендерится с legacy visual design вместо нового.
+     `.piano-keyboard` container — dead code (DOM использует
+     `.piano-keys`, не `.piano-keyboard`).
 
-  Поправка layout: убрать из flow + компенсировать
-  padding-top на .app-body (или main), чтобы контент
-  не уходил под транспорт.
+  Решение для #1: `position: fixed; top: var(--header-h);
+  z-index: calc(var(--z-sheet) + 12)` + blur фон. Гарантирует
+  видимость независимо от scroll-контекста.
+
+  Решение для #2: удалить legacy duplicate секцию (строки
+  3360-3485 в components.css) — это PIANO & STEP GRID
+  секция, перенесённая из legacy-eat-all. Modern секции
+  (строки 837-908 step-grid, 1196-1232 piano-key) уже в файле
+  и теперь снова выигрывают cascade.
 antithesis: |
   (1) «Sticky должен работать в современных браузерах даже
   без overflow на parent». Возражение: да, но элемент
@@ -42,37 +50,42 @@ antithesis: |
   breakpoints. Bottom-sheet mode — mobile-first, но Play
   нужен везде.
 synthesis: |
-  Три правки в components.css:
+  Два коммита:
 
-  1. **`.app-controls-row`** (replace existing rules):
-     - `position: fixed; top: var(--header-h); left: 0; right: 0;`
-     - `z-index: calc(var(--z-sheet) + 12);` (выше sheet, tabbar,
-       toolstrip — все три < 12)
-     - `background: rgba(10, 10, 14, 0.92);` + `backdrop-filter:
-       blur(12px) saturate(160%);` (отделяет визуально)
-     - `padding: var(--space-xs) var(--space-md);`
-     - `border-bottom: 1px solid var(--border);`
-     - убрать mobile @media — правило универсально
+  1. **`fix(ui): TransportPanel position:fixed below TopBar —
+     always accessible`** (committed):
+     - `.app-controls-row` → `position: fixed; top: var(--header-h);
+       left: 0; right: 0; z-index: calc(var(--z-sheet) + 12);` +
+       blur фон.
+     - `.app-body` → `padding-top: var(--controls-h);`
+     - tokens.css → `--controls-h: 52px;`
+     - mobile @media (max-width: 720px) удалён — правило
+       универсально.
 
-  2. **`.app-body`** (modify):
-     - добавить `padding-top: var(--controls-h);` чтобы
-       контент не уходил под фикс-транспорт.
-
-  3. **`:root`** (modify, в tokens.css):
-     - добавить `--controls-h: 52px;` (высота транспорта
-       включая padding).
+  2. **`fix(ui): drop legacy duplicate PIANO & STEP GRID section
+     from components.css`** (this commit):
+     - delete lines 3360-3485: duplicate `.piano-key` (8
+       occurrences), `.step-grid`, `.step-grid-toolbar`,
+       `.step-grid-rows`, `.step-grid-row`, `.step-grid-row-label`,
+       `.step-grid-row-sample`, `.step-grid-row-name`,
+       `.step-grid-btn`, plus dead `.piano-keyboard` container.
+     - Modern definitions (lines 837-908 for step-grid, 1196-1232
+       for piano-key) remain and now correctly win cascade.
 
   Verification:
     - typecheck: clean
     - vitest: 632/632
+    - lint: 2 errors (preexisting, unchanged)
     - build (vite): success
-    - smoke test (playwright): открыть AI sheet через
-      BottomToolstrip, проверить:
-      - транспорт виден поверх sheet (z-index check)
-      - Play button clickable когда sheet открыт
-      - `document.elementFromPoint(play-x, play-y)` ==
-        play button (не перекрыт)
-    - visual: на desktop и mobile (resize viewport 360×640)
-      транспорт не съезжает с контентом
+    - smoke test (playwright):
+      * Open AI dialog (via TabBar AI button) — verify
+        `document.elementFromPoint(play-x, play-y)` returns
+        the play button (z-index 52 effective).
+      * Open Step Grid bottom-sheet — verify .step-grid*
+        rendered with modern styles (smaller buttons, line-height
+        tweak, grid-template 56px col not 64px).
+      * Open Piano dialog — verify .piano-key.white has CSS-var
+        based width/height (80px / 220px) not legacy 96px
+        height.
 status: draft
 ---
