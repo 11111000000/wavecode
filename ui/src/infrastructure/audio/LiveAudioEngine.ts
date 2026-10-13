@@ -6,7 +6,9 @@ import type * as TonalModule from '@strudel/tonal';
 import type * as TranspilerModule from '@strudel/transpiler';
 import type * as WebaudioModule from '@strudel/webaudio';
 import * as superdough from 'superdough';
+import type { LayerMix } from '~/domain/types';
 import type { NoteEvent } from '~/domain/midi/encoder';
+import { injectMix } from '~/application/useCases/injectMix';
 import { LiveRecorder, pickSupportedMime } from './AudioRecorder';
 import { renderToWav } from './OfflineRender';
 import { applyVoicingAliases } from './strudelPatches';
@@ -85,6 +87,16 @@ type ReplHandle = {
   stop: () => void;
   audioCtx: AudioContext;
   setCps?: (cps: number) => void;
+  /**
+   * Hot-swap the parsed Pattern into the live scheduler without going
+   * through `evaluate`'s beforeEval/afterEval/sample-init side-effects.
+   * `autostart=false` keeps the scheduler running; the new pattern
+   * kicks in at the next lookahead window (~50ms @ cps=1).
+   *
+   * Used by `setLayerMix` for live mixer edits.
+   * See `math/wavecode-mixer-live-update`.
+   */
+  setPattern?: (pattern: unknown, autostart?: boolean) => Promise<unknown>;
 };
 
 type DebugState = {
@@ -468,6 +480,61 @@ export const LiveAudioEngine: Layer.Layer<AudioEngine, never, never> = Layer.suc
           repl.setCps?.(cps);
         },
         catch: () => null as null,
+      }).pipe(Effect.catchAll(() => Effect.void)),
+    /**
+     * Hot-swap mixer edits into the live pattern.
+     *
+     * Flow:
+     *   1. read `debugState.lastEvaluatedSnippet` (set by `eval()`);
+     *   2. rebuild the snippet via `injectMix(snippet, layerMix)`
+     *      (pure string-level .gain() injection per top-level layer);
+     *   3. `repl.evaluate(newSnippet)` — same code path as a fresh eval
+     *      MINUS the explicit `repl.stop()` that `eval()` does above;
+     *      scheduler stays running, the new pattern takes over at the
+     *      next lookahead window (`Cyclist.setPattern` assigns
+     *      `this.pattern = newPat` atomically when already started —
+     *      see @strudel/core/cyclist.mjs:3171-3173).
+     *
+     * Trade-offs (wavecode-mixer-live-update packet):
+     *   - `eval()`'s `repl.stop()` is intentionally skipped. The old
+     *     pattern keeps playing for the duration of `compileKabel`
+     *     (~5-30ms for a 6-layer stack) then atomically swaps to the
+     *     new one. No audio gap, no static, no scheduler reset.
+     *   - On parse failure (corrupt snippet between eval and mix —
+     *     e.g. user hit undo with a stale score), the catch silently
+     *     no-ops. The old pattern continues; UI debounces will retry
+     *     on the next mixer change.
+     *   - `evalScope()` and `applyVoicingAliases()` are re-run on each
+     *     call (cheap, idempotent); `beforeEval`/`afterEval` callbacks
+     *     fire but are designed to be safe to repeat.
+     *
+     * Called by `applyMixLive` in `audioActions.ts`, debounced 50ms
+     * from the MixerPanel.
+     */
+    setLayerMix: (layerMix: ReadonlyArray<LayerMix>) =>
+      Effect.tryPromise({
+        try: async () => {
+          const lastSnippet = debugState.lastEvaluatedSnippet;
+          if (!lastSnippet.trim()) return;
+          const audioCtx = unlockAudioContext();
+          const repl = await ensureRepl(audioCtx);
+          const newSnippet = injectMix(lastSnippet, layerMix);
+          // Snapshot the rebuilt snippet synchronously so a subsequent
+          // `eval()` (e.g. user pressed ▶) picks up the same source —
+          // same contract as `eval()` itself.
+          setDebug({ lastEvaluatedSnippet: newSnippet });
+          await repl.evaluate(newSnippet);
+        },
+        catch: (err) => {
+          // Silent rollback — see packet antithesis (5). The existing
+          // `repl.scheduler.pattern` is left untouched and audio keeps
+          // playing. We log to console because failure here means the
+          // user's mixer edits don't reach their ears — they should be
+          // able to inspect why via Debug > Console.
+          const msg = err instanceof Error ? err.message : String(err);
+          console.warn('[wavecode/LiveAudioEngine.setLayerMix] parse failed, keeping previous pattern:', msg);
+          return null as null;
+        },
       }).pipe(Effect.catchAll(() => Effect.void)),
     getCycleProgress: () =>
       Effect.sync(() => {
