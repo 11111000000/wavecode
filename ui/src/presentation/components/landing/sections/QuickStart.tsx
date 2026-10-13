@@ -6,72 +6,56 @@ export function QuickStart(): JSX.Element {
   return (
     <section id="start" class="l-section" aria-labelledby="start-title">
       <header class="l-section__head">
-        <span class="l-section__kicker">08 · start</span>
+        <span class="l-section__kicker">03 · с чего начать</span>
         <h2 class="l-section__title" id="start-title">
-          Открыть редактор — 3 шага, без регистрации.
+          Три шага до первой мелодии.
         </h2>
         <p class="l-section__sub">
-          Никаких аккаунтов, никаких API-ключей: сразу пишешь, сразу
-          слышишь. Если хочешь LLM-агента — добавь один ключ от
-          llm.kosov.online (LiteLLM-прокси с OpenAI-совместимым API).
+          Без регистрации, без своих ключей. Просто открой редактор.
         </p>
       </header>
 
       <div class="l-quickstart">
         <article class="l-step">
           <span class="l-step__num">1</span>
-          <h3 class="l-step__title">Открой редактор</h3>
+          <h3 class="l-step__title">Выбери готовую мелодию</h3>
           <p class="l-step__body">
-            Кнопка «Открыть редактор» на этой странице — и ты в
-            живом Strudel-окружении. Звук играет сразу после клика на
-            «Play».
+            Восемь пресетов на главной странице лендинга — кликни
+            на любой, откроется в редакторе с уже заполненным кодом.
           </p>
           <pre class="l-step__cmd">
-            <span class="prompt">$</span>{' '}
-            <span style={{ color: 'var(--fg)' }}>open</span>{' '}
-            <span style={{ color: 'var(--ok)' }}>wavecode.kosov.online/app</span>
+            <span class="prompt">1.</span>{' '}
+            <span style={{ color: 'var(--fg-dim)' }}>нажми «Открыть»</span>{'\n'}
+            <span class="prompt">2.</span>{' '}
+            <span style={{ color: 'var(--fg-dim)' }}>редактор загрузится</span>
           </pre>
         </article>
 
         <article class="l-step">
           <span class="l-step__num">2</span>
-          <h3 class="l-step__title">Выбери пресет или пиши свой</h3>
+          <h3 class="l-step__title">Нажми «Play»</h3>
           <p class="l-step__body">
-            В шапке — 8 встроенных мелодий (Creep, EDM, Jazz ii-V-I…).
-            Меняешь — пересчитывается мгновенно. Пресет можно
-            сохранить в localStorage.
+            Кнопка <span style={{ color: 'var(--amber)' }}>▶</span>{' '}
+            внизу справа. Через секунду зазвучит. Громкость, пауза,
+            перемотка — всё там же.
           </p>
           <pre class="l-step__cmd">
-            <span class="prompt">$</span>{' '}
-            <span class="comment">{'// eval мгновенно по Enter'}</span>{'\n'}
-            <span style={{ color: 'var(--amber)' }}>stack(</span>
-            {'\n  '}
-            <span class="tk-fn" style={{ color: 'var(--magenta)' }}>note</span>
-            <span style={{ color: 'var(--fg)' }}>(</span>
-            <span style={{ color: 'var(--amber)' }}>"&lt;a2 e3&gt;"</span>
-            <span style={{ color: 'var(--fg)' }}>)</span>
-            <span style={{ color: 'var(--cyan)' }}>.s</span>
-            <span style={{ color: 'var(--fg)' }}>(</span>
-            <span style={{ color: 'var(--ok)' }}>"sawtooth"</span>
-            <span style={{ color: 'var(--fg)' }}>)</span>
-            <span style={{ color: 'var(--amber)' }}>,</span>
-            {'\n)'}
+            <span class="prompt">→</span>{' '}
+            <span style={{ color: 'var(--amber)' }}>▶</span>
+            <span style={{ color: 'var(--fg-dim)' }}>{' '}кнопка снизу справа</span>
           </pre>
         </article>
 
         <article class="l-step">
           <span class="l-step__num">3</span>
-          <h3 class="l-step__title">Спроси AI-агента</h3>
+          <h3 class="l-step__title">Меняй как хочешь</h3>
           <p class="l-step__body">
-            Чат-панель: «Сделай bass глубже», «Добавь swing 16ths».
-            Агент вызывает <code style={{ color: 'var(--amber)', background: 'transparent', border: 'none', padding: 0 }}>edit_score</code> и
-            применяет правку мгновенно, авто-eval’ит и сообщает о
-            результате.
+            Пиши в AI-чат «сделай быстрее» или «добавь басов».
+            Или правь код руками — музыка меняется мгновенно.
           </p>
           <pre class="l-step__cmd">
             <span class="prompt">💬</span>{' '}
-            <span style={{ color: 'var(--fg)' }}>«добавь swing и reverb»</span>{'\n'}
-            <span class="comment">{'↳ edit_score + eval_snippet'}</span>
+            <span style={{ color: 'var(--fg)' }}>«сделай быстрее в два раза»</span>
           </pre>
         </article>
       </div>
@@ -80,9 +64,9 @@ export function QuickStart(): JSX.Element {
         <A
           class="l-cta-primary"
           href="/app"
-          aria-label="Запустить редактор"
+          aria-label="Открыть редактор"
         >
-          <span>Запустить редактор</span>
+          <span>Открыть редактор</span>
           <span class="l-arrow"><ArrowRight size={18} /></span>
         </A>
       </div>
