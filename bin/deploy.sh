@@ -67,8 +67,10 @@ if ! "$SUDO" -n true 2>/dev/null; then
   exit 1
 fi
 
-echo "==> cp $UI_DIR/dist/ → $DEPLOY_DIR/"
-# Backup → dist.prev.<timestamp> (idempotent rollback).
+echo "==> atomic deploy $UI_DIR/dist/ → $DEPLOY_DIR/"
+# Атомарная замена: mv существующий → backup, mkdir новый, cp -r.
+# ВАЖНО: index.html ссылается на hashed assets/index-*.{js,css} —
+# они должны прийти из того же build, иначе 404 в браузере.
 TS=$(date +%Y%m%d-%H%M%S)
 if [ -d "$DEPLOY_DIR" ] && [ -f "$DEPLOY_DIR/index.html" ]; then
   "$SUDO" -n mv "$DEPLOY_DIR" "$DEPLOY_DIR.prev.$TS"
@@ -89,23 +91,22 @@ done
 "$SUDO" -n cp "$DEPLOY_DIR/index.html" "$DEPLOY_DIR/404.html"
 "$SUDO" -n chown -R caddy:caddy "$DEPLOY_DIR"
 
-# 6. Drop stale hashed bundles. Vite emits content-hashed filenames, so
-# previous index-*.js / index-*.css become orphans after a new build.
-ACTIVE_JS=$(grep -oE 'index-[A-Za-z0-9_-]+\.js' "$DEPLOY_DIR/index.html" | sort -u || true)
-ACTIVE_CSS=$(grep -oE 'index-[A-Za-z0-9_-]+\.css' "$DEPLOY_DIR/index.html" | sort -u || true)
-for f in "$DEPLOY_DIR/assets/"index-*.js "$DEPLOY_DIR/assets/"index-*.js.map \
-         "$DEPLOY_DIR/assets/"index-*.css "$DEPLOY_DIR/assets/"index-*.css.map; do
-  [ -f "$f" ] || continue
-  base=$(basename "$f")
-  case "$base" in
-    *.js|*.js.map)
-      echo "$ACTIVE_JS" | grep -qx "$base" && continue ;;
-    *.css|*.css.map)
-      echo "$ACTIVE_CSS" | grep -qx "$base" && continue ;;
-  esac
-  "$SUDO" -n rm -f "$f"
+# 6. Sanity check: убедиться, что index.html ссылается на файлы, которые
+# реально лежат в assets/. Защита от частичных deploy'ов, когда кто-то
+# копирует только assets/ или только index.html.
+ACTIVE_JS=$(grep -oE 'assets/index-[A-Za-z0-9_-]+\.js' "$DEPLOY_DIR/index.html" | sort -u || true)
+ACTIVE_CSS=$(grep -oE 'assets/index-[A-Za-z0-9_-]+\.css' "$DEPLOY_DIR/index.html" | sort -u || true)
+for ref in $ACTIVE_JS $ACTIVE_CSS; do
+  rel=${ref#assets/}
+  if [ ! -f "$DEPLOY_DIR/$ref" ]; then
+    echo "ERROR: index.html references $ref but file is missing!"
+    echo "  Build + cp -r не были атомарны. Откатываюсь на $DEPLOY_DIR.prev.$TS"
+    "$SUDO" -n rm -rf "$DEPLOY_DIR"
+    "$SUDO" -n mv "$DEPLOY_DIR.prev.$TS" "$DEPLOY_DIR"
+    exit 1
+  fi
 done
-"$SUDO" -n chown -R caddy:caddy "$DEPLOY_DIR"
+echo "    ✓ $(echo "$ACTIVE_JS" | wc -l) JS + $(echo "$ACTIVE_CSS" | wc -l) CSS references resolved"
 
 echo
 echo "✓ Deploy complete: $DEPLOY_DIR/"
