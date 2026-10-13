@@ -1,31 +1,22 @@
 #!/usr/bin/env bash
-# bin/deploy.sh — собрать wavecode и развернуть в двух местах.
+# bin/deploy.sh — собрать wavecode и развернуть на локальный Caddy.
 #
-# 1. PRIMARY: локальный Caddy через /var/lib/wavecode/dist.
-#    → https://wavecode.kosov.online/  (Caddy public listener, LE cert)
-#    → https://wavecode.tail347ae6.ts.net/ (Caddy tailnet listener)
+# 1. Проверяет .env.local (с per-app LLM-ключом).
+# 2. pnpm install (если node_modules отсутствует).
+# 3. pnpm build → ui/dist/
+# 4. sudo cp -r ui/dist/* → /var/lib/wavecode/dist/ (caddy:caddy).
+# 5. Создаёт SPA-fallback <route>/index.html для BrowserRouter
+#    маршрутов (Caddy try_files {path}/index.html — root index.html
+#    fallback требует правки Nix-конфига; workaround — копия в каждую
+#    директорию). Список маршрутов — литерал, обновляется вручную.
 #
-# 2. PARALLEL: GH Pages через gh-pages branch (https://11111000000.github.io/wavecode/).
-#    Публичный mirror для случаев, когда локальный сервер недоступен
-#    (CDN, обходной аудит, новый дев-стенд). Не претендует на домен
-#    wavecode.kosov.online — CNAME удалён из gh-pages намеренно, чтобы
-#    GitHub не резолвился как источник custom domain.
-#
-# Что делает:
-#   1. Проверяет .env.local (per-app LLM-ключ).
-#   2. pnpm install (если node_modules отсутствует).
-#   3. pnpm build → ui/dist/
-#   4. sudo cp -r ui/dist/* → /var/lib/wavecode/dist/ (caddy:caddy).
-#   5. Создаёт SPA-fallback <route>/index.html для BrowserRouter
-#      маршрутов (Caddy try_files {path}/index.html — root index.html
-#      fallback требует правки Nix-конфига; workaround — копия в каждую
-#      директорию). Список маршрутов — литерал, обновляется вручную.
-#   6. Параллельный push в gh-pages branch через orphan worktree,
-#      без CNAME (GH Pages не претендует на кастомный домен).
+# После deploy:
+#   • https://wavecode.kosov.online/         — публичный URL (Caddy + LE cert)
+#   • https://wavecode.tail347ae6.ts.net/   — tailnet URL (Tailscale mesh)
 #
 # Rollback:
-#   * Primary:  cd /var/lib/wavecode && mv dist.prev.<ts> dist
-#   * GH Pages:  gh api -X DELETE repos/.../git/refs/heads/gh-pages
+#   • cd /var/lib/wavecode && mv dist.prev.<ts> dist
+#   • (или nix-конфиг: git revert <commit> && bin/rebuild.sh switch)
 #
 # Идемпотентно: можно запускать сколько угодно раз.
 
@@ -76,7 +67,7 @@ if ! "$SUDO" -n true 2>/dev/null; then
   exit 1
 fi
 
-echo "==> cp $UI_DIR/dist/ → $DEPLOY_DIR/ (PRIMARY)"
+echo "==> cp $UI_DIR/dist/ → $DEPLOY_DIR/"
 # Backup → dist.prev.<timestamp> (idempotent rollback).
 TS=$(date +%Y%m%d-%H%M%S)
 if [ -d "$DEPLOY_DIR" ] && [ -f "$DEPLOY_DIR/index.html" ]; then
@@ -88,8 +79,8 @@ fi
 
 # 5. SPA workaround: copy index.html into every SPA-route directory.
 # Caddy `try_files {path}/index.html` отдаёт этот файл для `/<route>`,
-# fallback на root index.html. Лучшее долгосрочное решение — добавить
-# в Nix-конфиг `try_files {path} {path}.html {path}/index.html /index.html`
+# fallback на root index.html. Лучшее долгосрочное решение — добавить в
+# Nix-конфиг `try_files {path} {path}.html {path}/index.html /index.html`
 # (требует nixos-rebuild switch + rollback-процедура).
 for route in "${SPA_ROUTES[@]}"; do
   "$SUDO" -n mkdir -p "$DEPLOY_DIR/$route"
@@ -116,34 +107,8 @@ for f in "$DEPLOY_DIR/assets/"index-*.js "$DEPLOY_DIR/assets/"index-*.js.map \
 done
 "$SUDO" -n chown -R caddy:caddy "$DEPLOY_DIR"
 
-echo "✓ PRIMARY deployed: $DEPLOY_DIR/"
-
-# 7. Parallel GH Pages deploy (orphan worktree, no CNAME — mirror only).
-echo "==> gh-pages (PARALLEL mirror)"
-if command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
-  GH_WORK=/tmp/gh-pages-work
-  rm -rf "$GH_WORK"
-  mkdir -p "$GH_WORK"
-  cd "$GH_WORK"
-  git init -q
-  git remote add origin "$(git -C "$UI_DIR/.." remote get-url origin)"
-  git checkout --orphan gh-pages >/dev/null 2>&1
-  cp -r "$UI_DIR/dist/." .
-  rm -f CNAME  # never claim custom domain — primary serves there
-  git add -A
-  git -c user.email="${GIT_AUTHOR_EMAIL:-wavecode-deploy@local}" \
-      -c user.name="${GIT_AUTHOR_NAME:-wavecode-deploy}" \
-      commit -q -m "deploy: parallel mirror from $(git -C "$UI_DIR/.." rev-parse --short HEAD)"
-  git push -q -f origin gh-pages
-  echo "✓ PARALLEL gh-pages pushed: $(gh api repos/11111000000/wavecode/pages --jq .html_url)"
-else
-  echo "  (skipped: gh CLI not authenticated — set it up with 'gh auth login')"
-fi
-
 echo
-echo "✓ Both deployments succeeded:"
-echo "    PRIMARY:   https://wavecode.kosov.online/"
-echo "    MIRROR:    $(cd "$UI_DIR/.." && git remote get-url origin | sed 's|github.com/11111000000/|11111000000.github.io/|; s|\.git$|/|')"
+echo "✓ Deploy complete: $DEPLOY_DIR/"
 echo
 echo "Verify:"
 echo "    curl -I https://wavecode.kosov.online/         # landing"
