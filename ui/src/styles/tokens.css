@@ -127,6 +127,7 @@
 
   /* ── LAYOUT ───────────────────────────────────────────────── */
   --header-h:        56px;
+  --preset-row-h:    44px;   /* wavecode-preset-row-and-toast-z: PresetRow fixed row (single select + padding) */
   --controls-h:      52px;   /* wavecode-transport-always-visible: TransportPanel fixed row */
   --tabbar-h:        60px;
   --fab-size:        56px;
