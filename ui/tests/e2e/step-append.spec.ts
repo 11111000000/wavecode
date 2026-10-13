@@ -26,7 +26,7 @@ test('tapping a cell does NOT clobber the loaded preset (score preserved, audio 
   page.on('console', (m) => consoleLogs.push(`[${m.type()}] ${m.text()}`));
 
   await page.setViewportSize({ width: 1280, height: 800 });
-  await page.goto('http://127.0.0.1:4173/', { waitUntil: 'domcontentloaded' });
+  await page.goto('http://127.0.0.1:5173/', { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('main.app', { timeout: 15_000 });
   await page.waitForSelector('.cm-content', { timeout: 15_000 });
 
@@ -35,7 +35,7 @@ test('tapping a cell does NOT clobber the loaded preset (score preserved, audio 
   await expect(page.locator('.cm-content')).toContainText('Creep');
 
   // Start audio so audio.status reports 'playing'.
-  await page.locator('button:has-text("▶ Eval")').click();
+  await page.locator('button[aria-label="Запуск"]').click();
   await page.waitForTimeout(4_000);
   const statusBefore = (await audioStatus(page)) ?? '';
   expect(statusBefore.trim()).toBe('playing');
@@ -63,7 +63,7 @@ test('tapping a cell does NOT clobber the loaded preset (score preserved, audio 
 
 test('tapping ↑ load & play with a loaded preset wraps grid layers into the existing stack', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
-  await page.goto('http://127.0.0.1:4173/', { waitUntil: 'domcontentloaded' });
+  await page.goto('http://127.0.0.1:5173/', { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('main.app', { timeout: 15_000 });
   await page.waitForSelector('.cm-content', { timeout: 15_000 });
 
@@ -95,7 +95,7 @@ test('tapping ↑ load & play with a loaded preset wraps grid layers into the ex
 
 test('empty editor + grid tap + load→editor equals standalone grid snippet', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
-  await page.goto('http://127.0.0.1:4173/', { waitUntil: 'domcontentloaded' });
+  await page.goto('http://127.0.0.1:5173/', { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('main.app', { timeout: 15_000 });
   await page.waitForSelector('.cm-content', { timeout: 15_000 });
 

@@ -16,7 +16,7 @@ test('Strudel eval produces triggers', async ({ page }) => {
   await page.waitForTimeout(1500);
 
   console.log('=== Eval ===');
-  await page.locator('button:has-text("Eval (play)")').click();
+  await page.locator('button[aria-label="Запуск"]').click();
   await page.waitForTimeout(5000);
 
   const debugInfo = await page.evaluate(() => {
