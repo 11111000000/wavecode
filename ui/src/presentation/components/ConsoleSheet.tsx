@@ -12,6 +12,17 @@
  *     сохраняет колбэк); install потом его подхватит.
  *   - Polling fallback не нужен — sink даёт immediate update.
  *
+ * Boot restore (Phase 3 — Subagent 13):
+ *   - На onMount, после того как динамический import() разрешился,
+ *     вызываем logger.loadPersistedErrors() и, если возвращён
+ *     непустой слайс, logger.prepend(persisted). Это восстанавливает
+ *     последнюю сотню ERROR/FATAL-записей из IDB (последний рестарт
+ *     браузера не стирает историю ошибок). Sink bump-ит сигнал →
+ *     ConsoleSheet сразу отображает их.
+ *   - Любая ошибка загрузки (IDB недоступен, payload corrupt) ловится
+ *     и глушится через console.warn — sheet не должен крашиться из-за
+ *     persistence-layer.
+ *
  * UI:
  *   - Mobile: bottom-sheet на 60vh / 90vh (через inline translateY).
  *   - Desktop ≥1024px: right-side drawer 480px (через .console-sheet).
@@ -116,6 +127,25 @@ export function ConsoleSheet(): JSX.Element {
 
   onMount(() => {
     installConsoleGlobals();
+    void (async () => {
+      try {
+        // logger is statically imported and installed at boot (main.tsx).
+        // We can call its methods directly without awaiting an IIFE.
+        const persisted = await logger.loadPersistedErrors();
+        if (persisted.length === 0) return;
+        logger.prepend(persisted);
+        sinkTickSet((n) => n + 1);
+      } catch (err) {
+        try {
+          console.warn(
+            '[ConsoleSheet] failed to load persisted errors:',
+            err,
+          );
+        } catch {
+          /* logger.warn itself may be unavailable in some envs */
+        }
+      }
+    })();
   });
 
   const onClose = (): void => consoleStore.setConsoleOpen(false);

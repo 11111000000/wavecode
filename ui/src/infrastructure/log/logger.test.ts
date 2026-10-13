@@ -278,6 +278,82 @@ describe('logger', () => {
     expect(out).toEqual([]);
   });
 
+  it('prepend([]) is a no-op (no sink notification, buffer unchanged)', () => {
+    logger.push('info', ['live-1']);
+    const sinkCalls: LogEntry[] = [];
+    logger.setSink((e) => sinkCalls.push(e));
+    logger.prepend([]);
+    expect(logger.getBuffer()).toHaveLength(1);
+    expect(sinkCalls).toHaveLength(0);
+  });
+
+  it('prepend(entries) inserts at the HEAD of the buffer and notifies the sink', () => {
+    logger.push('info', ['live-1']);
+    logger.push('info', ['live-2']);
+    const persisted: LogEntry[] = [
+      {
+        id: 9001,
+        level: 'error',
+        text: 'persisted-1',
+        args: ['persisted-1'],
+        source: 'app',
+        ts: 1_700_000_000_000,
+      },
+      {
+        id: 9002,
+        level: 'error',
+        text: 'persisted-2',
+        args: ['persisted-2'],
+        source: 'app',
+        ts: 1_700_000_000_001,
+      },
+    ];
+    const sinkCalls: LogEntry[] = [];
+    logger.setSink((e) => sinkCalls.push(e));
+    logger.prepend(persisted);
+
+    const buf = logger.getBuffer();
+    expect(buf.map((e) => e.text)).toEqual([
+      'persisted-1',
+      'persisted-2',
+      'live-1',
+      'live-2',
+    ]);
+    expect(sinkCalls).toHaveLength(1);
+    expect(sinkCalls[0]?.text).toBe('persisted-2');
+  });
+
+  it('prepend drops the oldest entries once MAX_LOG_ENTRIES is exceeded', () => {
+    // Fill the live ring to near capacity with live entries.
+    for (let i = 0; i < MAX_LOG_ENTRIES - 2; i++) {
+      logger.push('info', [`live-${i}`]);
+    }
+    expect(logger.getBuffer()).toHaveLength(MAX_LOG_ENTRIES - 2);
+
+    // Prepend 5 entries — total 503, cap is 500. The 3 oldest
+    // entries in chronological order (persisted-0, persisted-1,
+    // persisted-2 — they're the OLDEST since they come from before
+    // the page reload) get dropped to make room.
+    const persisted: LogEntry[] = Array.from({ length: 5 }, (_, i) => ({
+      id: 8000 + i,
+      level: 'error',
+      text: `persisted-${i}`,
+      args: [`persisted-${i}`],
+      source: 'app',
+      ts: 1_700_000_000_000 + i,
+    }));
+    logger.prepend(persisted);
+
+    const buf = logger.getBuffer();
+    expect(buf).toHaveLength(MAX_LOG_ENTRIES);
+    // First 3 persisted entries (the oldest of the prepend) are gone.
+    expect(buf[0]?.text).toBe('persisted-3');
+    expect(buf[1]?.text).toBe('persisted-4');
+    expect(buf[2]?.text).toBe('live-0');
+    expect(buf[3]?.text).toBe('live-1');
+    expect(buf[buf.length - 1]?.text).toBe(`live-${MAX_LOG_ENTRIES - 3}`);
+  });
+
   it('throttle resets after windowMs passes', async () => {
     // Five warnings in a tight burst.
     for (let i = 0; i < 5; i++) {

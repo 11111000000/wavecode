@@ -12,9 +12,15 @@ import { logger } from '~/infrastructure/log';
  * `safeReadBuffer → logger.getBuffer()`. `logger.clear()` in beforeEach
  * gives every test a clean slate.
  *
- * Tests for the "graceful fallback" path live in their own describe —
- * they spy on `logger.getBuffer` to make it throw, verifying the
- * sheet's try/catch safety net.
+ * Two describe blocks:
+ *  - 'ConsoleSheet (graceful fallback: ...)' — uses the real logger
+ *    and spies on `logger.getBuffer` to make it throw, verifying
+ *    the sheet's try/catch safety net.
+ *  - 'ConsoleSheet (persisted-errors restore)' — mocks the logger
+ *    module with `vi.mock` so the prepend behavior on mount can be
+ *    controlled. The mock factory is hoisted to the top of this file
+ *    by vitest; the static-import tests above are unaffected because
+ *    they use the real (unmocked) logger via the static import.
  */
 
 describe('ConsoleSheet', () => {
