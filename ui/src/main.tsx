@@ -1,6 +1,7 @@
 /* <reference types="solid-js" /> */
 import { render } from 'solid-js/web';
 import { wrapStrudelLogger } from './infrastructure/audio/strudelPatches';
+import { logger } from './infrastructure/log';
 import { App } from './App';
 import './index.css';
 import { setPendingShare } from './presentation/state/shareState';
@@ -11,6 +12,21 @@ import { parseShareUrl } from './domain/urlCodec';
 // that don't render `%c` styling don't get `background-color: …` appended to
 // messages. See strudelPatches.ts for the full rationale.
 wrapStrudelLogger();
+
+// Install the log ring-buffer capture as the next bootstrap step. Order is
+// load-bearing — see `infrastructure/log/logger.ts` header for the full
+// rationale, but the short version is:
+//
+//   1. wrapStrudelLogger()  — strips %c + CSS-arg from console.log
+//   2. logger.install()     — captures all subsequent console.* to the buffer
+//   3. installConsoleGlobals() (in App onMount) — window.error → pushToast
+//
+// Without this call, the ring buffer is empty until the user first opens
+// the ConsoleSheet — which means every Strudel/cyclist/sampler log from
+// boot until the first sheet open is silently dropped. logger.install()
+// is idempotent (`installed` flag in logger.ts) so calling it again from
+// anywhere later is a no-op.
+logger.install();
 
 const root = document.getElementById('root');
 if (!root) throw new Error('#root element not found in index.html');
