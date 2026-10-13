@@ -193,15 +193,40 @@ const ensureWorker = (): Worker => {
 /**
  * Per-URL AudioBuffer cache populated by `decodeInWorker`. Test-only
  * accessor `__getWarmCache()` exposes it for inspection. Production
- * consumers will be Phase 2's wrapped `loadBuffer`.
+ * consumers are `wrapSuperdoughLoadBuffer` (Phase 4 / Subagent 16),
+ * which patches superdough's runtime `loadBuffer` to consult this
+ * cache first.
  */
 const warmCache = new Map<string, AudioBuffer>();
+
+/**
+ * Reference held by the wrapped `loadBuffer`. `setWarmCache(cache)`
+ * installs (or clears) the reference. The wrapper consults it on
+ * every call; when the URL is present AND the cached AudioBuffer
+ * was created on the same AudioContext as the caller's, the cached
+ * buffer is returned directly without a fetch + decode.
+ *
+ * Why a separate `warmCacheRef`: the same cache is mutated by
+ * `decodeInWorker` (additions). Holding a `Map` reference (not a
+ * copy) means the wrapper always sees the latest entries.
+ */
+let warmCacheRef: Map<string, AudioBuffer> | null = null;
+
+export const setWarmCache = (cache: Map<string, AudioBuffer> | null): void => {
+  warmCacheRef = cache;
+};
 
 /**
  * Reconstruct the main-thread AudioBuffer from a Worker reply's
  * raw Float32Array buffer. Channel-major layout: ch0 samples
  * (length), then ch1 samples (length), etc. — exactly what
  * `decodeWorker.ts:mergeChannels()` produces.
+ *
+ * Stamps the AudioContext as a non-standard `__ctx` property on
+ * the resulting AudioBuffer so `wrapSuperdoughLoadBuffer` can
+ * detect context-match before short-circuiting. (Stock
+ * AudioBuffer does not expose `.context`; we attach our own
+ * marker. The WebAudio spec does not forbid this.)
  */
 const reconstructBuffer = (out: DecodeOk): AudioBuffer => {
   const ac = getAudioContext();
@@ -212,6 +237,7 @@ const reconstructBuffer = (out: DecodeOk): AudioBuffer => {
   for (let ch = 0; ch < out.numberOfChannels; ch += 1) {
     audioBuffer.copyToChannel(view.subarray(ch * length, (ch + 1) * length), ch);
   }
+  (audioBuffer as unknown as { __ctx: AudioContext }).__ctx = ac;
   return audioBuffer;
 };
 
@@ -304,6 +330,127 @@ const collectSampleUrls = (dict: SoundMapSnapshot): string[] => {
 
 const PRELOAD_CONCURRENCY = 4;
 
+/**
+ * Phase 4 / Subagent 16: warm-cache fast path.
+ *
+ * When `preloadAllBuffers` populates the warm cache, the same
+ * AudioBuffer objects are valid for the runtime as long as the
+ * runtime uses the same AudioContext (which wavecode does —
+ * one shared `__wavecodeAudioCtx`). This wrap short-circuits
+ * superdough's loadBuffer for cached URLs, eliminating the
+ * "loading sound X took too long" warning that plagued
+ * piano-ballad and similar fast-tempo presets.
+ *
+ * SCOPE: only short-circuits when the cached buffer was
+ * created on the same AudioContext as the runtime's. If the
+ * contexts differ, falls through to the original loadBuffer.
+ * The sample-rate mismatch across contexts is a known
+ * limitation; wavecode's single-context architecture sidesteps
+ * it entirely.
+ *
+ * Implementation notes:
+ *
+ * - `originalLoadBuffer` is bound to `mod` (superdough's
+ *   namespace module) so the function still resolves its
+ *   closure-private `loadCache` / `bufferCache` maps correctly
+ *   even after we overwrite `mod.loadBuffer`.
+ * - The wrap is idempotent: subsequent calls return early. This
+ *   matters because `LiveAudioEngine.ensureRepl` may re-enter on
+ *   module reload (HMR) and we must not stack wraps.
+ * - The wrap is installed ASYNCHRONOUSLY because
+ *   `@strudel/webaudio` is dynamically imported (Vite bundles it
+ *   on demand). We must wait for the dynamic import to resolve
+ *   before monkey-patching. The race window is microseconds in
+ *   practice — the first hap is always seconds later — but we
+ *   guard against double-install via the `originalLoadBuffer`
+ *   sentinel.
+ * - The wrap falls through gracefully when `warmCacheRef` is
+ *   null (setWarmCache(null) on teardown). It also falls through
+ *   when the URL is not in the cache or the cached buffer lives
+ *   on a different AudioContext than the runtime's.
+ */
+let originalLoadBuffer:
+  | ((url: string, ac: AudioContext, label: string, n?: number) => Promise<AudioBuffer>)
+  | null = null;
+let wrapInstalled = false;
+
+/**
+ * Patched `loadBuffer` that consults `warmCacheRef` first. When
+ * the URL is present and the cached AudioBuffer's `__ctx`
+ * (stamped by `reconstructBuffer`) matches the caller's
+ * AudioContext, returns the cached buffer directly. Otherwise
+ * falls through to the original superdough implementation.
+ */
+const wrappedLoadBuffer = async (
+  url: string,
+  ac: AudioContext,
+  label: string,
+  n: number = 0,
+): Promise<AudioBuffer> => {
+  const cache = warmCacheRef;
+  if (cache !== null) {
+    const cached = cache.get(url);
+    if (cached !== undefined) {
+      // The cached AudioBuffer carries a non-standard `__ctx`
+      // property stamped by `reconstructBuffer` (which knows
+      // which AudioContext created it). Real AudioBuffer does
+      // not expose `.context`, so we attach our own.
+      const stamped = (cached as unknown as { __ctx?: AudioContext }).__ctx;
+      if (stamped === ac) {
+        return cached;
+      }
+      // Context mismatch (e.g. multi-context consumer): fall
+      // through to the original loadBuffer. The PCM data is the
+      // same — but we'd need to re-decode to the new context's
+      // sampleRate, which is the original's job.
+    }
+  }
+  if (originalLoadBuffer !== null) {
+    return originalLoadBuffer(url, ac, label, n);
+  }
+  // Wrap not installed yet (dynamic import still pending). Fall
+  // through to the live `mod.loadBuffer` so callers aren't blocked.
+  const mod = await import('@strudel/webaudio');
+  return mod.loadBuffer(url, ac, label, n);
+};
+
+/**
+ * Install the warm-cache wrapper on `@strudel/webaudio`'s
+ * `loadBuffer` (re-exported from superdough). Idempotent: a
+ * second call returns without re-patching. Safe to call from
+ * `LiveAudioEngine.ensureRepl` once modules are loaded.
+ */
+export const wrapSuperdoughLoadBuffer = (): void => {
+  if (wrapInstalled) return;
+  void (async () => {
+    const mod = await import('@strudel/webaudio');
+    if (wrapInstalled) return;
+    if (typeof mod.loadBuffer !== 'function') {
+      console.warn('[SampleLoader] @strudel/webaudio.loadBuffer not a function — wrap skipped');
+      return;
+    }
+    originalLoadBuffer = mod.loadBuffer.bind(mod);
+    mod.loadBuffer = wrappedLoadBuffer as typeof mod.loadBuffer;
+    wrapInstalled = true;
+  })();
+};
+
+/**
+ * Test-only reset for the wrap state. Production callers use
+ * `setWarmCache(null)` for cache teardown; this also undoes the
+ * patch so subsequent tests start from a clean slate.
+ */
+export const __resetLoadBufferWrapForTests = (): void => {
+  if (originalLoadBuffer !== null) {
+    void import('@strudel/webaudio').then((mod) => {
+      mod.loadBuffer = originalLoadBuffer as typeof mod.loadBuffer;
+    }).catch(() => undefined);
+  }
+  originalLoadBuffer = null;
+  wrapInstalled = false;
+  warmCacheRef = null;
+};
+
 type PreloadState = {
   loaded: number;
   total: number;
@@ -352,6 +499,13 @@ const preloadAllBuffers = async (state: PreloadState): Promise<void> => {
   // works on it. `unlockAudioContext()` is invoked later by
   // LiveAudioEngine.eval() once the user clicks Play.
   const ac = getAudioContext();
+  // Install the cache reference for the wrapper. The wrapper is
+  // installed (separately) by `wrapSuperdoughLoadBuffer()` —
+  // typically from `LiveAudioEngine.ensureRepl` once modules load.
+  // Even before the wrap is installed, populating the reference is
+  // safe: `warmCacheRef === null` keeps the wrapper in fall-through
+  // mode.
+  setWarmCache(warmCache);
   state.total = collectSampleUrls(dict).length;
   const urls = state.total > 0 ? collectSampleUrls(dict) : [];
   // Touch `ac` so the variable is used and the type check sees the
@@ -484,4 +638,5 @@ export const __resetForTests = (): void => {
   nextDecodeId = 0;
   inflightDecodes.clear();
   warmCache.clear();
+  setWarmCache(null);
 };
