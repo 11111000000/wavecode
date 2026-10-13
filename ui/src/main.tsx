@@ -3,7 +3,6 @@ import { render } from 'solid-js/web';
 import { wrapStrudelLogger } from './infrastructure/audio/strudelPatches';
 import { App } from './App';
 import './index.css';
-import './debug.css';
 import { setPendingShare } from './presentation/state/shareState';
 import { parseShareUrl } from './domain/urlCodec';
 

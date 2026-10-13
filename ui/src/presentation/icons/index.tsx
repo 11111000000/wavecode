@@ -244,6 +244,29 @@ export const DragHandleIcon = (p: Props): JSX.Element => (
   </svg>
 );
 
+/** Console / bug icon — terminal-propt with antennae.
+ *  Используется для фиксированной кнопки ConsoleButton. */
+export const ConsoleIcon = (p: Props): JSX.Element => (
+  <svg {...base(p.size ?? 20)} class={`wc-icon ${p.class ?? ''}`}>
+    <rect x="2.5" y="4" width="11" height="9" rx="1.2" />
+    <line x1="4.5" y1="7" x2="11.5" y2="7" />
+    <line x1="4.5" y1="10" x2="11.5" y2="10" />
+    <circle cx="5" cy="4" r="0.6" fill="currentColor" stroke="none" />
+    <circle cx="8" cy="4" r="0.6" fill="currentColor" stroke="none" />
+    <circle cx="11" cy="4" r="0.6" fill="currentColor" stroke="none" />
+    <line x1="5.5" y1="13" x2="5.5" y2="14.5" />
+    <line x1="10.5" y1="13" x2="10.5" y2="14.5" />
+    <line x1="4" y1="14.5" x2="12" y2="14.5" />
+  </svg>
+);
+
+/** Pin icon — означает sticky (нет auto-dismiss). */
+export const PinIcon = (p: Props): JSX.Element => (
+  <svg {...base(p.size ?? 14)} class={`wc-icon ${p.class ?? ''}`}>
+    <path d="M8 1.5 L8 6 M5.5 6 L10.5 6 M6 9 L10 9 M8 9 L8 14.5" />
+  </svg>
+);
+
 /**
  * BrandLogo — стилизованная осциллограмма «W» + spectrum dot + cursor.
  * Использует currentColor для основных paths + hardcoded accents

@@ -2,7 +2,6 @@ import {
   createSignal, onMount, onCleanup, type JSX,
 } from 'solid-js';
 import { Effect } from 'effect';
-import { DebugPanel } from './presentation/panels/DebugPanel';
 import {
   installKeyboardShortcuts,
   setMobileMode,
@@ -23,6 +22,10 @@ import { useAppBootstrap } from './presentation/state/useAppBootstrap';
 import { useAutoSave } from './presentation/state/useAutoSave';
 import { TabBar } from './presentation/components/TabBar';
 import { FAB } from './presentation/components/FAB';
+import { Toast } from './presentation/components/Toast';
+import { ConsoleButton } from './presentation/components/ConsoleButton';
+import { ConsoleSheet } from './presentation/components/ConsoleSheet';
+import { installConsoleGlobals } from './presentation/components/consoleGlobals';
 import { TopBar } from './presentation/components/app/TopBar';
 import { PresetRow } from './presentation/components/app/PresetRow';
 import { PanelsLayout } from './presentation/components/app/PanelsLayout';
@@ -106,8 +109,13 @@ export function App(): JSX.Element {
     });
   });
 
+  onMount(() => {
+    installConsoleGlobals();
+  });
+
   return (
     <main class="app wc-app">
+      <Toast />
       <TopBar
         audioRunning={audio.audioRunning()}
         audioStarting={audioStarting()}
@@ -195,7 +203,8 @@ export function App(): JSX.Element {
       />
       <BottomSheets />
       <TabBar />
-      <DebugPanel />
+      <ConsoleButton />
+      <ConsoleSheet />
     </main>
   );
 }
