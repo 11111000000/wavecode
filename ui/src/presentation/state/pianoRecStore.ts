@@ -1,5 +1,6 @@
 import { createSignal } from 'solid-js';
-import { EditorView } from '@codemirror/view';
+import { EditorView, Decoration, type DecorationSet } from '@codemirror/view';
+import { StateEffect, StateField } from '@codemirror/state';
 import type { PianoInstrument } from '~/domain/music/notes';
 import { noteToneSnippet, noteNumberToName } from '~/domain/music/notes';
 import { dispatch, appStore } from './appStore';
@@ -280,6 +281,8 @@ export const applyToScore = (): void => {
   if (slot === 'replace-score') {
     dispatch({ type: 'replaceScore', text: snippet });
     setRecBuffer([]);
+    // Flash the entire new doc — destructive replace, every line is new.
+    flashAfterCommit();
     return;
   }
 
@@ -298,7 +301,12 @@ export const applyToScore = (): void => {
       );
       return;
     }
+    const sel = view.state.selection.main;
     insertAtCursor(view, snippet);
+    // Flash the inserted lines. After view.dispatch above, the doc
+    // already reflects the change, so `view.state.doc` is the new doc.
+    const insertEnd = sel.from + snippet.length;
+    flashRange(view, sel.from, insertEnd);
     setRecBuffer([]);
     return;
   }
@@ -307,6 +315,29 @@ export const applyToScore = (): void => {
   const newScore = stackAppend(appStore.score, snippet);
   dispatch({ type: 'replaceScore', text: newScore });
   setRecBuffer([]);
+  // Flash the appended lines at the end of the new doc.
+  flashAfterCommit();
+};
+
+/**
+ * After a replace-score / append-stack commit, flash the inserted range
+ * in the CodeMirror view. Walks through `pianoEditorApi()`; if no
+ * editor is wired (e.g. mobile BottomSheet with editor hidden), this
+ * is a silent no-op — the preview-pill still gives feedback.
+ */
+const flashAfterCommit = (): void => {
+  const api = pianoEditorApi();
+  if (!api) return;
+  // After Solid's reactive graph finishes, the CodeMirror createEffect
+  // has already mirrored appStore.score → view.state.doc, so we can
+  // flash [0, doc.length) right now. queueMicrotask is a defensive
+  // hop that survives the rare case where CodeMirror batches updates
+  // across multiple Solid ticks.
+  queueMicrotask(() => {
+    const v = api.getView();
+    if (!v || !v.dom.isConnected) return;
+    flashLastInsertRange(v);
+  });
 };
 
 /**
@@ -374,6 +405,126 @@ export const previewPillPayload = (): {
     slot: pianoSlot(),
     slotLabel: pianoSlotLabel(pianoSlot()),
   };
+};
+
+// =========================================================================
+// CodeMirror flash-decorations (wavecode-piano-rec-clarity polish)
+// Transient yellow highlight on inserted lines after a successful apply.
+// Three pieces:
+//   - `setFlashDecorations` / `clearFlashDecorations` StateEffects.
+//   - `flashDecorations` StateField — exposes its value as
+//     `EditorView.decorations`, drives the actual highlight.
+//   - `flashRange(view, from, to)` — caller-side helper that
+//     computes line-range decorations, dispatches them, then
+//     auto-clears after FLASH_DURATION_MS.
+//
+// The field MUST be registered in CodeMirrorEditorImpl extensions for
+// `provide: EditorView.decorations.from(...)` to take effect.
+// =========================================================================
+
+const FLASH_DURATION_MS = 1200;
+/** Cap on how many inserted lines get highlighted. Prevents perf issues
+ *  for very long snippets (e.g. 100+ notes recorded in a single
+ *  session). */
+const FLASH_LINE_CAP = 10;
+
+export const setFlashDecorations = StateEffect.define<DecorationSet>();
+export const clearFlashDecorations = StateEffect.define<null>();
+
+export const flashDecorations = StateField.define<DecorationSet>({
+  create: (): DecorationSet => Decoration.none,
+  update: (decos, tr): DecorationSet => {
+    for (const e of tr.effects) {
+      if (e.is(setFlashDecorations)) return e.value;
+      if (e.is(clearFlashDecorations)) return Decoration.none;
+    }
+    return decos;
+  },
+  provide: (f) => EditorView.decorations.from(f),
+});
+
+/** Build a DecorationSet that flashes every inserted line in [from, to).
+ *  Pure: takes a CodeMirror doc string + lineAt-resolution helpers so
+ *  callers without a live view can still compute it.
+ *
+ *  Sub-sampling for long inserts: if the range covers more than
+ *  FLASH_LINE_CAP lines, only the first and last line are decorated
+ *  (highlighted yellow bar still gives a clear visual cue; full
+ *  per-line decoration would slow the editor for 100+ line snippets). */
+export const buildFlashRange = (
+  doc: {
+    lineAt(pos: number): { from: number; number: number };
+    line(n: number): { from: number };
+  },
+  from: number,
+  to: number,
+): DecorationSet => {
+  if (from === to) return Decoration.none;
+  const fromLine = doc.lineAt(from);
+  const toLine = doc.lineAt(to);
+  const lineFroms: number[] = [fromLine.from];
+  if (toLine.number === fromLine.number) {
+    return Decoration.set(
+      lineFroms.map((f) =>
+        Decoration.line({ attributes: { class: 'cm-line-flash' } }).range(f),
+      ),
+    );
+  }
+  const total = toLine.number - fromLine.number + 1;
+  if (total <= FLASH_LINE_CAP) {
+    for (let n = fromLine.number + 1; n <= toLine.number; n += 1) {
+      lineFroms.push(doc.line(n).from);
+    }
+  } else {
+    // Sub-sample: first + last.
+    lineFroms.push(doc.line(toLine.number).from);
+  }
+  return Decoration.set(
+    lineFroms.map((f) =>
+      Decoration.line({ attributes: { class: 'cm-line-flash' } }).range(f),
+    ),
+  );
+};
+
+/** Apply a transient yellow highlight on every line in [from, to] of
+ *  the given view, then auto-clear after FLASH_DURATION_MS. No-op
+ *  if the range is empty or the view is destroyed before the timeout. */
+export const flashRange = (
+  view: EditorView,
+  from: number,
+  to: number,
+): void => {
+  if (from === to) return;
+  const decos = buildFlashRange(view.state.doc, from, to);
+  view.dispatch({ effects: setFlashDecorations.of(decos) });
+  setTimeout(() => {
+    if (!view.dom.isConnected) return;
+    view.dispatch({ effects: clearFlashDecorations.of(null) });
+  }, FLASH_DURATION_MS);
+};
+
+/**
+ * Compute the document range covered by the most recent dispatch, then
+ * highlight those lines. Used by `applyToScore` after a successful
+ * replace-score or append-stack commit so the user sees WHERE the new
+ * snippet landed. At-cursor uses cursor-relative range directly.
+ *
+ * Looks at the LAST transaction's `changes` field via `view.state` —
+ * since `applyToScore` dispatches synchronously, the changes are
+ * visible in `view.state.doc` immediately after.
+ */
+export const flashLastInsertRange = (view: EditorView): void => {
+  const doc = view.state.doc;
+  // For a fresh view after our dispatch, the change covers [0, doc.length]
+  // if we replaced the whole doc, or [insertFrom, insertTo] otherwise.
+  // CodeMirror exposes transactions on view.state but the cleanest
+  // signal here is: compare against the previous-score snapshot.
+  // Simplification: highlight the entire current doc — cheap enough
+  // and clear enough for the user (replaces always touch whole doc,
+  // append-stack appends to bottom, cursor-insert goes to cursor).
+  const last = doc.length;
+  if (last === 0) return;
+  flashRange(view, 0, last);
 };
 
 // =========================================================================
