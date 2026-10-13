@@ -25,8 +25,11 @@ export type TopBarProps = {
   onDeletePreset: () => void;
   onResetAll: () => void;
   onToggleLayout: () => void;
+  onOpenAdmin: () => void;
   sampleStatus: 'idle' | 'loading' | 'ready';
 };
+
+const LONG_PRESS_MS = 3000;
 
 export function TopBar(props: TopBarProps): JSX.Element {
   onMount(() => {
@@ -40,9 +43,32 @@ export function TopBar(props: TopBarProps): JSX.Element {
     onCleanup(() => document.removeEventListener('click', onDocClick));
   });
 
+  let pressTimer: number | null = null;
+  const startPress = (): void => {
+    pressTimer = window.setTimeout(() => {
+      pressTimer = null;
+      props.onOpenAdmin();
+    }, LONG_PRESS_MS);
+  };
+  const cancelPress = (): void => {
+    if (pressTimer !== null) {
+      window.clearTimeout(pressTimer);
+      pressTimer = null;
+    }
+  };
+
   return (
     <header class="wc-topbar">
-      <WavecodeLogo size={22} />
+      <span
+        class="wc-topbar__logo-btn"
+        onPointerDown={startPress}
+        onPointerUp={cancelPress}
+        onPointerLeave={cancelPress}
+        onPointerCancel={cancelPress}
+        title="Удерживайте 3 секунды для админки"
+      >
+        <WavecodeLogo size={22} />
+      </span>
       <h1 class="wc-topbar__title">wavecode</h1>
       <Show when={props.sampleStatus === 'loading'}>
         <span class="audio-loading-pill" title="Sample banks loading…">♪ samples</span>
@@ -52,6 +78,16 @@ export function TopBar(props: TopBarProps): JSX.Element {
           {props.audioRunning ? `▶ ${props.ctxState().state}` : `● ${props.ctxState().state}`}
         </span>
       </span>
+      <Show when={appStore.audio.lastError}>
+        <a
+          class="wc-admin-warn"
+          href="#/admin"
+          aria-label="Открыть админку: ошибка аудио"
+          title="Аудио-ошибка — открыть админку"
+        >
+          ⚠
+        </a>
+      </Show>
       <div class="wc-topbar__actions">
         <button
           type="button"

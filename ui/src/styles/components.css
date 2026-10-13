@@ -644,6 +644,13 @@ textarea.wc-input {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+.wc-topbar__logo-btn {
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+}
 .wc-topbar__logo {
   display: inline-flex;
   align-items: center;
@@ -1909,34 +1916,24 @@ button:not([disabled]):not(.no-shrink):active {
   border-radius: var(--radius-pill);
 }
 
-/* ── /admin debug link ────────────────────────────────────────── */
+/* ── /admin contextual warn badge (only when appStore.audio.lastError) ── */
 
-.wc-debug-link {
-  position: fixed;
-  right: var(--space-md);
-  bottom: calc(var(--tabbar-h) + var(--space-md));
-  z-index: var(--z-tabbar);
-  font-family: var(--font-mono);
-  font-size: var(--fs-2xs);
-  font-weight: var(--fw-semibold);
-  letter-spacing: var(--ls-wide);
-  text-transform: uppercase;
-  text-decoration: none;
-  color: var(--magenta);
+.wc-admin-warn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: var(--radius-full);
   background: var(--magenta-soft);
+  color: var(--magenta);
   border: 1px solid var(--magenta);
-  border-radius: var(--radius-pill);
-  padding: var(--space-2xs) var(--space-sm);
-  box-shadow: var(--shadow-fab);
-  opacity: 0.6;
-  transition: opacity var(--dur-xs) var(--ease);
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+  text-decoration: none;
+  animation: admin-warn-pulse 1.6s ease-in-out infinite;
 }
-.wc-debug-link:hover {
-  opacity: 1;
-}
-@media (max-width: 720px) {
-  .wc-debug-link {
-    bottom: calc(var(--tabbar-h) + var(--space-sm));
-    right: var(--space-sm);
-  }
+@keyframes admin-warn-pulse {
+  0%, 100% { opacity: 0.7; }
+  50%      { opacity: 1; }
 }
