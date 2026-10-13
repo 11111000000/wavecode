@@ -1,4 +1,5 @@
 import { Show, For, onMount, onCleanup, type JSX } from 'solid-js';
+import { useNavigate } from '@solidjs/router';
 import { appStore } from '~/presentation/state/appStore';
 import type { MobileMode } from '~/presentation/state/uiState';
 import {
@@ -29,6 +30,13 @@ export type TopBarProps = {
 };
 
 export function TopBar(props: TopBarProps): JSX.Element {
+  const navigate = useNavigate();
+
+  const goHome = (e: MouseEvent): void => {
+    e.preventDefault();
+    navigate('/');
+  };
+
   onMount(() => {
     const onDocClick = (e: MouseEvent): void => {
       if (!props.showMobileMenu) return;
@@ -45,10 +53,12 @@ export function TopBar(props: TopBarProps): JSX.Element {
       <a
         href="/"
         class="wc-topbar__home"
-        aria-label="На главную (лендинг)"
+        aria-label="На главную — лендинг с описанием проекта"
         title="На главную"
+        onClick={goHome}
       >
-        ←
+        <span class="wc-topbar__home-arrow" aria-hidden="true">←</span>
+        <span class="wc-topbar__home-label">На главную</span>
       </a>
       <BrandLogo size={22} />
       <h1 class="wc-topbar__title">wavecode</h1>
