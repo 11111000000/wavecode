@@ -1,0 +1,50 @@
+applied_at: 2026-10-13
+branch: wavecode/transport-always-visible
+commits:
+  - 16709f9 docs(math): draft wavecode-transport-always-visible
+  - 6b2094a docs(math): expand packet with legacy-duplicate-removal scope
+  - b0a3341 fix(ui): TransportPanel position:fixed below TopBar — always accessible
+  - 633d353 fix(ui): drop legacy duplicate PIANO & STEP GRID from components.css
+supersedes: |
+  Closes regression from wavecode-legacy-eat-all (PIANO & STEP
+  GRID section had duplicates). Fixes UX issue: Play panel
+  hidden by bottom-sheets.
+notes: |
+  Two related fixes from one packet:
+
+  1. **Play panel always accessible.** Existing mobile @media
+     sticky rule was a no-op (.wc-app has no scroll context).
+     `.app-controls-row` → position:fixed, top:var(--header-h),
+     z-index: calc(var(--z-sheet) + 12) = 52, blur background.
+     `.app-body` → padding-top:var(--controls-h) compensates
+     for fixed row. New --controls-h: 52px token.
+
+  2. **Legacy duplicate section removed.** wavecode-legacy-eat-all
+     migrated PIANO & STEP GRID from legacy.css → components.css,
+     but those classes were ALREADY defined in components.css
+     (modern versions). Source-order cascade let legacy win,
+     silently overriding modern styles for .step-grid* (8 classes)
+     and .piano-key. Dead .piano-keyboard container (~25 lines
+     of rules for a container never in DOM) also removed.
+
+  Counts:
+    - components.css: 3485 → 3359 lines (-126)
+    - tokens.css:    +1 line (--controls-h: 52px)
+
+  Verification:
+    - typecheck: clean
+    - vitest: 636/636
+    - lint: 2 errors (preexisting, unchanged)
+    - build (vite): success
+    - smoke test (playwright):
+      * AI dialog open → Play button at (x, y) returns
+        `<path d="M3 2...">` (Play icon) at z-index 52
+        effective — CLICKABLE through sheet.
+      * Step sheet open → step-grid renders, Play still
+        clickable. Computed cell height 48px (touch-target
+        min-height constraint, expected).
+
+  User feedback addressed: "when bottom-sheets open, Play panel
+  becomes invisible — make it always accessible and active".
+
+  Pending: merge to master.
