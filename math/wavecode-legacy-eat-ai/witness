@@ -1,0 +1,48 @@
+applied_at: 2026-10-13
+branch: wavecode/legacy-eat-ai
+commits:
+  - e567a8e docs(math): draft wavecode-legacy-eat-ai
+  - c0d353b refactor(ui): migrate AI chat + collapsible panels to components.css
+supersedes: |
+  Second batch of wavecode-css-consolidate Phase 2.
+notes: |
+  Migrated COLLAPSIBLE PANELS + CHAT (AI panel messenger) from
+  legacy.css → components.css.
+
+  Sections:
+    - COLLAPSIBLE PANELS: .app-body, .collapsible, .score-panel,
+      .score-panel-inner, .ai-panel, .status-panel, .panel-header,
+      .collapse-toggle, .caret, .panel-hint
+    - CHAT: .ai-edit-panel-inner, .ai-messages, .ai-messages-empty,
+      .ai-message[-user|-assistant|-system], .ai-message-meta,
+      .ai-message-body, .ai-footer, .ai-textarea,
+      .ai-controls-row1, .ai-apply-btn, .ai-status, .ai-status-row,
+      .ai-retry-btn, .ai-status-ok, .ai-status-err
+
+  Counts:
+    - legacy.css:     1071 → 770 lines (-301)
+    - components.css: 2442 → 2753 lines (+311)
+
+  Cascade unchanged (components layer > legacy; migrated rules
+  are uniquely defined so layer ordering doesn't matter for them).
+
+  Verification:
+    - typecheck: clean
+    - vitest: 632/632 passing
+    - lint: 2 errors (preexisting, unchanged)
+    - build (vite): success
+    - smoke test (playwright): .ai-panel renders with surface-0 bg,
+      flex column layout; .panel-header h2 uses Geist 12px
+      lowercase — all migrated rules apply correctly.
+
+  Sections remaining in legacy.css (770 lines, 9 sections):
+    APP SHELL, BUTTON, SAVE PRESET BAR, SCORE PANEL (partial,
+      with .score-panel-inner nested selectors), MIDI I/O BAR,
+      MIXER PANEL, RECORD, SHARE MODAL, CODEMIRROR, MINI-NOTATION
+      TOOLBAR, PIANO & STEP GRID.
+
+  Next packet candidates: wavecode-legacy-eat-app-shell (~7
+  classes), wavecode-legacy-eat-button (~5 classes for
+  shared .ctrl-btn / .preset-btn), or batch them together.
+
+  Pending: merge to master.
