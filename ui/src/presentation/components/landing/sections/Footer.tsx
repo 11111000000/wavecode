@@ -1,20 +1,22 @@
 import { For, type JSX } from 'solid-js';
+import { A } from '@solidjs/router';
 import { WavecodeLogo } from '../icons';
 
 type Link = {
   readonly label: string;
   readonly href: string;
   readonly external?: boolean;
+  readonly route?: boolean;     // true → /app (SPA-навигация), false → #anchor или ext
 };
 
 const SECTIONS: ReadonlyArray<{ title: string; links: ReadonlyArray<Link> }> = [
   {
     title: 'Продукт',
     links: [
-      { label: 'Открыть редактор', href: '#/app' },
-      { label: 'Пресеты',           href: '#snippet' },
-      { label: 'Архитектура',       href: '#architecture' },
-      { label: 'Quick start',       href: '#start' },
+      { label: 'Открыть редактор',  href: '/app',         route: true },
+      { label: 'Пресеты',            href: '#snippet' },
+      { label: 'Архитектура',        href: '#architecture' },
+      { label: 'Quick start',        href: '#start' },
     ],
   },
   {
@@ -29,10 +31,10 @@ const SECTIONS: ReadonlyArray<{ title: string; links: ReadonlyArray<Link> }> = [
   {
     title: 'Поддержка',
     links: [
-      { label: 'README',       href: 'https://github.com/anomalyco/wavecode/blob/master/README.md', external: true },
-      { label: 'Issues',       href: 'https://github.com/anomalyco/wavecode/issues',                 external: true },
-      { label: 'AGENTS',       href: 'https://github.com/anomalyco/wavecode/blob/master/AGENTS.md', external: true },
-      { label: 'Discussions',  href: 'https://github.com/anomalyco/wavecode/discussions',             external: true },
+      { label: 'README',       href: 'https://github.com/11111000000/wavecode/blob/master/README.md', external: true },
+      { label: 'Issues',       href: 'https://github.com/11111000000/wavecode/issues',                 external: true },
+      { label: 'AGENTS',       href: 'https://github.com/11111000000/wavecode/blob/master/AGENTS.md', external: true },
+      { label: 'Discussions',  href: 'https://github.com/11111000000/wavecode/discussions',             external: true },
     ],
   },
 ];
@@ -60,14 +62,17 @@ export function Footer(): JSX.Element {
                 <For each={col.links}>
                   {(l) => (
                     <li>
-                      <a
-                        href={l.href}
-                        {...(l.external
-                          ? { target: '_blank', rel: 'noopener noreferrer' }
-                          : {})}
-                      >
-                        {l.label}
-                      </a>
+                      {l.route
+                        ? <A href={l.href}>{l.label}</A>
+                        : <a
+                            href={l.href}
+                            {...(l.external
+                              ? { target: '_blank', rel: 'noopener noreferrer' }
+                              : {})}
+                          >
+                            {l.label}
+                          </a>
+                      }
                     </li>
                   )}
                 </For>
