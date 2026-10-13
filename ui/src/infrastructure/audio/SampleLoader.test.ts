@@ -245,6 +245,7 @@ describe('SampleLoader — Strudel API contract (samples, soundMap, static impor
       loadSynthSamples: mod.loadSynthSamples,
       loadAllSamples: mod.loadAllSamples,
       areAllSamplesLoaded: mod.areAllSamplesLoaded,
+      getSampleLoadProgress: mod.getSampleLoadProgress,
     };
   };
 
@@ -410,10 +411,13 @@ describe('SampleLoader — Strudel API contract (samples, soundMap, static impor
     // 'bd:0' took too long" because fetch+decode (80–160 ms) outpaces
     // the audio scheduler. We populate superdough's internal `tt[url]`
     // cache via loadBuffer() so the first haps hit warm cache.
+    //
+    // New behavior: `preloadAllBuffers` returns Promise<void> and is
+    // awaited in `registerBank`. So once `loadDrumSamples()` resolves,
+    // every URL has been dispatched to `loadBuffer`. The 10ms wait
+    // from the previous version (fire-and-forget) is no longer needed.
     const { loadDrumSamples } = await loadSampleLoader();
     await loadDrumSamples();
-    // Allow microtasks to flush (preloadAllBuffers is fire-and-forget).
-    await new Promise((resolve) => setTimeout(resolve, 10));
     // Expect loadBuffer to have been called for every drums sample URL
     // (14 samples in the drums bank — see strudel.json).
     const drumFilenames = [
@@ -427,5 +431,92 @@ describe('SampleLoader — Strudel API contract (samples, soundMap, static impor
       // superdough's real loadBuffer would receive full URLs via getBaseURL.
       expect(calledUrls).toContain(fname);
     }
+  });
+
+  it('preloadAllBuffers limits concurrency to 4 in flight (loadBuffer called max 4 at a time)', async () => {
+    // Make each loadBuffer call take 5ms so we can observe overlap.
+    // Track the peak in-flight count via a closure.
+    let inFlight = 0;
+    let peakInFlight = 0;
+    loadBufferMock.mockImplementation(
+      () => new Promise<AudioBuffer>((r) => {
+        inFlight += 1;
+        peakInFlight = Math.max(peakInFlight, inFlight);
+        setTimeout(() => {
+          inFlight -= 1;
+          r({} as AudioBuffer);
+        }, 5);
+      }),
+    );
+    const { loadDrumSamples } = await loadSampleLoader();
+    await loadDrumSamples();
+    // Sanity: more than 1 in flight (otherwise the test is meaningless —
+    // every URL completed before the next started, no concurrency).
+    expect(peakInFlight).toBeGreaterThan(1);
+    // Hard cap: 24 drum URLs at limit 4 → peak should be exactly 4.
+    // (14 originals + 10 bare aliases: bd, sd, rim, hh, oh, cp, cb, sh,
+    // crash, ride. The aliases bd_sub, tom_l, tom_m, tom_h are skipped
+    // because their alias contains an underscore.)
+    expect(peakInFlight).toBeLessThanOrEqual(4);
+    // All 24 URLs were dispatched eventually.
+    expect(loadBufferMock).toHaveBeenCalledTimes(24);
+  });
+
+  it('onProgress fires for each buffer loaded (loaded/total counts up monotonically)', async () => {
+    const events: Array<{ loaded: number; total: number }> = [];
+    // Make each loadBuffer call take a tiny bit of time so onProgress
+    // events are spread out enough to observe each one.
+    loadBufferMock.mockImplementation(
+      () => new Promise<AudioBuffer>((r) => setTimeout(() => r({} as AudioBuffer), 1)),
+    );
+    const { loadDrumSamples } = await loadSampleLoader();
+    await loadDrumSamples({ onProgress: (loaded, total) => { events.push({ loaded, total }); } });
+    // First event is the (0, total) prelude.
+    expect(events[0]?.loaded).toBe(0);
+    // 14 original drum URLs + 10 bare aliases (bd, sd, rim, hh, oh, cp,
+    // cb, sh, crash, ride) = 24 total.
+    expect(events[0]?.total).toBe(24);
+    // Last event is (total, total).
+    const last = events[events.length - 1];
+    expect(last?.loaded).toBe(24);
+    expect(last?.total).toBe(24);
+    // Loaded is monotonically non-decreasing.
+    for (let i = 1; i < events.length; i++) {
+      expect(events[i]!.loaded).toBeGreaterThanOrEqual(events[i - 1]!.loaded);
+    }
+    // No duplicates in (loaded, total) for the "complete" set — every
+    // call must have produced a unique loaded count.
+    const loadeds = events.map((e) => e.loaded);
+    expect(new Set(loadeds).size).toBe(loadeds.length);
+  });
+
+  it('getSampleLoadProgress reflects actual state after a load', async () => {
+    const { loadDrumSamples, getSampleLoadProgress, areAllSamplesLoaded } = await loadSampleLoader();
+    // Initially: nothing loaded.
+    const before = getSampleLoadProgress();
+    expect(before.loaded).toBe(0);
+    expect(before.total).toBe(0);
+    expect(before.perBank.drums).toEqual({ loaded: 0, total: 0 });
+    expect(areAllSamplesLoaded()).toBe(false);
+    await loadDrumSamples();
+    const after = getSampleLoadProgress();
+    // 14 drum originals + 10 bare aliases = 24 URLs.
+    expect(after.perBank.drums).toEqual({ loaded: 24, total: 24 });
+    expect(after.perBank.piano).toEqual({ loaded: 0, total: 0 });
+    expect(after.perBank.synth).toEqual({ loaded: 0, total: 0 });
+    expect(after.loaded).toBe(24);
+    expect(after.total).toBe(24);
+    // Drums alone is not "all loaded" — piano + synth are still idle.
+    expect(areAllSamplesLoaded()).toBe(false);
+  });
+
+  it('backward-compat: loadPianoSamples with no args still returns a Promise<void>', async () => {
+    // The new signature is `loadPianoSamples(opts?: LoadOptions)`. Old
+    // call sites (App.tsx, useAppBootstrap.ts, PianoSampleLoader shim)
+    // pass no arguments and ignore the return value — they still work.
+    const { loadPianoSamples } = await loadSampleLoader();
+    const p = loadPianoSamples();
+    expect(p).toBeInstanceOf(Promise);
+    await p;
   });
 });
