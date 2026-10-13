@@ -12,12 +12,25 @@ import {
   onNote,
 } from '~/infrastructure/audio/MidiInput';
 import { evalScore } from '../state/audioActions';
-import { singleNoteSnippet } from '~/domain/music/notes';
+import { buildPianoSnippet } from './pianoSynth';
 
 /**
  * On-screen 2-octave piano (C3..B4). Tap to play. WebMIDI input
  * auto-binds when available (Chrome/Edge/Firefox desktop + Android).
  * iOS Safari: only on-screen.
+ *
+ * Polyphony + note-off:
+ *   - The component accumulates an `activeNotes: Set<number>` and calls
+ *     `evalScore(buildPianoSnippet(set))` on every press/release. The
+ *     snippet shapes itself around the held set:
+ *       • 0 notes → SILENCE ('silence' literal — Strudel stays silent).
+ *       • 1 note  → single voice `note("c4").s("triangle")...`.
+ *       • 2+ notes → `stack(note("c4")…, note("e4")…, …)`.
+ *   - evalScore is throttled to 30 ms via a trailing-edge setTimeout so
+ *     fast trills (or a MIDI keyboard glaze) don't flood the eval queue
+ *     with re-evaluations of effectively identical patterns.
+ *   - Stopping the LAST held note sends SILENCE so ringing tails are
+ *     cut instead of decaying naturally.
  *
  * Sizing (width / height) is fully CSS-driven (see .piano-keys-inner in
  * components.css with `--white-w` / `--black-w` / `--piano-h`). The only
@@ -25,6 +38,8 @@ import { singleNoteSnippet } from '~/domain/music/notes';
  * `calc(var(--white-w) * <n> - var(--black-w) / 2)` so the @media query
  * override updates the layout without re-rendering.
  */
+const EVAL_DEBOUNCE_MS = 30;
+
 export function PianoKeyboard() {
   const [activeNotes, setActiveNotes] = createSignal<ReadonlySet<number>>(new Set());
   const [midiAvailable, setMidiAvailable] = createSignal(false);
@@ -36,21 +51,50 @@ export function PianoKeyboard() {
   const whiteIndex = (midi: number): number =>
     whiteNotes.findIndex((n) => n === midi);
 
+  // Debounce state — ref-equivalents in Solid are module-scope because
+  // signals would re-render on every change. We want the timer/handle
+  // to be invisible to the JSX tree.
+  let pendingEvalTimer: ReturnType<typeof setTimeout> | null = null;
+
+  const scheduleEval = (): void => {
+    if (pendingEvalTimer !== null) clearTimeout(pendingEvalTimer);
+    pendingEvalTimer = setTimeout(() => {
+      pendingEvalTimer = null;
+      void evalScore(buildPianoSnippet(activeNotes()));
+    }, EVAL_DEBOUNCE_MS);
+  };
+
   const playNote = (midi: number): void => {
     if (!isInPianoRange(midi)) return;
-    const next = new Set(activeNotes());
+    const current = activeNotes();
+    if (current.has(midi)) {
+      // Already pressed (e.g. MIDI key re-trigger without note-off).
+      // Re-eval anyway so the synth stays in sync with the held set.
+      scheduleEval();
+      return;
+    }
+    const next = new Set(current);
     next.add(midi);
     setActiveNotes(next);
-    const name = noteNumberToName(midi);
-    void evalScore(singleNoteSnippet(name));
+    scheduleEval();
   };
 
   const stopNote = (midi: number): void => {
     if (!isInPianoRange(midi)) return;
-    const next = new Set(activeNotes());
+    const current = activeNotes();
+    if (!current.has(midi)) return; // already released
+    const next = new Set(current);
     next.delete(midi);
     setActiveNotes(next);
+    scheduleEval();
   };
+
+  onCleanup(() => {
+    if (pendingEvalTimer !== null) {
+      clearTimeout(pendingEvalTimer);
+      pendingEvalTimer = null;
+    }
+  });
 
   // WebMIDI: request access on mount (silently no-op on iOS).
   onMount(() => {
