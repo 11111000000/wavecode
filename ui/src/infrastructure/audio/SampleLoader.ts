@@ -44,6 +44,18 @@
  * See: superdough/dist/index.mjs:989 — early-return skips playback when
  * `audioContext.currentTime > scheduled start`.
  *
+ * Concurrency: `preloadAllBuffers` runs at most 4 decodes in parallel
+ * (via `withConcurrency`). AudioContext.decodeAudioData is serialized
+ * on the audio thread per browser; 4 is a good balance between
+ * throughput (more parallelism → faster wall-clock) and
+ * over-decode (too many parallel decodes compete for the main thread
+ * and stall the scheduler). 36 URLs across the three banks (10 piano
+ * + 14 drums + 12 synth) → ~9 batches at limit 4.
+ *
+ * Progress: `onProgress(loaded, total)` fires after each buffer
+ * resolves. The total is computed once at the start of the preload
+ * (so it does not drift mid-flight).
+ *
  * Samples bundled in `public/samples/` (Vite copies to dist/).
  *   - piano/ — Salamander Grand Piano v3 (CC0, 10 MP3s)
  *   - drums/ — 14 808-style one-shots (CC0, Freesound previews)
@@ -51,16 +63,34 @@
  */
 
 import { samples, soundMap, loadBuffer, getAudioContext } from '@strudel/webaudio';
+import { withConcurrency } from './withConcurrency';
 
-type BankState = { status: 'idle' | 'loading' | 'loaded' | 'failed'; inflight: Promise<void> | null };
+export type LoadOptions = {
+  onProgress?: (loaded: number, total: number) => void;
+};
+
+export type BankName = 'piano' | 'drums' | 'synth';
+
+export type SampleLoadProgress = {
+  loaded: number;
+  total: number;
+  perBank: Record<BankName, { loaded: number; total: number }>;
+};
+
+type BankState = {
+  status: 'idle' | 'loading' | 'loaded' | 'failed';
+  inflight: Promise<void> | null;
+  loaded: number;
+  total: number;
+};
 
 const PIANO_MANIFEST = '/samples/piano/strudel.json';
 const DRUMS_MANIFEST = '/samples/drums/strudel.json';
 const SYNTH_MANIFEST = '/samples/synth/strudel.json';
 
-const piano: BankState = { status: 'idle', inflight: null };
-const drums: BankState = { status: 'idle', inflight: null };
-const synth: BankState = { status: 'idle', inflight: null };
+const piano: BankState = { status: 'idle', inflight: null, loaded: 0, total: 0 };
+const drums: BankState = { status: 'idle', inflight: null, loaded: 0, total: 0 };
+const synth: BankState = { status: 'idle', inflight: null, loaded: 0, total: 0 };
 
 type SoundEntry = { onTrigger: unknown; data: unknown };
 type SoundMapSnapshot = Record<string, SoundEntry>;
@@ -84,6 +114,33 @@ const addBareAliases = (): number => {
   return Object.keys(updates).length;
 };
 
+const collectSampleUrls = (dict: SoundMapSnapshot): string[] => {
+  const urls: string[] = [];
+  for (const [, entry] of Object.entries(dict)) {
+    const data = entry.data as { type?: string; samples?: unknown };
+    if (data.type !== 'sample' || !data.samples) continue;
+    const samples = data.samples;
+    if (Array.isArray(samples)) {
+      for (const url of samples) {
+        if (typeof url === 'string') urls.push(url);
+      }
+    } else if (typeof samples === 'object' && samples !== null) {
+      for (const urlList of Object.values(samples as Record<string, unknown>)) {
+        if (Array.isArray(urlList)) {
+          for (const url of urlList) {
+            if (typeof url === 'string') urls.push(url);
+          }
+        }
+      }
+    }
+  }
+  return urls;
+};
+
+const PRELOAD_CONCURRENCY = 4;
+
+type PreloadState = { loaded: number; total: number; onProgress?: ((loaded: number, total: number) => void) | undefined };
+
 /**
  * Collect every sample URL registered by `samples()` and eagerly
  * fetch+decode via `loadBuffer()`. Populates superdough's internal
@@ -93,8 +150,14 @@ const addBareAliases = (): number => {
  *   "[sampler] loading sound 'bd:0' took too long"
  * because `fetch().arrayBuffer().decodeAudioData()` takes 80–160 ms and
  * the audio context time advances past the scheduled start.
+ *
+ * `onProgress(loaded, total)` fires after every successful (or
+ * failed-but-acknowledged) buffer resolution. Failures are not
+ * surfaced — we use `Promise.allSettled` semantics so a single bad
+ * URL does not block the rest of the bank. The total is computed
+ * once at the start of the preload.
  */
-const preloadAllBuffers = async (): Promise<void> => {
+const preloadAllBuffers = async (state: PreloadState): Promise<void> => {
   const dict = soundMap.get() as SoundMapSnapshot;
   // Touch the audio context so `getAudioContext()` returns a live ctx that
   // can decode. If the user hasn't interacted yet, `getAudioContext()`
@@ -102,32 +165,26 @@ const preloadAllBuffers = async (): Promise<void> => {
   // `unlockAudioContext()` is invoked later by LiveAudioEngine.eval() once
   // the user clicks Play.
   const ac = getAudioContext();
-  const promises: Promise<unknown>[] = [];
-  for (const [key, entry] of Object.entries(dict)) {
-    const data = entry.data as { type?: string; samples?: unknown };
-    if (data.type !== 'sample' || !data.samples) continue;
-    const samples = data.samples;
-    if (Array.isArray(samples)) {
-      for (const url of samples) {
-        if (typeof url === 'string') promises.push(loadBuffer(url, ac, key));
-      }
-    } else if (typeof samples === 'object' && samples !== null) {
-      for (const urlList of Object.values(samples as Record<string, unknown>)) {
-        if (Array.isArray(urlList)) {
-          for (const url of urlList) {
-            if (typeof url === 'string') promises.push(loadBuffer(url, ac, key));
-          }
-        }
-      }
+  const urls = collectSampleUrls(dict);
+  state.total = urls.length;
+  state.loaded = 0;
+  state.onProgress?.(0, urls.length);
+  await withConcurrency(urls, PRELOAD_CONCURRENCY, async (url) => {
+    try {
+      await loadBuffer(url, ac, url);
+    } catch {
+      // Swallow individual decode failures — see comment above.
     }
-  }
-  // Don't block the registration promise — preload in parallel.
-  // Failures are non-fatal (browser may already have the file under
-  // HTTP cache; subsequent requests retry naturally).
-  void Promise.allSettled(promises);
+    state.loaded += 1;
+    state.onProgress?.(state.loaded, state.total);
+  });
 };
 
-const registerBank = (manifestUrl: string, state: BankState): Promise<void> => {
+const registerBank = (
+  manifestUrl: string,
+  state: BankState,
+  opts: LoadOptions = {},
+): Promise<void> => {
   if (state.status === 'loaded') return Promise.resolve();
   if (state.inflight) return state.inflight;
   state.status = 'loading';
@@ -135,7 +192,14 @@ const registerBank = (manifestUrl: string, state: BankState): Promise<void> => {
     try {
       await samples(manifestUrl);
       addBareAliases();
-      preloadAllBuffers();
+      const preloadState: PreloadState = {
+        loaded: 0,
+        total: 0,
+        onProgress: opts.onProgress,
+      };
+      await preloadAllBuffers(preloadState);
+      state.loaded = preloadState.loaded;
+      state.total = preloadState.total;
       state.status = 'loaded';
     } catch (err) {
       state.status = 'failed';
@@ -147,25 +211,49 @@ const registerBank = (manifestUrl: string, state: BankState): Promise<void> => {
   return state.inflight;
 };
 
-export const loadPianoSamples = (): void => {
-  void registerBank(PIANO_MANIFEST, piano);
-};
+export const loadPianoSamples = (opts: LoadOptions = {}): Promise<void> =>
+  registerBank(PIANO_MANIFEST, piano, opts);
 
-export const loadDrumSamples = (): void => {
-  void registerBank(DRUMS_MANIFEST, drums);
-};
+export const loadDrumSamples = (opts: LoadOptions = {}): Promise<void> =>
+  registerBank(DRUMS_MANIFEST, drums, opts);
 
-export const loadSynthSamples = (): void => {
-  void registerBank(SYNTH_MANIFEST, synth);
-};
+export const loadSynthSamples = (opts: LoadOptions = {}): Promise<void> =>
+  registerBank(SYNTH_MANIFEST, synth, opts);
 
-export const loadAllSamples = (): void => {
-  loadPianoSamples();
-  loadDrumSamples();
-  loadSynthSamples();
+export const loadAllSamples = (opts: LoadOptions = {}): Promise<void> => {
+  // Fire all three in parallel; failures are isolated per-bank by
+  // registerBank. Returned promise resolves when the LAST bank
+  // settles. The onProgress callback fires for every buffer across
+  // every bank — callers that want per-bank splits should subscribe
+  // to getSampleLoadProgress() instead.
+  return Promise.all([
+    loadPianoSamples(opts),
+    loadDrumSamples(opts),
+    loadSynthSamples(opts),
+  ]).then(() => undefined);
 };
 
 export const areAllSamplesLoaded = (): boolean =>
   piano.status === 'loaded'
   && drums.status === 'loaded'
   && synth.status === 'loaded';
+
+const sum = (a: number, b: number): number => a + b;
+
+/**
+ * Current sample-load progress. Each bank tracks its own loaded/total
+ * count (computed once at the start of its preload). The aggregate
+ * `loaded`/`total` is the sum of all three banks.
+ *
+ * Useful for UI: poll this every animation frame to drive a "Loading
+ * 36/36 samples…" indicator.
+ */
+export const getSampleLoadProgress = (): SampleLoadProgress => ({
+  loaded: [piano.loaded, drums.loaded, synth.loaded].reduce(sum, 0),
+  total: [piano.total, drums.total, synth.total].reduce(sum, 0),
+  perBank: {
+    piano: { loaded: piano.loaded, total: piano.total },
+    drums: { loaded: drums.loaded, total: drums.total },
+    synth: { loaded: synth.loaded, total: synth.total },
+  },
+});

@@ -116,7 +116,7 @@ export const BUILTIN_PRESETS: ReadonlyArray<Preset> = [
       '  // Ride cymbal — light 8ths',
       '  s("drums_ride*8").decay(.3).sustain(0.05).gain(0.12).hpf(5000),',
       '  // Sparse piano lead — C-E-G arpeggio',
-      '  n("c5 e5 g5 e5 c5 e5 g5 e5").s("triangle").gain(0.10).room(.4)',
+      '  note("c5 e5 g5 e5 c5 e5 g5 e5").s("triangle").gain(0.10).room(.4)',
       ')',
     ].join('\n'),
   },
@@ -156,7 +156,7 @@ export const BUILTIN_PRESETS: ReadonlyArray<Preset> = [
       '  // Shaker — light 16ths',
       '  s("~ sh ~ sh ~ sh ~ sh ~ sh ~ sh ~ sh ~").decay(.04).gain(0.15),',
       '  // Sparse melodic lead — pentatonic flair',
-      '  n("e5 ~ d5 ~ c5 ~ b4 a4 ~ g4 ~").s("triangle").gain(0.10).room(.3)',
+      '  note("e5 ~ d5 ~ c5 ~ b4 a4 ~ g4 ~").s("triangle").gain(0.10).room(.3)',
       ')',
     ].join('\n'),
   },
@@ -175,7 +175,7 @@ export const BUILTIN_PRESETS: ReadonlyArray<Preset> = [
       '  // Hi-hat rolls — 32nd notes on 16ths',
       '  s("hh*4 [hh hh] hh*2 [hh hh hh]").decay(.03).gain(0.25),',
       '  // Sparse bell lead — minor pentatonic',
-      '  n("~ ~ ~ c5 ~ ~ eb5 ~ ~ ~ g4 ~ ~ c5 ~").s("triangle").decay(.5).gain(0.12).room(.3),',
+      '  note("~ ~ ~ c5 ~ ~ eb5 ~ ~ ~ g4 ~ ~ c5 ~").s("triangle").decay(.5).gain(0.12).room(.3),',
       '  // Sub bass drone',
       '  note("a1 ~ ~ ~ ~ ~ ~ ~").s("sine").gain(0.25)',
       ')',
@@ -196,7 +196,7 @@ export const BUILTIN_PRESETS: ReadonlyArray<Preset> = [
       '  // Pluck chord stab on 4',
       '  s("~ ~ ~ sd:0.1 ~ ~ ~ ~").gain(0.20),',
       '  // Sparse marimba lead',
-      '  n("~ c5 ~ ~ eb5 ~ ~ d5 ~ c5 ~ ~ b4").s("triangle").decay(.4).gain(0.12).room(.2),',
+      '  note("~ c5 ~ ~ eb5 ~ ~ d5 ~ c5 ~ ~ b4").s("triangle").decay(.4).gain(0.12).room(.2),',
       '  // Rim percussion for texture',
       '  s("~ ~ rim ~ ~ rim ~").decay(.05).gain(0.12)',
       ')',
@@ -219,7 +219,7 @@ export const BUILTIN_PRESETS: ReadonlyArray<Preset> = [
       '  // Bit-reduced noise percussion',
       '  s("white*8").crush(4, 8000).decay(.05).gain(0.10),',
       '  // Detuned sine melody — irregular rhythm',
-      '  n("~ c5 ~ ~ eb5 ~ ~ g4 ~ ~ ~ c5 ~").s("sine").detune(15).gain(0.10).room(.4)',
+      '  note("~ c5 ~ ~ eb5 ~ ~ g4 ~ ~ ~ c5 ~").s("sine").detune(15).gain(0.10).room(.4)',
       ')',
     ].join('\n'),
   },
@@ -238,7 +238,7 @@ export const BUILTIN_PRESETS: ReadonlyArray<Preset> = [
       '  // Bass — root notes',
       '  note("<a2 f2 c2 g2>").s("triangle").gain(0.28).lpf(500),',
       '  // Soft vocal lead — pentatonic melody',
-      '  n("a4 c5 e5 c5 a4 g4 a4 c5").s("triangle").gain(0.10).room(.5).lpf(3000),',
+      '  note("a4 c5 e5 c5 a4 g4 a4 c5").s("triangle").gain(0.10).room(.5).lpf(3000),',
       '  // Soft kick on 1 and 3',
       '  s("bd ~ ~ bd ~ ~ ~ ~").decay(.10).gain(0.20)',
       ')',
@@ -273,7 +273,7 @@ export const BUILTIN_PRESETS: ReadonlyArray<Preset> = [
       '// Piano ballad — Salamander Grand Piano v3 (CC0) + vi-IV-I-V',
       'stack(',
       '  // Right hand — 8th-note arpeggio в стиле Billy Joel',
-      '  n("a4 c5 e5 c5 f4 a4 c5 e5 g4 b4 d5 b4 c5 e5 g4 c5 e5").s("piano_a4").gain(0.5).room(.4),',
+      '  note("a4 c5 e5 c5 f4 a4 c5 e5 g4 b4 d5 b4 c5 e5 g4 c5 e5").s("piano_a4").gain(0.5).room(.4),',
       '  // Left hand — vi-IV-I-V chord roots',
       '  note("<f3 [a3,c4] g3 [b3,d4] a3 [c4,e4] e3 [g3,b3] f3 [a3,c4] g3 [b3,d4] a3 [c4,e4] e3 [g3,b3]>").s("piano_c4").gain(0.4).room(.3),',
       '  // Soft kick on 1 и 3',
@@ -409,9 +409,82 @@ export const BUILTIN_PRESETS: ReadonlyArray<Preset> = [
       '  s("~ ~ ~ ~ ~ ~ ~ drums_crash").gain(0.30),',
       '  // Райд — длинный «шум» на фоне (время от времени)',
       '  s("drums_ride ~ ~ ~ ~ ~ ~ ~").gain(0.25),',
-      '  // Лёгкий kick для басовой основы',
+      '  // Лёгкий kick для базовой основы',
       '  s("bd ~ ~ ~ ~ ~ ~ ~").gain(0.30)',
       ')',
     ].join('\n'),
   },
 ];
+
+/**
+ * Result of running a preset's score through Strudel's transpiler
+ * in a sandbox. Used by the dev-time preset lint to surface warnings
+ * (e.g. `n("note_name")` misuse, missing samples, etc.) without
+ * firing the audio scheduler.
+ */
+export type PresetValidationResult = {
+  readonly presetId: string;
+  readonly warnings: readonly { level: 'warn' | 'error'; message: string }[];
+  readonly elapsedMs: number;
+  readonly error?: string;
+};
+
+/**
+ * Run a preset's score through Strudel's transpiler in a sandbox and
+ * collect `console.warn` / `console.error` calls emitted during
+ * evaluation. Returns the captured diagnostics plus a thrown-error
+ * message if the transpiler itself rejected the snippet.
+ *
+ * The transpiler and console are injected so tests can supply a mock
+ * `console` (real `console.warn` would pollute test output) and a
+ * stub `transpiler.evaluate` that does not require the audio
+ * modules to be loaded.
+ *
+ * Throws nothing: if `transpiler.evaluate` rejects, the error message
+ * is captured in `result.error` and `warnings` is empty.
+ */
+export const validatePreset = async (
+  preset: Preset,
+  opts: {
+    transpiler: {
+      evaluate: (code: string, transpiler: unknown) => Promise<unknown>;
+      transpiler?: unknown;
+    };
+    console: Pick<Console, 'warn' | 'error'>;
+  },
+): Promise<PresetValidationResult> => {
+  const warnings: { level: 'warn' | 'error'; message: string }[] = [];
+  const realWarn = opts.console.warn;
+  const realError = opts.console.error;
+  const captureWarn: typeof opts.console.warn = (...args: unknown[]) => {
+    warnings.push({ level: 'warn', message: args.map(String).join(' ') });
+    realWarn.apply(opts.console, args);
+  };
+  const captureError: typeof opts.console.error = (...args: unknown[]) => {
+    warnings.push({ level: 'error', message: args.map(String).join(' ') });
+    realError.apply(opts.console, args);
+  };
+  opts.console.warn = captureWarn;
+  opts.console.error = captureError;
+  const startedAt = performance.now();
+  try {
+    await opts.transpiler.evaluate(preset.score, opts.transpiler.transpiler);
+  } catch (err) {
+    const elapsedMs = performance.now() - startedAt;
+    return {
+      presetId: preset.id,
+      warnings: [],
+      elapsedMs,
+      error: err instanceof Error ? err.message : String(err),
+    };
+  } finally {
+    opts.console.warn = realWarn;
+    opts.console.error = realError;
+  }
+  const elapsedMs = performance.now() - startedAt;
+  return {
+    presetId: preset.id,
+    warnings: Object.freeze(warnings),
+    elapsedMs,
+  };
+};
