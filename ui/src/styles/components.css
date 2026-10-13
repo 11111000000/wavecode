@@ -2094,3 +2094,48 @@ button:not([disabled]):not(.no-shrink):active {
   color: var(--fg-ghost);
   line-height: var(--lh-snug);
 }
+
+/* ── Bottom toolstrip (Step / Piano / Mixer) ───────────────────────────── */
+
+.wc-toolstrip {
+  display: flex;
+  gap: var(--space-xs);
+  justify-content: center;
+  padding: var(--space-xs) var(--space-sm);
+  background: rgba(10, 10, 14, 0.7);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-top: 1px solid var(--border);
+}
+.wc-toolstrip-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2xs);
+  padding: var(--space-2xs) var(--space-md);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  color: var(--fg-muted);
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  cursor: pointer;
+  min-height: 32px;
+  transition: color var(--dur-xs) var(--ease), border-color var(--dur-xs) var(--ease);
+}
+.wc-toolstrip-btn:hover {
+  color: var(--amber);
+  border-color: var(--amber);
+}
+.wc-toolstrip-btn[data-active='true'] {
+  color: var(--amber);
+  background: var(--amber-soft);
+  border-color: var(--amber);
+}
+@media (max-width: 639px) {
+  .wc-toolstrip-btn__label {
+    display: none;
+  }
+  .wc-toolstrip-btn {
+    padding: var(--space-2xs) var(--space-sm);
+  }
+}
