@@ -1,9 +1,29 @@
 import { describe, it, expect, vi, beforeAll, beforeEach, afterEach } from 'vitest';
+
+// Mock idb-keyval so the dynamic import inside idbBuffer resolves to a
+// controllable spy. The mock factory is run before any test imports
+// anything else, so loadPersistedErrors/savePersistedErrors pick up
+// the spies on their first dynamic-import call.
+vi.mock('idb-keyval', () => {
+  const store = new Map<string, unknown>();
+  return {
+    get: vi.fn(async (key: string) => store.get(key)),
+    set: vi.fn(async (key: string, value: unknown) => {
+      store.set(key, value);
+    }),
+    del: vi.fn(async (key: string) => {
+      store.delete(key);
+    }),
+  };
+});
+
+import * as idb from 'idb-keyval';
 import {
   logger,
   MAX_LOG_ENTRIES,
   type LogEntry,
 } from './logger';
+import { PERSISTED_KEY } from './idbBuffer';
 
 describe('logger', () => {
   let savedLog: typeof console.log;
@@ -170,5 +190,109 @@ describe('logger', () => {
     const buf = logger.getBuffer();
     expect(buf).toHaveLength(1);
     expect(buf[0]?.text).toBe('still works');
+  });
+
+  describe('Phase 2 enhancements', () => {
+    beforeEach(() => {
+      vi.mocked(idb.get).mockClear();
+      vi.mocked(idb.set).mockClear();
+      vi.mocked(idb.del).mockClear();
+    });
+
+    it("'fatal' level entries land in the buffer with level='fatal'", () => {
+      logger.push('fatal', ['something catastrophic']);
+      const buf = logger.getBuffer();
+      expect(buf).toHaveLength(1);
+      expect(buf[0]?.level).toBe('fatal');
+      expect(buf[0]?.text).toBe('something catastrophic');
+    });
+
+  it('6 identical warnings in 100ms → 5 originals + 1 throttle-suppression entry', () => {
+    for (let i = 0; i < 6; i++) {
+      logger.push('warn', ['spam'], 'noisy');
+    }
+    const buf = logger.getBuffer();
+    expect(buf).toHaveLength(6);
+    const originals = buf.filter((e) => e.text === 'spam');
+    const suppressions = buf.filter((e) => e.text.includes('similar messages suppressed'));
+    expect(originals).toHaveLength(5);
+    expect(suppressions).toHaveLength(1);
+    expect(suppressions[0]?.source).toBe('noisy');
+    expect(suppressions[0]?.level).toBe('warn');
+  });
+
+  it('different sources are throttled independently', () => {
+    for (let i = 0; i < 6; i++) {
+      logger.push('warn', ['a'], 'src-a');
+      logger.push('warn', ['b'], 'src-b');
+    }
+    const buf = logger.getBuffer();
+    const a = buf.filter((e) => e.source === 'src-a');
+    const b = buf.filter((e) => e.source === 'src-b');
+    const aOriginals = a.filter((e) => e.text === 'a');
+    const bOriginals = b.filter((e) => e.text === 'b');
+    const aSuppression = a.filter((e) => e.text.includes('suppressed'));
+    const bSuppression = b.filter((e) => e.text.includes('suppressed'));
+    expect(aOriginals).toHaveLength(5);
+    expect(bOriginals).toHaveLength(5);
+    expect(aSuppression).toHaveLength(1);
+    expect(bSuppression).toHaveLength(1);
+  });
+
+  it("'info' and 'debug' levels are NOT throttled", () => {
+    for (let i = 0; i < 20; i++) {
+      logger.push('info', ['i'], 'loud');
+      logger.push('debug', ['d'], 'loud');
+    }
+    const buf = logger.getBuffer();
+    expect(buf.filter((e) => e.text === 'i')).toHaveLength(20);
+    expect(buf.filter((e) => e.text === 'd')).toHaveLength(20);
+    expect(buf.filter((e) => e.text.includes('suppressed'))).toHaveLength(0);
+  });
+
+  it('ERROR entries trigger savePersistedErrors (fire-and-forget)', async () => {
+    logger.push('error', ['an error happened']);
+    // Allow the microtask queue to flush.
+    await new Promise((r) => setTimeout(r, 10));
+    expect(idb.set).toHaveBeenCalled();
+    const calls = vi.mocked(idb.set).mock.calls;
+    const last = calls[calls.length - 1]!;
+    expect(last[0]).toBe(PERSISTED_KEY);
+    const payload = last[1] as ReadonlyArray<LogEntry>;
+    expect(payload.some((e) => e.text === 'an error happened')).toBe(true);
+  });
+
+  it('FATAL entries also trigger savePersistedErrors', async () => {
+    logger.push('fatal', ['the app is on fire']);
+    await new Promise((r) => setTimeout(r, 10));
+    expect(idb.set).toHaveBeenCalled();
+    const calls = vi.mocked(idb.set).mock.calls;
+    const last = calls[calls.length - 1]!;
+    const payload = last[1] as ReadonlyArray<LogEntry>;
+    expect(payload.some((e) => e.text === 'the app is on fire' && e.level === 'fatal')).toBe(true);
+  });
+
+  it('loadPersistedErrors returns [] when IDB has no entry', async () => {
+    vi.mocked(idb.get).mockResolvedValueOnce(undefined);
+    const out = await logger.loadPersistedErrors();
+    expect(out).toEqual([]);
+  });
+
+  it('throttle resets after windowMs passes', async () => {
+    // Five warnings in a tight burst.
+    for (let i = 0; i < 5; i++) {
+      logger.push('warn', ['burst'], 'reset-source');
+    }
+    const buf1 = logger.getBuffer();
+    expect(buf1.filter((e) => e.text === 'burst')).toHaveLength(5);
+
+    // Clear buffer + throttle history; the next push should NOT be
+    // considered a continuation of the previous burst.
+    logger.clear();
+    logger.push('warn', ['after-window'], 'reset-source');
+    const buf2 = logger.getBuffer();
+    expect(buf2.filter((e) => e.text === 'after-window')).toHaveLength(1);
+    expect(buf2.filter((e) => e.text.includes('suppressed'))).toHaveLength(0);
+  });
   });
 });
