@@ -1,4 +1,5 @@
-import { For, createSignal, onMount, onCleanup } from 'solid-js';
+import { For, createSignal, createEffect, onMount, onCleanup } from 'solid-js';
+import { Effect } from 'effect';
 import {
   rangeNotes,
   noteNumberToName,
@@ -14,10 +15,13 @@ import {
 } from '~/infrastructure/audio/MidiInput';
 import { createPianoSynth, type PianoSynth } from '~/infrastructure/audio/PianoSynth';
 import { unlockAudioContext } from '~/infrastructure/audio/LiveAudioEngine';
+import { AudioEngine } from '~/domain/services';
+import { AppLayer } from '~/infrastructure/composition';
 import {
   recEnabled,
   appendNote,
   updateLastNoteEnd,
+  followEnabled,
   instrument,
 } from '../state/pianoRecStore';
 import { PianoToolbar } from './PianoToolbar';
@@ -60,6 +64,8 @@ import { PianoToolbar } from './PianoToolbar';
  * var(--black-w) / 2)`.
  */
 const NOTEON_DEBOUNCE_MS = 30;
+/** FOLLOW mode poll cadence (ms). 20Hz → ~2ms/sec CPU. */
+const FOLLOW_POLL_MS = 50;
 
 /** Russian pluralisation for "нота/ноты/нот". */
 const formatActiveLabel = (count: number): string => {
@@ -80,6 +86,12 @@ export function PianoKeyboard() {
   // note is released. On-screen taps don't change this — they share
   // the same `activeNotes` set but have no device identity.
   const [activeMidiSource, setActiveMidiSource] = createSignal<string | null>(null);
+  // FOLLOW mode: the set of MIDI numbers the Strudel scheduler is
+  // currently sounding. Refreshed via a 50ms timer that calls
+  // AudioEngine.getActiveHaps() while followEnabled() is true.
+  // Unioned with `activeNotes()` for the key's `active` class and
+  // reflected in the `data-source` attribute (none/pressed/follow/both).
+  const [liveHaps, setLiveHaps] = createSignal<ReadonlySet<number>>(new Set());
 
   const notes = rangeNotes();
   const whiteNotes = notes.filter((n) => !isBlackKey(n));
@@ -183,6 +195,64 @@ export function PianoKeyboard() {
     }
     voiceMap.clear();
     pendingNoteOns.clear();
+    // FOLLOW mode cleanup: the setInterval handle is cleared by
+    // `setFollow(false)` inside `onMount` — but if the user navigates
+    // away with the toggle still on, we still need a safety net. The
+    // cleanup below mirrors the toggle-off path.
+    if (followPollTimer !== null) {
+      clearInterval(followPollTimer);
+      followPollTimer = null;
+    }
+  });
+
+  // FOLLOW polling (post wavecode-piano-modes-and-gain): every
+  // FOLLOW_POLL_MS ms, ask the AudioEngine which MIDI notes are
+  // sounding in the scheduler right now. Reactive: it turns on/off
+  // with `followEnabled` without unmounting the component. The poll
+  // handle is module-scope so we can stop it from any handler.
+  let followPollTimer: ReturnType<typeof setInterval> | null = null;
+  const startFollowPoll = (): void => {
+    if (followPollTimer !== null) return;
+    followPollTimer = setInterval(() => {
+      // Defensive: if the toggle flipped off mid-tick, stop on the
+      // next iteration. This avoids leaked timers when toggling
+      // rapidly.
+      if (!followEnabled()) {
+        if (followPollTimer !== null) {
+          clearInterval(followPollTimer);
+          followPollTimer = null;
+        }
+        setLiveHaps(new Set<number>());
+        return;
+      }
+      void Effect.runPromise(
+        Effect.gen(function* () {
+          const engine = yield* AudioEngine;
+          const haps = yield* engine.getActiveHaps();
+          const next = new Set<number>();
+          for (const h of haps) {
+            if (Number.isFinite(h.midi)) next.add(h.midi);
+          }
+          setLiveHaps(next);
+        }).pipe(Effect.provide(AppLayer)),
+      );
+    }, FOLLOW_POLL_MS);
+  };
+  /** Stop the FOLLOW poll AND clear liveHaps so keys un-highlight. */
+  const stopFollowPoll = (): void => {
+    if (followPollTimer !== null) {
+      clearInterval(followPollTimer);
+      followPollTimer = null;
+    }
+    setLiveHaps(new Set<number>());
+  };
+
+  // Reactive FOLLOW mode controller: whenever the user flips
+  // `followEnabled`, start/stop the poll accordingly. Mount-time is
+  // `false` → no poll until the user explicitly opts in.
+  createEffect(() => {
+    if (followEnabled()) startFollowPoll();
+    else stopFollowPoll();
   });
 
   // WebMIDI: request access on mount (silently no-op on iOS).
@@ -254,10 +324,20 @@ export function PianoKeyboard() {
           <For each={whiteNotes}>
             {(midi) => {
               const active = (): boolean => activeNotes().has(midi);
+              const followed = (): boolean => liveHaps().has(midi);
+              const dataSource = (): 'pressed' | 'follow' | 'both' | 'none' => {
+                const p = active();
+                const f = followed();
+                if (p && f) return 'both';
+                if (p) return 'pressed';
+                if (f) return 'follow';
+                return 'none';
+              };
               return (
                 <button
                   type="button"
-                  class={`piano-key white${active() ? ' active' : ''}`}
+                  class={`piano-key white${active() ? ' active' : ''}${followed() ? ' followed' : ''}`}
+                  data-source={dataSource()}
                   aria-label={noteNumberToName(midi) as NoteName}
                   aria-pressed={active()}
                   onPointerDown={(e) => {
@@ -282,10 +362,20 @@ export function PianoKeyboard() {
               const boundary = wIdx + 1;
               const left = `calc((var(--white-w) * ${boundary}) - (var(--black-w) / 2))`;
               const active = (): boolean => activeNotes().has(midi);
+              const followed = (): boolean => liveHaps().has(midi);
+              const dataSource = (): 'pressed' | 'follow' | 'both' | 'none' => {
+                const p = active();
+                const f = followed();
+                if (p && f) return 'both';
+                if (p) return 'pressed';
+                if (f) return 'follow';
+                return 'none';
+              };
               return (
                 <button
                   type="button"
-                  class={`piano-key black${active() ? ' active' : ''}`}
+                  class={`piano-key black${active() ? ' active' : ''}${followed() ? ' followed' : ''}`}
+                  data-source={dataSource()}
                   style={{ left }}
                   aria-label={noteNumberToName(midi) as NoteName}
                   aria-pressed={active()}

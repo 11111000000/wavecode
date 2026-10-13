@@ -1036,6 +1036,62 @@ textarea.wc-input {
   50%      { box-shadow: 0 0 16px var(--magenta-glow); }
 }
 
+.piano-follow-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2xs);
+  height: 28px;
+  padding: 0 var(--space-sm);
+  font-family: var(--font-mono);
+  font-size: var(--fs-2xs);
+  font-weight: var(--fw-semibold);
+  letter-spacing: var(--ls-wide);
+  text-transform: uppercase;
+  background: transparent;
+  color: var(--fg-dim);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+  transition:
+    color var(--dur-xs) var(--ease),
+    border-color var(--dur-xs) var(--ease),
+    background var(--dur-xs) var(--ease);
+  user-select: none;
+}
+.piano-follow-btn:hover { color: var(--cyan); border-color: var(--cyan); }
+.piano-follow-btn[data-active='true'] {
+  color: var(--fg-inverse);
+  background: var(--cyan);
+  border-color: var(--cyan);
+  box-shadow: 0 0 8px var(--cyan-glow);
+}
+
+.piano-apply-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2xs);
+  height: 28px;
+  padding: 0 var(--space-sm);
+  font-family: var(--font-mono);
+  font-size: var(--fs-2xs);
+  font-weight: var(--fw-semibold);
+  letter-spacing: var(--ls-wide);
+  text-transform: uppercase;
+  background: transparent;
+  color: var(--amber);
+  border: 1px solid var(--amber);
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+  transition:
+    color var(--dur-xs) var(--ease),
+    background var(--dur-xs) var(--ease);
+  user-select: none;
+}
+.piano-apply-btn:hover {
+  background: var(--amber);
+  color: var(--fg-inverse);
+}
+
 .piano-instrument-selector {
   display: inline-flex;
   align-items: center;
@@ -1172,6 +1228,27 @@ textarea.wc-input {
   color: var(--fg-inverse);
   box-shadow: var(--shadow-glow-amber);
   transform: scaleY(0.95);
+}
+
+/* FOLLOW mode visual feedback (wavecode-piano-modes-and-gain):
+ *  - data-source="follow"  → scheduler is sounding this note; cyan border
+ *    + subtle cyan glow.
+ *  - data-source="both"    → user is pressing it AND scheduler is sounding
+ *    it; both visual states layered (amber fill + cyan border).
+ *  - data-source="pressed" → existing .active style (amber fill).
+ *  - data-source="none"    → default; no highlighting.
+ * The class `followed` (without `.active`) covers the case where the
+ * scheduler is sounding a note but the user isn't pressing it. */
+.piano-key[data-source='follow'] {
+  border-color: var(--cyan);
+  box-shadow: 0 0 0 1px var(--cyan), 0 0 6px var(--cyan-glow);
+}
+.piano-key[data-source='both'] {
+  border-color: var(--cyan);
+  box-shadow:
+    0 0 0 1px var(--cyan),
+    0 0 0 3px var(--cyan-glow),
+    var(--shadow-glow-amber);
 }
 .piano-key-label {
   font-size: 9px;

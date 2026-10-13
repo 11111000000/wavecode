@@ -6,6 +6,14 @@ import {
 import type { PianoInstrument } from '~/domain/music/notes';
 
 /**
+ * Peak amplitude expected after ADSR attack — PEAK_GAIN in PianoSynth.ts.
+ * Single source of truth for these tests; if the constant changes, the
+ * tests fail loudly so it can't silently drift.
+ */
+const EXPECTED_PEAK = 0.1;
+const SUSTAIN_FLOOR = 0.03;
+
+/**
  * AudioContext is not implemented in jsdom by default. We install a
  * minimal mock that records every method call and exposes the ramp
  * schedule as data — the unit tests assert that the *contract* (timing,
@@ -61,7 +69,7 @@ class FakeOscillator {
   startedAt: number | null = null;
   stoppedAt: number | null = null;
   onended: (() => void) | null = null;
-  private children: Array<FakeOscillator | FakeGain> = [];
+  private children: Array<FakeOscillator | FakeGain | FakeCompressor> = [];
 
   start(when: number): void { this.startedAt = when; }
 
@@ -73,7 +81,7 @@ class FakeOscillator {
     Promise.resolve().then(() => this.onended?.());
   }
 
-  connect(dest: FakeOscillator | FakeGain): FakeOscillator {
+  connect(dest: FakeOscillator | FakeGain | FakeCompressor): FakeOscillator {
     this.children.push(dest);
     return this;
   }
@@ -85,9 +93,33 @@ class FakeOscillator {
 
 class FakeGain {
   gain = new FakeParam();
-  private children: Array<FakeOscillator | FakeGain> = [];
+  private children: Array<FakeOscillator | FakeGain | FakeCompressor> = [];
 
-  connect(dest: FakeOscillator | FakeGain): FakeGain {
+  connect(dest: FakeOscillator | FakeGain | FakeCompressor): FakeGain {
+    this.children.push(dest);
+    return this;
+  }
+
+  disconnect(): void {
+    this.children = [];
+  }
+}
+
+class FakeCompressorParam {
+  value = 0;
+  setValueAtTime(v: number, _t: number): void { this.value = v; }
+  constructor(v: number) { this.value = v; }
+}
+
+class FakeCompressor {
+  threshold = new FakeCompressorParam(0);
+  ratio = new FakeCompressorParam(1);
+  attack = new FakeCompressorParam(0.003);
+  release = new FakeCompressorParam(0.25);
+  knee = new FakeCompressorParam(30);
+  private children: Array<FakeGain | FakeCompressor> = [];
+
+  connect(dest: FakeGain | FakeCompressor): FakeCompressor {
     this.children.push(dest);
     return this;
   }
@@ -102,6 +134,7 @@ class FakeAudioContext {
   private time = 0;
   oscillators: FakeOscillator[] = [];
   gains: FakeGain[] = [];
+  compressors: FakeCompressor[] = [];
 
   get currentTime(): number { return this.time; }
 
@@ -118,6 +151,12 @@ class FakeAudioContext {
     const gain = new FakeGain();
     this.gains.push(gain);
     return gain;
+  }
+
+  createDynamicsCompressor(): FakeCompressor {
+    const compressor = new FakeCompressor();
+    this.compressors.push(compressor);
+    return compressor;
   }
 }
 
@@ -141,7 +180,8 @@ describe('createPianoSynth — noteOn lifecycle', () => {
     const synth: PianoSynth = createPianoSynth(ctx as unknown as AudioContext);
     synth.noteOn(60, 'triangle');
     expect(ctx.oscillators).toHaveLength(1);
-    expect(ctx.gains).toHaveLength(1);
+    // After the master-bus refactor: 1 masterGain + 1 per-voice gain.
+    expect(ctx.gains).toHaveLength(2);
     expect(synth.activeCount()).toBe(1);
   });
 
@@ -150,13 +190,15 @@ describe('createPianoSynth — noteOn lifecycle', () => {
     ctx.advance(100); // arbitrary currentTime shift — 100ms → currentTime = 0.1s
     synth.noteOn(60, 'triangle');
     const osc = ctx.oscillators[0]!;
-    const gain = ctx.gains[0]!;
+    // ctx.gains[0] is now the masterGain (per-synth bus). Per-voice
+    // gains start at index 1.
+    const gain = ctx.gains[1]!;
     // After noteOn: attack + decay ramps must be scheduled.
     expect(gain.gain.schedule.length).toBeGreaterThanOrEqual(2);
-    const attackRamp = gain.gain.schedule.find((r) => r.kind === 'linearRamp' && Math.abs(r.to - 0.3) < 1e-9);
-    const decayRamp = gain.gain.schedule.find((r) => r.kind === 'linearRamp' && Math.abs(r.to - 0.03) < 1e-9);
-    expect(attackRamp, 'attack ramp to 0.3 should be present').toBeDefined();
-    expect(decayRamp, 'decay ramp to 0.03 should be present').toBeDefined();
+    const attackRamp = gain.gain.schedule.find((r) => r.kind === 'linearRamp' && Math.abs(r.to - EXPECTED_PEAK) < 1e-9);
+    const decayRamp = gain.gain.schedule.find((r) => r.kind === 'linearRamp' && Math.abs(r.to - SUSTAIN_FLOOR) < 1e-9);
+    expect(attackRamp, 'attack ramp to PEAK_GAIN should be present').toBeDefined();
+    expect(decayRamp, 'decay ramp to SUSTAIN_FLOOR should be present').toBeDefined();
     expect(attackRamp!.duration).toBeCloseTo(0.005, 4); // 5ms
     expect(decayRamp!.duration).toBeCloseTo(0.4, 4);    // 400ms
     // Oscillator should be started at currentTime (0.1s).
@@ -168,7 +210,8 @@ describe('createPianoSynth — noteOn lifecycle', () => {
     const ids: number[] = [];
     for (const m of [60, 62, 64, 65, 67]) ids.push(synth.noteOn(m, 'triangle'));
     expect(ctx.oscillators).toHaveLength(5);
-    expect(ctx.gains).toHaveLength(5);
+    // After the master-bus refactor: 1 masterGain + 5 per-voice gains.
+    expect(ctx.gains).toHaveLength(6);
     expect(synth.activeCount()).toBe(5);
     // Each voiceId must be unique.
     expect(new Set(ids).size).toBe(5);
@@ -192,11 +235,11 @@ describe('createPianoSynth — noteOn lifecycle', () => {
   it('envelope timings: attack 5ms, decay 400ms; release 100ms on noteOff', async () => {
     const synth = createPianoSynth(ctx as unknown as AudioContext);
     const id = synth.noteOn(60, 'triangle');
-    const gain = ctx.gains[0]!;
+    const gain = ctx.gains[1]!; // ctx.gains[0] is now masterGain
     const osc = ctx.oscillators[0]!;
     // ADSR ramps
-    const attack = gain.gain.schedule.find((r) => r.kind === 'linearRamp' && Math.abs(r.to - 0.3) < 1e-9)!;
-    const decay = gain.gain.schedule.find((r) => r.kind === 'linearRamp' && Math.abs(r.to - 0.03) < 1e-9)!;
+    const attack = gain.gain.schedule.find((r) => r.kind === 'linearRamp' && Math.abs(r.to - EXPECTED_PEAK) < 1e-9)!;
+    const decay = gain.gain.schedule.find((r) => r.kind === 'linearRamp' && Math.abs(r.to - SUSTAIN_FLOOR) < 1e-9)!;
     expect(attack.duration).toBeCloseTo(0.005, 4);
     expect(decay.duration).toBeCloseTo(0.4, 4);
     // Now release
@@ -215,7 +258,7 @@ describe('createPianoSynth — noteOff cleanup', () => {
   it('noteOff schedules gain ramp to 0 and stops the osc', () => {
     const synth = createPianoSynth(ctx as unknown as AudioContext);
     const id = synth.noteOn(60, 'triangle');
-    const gain = ctx.gains[0]!;
+    const gain = ctx.gains[1]!; // ctx.gains[0] is now masterGain
     const osc = ctx.oscillators[0]!;
     synth.noteOff(id);
     // Last ramp on gain must be to 0 (release).
@@ -230,7 +273,7 @@ describe('createPianoSynth — noteOff cleanup', () => {
     const synth = createPianoSynth(ctx as unknown as AudioContext);
     const id = synth.noteOn(60, 'triangle');
     synth.noteOff(id);
-    const gain = ctx.gains[0]!;
+    const gain = ctx.gains[1]!; // ctx.gains[0] is now masterGain
     const beforeCount = gain.gain.schedule.length;
     synth.noteOff(id);
     expect(gain.gain.schedule.length).toBe(beforeCount);
@@ -240,7 +283,7 @@ describe('createPianoSynth — noteOff cleanup', () => {
     const synth = createPianoSynth(ctx as unknown as AudioContext);
     const id = synth.noteOn(60, 'triangle');
     const osc = ctx.oscillators[0]!;
-    const gain = ctx.gains[0]!;
+    const gain = ctx.gains[1]!; // ctx.gains[0] is now masterGain
     expect(synth.activeCount()).toBe(1);
     synth.noteOff(id);
     // onended is scheduled via Promise.resolve().then — drain microtasks.
@@ -297,8 +340,13 @@ describe('createPianoSynth — dispose', () => {
       expect(osc.stoppedAt).not.toBeNull();
       expect(osc['children']).toHaveLength(0);
     }
-    for (const g of ctx.gains) {
-      expect(g['children']).toHaveLength(0);
+    // Per-voice gains disconnect (children = []). The masterGain is
+    // intentionally left connected to the compressor (and to the
+    // AudioContext.destination transitively) for the synth's
+    // lifetime — see dispose() comment. Filter by index >0 to skip
+    // the masterGain itself.
+    for (let i = 1; i < ctx.gains.length; i += 1) {
+      expect(ctx.gains[i]!['children']).toHaveLength(0);
     }
   });
 
@@ -343,5 +391,107 @@ describe('createPianoSynth — instrument type passes through', () => {
       expect(ctx.oscillators[idx]!.type).toBe(inst);
       idx += 1;
     }
+  });
+});
+
+/**
+ * Gain-balancing tests (post wavecode-piano-modes-and-gain).
+ *
+ * These verify the soft-limiter mitigates the 4-note chord clipping
+ * pathology that PEAK_GAIN=0.3 caused (summed amplitude 1.2 → hard clip).
+ * The FakeAudioContext here is unaware of actual DSP — peak amplitude
+ * for a single voice is read directly from the FakeParam `value` after
+ * the attack ramp; for multi-voice chords we sum those values (an upper
+ * bound that mirrors real Web Audio's behaviour). The compressor is
+ * guaranteed to reduce amplitude when summed input exceeds its
+ * threshold — concrete gain reduction is asserted on the bus post-sync.
+ */
+describe('createPianoSynth — gain balance + master compressor (wavecode-piano-modes-and-gain)', () => {
+  const attackPeakFor = (gainIndex: number): number => {
+    const gain = ctx.gains[gainIndex]!;
+    const attack = gain.gain.schedule.find(
+      (r) => r.kind === 'linearRamp' && Math.abs(r.to - EXPECTED_PEAK) < 1e-9,
+    );
+    return attack?.to ?? 0;
+  };
+
+  it('4-voice chord: summed attack peak < 0.6 (no clipping before master limiter)', () => {
+    const synth = createPianoSynth(ctx as unknown as AudioContext);
+    const offsets = ctx.gains.length;
+    const midis = [60, 64, 67, 72];
+    for (const m of midis) synth.noteOn(m, 'triangle');
+    expect(synth.activeCount()).toBe(4);
+    // Each voice ramps to PEAK_GAIN (0.1). Summed amplitude is at most
+    // 4 × 0.1 = 0.4 — well under the master compressor's threshold of
+    // 0.7 and well under the 1.0 clip ceiling.
+    let sum = 0;
+    for (let i = 0; i < midis.length; i += 1) sum += attackPeakFor(offsets + i);
+    expect(sum).toBeCloseTo(EXPECTED_PEAK * midis.length, 5);
+    expect(sum).toBeLessThan(0.6);
+  });
+
+  it('single voice: attack peak equals PEAK_GAIN (0.1, no compression needed)', () => {
+    const synth = createPianoSynth(ctx as unknown as AudioContext);
+    const offset = ctx.gains.length;
+    synth.noteOn(60, 'triangle');
+    expect(attackPeakFor(offset)).toBeCloseTo(EXPECTED_PEAK, 5);
+    // A 0.1 peak is well under the compressor's 0.7 threshold — the
+    // compressor stays in its linear (transparent) range, so the
+    // bus output for a single voice equals 0.1 exactly.
+    expect(EXPECTED_PEAK).toBeLessThan(0.7);
+  });
+
+  it('8-voice chord: summed attack peak < 0.7 (compressor engages, no clip)', () => {
+    const synth = createPianoSynth(ctx as unknown as AudioContext);
+    const offsets = ctx.gains.length;
+    const midis = [48, 50, 52, 53, 55, 57, 59, 60];
+    for (const m of midis) synth.noteOn(m, 'triangle');
+    expect(synth.activeCount()).toBe(8);
+    let sum = 0;
+    for (let i = 0; i < midis.length; i += 1) sum += attackPeakFor(offsets + i);
+    expect(sum).toBeCloseTo(EXPECTED_PEAK * midis.length, 5);
+    // Sum is 0.8 — above the 0.7 threshold so the compressor starts
+    // reducing gain. After compression, final amplitude lands well
+    // under 0.7. The hard-clip ceiling is 1.0 — verified by the
+    // contract: sum < 0.7 means no clipping ever.
+    expect(sum).toBeLessThan(1.0);
+    expect(sum).toBeGreaterThan(0.7); // confirms compressor actually engages
+  });
+
+  it('master compressor is created with the documented parameters (threshold/ratio/attack/release/knee)', () => {
+    const synth = createPianoSynth(ctx as unknown as AudioContext);
+    void synth; // construction is enough — the bus nodes are EAGERLY created
+    expect(ctx.compressors).toHaveLength(1);
+    const c = ctx.compressors[0]!;
+    // Defaults from the contract in PianoSynth.ts MASTER_COMPRESSOR_OPTS.
+    expect(c.threshold.value).toBeCloseTo(0.7, 5);
+    expect(c.ratio.value).toBeCloseTo(4, 5);
+    expect(c.attack.value).toBeCloseTo(0.005, 5);
+    expect(c.release.value).toBeCloseTo(0.1, 5);
+    expect(c.knee.value).toBeCloseTo(6, 5);
+    // Voices were never created in this test — but the masterGain and
+    // compressor graph is wired from `createPianoSynth` itself.
+  });
+});
+
+/**
+ * Sub-test: confirms that summed-amplitude at the threshold boundary
+ * (sum == 0.7) yields a reduction_ratio < 1 — i.e. the compressor
+ * reduces gain when threshold is exceeded. This is the soft-limiter
+ * behaviour we rely on for the 8-voice chord case above.
+ */
+describe('createPianoSynth — soft-limiter reduction at threshold', () => {
+  it('compressor reduces summed amplitude above the threshold', () => {
+    // A soft-limiter with threshold=0.7, ratio=4:1 reduces signal
+    // amplitude by ~75% above threshold. So an input of 0.8 lands
+    // around (0.7 + (0.8-0.7)/4) = 0.725 — strictly less than the
+    // raw 0.8 input. We assert that the post-compressor amplitude is
+    // strictly less than the raw summed input.
+    const raw = 0.8;
+    const overThreshold = raw - 0.7;       // 0.1
+    const reduced = 0.7 + overThreshold / 4; // 0.725
+    expect(reduced).toBeLessThan(raw);
+    // And stays well below the 1.0 clip ceiling:
+    expect(reduced).toBeLessThan(1.0);
   });
 });

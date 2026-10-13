@@ -139,6 +139,8 @@ describe('PianoKeyboard layout invariants (black-key overlap with neighbours)', 
  *     stub AudioContext (jsdom doesn't implement it). The stub is a
  *     plain object — PianoSynth in the test takes that context and
  *     the spy records them.
+ *   - We mock `~/infrastructure/composition` to a no-op layer so the
+ *     FOLLOW poll path doesn't crash on missing FiberRefs.
  *   - We DO NOT mock `evalScore` — if any code path still calls it
  *     from PianoKeyboard, the test fails. This is the regression
  *     guard against re-introducing the "interrupts main track" bug.
@@ -231,6 +233,12 @@ describe('PianoKeyboard component (parallel synth + no evalScore)', () => {
       requestMidiAccess: async () => null,
       onNote: () => () => undefined,
     }));
+    // FOLLOW mode would reach into the AppLayer to call
+    // AudioEngine.getActiveHaps. Stub the layer as identity so the
+    // createEffect() registration in PianoKeyboard doesn't bail out.
+    vi.doMock('~/infrastructure/composition', () => ({
+      AppLayer: { provide: () => (eff: unknown) => eff },
+    }));
 
     render = (await import('solid-js/web')).render;
     ({ PianoKeyboard } = await import('./PianoKeyboard'));
@@ -248,6 +256,7 @@ describe('PianoKeyboard component (parallel synth + no evalScore)', () => {
     vi.doUnmock('~/infrastructure/audio/LiveAudioEngine');
     vi.doUnmock('../state/audioActions');
     vi.doUnmock('~/infrastructure/audio/MidiInput');
+    vi.doUnmock('~/infrastructure/composition');
     if (container) container.remove();
   });
 
@@ -276,6 +285,8 @@ describe('PianoKeyboard component (parallel synth + no evalScore)', () => {
     expect(evalScore).not.toHaveBeenCalled();
     const btn = container.querySelector<HTMLButtonElement>('button[aria-label="C4"]')!;
     expect(btn.classList.contains('active')).toBe(true);
+    // data-source reflects 'pressed' when only the user is holding it:
+    expect(btn.getAttribute('data-source')).toBe('pressed');
   });
 
   it('tap + release → activeSet empty; main score untouched', async () => {
@@ -286,6 +297,7 @@ describe('PianoKeyboard component (parallel synth + no evalScore)', () => {
     expect(evalScore).not.toHaveBeenCalled();
     const btn = container.querySelector<HTMLButtonElement>('button[aria-label="C4"]')!;
     expect(btn.classList.contains('active')).toBe(false);
+    expect(btn.getAttribute('data-source')).toBe('none');
   });
 
   it('out-of-range note press → no noteOn (guard via isInPianoRange)', async () => {
@@ -404,6 +416,16 @@ describe('PianoKeyboard component (parallel synth + no evalScore)', () => {
     expect(noteOnSpy).not.toHaveBeenCalled();
     expect(noteOffSpy).not.toHaveBeenCalled();
   });
+
+  // FOLLOW + apply button DOM invariants (wavecode-piano-modes-and-gain).
+  // Toolbar is mounted inside PianoKeyboard, so the buttons render here.
+  it('renders the FOLLOW button in the toolbar', () => {
+    expect(container.querySelector('.piano-follow-btn')).toBeTruthy();
+  });
+
+  it('↑ apply button is hidden when REC off + buffer empty', () => {
+    expect(container.querySelector('.piano-apply-btn')).toBeNull();
+  });
 });
 
 /**
@@ -475,6 +497,9 @@ describe('PianoKeyboard component (MIDI status pill + active-count)', () => {
         return () => { noteCb = null; };
       },
     }));
+    vi.doMock('~/infrastructure/composition', () => ({
+      AppLayer: { provide: () => (eff: unknown) => eff },
+    }));
 
     render = (await import('solid-js/web')).render;
     ({ PianoKeyboard } = await import('./PianoKeyboard'));
@@ -493,6 +518,7 @@ describe('PianoKeyboard component (MIDI status pill + active-count)', () => {
     vi.doUnmock('~/infrastructure/audio/LiveAudioEngine');
     vi.doUnmock('../state/audioActions');
     vi.doUnmock('~/infrastructure/audio/MidiInput');
+    vi.doUnmock('~/infrastructure/composition');
     if (container) container.remove();
   });
 
@@ -613,6 +639,7 @@ describe('PianoKeyboard component (MIDI source attribution in status pill)', () 
       appendNote: (): void => undefined,
       updateLastNoteEnd: (): void => undefined,
       instrument: (): PianoInstrument => 'triangle',
+      followEnabled: () => false,
     }));
     vi.doMock('~/infrastructure/audio/MidiInput', () => ({
       isMidiAvailable: () => true,
@@ -628,6 +655,9 @@ describe('PianoKeyboard component (MIDI source attribution in status pill)', () 
         noteCb = cb;
         return () => { noteCb = null; };
       },
+    }));
+    vi.doMock('~/infrastructure/composition', () => ({
+      AppLayer: { provide: () => (eff: unknown) => eff },
     }));
     render = (await import('solid-js/web')).render;
     ({ PianoKeyboard } = await import('./PianoKeyboard'));
@@ -646,6 +676,7 @@ describe('PianoKeyboard component (MIDI source attribution in status pill)', () 
     vi.doUnmock('~/infrastructure/audio/LiveAudioEngine');
     vi.doUnmock('../state/pianoRecStore');
     vi.doUnmock('~/infrastructure/audio/MidiInput');
+    vi.doUnmock('~/infrastructure/composition');
     if (container) container.remove();
   });
 
@@ -745,6 +776,9 @@ describe('PianoKeyboard component (no MIDI status on iOS Safari)', () => {
       requestMidiAccess: async () => null,
       onNote: () => () => undefined,
     }));
+    vi.doMock('~/infrastructure/composition', () => ({
+      AppLayer: { provide: () => (eff: unknown) => eff },
+    }));
     render = (await import('solid-js/web')).render;
     ({ PianoKeyboard } = await import('./PianoKeyboard'));
     container = document.createElement('div');
@@ -761,6 +795,7 @@ describe('PianoKeyboard component (no MIDI status on iOS Safari)', () => {
     vi.doUnmock('~/infrastructure/audio/LiveAudioEngine');
     vi.doUnmock('../state/audioActions');
     vi.doUnmock('~/infrastructure/audio/MidiInput');
+    vi.doUnmock('~/infrastructure/composition');
     if (container) container.remove();
   });
 
