@@ -87,5 +87,5 @@ synthesis: |
       * Open Piano dialog — verify .piano-key.white has CSS-var
         based width/height (80px / 220px) not legacy 96px
         height.
-status: draft
+status: applied
 ---
