@@ -28,7 +28,15 @@ export default defineConfig({
         ],
       },
       workbox: {
-        globPatterns: ['**/*.{js,css,html,svg,png,ico,webmanifest,woff2}'],
+        // html is intentionally excluded: navigateFallback handles HTML
+        // via the network on every navigation, so mobile users who kept
+        // a stale PWA tab open always pick up the new bundle hash on
+        // their next visit. Without this, Workbox precaches index.html
+        // and the navigation fallback serves the cached copy, so a
+        // deploy's new bundle hash is never reached until the user
+        // hard-reloads (which is the bug we hit 2026-10-13 with the
+        // LLM-401 regression). See math/wavecode-pwa-auto-update.
+        globPatterns: ['**/*.{js,css,svg,png,ico,webmanifest,woff2}'],
         navigateFallback: '/index.html',
         navigateFallbackDenylist: [/^\/api\//],
         runtimeCaching: [
