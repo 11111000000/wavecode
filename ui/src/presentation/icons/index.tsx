@@ -114,6 +114,20 @@ export const NewIcon = (p: Props): JSX.Element => (
   </svg>
 );
 
+export const DotsVIcon = (p: Props): JSX.Element => (
+  <svg {...base(p.size ?? 14)} class={`wc-icon ${p.class ?? ''}`}>
+    <circle cx="8" cy="3" r="1.2" fill="currentColor" stroke="none" />
+    <circle cx="8" cy="8" r="1.2" fill="currentColor" stroke="none" />
+    <circle cx="8" cy="13" r="1.2" fill="currentColor" stroke="none" />
+  </svg>
+);
+
+export const WrenchIcon = (p: Props): JSX.Element => (
+  <svg {...base(p.size ?? 14)} class={`wc-icon ${p.class ?? ''}`}>
+    <path d="M11 2.5a3.5 3.5 0 0 0-3.4 4.3L2 12.4 3.6 14l5.6-5.6a3.5 3.5 0 1 0 1.8-5.9z" />
+  </svg>
+);
+
 export const PhoneIcon = (p: Props): JSX.Element => (
   <svg {...base(p.size ?? 14)} class={`wc-icon ${p.class ?? ''}`}>
     <rect x="4" y="1" width="8" height="14" rx="0.5" />

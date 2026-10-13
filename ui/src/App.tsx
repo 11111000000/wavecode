@@ -124,7 +124,6 @@ function AppShell(): JSX.Element {
   const [showPiano, setShowPiano] = createSignal(false);
   const [audioStarting, setAudioStarting] = createSignal(false);
   const [mobileMode, setMobileModeSignal] = createSignal<MobileMode>(getMobileMode());
-  const [showMobileMenu, setShowMobileMenu] = createSignal(false);
   const [newPresetName, setNewPresetName] = createSignal('');
 
   onMount(() => {
@@ -185,14 +184,11 @@ function AppShell(): JSX.Element {
         ctxState={audio.ctxState}
         presetId={presetId()}
         mobileMode={mobileMode()}
-        showMobileMenu={showMobileMenu()}
         sampleStatus={getSampleStatus()}
         chooseMobileMode={(m) => {
           setMobileMode(m);
           setMobileModeSignal(m);
-          setShowMobileMenu(false);
         }}
-        setShowMobileMenu={(v) => setShowMobileMenu(v)}
         onSavePreset={() => setShowSavePreset((v) => !v)}
         onRollback={undo}
         onRedo={redo}
