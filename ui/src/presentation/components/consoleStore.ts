@@ -9,8 +9,15 @@
  *                     кнопки ConsoleButton).
  *
  * ВАЖНО: информационные 'info' / 'warn' тосты НЕ увеличивают
- * `unreadErrors`. Только `severity ∈ {'error', 'critical'}` —
+ * `unreadErrors`. Только `severity ∈ {'error', 'critical', 'fatal'}` —
  * иначе пользователь не сможет фильтровать шум.
+ *
+ * 'fatal' добавлен в Phase-2 Subagent-7 как часть console UX polish:
+ * - LogLevel-union параллельно расширяется в Subagent-6 (`logger.ts`).
+ * - Treat 'fatal' as equal-to 'critical' here: sticky TTL, increments
+ *   unreadErrors, clickable to open the sheet. Никакой код consoleStore
+ *   не нужен при merge Subagent-6 — `pushToast({ severity: 'fatal' })`
+ *   уже валиден по типу.
  *
  * setConsoleOpen(true) побочно вызывает markAllRead — удобно для UI,
  * которому достаточно одного вызова при открытии sheet'а.
@@ -19,7 +26,7 @@
 import { nanoid } from 'nanoid';
 import { createSignal } from 'solid-js';
 
-export type ToastSeverity = 'info' | 'warn' | 'error' | 'critical';
+export type ToastSeverity = 'info' | 'warn' | 'error' | 'critical' | 'fatal';
 
 export type Toast = {
   readonly id: string;
@@ -41,6 +48,7 @@ const TOAST_DEFAULT_TTL: Readonly<Record<ToastSeverity, number>> = {
   warn: 6000,
   error: 8000,
   critical: 0,
+  fatal: 0,
 };
 
 const [toasts, setToasts] = createSignal<readonly Toast[]>([]);
@@ -48,7 +56,7 @@ const [consoleOpen, setConsoleOpenSignal] = createSignal(false);
 const [unreadErrors, setUnreadErrors] = createSignal(0);
 
 const isErrorSeverity = (s: ToastSeverity): boolean =>
-  s === 'error' || s === 'critical';
+  s === 'error' || s === 'critical' || s === 'fatal';
 
 const capToasts = (next: readonly Toast[]): readonly Toast[] => {
   if (next.length <= MAX_TOASTS) return next;

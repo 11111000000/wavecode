@@ -68,4 +68,37 @@ describe('Toast', () => {
     const list = consoleStore.toasts();
     expect(list[0]?.ttlMs).toBe(0);
   });
+
+  it('renders a SVG severity icon inside .toast-icon (color-blind support)', () => {
+    consoleStore.pushToast({ severity: 'info', title: 'i' });
+    consoleStore.pushToast({ severity: 'warn', title: 'w' });
+    consoleStore.pushToast({ severity: 'error', title: 'e' });
+    consoleStore.pushToast({ severity: 'critical', title: 'c' });
+    const { container } = render(() => <Toast />);
+    const items = container.querySelectorAll('.toast-item');
+    // Each toast's .toast-icon must host exactly one <svg> (severity icon).
+    items.forEach((item) => {
+      const slot = item.querySelector('.toast-icon');
+      expect(slot).toBeTruthy();
+      const svgs = slot!.querySelectorAll('svg');
+      expect(svgs).toHaveLength(1);
+    });
+    // Critical toast also gets the toast-pin (sticky marker, kept).
+    expect(items[3]?.querySelector('.toast-pin')).toBeTruthy();
+  });
+
+  it('fatal severity reuses the critical icon (treated equal for visuals)', () => {
+    consoleStore.pushToast({ severity: 'critical', title: 'c' });
+    consoleStore.pushToast({ severity: 'fatal', title: 'f' });
+    const { container } = render(() => <Toast />);
+    const items = container.querySelectorAll('.toast-item');
+    expect(items).toHaveLength(2);
+    // Both toast-icon slots host identical SVG path data (same icon).
+    const iconA = items[0]!.querySelector('.toast-icon svg')!.innerHTML.replace(/\s+/g, '');
+    const iconB = items[1]!.querySelector('.toast-icon svg')!.innerHTML.replace(/\s+/g, '');
+    expect(iconA).toBe(iconB);
+    // And fatal gets the sticky pin (TTL=0).
+    expect(items[1]!.querySelector('.toast-pin')).toBeTruthy();
+    expect(consoleStore.toasts()[1]?.ttlMs).toBe(0);
+  });
 });

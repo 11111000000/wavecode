@@ -1238,6 +1238,14 @@ button:not([disabled]):not(.no-shrink):active {
   border-left-color: var(--magenta);
   background: linear-gradient(90deg, var(--magenta-soft) 0%, var(--surface-2) 80%);
 }
+/* `.toast-fatal` (Phase-2 polish): identical visual contract to
+ * `.toast-critical` — fatal uses the same color channel (magenta).
+ * Sticky-TTL is enforced in JS via `TOAST_DEFAULT_TTL.fatal = 0`,
+ * this selector only paints the chrome. */
+.toast-item.toast-fatal {
+  border-left-color: var(--magenta);
+  background: linear-gradient(90deg, var(--magenta-soft) 0%, var(--surface-2) 80%);
+}
 
 .toast-icon {
   flex-shrink: 0;
@@ -1256,6 +1264,7 @@ button:not([disabled]):not(.no-shrink):active {
 .toast-item.toast-warn     .toast-icon { background: var(--warn-soft);   color: var(--warn); }
 .toast-item.toast-err      .toast-icon { background: var(--err-soft);    color: var(--err); }
 .toast-item.toast-critical .toast-icon { background: var(--magenta-soft); color: var(--magenta); }
+.toast-item.toast-fatal    .toast-icon { background: var(--magenta-soft); color: var(--magenta); }
 
 .toast-body {
   flex: 1 1 auto;
