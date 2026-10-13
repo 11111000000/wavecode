@@ -15,6 +15,17 @@
  *     logger-модуль отсутствует, sinkTick остаётся в покое,
  *     getBuffer() возвращает [].
  *
+ * Boot restore (Phase 3 — Subagent 13):
+ *   - На onMount, после того как динамический import() разрешился,
+ *     вызываем logger.loadPersistedErrors() и, если возвращён
+ *     непустой слайс, logger.prepend(persisted). Это восстанавливает
+ *     последнюю сотню ERROR/FATAL-записей из IDB (последний рестарт
+ *     браузера не стирает историю ошибок). Sink bump-ит сигнал →
+ *     ConsoleSheet сразу отображает их.
+ *   - Любая ошибка загрузки (IDB недоступен, payload corrupt) ловится
+ *     и глушится через console.warn — sheet не должен крашиться из-за
+ *     persistence-layer.
+ *
  * UI:
  *   - Mobile: bottom-sheet на 60vh / 90vh (через inline translateY).
  *   - Desktop ≥1024px: right-side drawer 480px (через .console-sheet).
@@ -45,6 +56,8 @@ type LogModule = {
     clear(): void;
     install(): void;
     setSink(cb: ((e: LogEntry) => void) | null): void;
+    loadPersistedErrors(): Promise<readonly LogEntry[]>;
+    prepend(entries: readonly LogEntry[]): void;
   };
 };
 
@@ -163,6 +176,30 @@ export function ConsoleSheet(): JSX.Element {
 
   onMount(() => {
     installConsoleGlobals();
+    void (async () => {
+      try {
+        // Wait for the module-load IIFE to finish (it may still be
+        // in flight when the very first sheet mounts). Once
+        // loggerState.mod is set, we can call loadPersistedErrors
+        // and prepend on it.
+        await logModulePromise;
+        if (!loggerState.hasLogger || loggerState.mod === null) return;
+        const persisted =
+          await loggerState.mod.logger.loadPersistedErrors();
+        if (persisted.length === 0) return;
+        loggerState.mod.logger.prepend(persisted);
+        sinkTickSet((n) => n + 1);
+      } catch (err) {
+        try {
+          console.warn(
+            '[ConsoleSheet] failed to load persisted errors:',
+            err,
+          );
+        } catch {
+          /* logger.warn itself may be unavailable in some envs */
+        }
+      }
+    })();
   });
 
   const onClose = (): void => consoleStore.setConsoleOpen(false);
