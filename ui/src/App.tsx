@@ -21,7 +21,6 @@ import { Repo } from '~/domain/services';
 import { useAppBootstrap } from './presentation/state/useAppBootstrap';
 import { useAutoSave } from './presentation/state/useAutoSave';
 import { TabBar } from './presentation/components/TabBar';
-import { FAB } from './presentation/components/FAB';
 import { Toast } from './presentation/components/Toast';
 import { ConsoleButton } from './presentation/components/ConsoleButton';
 import { ConsoleSheet } from './presentation/components/ConsoleSheet';
@@ -160,6 +159,8 @@ export function App(): JSX.Element {
         showPiano={showPiano()}
         showSavePreset={showSavePreset()}
         newPresetName={newPresetName()}
+        audioRunning={audio.audioRunning}
+        audioStarting={audioStarting}
         onLoadPreset={(id) => {
           const preset = getPreset(id);
           if (!preset) return;
@@ -191,16 +192,15 @@ export function App(): JSX.Element {
           setShowSavePreset(false);
           setNewPresetName('');
         }}
+        onPlay={() => {
+          setAudioStarting(true);
+          void evalScore();
+        }}
+        onStop={() => {
+          void stopAudio();
+        }}
       />
       <PanelsLayout />
-      <FAB
-        onClick={() => {
-          if (audio.audioRunning()) { void stopAudio(); } else { setAudioStarting(true); void evalScore(); }
-        }}
-        tone={audio.audioRunning() ? 'magenta' : 'amber'}
-        variant={audio.audioRunning() ? 'stop' : 'play'}
-        ariaLabel={audio.audioRunning() ? 'Стоп' : 'Запуск'}
-      />
       <BottomSheets />
       <TabBar />
       <ConsoleButton />

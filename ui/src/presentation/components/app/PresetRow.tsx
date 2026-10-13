@@ -10,12 +10,16 @@ export type PresetRowProps = {
   showPiano: boolean;
   showSavePreset: boolean;
   newPresetName: string;
+  audioRunning: () => boolean;
+  audioStarting: () => boolean;
   onLoadPreset: (id: string) => void;
   onToggleStepGrid: () => void;
   onTogglePiano: () => void;
   onShowSavePreset: (v: boolean) => void;
   onNewPresetName: (v: string) => void;
   onSavePreset: () => void;
+  onPlay: () => void;
+  onStop: () => void;
 };
 
 export function PresetRow(props: PresetRowProps): JSX.Element {
@@ -62,7 +66,12 @@ export function PresetRow(props: PresetRowProps): JSX.Element {
         </button>
         <button type="button" class="wc-chip" onClick={() => beep(440)}>440</button>
         <button type="button" class="wc-chip" onClick={() => beep(220)}>220</button>
-        <TransportPanel />
+        <TransportPanel
+          audioRunning={props.audioRunning}
+          audioStarting={props.audioStarting}
+          onPlay={props.onPlay}
+          onStop={props.onStop}
+        />
       </div>
 
       <Show when={props.showSavePreset}>
