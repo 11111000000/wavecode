@@ -30,7 +30,7 @@ const PRESETS: ReadonlyArray<PresetItem> = [
 export function SnippetShowcase(): JSX.Element {
   const open = (id: string): void => {
     // Hash-router navigation (see Hero.tsx for full rationale).
-    const target = `/app?preset=${encodeURIComponent(id)}`;
+    const target = `#/app?preset=${encodeURIComponent(id)}`;
     window.history.pushState(null, '', target);
     window.dispatchEvent(new HashChangeEvent('hashchange'));
   };
