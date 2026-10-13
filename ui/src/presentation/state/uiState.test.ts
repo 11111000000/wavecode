@@ -206,6 +206,19 @@ describe('uiState bottom-sheet sync', () => {
     setTab('score');
     expect(getKindSnap('mixer')).toBe('closed');
   });
+
+  it('setTab(step) opens step sheet at full', async () => {
+    const { setTab, getKindSnap, getActiveTab } = await import('./uiState');
+    setTab('step');
+    expect(getActiveTab()).toBe('step');
+    expect(getKindSnap('step')).toBe('full');
+  });
+
+  it('setTab(piano) opens piano sheet at full', async () => {
+    const { setTab, getKindSnap } = await import('./uiState');
+    setTab('piano');
+    expect(getKindSnap('piano')).toBe('full');
+  });
 });
 
 describe('uiState keyboard shortcuts (multi-undo)', () => {

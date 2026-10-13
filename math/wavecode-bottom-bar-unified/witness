@@ -1,0 +1,16 @@
+applied_at: 2026-10-13
+branch: feat/bottom-bar-unified
+commit: c58f778
+supersedes: null
+evidence:
+  - test: vitest (49 files, 634 tests passed; +2 setTab step/piano cases)
+  - build: vite build OK; bundle 263.19 kB → 262.32 kB; CSS 119.03 kB → 118.51 kB
+  - files:
+      - ui/src/presentation/components/TabBar.tsx (3 → 6 items)
+      - ui/src/presentation/components/BottomToolstrip.tsx (deleted)
+      - ui/src/presentation/icons/index.tsx (TabStepIcon + TabPianoIcon)
+      - ui/src/presentation/state/uiState.ts (TabId + step/piano ветки setTab)
+      - ui/src/presentation/state/uiState.test.ts (setTab step/piano tests)
+      - ui/src/App.tsx (BottomToolstrip import + JSX removed; createEffect on step tab)
+      - ui/src/styles/components.css (.wc-toolstrip* rules removed)
+      - math/wavecode-bottom-bar-unified/packet.md

@@ -4,7 +4,7 @@ import {
   getActiveTab, setTab, type TabId,
 } from '../state/uiState';
 import {
-  TabScoreIcon, TabChatIcon, TabStatusIcon,
+  TabScoreIcon, TabStepIcon, TabPianoIcon, TabMixerIcon, TabChatIcon, TabStatusIcon,
 } from '../icons';
 import { SampleProgressBadge } from './SampleProgressBadge';
 
@@ -16,16 +16,24 @@ type Item = {
 };
 
 const ITEMS: Item[] = [
-  { id: 'score',  label: 'Score',  icon: TabScoreIcon },
-  { id: 'chat',   label: 'AI',     icon: TabChatIcon  },
+  { id: 'score',  label: 'Score',  icon: TabScoreIcon  },
+  { id: 'step',   label: 'Step',   icon: TabStepIcon   },
+  { id: 'piano',  label: 'Piano',  icon: TabPianoIcon  },
+  { id: 'mixer',  label: 'Mixer',  icon: TabMixerIcon  },
+  { id: 'chat',   label: 'AI',     icon: TabChatIcon   },
   { id: 'status', label: 'Status', icon: TabStatusIcon },
 ];
 
 /**
- * TabBar — bottom navigation для mobile-first layout.
- * 3 вкладки: Score, AI, Status. Mixer вынесен в BottomToolstrip
- * (там же Step/Piano — все «инструменты» вместе). На desktop (>=1024)
- * скрыта — панели остаются в flex-stack layout.
+ * TabBar — единый bottom navigation для mobile-first layout.
+ * 6 вкладок: Score, Step, Piano, Mixer, AI, Status. Каждый таб кроме
+ * Score открывает соответствующий BottomSheet (см. setTab в uiState).
+ * На desktop (>=1024) скрыта — панели остаются в flex-stack layout.
+ *
+ * До packet wavecode-bottom-bar-unified: 3 таба (score/ai/status) +
+ * отдельный BottomToolstrip с 3 кнопками (step/piano/mixer) над баром.
+ * На mobile-вьюпортах toolstrip был невидим (z-index/safe-bottom
+ * конфликт, иконки 16px на тёмном фоне). Слито в TabBar.
  */
 export function TabBar(): JSX.Element {
   return (
