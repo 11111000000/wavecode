@@ -317,72 +317,42 @@ export const CriticalIcon = (p: Props): JSX.Element => (
 );
 
 /**
- * BrandLogo — стилизованная осциллограмма «W» + spectrum dot + cursor.
- * Использует currentColor для основных paths + hardcoded accents
- * (надёжнее, чем SVG-linearGradient в headless-render).
- * Sizes: small (32×11) для topbar, large (128×44) для boot screen.
+ * WavecodeLogo — square 48×48 spectrum-tile logo: amber→cyan→magenta
+ * gradient waveform on a slate rounded-square with a pulsing amber dot.
+ * Единый компонент для boot loader, TopBar, TopNav, Footer.
  */
-export const BrandLogo = (p: { size?: number; class?: string }): JSX.Element => {
-  const h = p.size ?? 22;
-  const w = h * 3;
-  return (
-    <svg
-      width={w}
-      height={h}
-      viewBox="0 0 48 16"
+export const WavecodeLogo = (p: { size?: number; class?: string }): JSX.Element => (
+  <svg
+    width={p.size ?? 28}
+    height={p.size ?? 28}
+    viewBox="0 0 48 48"
+    fill="none"
+    aria-hidden="true"
+    class={p.class ?? 'l-logo'}
+  >
+    <defs>
+      <linearGradient id="l-logo-bg" x1="0" y1="0" x2="48" y2="48" gradientUnits="userSpaceOnUse">
+        <stop offset="0"   stop-color="#ffaa3b" />
+        <stop offset="0.5" stop-color="#5eead4" />
+        <stop offset="1"   stop-color="#f472b6" />
+      </linearGradient>
+    </defs>
+    <rect width="48" height="48" rx="10" fill="#11121a" />
+    <rect x="2" y="2" width="44" height="44" rx="9" fill="none" stroke="#27272a" />
+    <path
+      d="M6 24 L10 24 L13 16 L16 32 L19 18 L22 30 L24 24 L28 24 M30 24 L33 22 M30 24 L33 26 M35 19 V29 M39 22 V26"
+      stroke="url(#l-logo-bg)"
+      stroke-width="2.2"
+      stroke-linecap="round"
+      stroke-linejoin="round"
       fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-      class={`wc-brand-logo ${p.class ?? ''}`}
-      aria-hidden="true"
-    >
-      {/* W waveform — основной «W» из spike-сегментов */}
-      <path
-        d="M2 8 L4 8 L5 4 L6 12 L7 5 L8 11 L9 8 L11 8"
-        stroke="currentColor"
-        stroke-width="1.6"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-      />
-      {/* Center spectrum dot — pulse core, amber */}
-      <circle cx="14" cy="8" r="1.5" fill="#ffaa3b">
-        <animate attributeName="opacity" values="1;0.5;1" dur="1.6s" repeatCount="indefinite" />
-      </circle>
-      {/* Waveform echo (правее) — currentColor dim */}
-      <path
-        d="M17 8 L19 8 L20 5 L21 11 L22 8 L24 8"
-        stroke="currentColor"
-        stroke-width="1.2"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-        opacity="0.5"
-      />
-      {/* Terminal cursor — animated block, magenta */}
-      <rect x="26" y="6" width="1.8" height="4" fill="#f472b6">
-        <animate attributeName="opacity" values="1;0;1" dur="1.0s" repeatCount="indefinite" />
-      </rect>
-      {/* Far right: «» chevron — call-to-action, cyan */}
-      <path
-        d="M30 8 L32.5 5.5 M30 8 L32.5 10.5"
-        stroke="#5eead4"
-        stroke-width="1"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-        opacity="0.8"
-      />
-      {/* ascii ▢ — cell marker, cyan pulse */}
-      <rect x="35" y="4.5" width="2.5" height="7" stroke="#5eead4" stroke-width="1" fill="none" opacity="0.8">
-        <animate attributeName="opacity" values="0.4;1;0.4" dur="2.2s" repeatCount="indefinite" />
-      </rect>
-      {/* Hex-like bottom text «wc» в micro-form, slate */}
-      <g transform="translate(40 12)" font-family="monospace" font-size="3.6" fill="#71717a" opacity="0.9">
-        <text x="0" y="0">wc</text>
-      </g>
-      {/* Tiny corner dots — grid markers, dim slate */}
-      <circle cx="2"  cy="2"  r="0.5" fill="#3f3f46" />
-      <circle cx="46" cy="2"  r="0.5" fill="#3f3f46" />
-      <circle cx="2"  cy="14" r="0.5" fill="#3f3f46" />
-      <circle cx="46" cy="14" r="0.5" fill="#3f3f46" />
-    </svg>
-  );
-};
+    />
+    <circle cx="38" cy="13" r="1.6" fill="#ffaa3b">
+      <animate attributeName="opacity" values="1;0.45;1" dur="1.6s" repeatCount="indefinite" />
+    </circle>
+  </svg>
+);
+
+// Legacy alias — старые импорты BrandLogo теперь получают WavecodeLogo.
+export const BrandLogo = WavecodeLogo;
 ;

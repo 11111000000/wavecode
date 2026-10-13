@@ -164,32 +164,5 @@ export const GitHubIcon = (p: IconProps): JSX.Element => (
   </svg>
 );
 
-export const WavecodeLogo = (p: IconProps): JSX.Element => (
-  <svg
-    width={p.size ?? 28}
-    height={p.size ?? 28}
-    viewBox="0 0 48 48"
-    fill="none"
-    aria-hidden="true"
-    class={p.class ?? 'l-logo'}
-  >
-    <defs>
-      <linearGradient id="l-logo-bg" x1="0" y1="0" x2="48" y2="48" gradientUnits="userSpaceOnUse">
-        <stop offset="0"   stop-color="#ffaa3b" />
-        <stop offset="0.5" stop-color="#5eead4" />
-        <stop offset="1"   stop-color="#f472b6" />
-      </linearGradient>
-    </defs>
-    <rect width="48" height="48" rx="10" fill="#11121a" />
-    <rect x="2" y="2" width="44" height="44" rx="9" fill="none" stroke="#27272a" />
-    <path
-      d="M6 24 L10 24 L13 16 L16 32 L19 18 L22 30 L24 24 L28 24 M30 24 L33 22 M30 24 L33 26 M35 19 V29 M39 22 V26"
-      stroke="url(#l-logo-bg)"
-      stroke-width="2.2"
-      stroke-linecap="round"
-      stroke-linejoin="round"
-      fill="none"
-    />
-    <circle cx="38" cy="13" r="1.6" fill="#ffaa3b" />
-  </svg>
-);
+// WavecodeLogo re-exported from presentation/icons (single source of truth).
+export { WavecodeLogo } from '~/presentation/icons';
