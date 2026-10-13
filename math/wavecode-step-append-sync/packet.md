@@ -127,17 +127,16 @@ substrate: |
     (extend, +6 cases).
   + `ui/tests/e2e/step-append.spec.ts` (new, ~70 lines).
   + `math/wavecode-step-append-sync/{packet.md,witness}`.
-status: draft
+status: applied
 witness:
-  applied_at: TBD
-  commit: TBD
+  applied_at: 2026-10-13
+  commit: 14751725d237a07c8a08fc7f08eb09129cba6504
   supersedes: math/wavecode-step-sequencer/packet.md
   notes: |
-    SHA + applied_at будут заполнены subagent'ом.
-    Supersession of wavecode-step-sequencer потому что
-    старая семантика `replaceScore при tap` ломает UX;
-    новая семантика — preview + explicit-load + sync-
-    playhead.
+    Applied by subagent 2 of 3 on 2026-10-13. Supersession of
+    wavecode-step-sequencer because the old `replaceScore on
+    tap` semantics broke UX; new semantics — preview +
+    explicit-load + sync-playhead.
 axiom: A4
 epistemics:
   - statement: "Текущий StepGrid.onCellTap УБИВАЕТ editor-

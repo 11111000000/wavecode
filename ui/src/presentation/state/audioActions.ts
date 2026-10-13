@@ -63,3 +63,65 @@ export const stopAudio = async (): Promise<void> => {
 };
 
 export const beep = (hz: number): void => testBeep(hz);
+
+/**
+ * Per-sample synthesis recipe for one-shot drum previews.
+ *
+ * `frequencyHz` is the base pitch: kick is a low thump, snare sits
+ * mid-range, hihat lives near Nyquist (square wave → noise-like
+ * cymbal), clap is bright sawtooth that aliases into a clap-ish
+ * transient.
+ *
+ * `peakGain` and `wave` are tuned to keep each sample monophonic and
+ * short (≤500ms envelope). ADSR is applied as 4 linear ramps:
+ *   attack 5ms → 1.0; decay 400ms → 0.1 (sustain floor);
+ *   release 100ms → ~0; total ≈ 500ms.
+ */
+const SAMPLE_RECIPES: Record<
+  'bd' | 'sd' | 'hh' | 'cp',
+  { frequencyHz: number; wave: OscillatorType; peakGain: number }
+> = {
+  bd: { frequencyHz: 60, wave: 'triangle', peakGain: 0.85 },
+  sd: { frequencyHz: 200, wave: 'sine', peakGain: 0.5 },
+  hh: { frequencyHz: 8000, wave: 'square', peakGain: 0.18 },
+  cp: { frequencyHz: 1200, wave: 'sawtooth', peakGain: 0.25 },
+};
+
+const ATTACK_S = 0.005;
+const DECAY_S = 0.4;
+const SUSTAIN_LEVEL = 0.1;
+const RELEASE_S = 0.1;
+const TAIL_PAD_S = 0.02;
+
+/**
+ * One-shot drum preview. Plays <500ms of `OscillatorNode + GainNode`
+ * directly on the shared `AudioContext` (`__wavecodeAudioCtx`), bypasses
+ * `audio.eval` entirely so the loaded Strudel pattern keeps playing
+ * unchanged. Used by `<StepGrid />` cell taps — see packet
+ * `wavecode-step-append-sync` synthesis (a).
+ */
+export const previewSample = (sample: 'bd' | 'sd' | 'hh' | 'cp'): void => {
+  const audioCtx = unlockAudioContext();
+  const recipe = SAMPLE_RECIPES[sample];
+  const t0 = audioCtx.currentTime;
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  osc.type = recipe.wave;
+  osc.frequency.setValueAtTime(recipe.frequencyHz, t0);
+  // ADSR via linearRampToValueAtTime (per packet): strict ramps, cheap.
+  gain.gain.setValueAtTime(0.0001, t0);
+  gain.gain.linearRampToValueAtTime(recipe.peakGain, t0 + ATTACK_S);
+  gain.gain.linearRampToValueAtTime(recipe.peakGain * SUSTAIN_LEVEL, t0 + ATTACK_S + DECAY_S);
+  gain.gain.linearRampToValueAtTime(0.0001, t0 + ATTACK_S + DECAY_S + RELEASE_S);
+  osc.connect(gain).connect(audioCtx.destination);
+  osc.start(t0);
+  osc.stop(t0 + ATTACK_S + DECAY_S + RELEASE_S + TAIL_PAD_S);
+  osc.onended = (): void => {
+    try {
+      osc.disconnect();
+      gain.disconnect();
+    } catch {
+      /* already disconnected — defensive, jsdom onended can re-fire */
+    }
+  };
+};
