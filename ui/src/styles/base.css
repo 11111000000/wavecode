@@ -164,6 +164,20 @@ hr {
 
 code, pre, .mono { font-family: var(--font-mono); }
 
+/* ── REDUCED MOTION (WCAG 2.3.3) ───────────────────────────── */
+/* OS-level setting (iOS Reduce Motion, Android Remove Animations,
+ * Windows Settings → Ease of Access). Honour it globally. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
 /* ── UTILITIES (text-only) ───────────────────────────────── */
 .dim   { color: var(--fg-dim); }
 .ghost { color: var(--fg-ghost); }
