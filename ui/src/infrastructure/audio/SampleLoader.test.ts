@@ -246,6 +246,7 @@ describe('SampleLoader — Strudel API contract (samples, soundMap, static impor
       loadAllSamples: mod.loadAllSamples,
       areAllSamplesLoaded: mod.areAllSamplesLoaded,
       getSampleLoadProgress: mod.getSampleLoadProgress,
+      isSampleCached: mod.isSampleCached,
     };
   };
 
@@ -518,5 +519,125 @@ describe('SampleLoader — Strudel API contract (samples, soundMap, static impor
     const p = loadPianoSamples();
     expect(p).toBeInstanceOf(Promise);
     await p;
+  });
+
+  /**
+   * SW-cache pre-check + `isSampleCached` contract.
+   *
+   * `isSampleCached(url)` is a deduped wrapper around
+   * `swCache.isInServiceWorkerCache(url)`. The contract under test:
+   *   - returns true when SW cache has the URL
+   *   - returns false when SW cache is empty
+   *   - dedupes concurrent calls for the same URL (one roundtrip)
+   *   - preloadAllBuffers skips loadBuffer() for cached URLs but still
+   *     counts them in loaded/total
+   *
+   * We mock the global `caches` API via `Object.defineProperty`. Each
+   * test rebuilds the mock to keep cases isolated. `loadSampleLoader()`
+   * is reused from the suite above (same Strudel mock) so the drums
+   * bank produces 24 distinct URLs we can sprinkle across cache hits.
+   */
+  type CachesApi = {
+    keys: ReturnType<typeof vi.fn>;
+    open: ReturnType<typeof vi.fn>;
+  };
+
+  const installCaches = (api: CachesApi | undefined): void => {
+    Object.defineProperty(globalThis, 'caches', {
+      value: api,
+      configurable: true,
+      writable: true,
+    });
+  };
+
+  const fakeResp = (): Response => new Response(new ArrayBuffer(0));
+
+  it('isSampleCached returns true when SW cache has the URL', async () => {
+    installCaches({
+      keys: vi.fn().mockResolvedValue(['precache-v1']),
+      open: vi.fn(async () => ({ match: vi.fn().mockResolvedValue(fakeResp()) })),
+    });
+    const { isSampleCached } = await loadSampleLoader();
+    expect(await isSampleCached('bd.mp3')).toBe(true);
+  });
+
+  it('isSampleCached returns false when SW cache is empty', async () => {
+    installCaches({
+      keys: vi.fn().mockResolvedValue(['precache-v1']),
+      open: vi.fn(async () => ({ match: vi.fn().mockResolvedValue(undefined) })),
+    });
+    const { isSampleCached } = await loadSampleLoader();
+    expect(await isSampleCached('bd.mp3')).toBe(false);
+  });
+
+  it('isSampleCached returns false when Cache API is undefined', async () => {
+    installCaches(undefined);
+    const { isSampleCached } = await loadSampleLoader();
+    expect(await isSampleCached('bd.mp3')).toBe(false);
+  });
+
+  it('isSampleCached dedupes concurrent calls for the same URL (one roundtrip)', async () => {
+    let matchCalls = 0;
+    installCaches({
+      keys: vi.fn().mockResolvedValue(['precache-v1']),
+      open: vi.fn(async () => ({
+        match: vi.fn().mockImplementation(async () => {
+          matchCalls += 1;
+          // Force a microtask gap so concurrent callers all attach
+          // to the same in-flight promise.
+          await new Promise<void>((r) => setTimeout(r, 5));
+          return fakeResp();
+        }),
+      })),
+    });
+    const { isSampleCached } = await loadSampleLoader();
+    const url = 'bd.mp3';
+    const [a, b, c, d] = await Promise.all([
+      isSampleCached(url),
+      isSampleCached(url),
+      isSampleCached(url),
+      isSampleCached(url),
+    ]);
+    expect(a).toBe(true);
+    expect(b).toBe(true);
+    expect(c).toBe(true);
+    expect(d).toBe(true);
+    // 4 callers but only one underlying match() call — the dedupe map
+    // collapses the in-flight promises into a single Promise<boolean>.
+    expect(matchCalls).toBe(1);
+  });
+
+  it('preloadAllBuffers skips loadBuffer for SW-cached URLs but still counts them', async () => {
+    // Mock caches to mark ONE URL as cached and the rest as not cached.
+    // Expected call counts: every cached URL → 0 loadBuffer calls;
+    // every non-cached URL → 1 loadBuffer call. The TOTAL count of
+    // loadBuffer calls = total URLs - cached URL occurrences.
+    //
+    // Note: bd.mp3 appears TWICE in the URL list — once for drums_bd
+    // (original) and once for `bd` (bare-name alias). Same file, two
+    // soundMap entries. Caching the URL skips BOTH calls. So with
+    // bd.mp3 cached, loadBuffer is called 24 - 2 = 22 times.
+    const cachedUrl = 'bd.mp3';
+    installCaches({
+      keys: vi.fn().mockResolvedValue(['precache-v1']),
+      open: vi.fn(async () => ({
+        match: vi.fn().mockImplementation(async (url: string) => {
+          if (url === cachedUrl) return fakeResp();
+          return undefined;
+        }),
+      })),
+    });
+    const { loadDrumSamples, getSampleLoadProgress } = await loadSampleLoader();
+    await loadDrumSamples();
+    // bd.mp3 cached → 2 occurrences skipped; the other 22 URLs hit loadBuffer.
+    const calledUrls = loadBufferMock.mock.calls.map((c) => String(c[0]));
+    expect(calledUrls).not.toContain(cachedUrl);
+    expect(loadBufferMock).toHaveBeenCalledTimes(22);
+    // getSampleLoadProgress still reflects 24/24 (cached URLs are
+    // counted toward loaded/total — see SWCacheShortCircuit in
+    // preloadAllBuffers).
+    const progress = getSampleLoadProgress();
+    expect(progress.perBank.drums.total).toBe(24);
+    expect(progress.perBank.drums.loaded).toBe(24);
   });
 });

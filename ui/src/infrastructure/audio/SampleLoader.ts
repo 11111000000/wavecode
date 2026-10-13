@@ -64,6 +64,16 @@
 
 import { samples, soundMap, loadBuffer, getAudioContext } from '@strudel/webaudio';
 import { withConcurrency } from './withConcurrency';
+import { isInServiceWorkerCache } from './swCache';
+import {
+  SAMPLE_PROGRESS_EVENT,
+  type SampleProgressEvent,
+  type SampleProgressStatus,
+} from './sampleProgressEvent';
+
+export type { SampleProgressEvent, SampleProgressStatus } from './sampleProgressEvent';
+
+export const SAMPLE_PROGRESS_EVENT_NAME = SAMPLE_PROGRESS_EVENT;
 
 export type LoadOptions = {
   onProgress?: (loaded: number, total: number) => void;
@@ -75,6 +85,28 @@ export type SampleLoadProgress = {
   loaded: number;
   total: number;
   perBank: Record<BankName, { loaded: number; total: number }>;
+};
+
+/**
+ * Per-URL promise dedupe — multiple callers awaiting the same URL share
+ * one `caches.match()` roundtrip. Cleared on page reload (module-scope).
+ */
+const cacheCheckInflight = new Map<string, Promise<boolean>>();
+
+/**
+ * Public SW-cache probe for sample URLs. Dedupe-wrapped around
+ * `isInServiceWorkerCache` so the heavy lifting (iterating every
+ * cache name + match) happens at most once even if `preloadAllBuffers`
+ * fires it 4× per URL concurrently.
+ */
+export const isSampleCached = (url: string): Promise<boolean> => {
+  const cached = cacheCheckInflight.get(url);
+  if (cached) return cached;
+  const p = isInServiceWorkerCache(url).finally(() => {
+    cacheCheckInflight.delete(url);
+  });
+  cacheCheckInflight.set(url, p);
+  return p;
 };
 
 type BankState = {
@@ -139,7 +171,12 @@ const collectSampleUrls = (dict: SoundMapSnapshot): string[] => {
 
 const PRELOAD_CONCURRENCY = 4;
 
-type PreloadState = { loaded: number; total: number; onProgress?: ((loaded: number, total: number) => void) | undefined };
+type PreloadState = {
+  loaded: number;
+  total: number;
+  onProgress?: ((loaded: number, total: number) => void) | undefined;
+  onProgressEvent?: ((evt: SampleProgressEvent) => void) | undefined;
+};
 
 /**
  * Collect every sample URL registered by `samples()` and eagerly
@@ -147,9 +184,22 @@ type PreloadState = { loaded: number; total: number; onProgress?: ((loaded: numb
  * `tt[url]` promise cache so subsequent haps hit it immediately.
  *
  * Without this, the very first haps of a preset drop with
- *   "[sampler] loading sound 'bd:0' took too long"
+ *   "[sampler] memory sound 'bd:0' took too long"
  * because `fetch().arrayBuffer().decodeAudioData()` takes 80–160 ms and
  * the audio context time advances past the scheduled start.
+ *
+ * SW-cache short-circuit: URLs that are already in the Service Worker
+ * cache are SKIPPED at the `loadBuffer` step but still counted in
+ * `loaded`/`total`. Rationale: the audio context will fetch the
+ * decoded buffer from the SW cache on first play (one round-trip,
+ * no re-decode). Skipping the explicit `loadBuffer` call removes a
+ * redundant double-fetch. The race against the audio scheduler is
+ * closed at the audio context level (cached) rather than the network
+ * level (uncached → fetch). If the SW cache doesn't actually have
+ * the file, the audio context's own fetch will populate it, and the
+ * next preload run will skip. URL/network level differences are not
+ * surfaced here — failures are swallowed for symmetry with the
+ * non-cached branch above.
  *
  * `onProgress(loaded, total)` fires after every successful (or
  * failed-but-acknowledged) buffer resolution. Failures are not
@@ -169,14 +219,19 @@ const preloadAllBuffers = async (state: PreloadState): Promise<void> => {
   state.total = urls.length;
   state.loaded = 0;
   state.onProgress?.(0, urls.length);
+  state.onProgressEvent?.({ loaded: 0, total: urls.length, status: 'loading' });
   await withConcurrency(urls, PRELOAD_CONCURRENCY, async (url) => {
     try {
-      await loadBuffer(url, ac, url);
+      const cached = await isSampleCached(url);
+      if (!cached) {
+        await loadBuffer(url, ac, url);
+      }
     } catch {
       // Swallow individual decode failures — see comment above.
     }
     state.loaded += 1;
     state.onProgress?.(state.loaded, state.total);
+    state.onProgressEvent?.({ loaded: state.loaded, total: state.total, status: 'loading' });
   });
 };
 
@@ -189,6 +244,12 @@ const registerBank = (
   if (state.inflight) return state.inflight;
   state.status = 'loading';
   state.inflight = (async () => {
+    const emit = (loaded: number, total: number, status: SampleProgressStatus): void => {
+      if (typeof window === 'undefined') return;
+      window.dispatchEvent(new CustomEvent(SAMPLE_PROGRESS_EVENT, {
+        detail: { loaded, total, status },
+      }));
+    };
     try {
       await samples(manifestUrl);
       addBareAliases();
@@ -196,14 +257,18 @@ const registerBank = (
         loaded: 0,
         total: 0,
         onProgress: opts.onProgress,
+        onProgressEvent: (e) => emit(e.loaded, e.total, e.status),
       };
+      emit(0, 0, 'loading');
       await preloadAllBuffers(preloadState);
       state.loaded = preloadState.loaded;
       state.total = preloadState.total;
       state.status = 'loaded';
+      emit(state.loaded, state.total, 'loaded');
     } catch (err) {
       state.status = 'failed';
       console.warn(`[SampleLoader] failed to register bank (${manifestUrl}):`, err);
+      emit(state.loaded, state.total, 'error');
     } finally {
       state.inflight = null;
     }

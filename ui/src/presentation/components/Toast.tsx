@@ -10,11 +10,21 @@
  *                                    показывает, но без цветовой агрессии).
  *   - 'error' / 'critical'        — кликабельный, открывает ConsoleSheet,
  *                                    severity цвет, на 'critical' — sticky.
+ *
+ * Sample-load progress hook: подписывается на
+ * `wavecode:sample-progress` и при `status: 'loaded'` пушит
+ * однократный info-toast «Сэмплы загружены (N/N)». На status='error'
+ * пушит warn-toast «Не удалось загрузить все сэмплы». 'loading' события
+ * игнорируются — прогресс показывает SampleProgressBadge в TabBar.
  */
 
 import { type JSX, For, Show, onCleanup, onMount, createMemo } from 'solid-js';
 import { consoleStore, type Toast, type ToastSeverity } from './consoleStore';
 import { CloseIcon, PinIcon } from '../icons';
+import {
+  SAMPLE_PROGRESS_EVENT,
+  type SampleProgressEvent,
+} from '../../infrastructure/audio/sampleProgressEvent';
 
 const SEVERITY_TOKEN: Readonly<Record<ToastSeverity, string>> = {
   info: 'info',
@@ -109,6 +119,30 @@ function ToastItem(props: ToastItemProps): JSX.Element {
 
 export function Toast(): JSX.Element {
   const items = createMemo(() => consoleStore.toasts());
+  onMount(() => {
+    const onProgress = (e: Event): void => {
+      const detail = (e as CustomEvent<SampleProgressEvent>).detail;
+      if (!detail) return;
+      if (detail.status === 'loaded' && detail.total > 0) {
+        consoleStore.pushToast({
+          severity: 'info',
+          title: 'Сэмплы загружены',
+          body: `${detail.loaded}/${detail.total} готовы к воспроизведению`,
+          source: 'samples',
+        });
+      } else if (detail.status === 'error' && detail.total > 0) {
+        consoleStore.pushToast({
+          severity: 'warn',
+          title: 'Сэмплы загружены частично',
+          body: `${detail.loaded}/${detail.total} — некоторые банки пропущены`,
+          source: 'samples',
+        });
+      }
+      // 'loading' / 'idle' — no toast; progress lives in SampleProgressBadge.
+    };
+    window.addEventListener(SAMPLE_PROGRESS_EVENT, onProgress as EventListener);
+    onCleanup(() => window.removeEventListener(SAMPLE_PROGRESS_EVENT, onProgress as EventListener));
+  });
   return (
     <div class="toast-stack" role="region" aria-label="Notifications">
       <For each={items()}>{(t) => <ToastItem toast={t} />}</For>
