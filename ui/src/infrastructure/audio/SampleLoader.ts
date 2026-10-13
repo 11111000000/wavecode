@@ -430,14 +430,21 @@ export const wrapSuperdoughLoadBuffer = (): void => {
       return;
     }
     originalLoadBuffer = mod.loadBuffer.bind(mod);
-    // Direct assignment `mod.loadBuffer = …` throws in production:
-    // `@strudel/webaudio` is `export * from "superdough"`, and ESM
-    // re-exports are live bindings with no setter (read-only getter).
-    // Use defineProperty with `configurable: true` to forcibly
-    // replace the property. Throws `TypeError: Cannot redefine
-    // property` only if the original was non-configurable — which
-    // happens for primitive non-writable frozen bindings; in that
-    // case we log and fall back to the no-wrap path.
+    // `@strudel/webaudio` is `export * from "superdough"`. The
+    // module-namespace binding is effectively read-only at the point
+    // Cyclist captures it: in dev (Vite) the descriptor says
+    // writable:true / configurable:false but assignment is a silent
+    // no-op (Cyclist holds the original reference); in production
+    // (rollup) the namespace is `Object.freeze`'d and both
+    // assignment and defineProperty throw. Either way the patch
+    // can't reach Cyclist's `onTrigger` callback, so the wrap is
+    // purely a no-op. Verify by checking the swap actually landed;
+    // if not, log and skip.
+    try {
+    mod.loadBuffer = wrappedLoadBuffer as typeof mod.loadBuffer;
+    } catch {
+      /* Object.freeze'd namespace in prod. */
+    }
     try {
       Object.defineProperty(mod, 'loadBuffer', {
         value: wrappedLoadBuffer,
@@ -445,11 +452,14 @@ export const wrapSuperdoughLoadBuffer = (): void => {
         configurable: true,
         enumerable: true,
       });
+    } catch {
+      /* configurable:false in dev. */
+    }
+    if (mod.loadBuffer === wrappedLoadBuffer) {
       wrapInstalled = true;
-    } catch (err) {
+    } else {
       console.warn(
-        '[SampleLoader] could not patch @strudel/webaudio.loadBuffer — warm-cache short-circuit disabled',
-        err,
+        '[SampleLoader] could not patch @strudel/webaudio.loadBuffer — warm-cache short-circuit disabled (Cyclist captured original reference).',
       );
     }
   })();
@@ -463,16 +473,22 @@ export const wrapSuperdoughLoadBuffer = (): void => {
 export const __resetLoadBufferWrapForTests = (): void => {
   if (originalLoadBuffer !== null) {
     void import('@strudel/webaudio').then((mod) => {
+      // Match the install strategy: try direct assignment first
+      // (dev: writable:true, configurable:false), fall back to
+      // defineProperty (rarely needed), swallow otherwise.
       try {
-        Object.defineProperty(mod, 'loadBuffer', {
-          value: originalLoadBuffer,
-          writable: true,
-          configurable: true,
-          enumerable: true,
-        });
+        mod.loadBuffer = originalLoadBuffer as typeof mod.loadBuffer;
       } catch {
-        /* re-export is non-configurable in some environments;
-         * tests on those will not see the wrap anyway. */
+        try {
+          Object.defineProperty(mod, 'loadBuffer', {
+            value: originalLoadBuffer,
+            writable: true,
+            configurable: true,
+            enumerable: true,
+          });
+        } catch {
+          /* frozen namespace — tests on those will not see the wrap anyway. */
+        }
       }
     }).catch(() => undefined);
   }
