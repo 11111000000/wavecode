@@ -4,7 +4,7 @@ import {
   getActiveTab, setTab, type TabId,
 } from '../state/uiState';
 import {
-  TabScoreIcon, TabChatIcon, TabMixerIcon, TabStatusIcon,
+  TabScoreIcon, TabChatIcon, TabStatusIcon,
 } from '../icons';
 import { SampleProgressBadge } from './SampleProgressBadge';
 
@@ -18,14 +18,14 @@ type Item = {
 const ITEMS: Item[] = [
   { id: 'score',  label: 'Score',  icon: TabScoreIcon },
   { id: 'chat',   label: 'AI',     icon: TabChatIcon  },
-  { id: 'mixer',  label: 'Mixer',  icon: TabMixerIcon },
   { id: 'status', label: 'Status', icon: TabStatusIcon },
 ];
 
 /**
  * TabBar — bottom navigation для mobile-first layout.
- * 4 вкладки: Score, AI, Mixer, Status. На desktop (>=1024) скрыта —
- * панели остаются в flex-stack layout.
+ * 3 вкладки: Score, AI, Status. Mixer вынесен в BottomToolstrip
+ * (там же Step/Piano — все «инструменты» вместе). На desktop (>=1024)
+ * скрыта — панели остаются в flex-stack layout.
  */
 export function TabBar(): JSX.Element {
   return (
