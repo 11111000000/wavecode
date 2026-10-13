@@ -22,19 +22,8 @@ export const evalScore = async (overrideScore?: string): Promise<void> => {
   }
   unlockAudioContext();
   dispatch({ type: 'audioStatusChange', status: 'playing' });
-  // Mixer side-state: gain/mute/solo — applied at eval time only,
-  // never mutates the persisted score.
-  const mixed = injectMix(score, appStore.layerMix);
-  // Transport-side-effects (swing) применяются в обёртке — score
-  // остаётся чистым, swing виден только на лету.
-  const wrapped = evalWithTransport(mixed, appStore.transportState);
   try {
-    await Effect.runPromise(
-      Effect.gen(function* () {
-        const audio = yield* AudioEngine;
-        yield* audio.eval(wrapped);
-      }).pipe(Effect.provide(AppLayer)),
-    );
+    await runWrapAndEval(score, appStore.transportState, appStore.layerMix);
   } catch (err) {
     dispatch({
       type: 'audioStatusChange',
@@ -42,6 +31,49 @@ export const evalScore = async (overrideScore?: string): Promise<void> => {
       error: err instanceof Error ? err.message : String(err),
     });
   }
+};
+
+/**
+ * Re-evaluate the current score with the *current* mixer + transport wrap,
+ * без запуска AudioContext и без dispatch status: playing.
+ *
+ * Используется из `useTransportAudioSync` при изменении swing-слайдера
+ * во время воспроизведения: пользователь уже нажал Play через
+ * `evalScore()`, audio engine работает, мы лишь подменяем паттерн.
+ * Если swing изменился, а audio context ещё не running — выходит
+ * no-op (re-eval не должен будить звук), вызывающий код это обрабатывает.
+ *
+ * Ошибки не флипают audio status — пользователь не нажимал Play,
+ * показывать баннер ошибки здесь неуместно. Логируем и тихо выходим.
+ */
+export const reEvalScoreWithTransport = async (): Promise<void> => {
+  const score = appStore.score;
+  if (!score.trim()) return;
+  try {
+    await runWrapAndEval(score, appStore.transportState, appStore.layerMix);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error('[wavecode/audioActions.reEvalScoreWithTransport]', msg, err);
+  }
+};
+
+const runWrapAndEval = async (
+  score: string,
+  transport: typeof appStore.transportState,
+  layerMix: typeof appStore.layerMix,
+): Promise<void> => {
+  // Mixer side-state: gain/mute/solo — applied at eval time only,
+  // never mutates the persisted score.
+  const mixed = injectMix(score, layerMix);
+  // Transport-side-effects (swing) применяются в обёртке — score
+  // остаётся чистым, swing виден только на лету.
+  const wrapped = evalWithTransport(mixed, transport);
+  await Effect.runPromise(
+    Effect.gen(function* () {
+      const audio = yield* AudioEngine;
+      yield* audio.eval(wrapped);
+    }).pipe(Effect.provide(AppLayer)),
+  );
 };
 
 export const stopAudio = async (): Promise<void> => {
