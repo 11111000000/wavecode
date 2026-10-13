@@ -430,8 +430,28 @@ export const wrapSuperdoughLoadBuffer = (): void => {
       return;
     }
     originalLoadBuffer = mod.loadBuffer.bind(mod);
-    mod.loadBuffer = wrappedLoadBuffer as typeof mod.loadBuffer;
-    wrapInstalled = true;
+    // Direct assignment `mod.loadBuffer = …` throws in production:
+    // `@strudel/webaudio` is `export * from "superdough"`, and ESM
+    // re-exports are live bindings with no setter (read-only getter).
+    // Use defineProperty with `configurable: true` to forcibly
+    // replace the property. Throws `TypeError: Cannot redefine
+    // property` only if the original was non-configurable — which
+    // happens for primitive non-writable frozen bindings; in that
+    // case we log and fall back to the no-wrap path.
+    try {
+      Object.defineProperty(mod, 'loadBuffer', {
+        value: wrappedLoadBuffer,
+        writable: true,
+        configurable: true,
+        enumerable: true,
+      });
+      wrapInstalled = true;
+    } catch (err) {
+      console.warn(
+        '[SampleLoader] could not patch @strudel/webaudio.loadBuffer — warm-cache short-circuit disabled',
+        err,
+      );
+    }
   })();
 };
 
@@ -443,7 +463,17 @@ export const wrapSuperdoughLoadBuffer = (): void => {
 export const __resetLoadBufferWrapForTests = (): void => {
   if (originalLoadBuffer !== null) {
     void import('@strudel/webaudio').then((mod) => {
-      mod.loadBuffer = originalLoadBuffer as typeof mod.loadBuffer;
+      try {
+        Object.defineProperty(mod, 'loadBuffer', {
+          value: originalLoadBuffer,
+          writable: true,
+          configurable: true,
+          enumerable: true,
+        });
+      } catch {
+        /* re-export is non-configurable in some environments;
+         * tests on those will not see the wrap anyway. */
+      }
     }).catch(() => undefined);
   }
   originalLoadBuffer = null;
