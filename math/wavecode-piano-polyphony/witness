@@ -1,0 +1,39 @@
+- sha: TBD
+  date: 2026-10-13
+  branch: feature/piano-polyphony
+  kind: fix
+  files:
+    - ui/src/domain/music/notes.ts
+    - ui/src/domain/music/notes.test.ts
+    - ui/src/presentation/components/pianoSynth.ts
+    - ui/src/presentation/components/PianoKeyboard.tsx
+    - ui/src/presentation/components/PianoKeyboard.test.ts
+    - ui/tests/e2e/piano.spec.ts
+    - math/wavecode-piano-polyphony/packet.md
+  notes: |
+    Three-piece piano fix:
+
+    A. `SILENCE_SNIPPET` constant `silence()`.
+
+    B. `multiNoteSnippet(notes)` builds stack(...) wrapping
+       singleNoteSnippet — empty → silence; 1 → singleNote
+       (no wrapper); ≥2 → stack.
+
+    C. `buildPianoSnippet(activeMidi: Set<number>)` adapter.
+       PianoKeyboard uses accumulator semantics:
+       playNote(midi) → set.add + eval(buildPianoSnippet(set)).
+       stopNote(midi) → set.delete + eval(buildPianoSnippet).
+
+    D. 30 ms debounce on rapid press/release cycles —
+       collapses chord-on-chord events to single eval.
+
+    Tests: notes +4, PianoKeyboard +6 = +10 cases (suite
+    297 → 307). typecheck clean. vite build OK. PWA
+    precache 21 entries (was 19).
+
+    Continues `wavecode-piano-input` (which created
+    singleNoteSnippet with single-note semantics only).
+
+    E2E piano.spec.ts covers: tap-one-key → no errors →
+    active oscillators > 0 → release → silent.
+---
