@@ -3,7 +3,9 @@ import {
   requestMidiAccess,
   getMidiPermissionState,
   isMidiAvailable,
+  onNote,
   type MidiAccessLike,
+  type MidiInputLike,
 } from './MidiInput';
 
 /**
@@ -180,5 +182,80 @@ describe('getMidiPermissionState', () => {
     setNavigator({ permissions: { query: spy } });
     await getMidiPermissionState();
     expect(spy).toHaveBeenCalledWith({ name: 'midi', sysex: false });
+  });
+});
+
+/**
+ * Phase 3 extension: each `NoteEvent` now carries `source` (the
+ * WebMIDI input name, e.g. "AKAI MPK Mini") and `sourceId` (the
+ * stable input.id UUID). The component layer uses these to label
+ * which device is sending notes. These tests pin the contract on
+ * the `onNote` subscriber side without standing up a real WebMIDI
+ * device — we mock the MIDIAccess shape, fire midimessage by
+ * hand, and inspect what reaches the callback.
+ */
+describe('onNote (source / sourceId attribution)', () => {
+  it('noteOn callback receives the input.name as `source` and input.id as `sourceId`', () => {
+    const input: MidiInputLike = {
+      id: 'dev-uuid-1',
+      name: 'AKAI MPK Mini',
+      onmidimessage: null,
+    };
+    const access: MidiAccessLike = {
+      inputs: new Map([[input.id, input]]),
+      state: 'connected',
+      onstatechange: null,
+    };
+    const seen: unknown[] = [];
+    onNote(access, (e) => seen.push(e));
+    expect(input.onmidimessage).toBeTypeOf('function');
+    // Channel 0, note 60 (C4), velocity 100 → noteOn
+    (input.onmidimessage as (ev: { data: Uint8Array; timeStamp: number }) => void)({
+      data: new Uint8Array([0x90, 60, 100]),
+      timeStamp: 0,
+    });
+    expect(seen).toHaveLength(1);
+    const ev = seen[0] as {
+      type: string;
+      note: number;
+      velocity: number;
+      source: string;
+      sourceId: string;
+    };
+    expect(ev.type).toBe('noteOn');
+    expect(ev.note).toBe(60);
+    expect(ev.velocity).toBe(100);
+    expect(ev.source).toBe('AKAI MPK Mini');
+    expect(ev.sourceId).toBe('dev-uuid-1');
+  });
+
+  it('falls back to `source: "unknown"` when the input name is null', () => {
+    const input: MidiInputLike = {
+      id: 'dev-uuid-2',
+      name: null,
+      onmidimessage: null,
+    };
+    const access: MidiAccessLike = {
+      inputs: new Map([[input.id, input]]),
+      state: 'connected',
+      onstatechange: null,
+    };
+    const seen: unknown[] = [];
+    onNote(access, (e) => seen.push(e));
+    (input.onmidimessage as (ev: { data: Uint8Array; timeStamp: number }) => void)({
+      data: new Uint8Array([0x80, 60, 64]), // noteOff
+      timeStamp: 0,
+    });
+    expect(seen).toHaveLength(1);
+    const ev = seen[0] as {
+      type: string;
+      note: number;
+      source: string;
+      sourceId: string;
+    };
+    expect(ev.type).toBe('noteOff');
+    expect(ev.note).toBe(60);
+    expect(ev.source).toBe('unknown');
+    expect(ev.sourceId).toBe('dev-uuid-2');
   });
 });
