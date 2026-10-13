@@ -74,6 +74,12 @@ export function PianoKeyboard() {
   const [activeNotes, setActiveNotes] = createSignal<ReadonlySet<number>>(new Set());
   const [midiAvailable, setMidiAvailable] = createSignal(false);
   const [midiInputs, setMidiInputs] = createSignal<ReadonlyArray<string>>([]);
+  // Most-recently-active MIDI input name. Populated by the first MIDI
+  // noteOn we see in a given session, replaced by a different device's
+  // noteOn if that device takes over, and cleared when the LAST held
+  // note is released. On-screen taps don't change this — they share
+  // the same `activeNotes` set but have no device identity.
+  const [activeMidiSource, setActiveMidiSource] = createSignal<string | null>(null);
 
   const notes = rangeNotes();
   const whiteNotes = notes.filter((n) => !isBlackKey(n));
@@ -116,7 +122,7 @@ export function PianoKeyboard() {
     pendingNoteOns.clear();
   };
 
-  const playNote = (midi: number): void => {
+  const playNote = (midi: number, source?: string): void => {
     if (!isInPianoRange(midi)) return;
     if (voiceMap.has(midi) || pendingNoteOns.has(midi)) return; // already in flight
     pendingNoteOns.add(midi);
@@ -127,6 +133,7 @@ export function PianoKeyboard() {
     const next = new Set(activeNotes());
     next.add(midi);
     setActiveNotes(next);
+    if (source !== undefined) setActiveMidiSource(source);
   };
 
   const stopNote = (midi: number): void => {
@@ -152,10 +159,16 @@ export function PianoKeyboard() {
       updateLastNoteEnd(performance.now());
     }
     const current = activeNotes();
-    if (!current.has(midi)) return;
+    if (!current.has(midi)) return; // already released
+    const willBeEmpty = current.size === 1;
     const next = new Set(current);
     next.delete(midi);
     setActiveNotes(next);
+    // When the last held note goes away, drop the device attribution
+    // too — the next press (MIDI or on-screen) re-establishes it. This
+    // keeps the pill idle state tidy: "MIDI: N devices" rather than
+    // a stale "AKAI MPK" lingering after the user lifts their hands.
+    if (willBeEmpty) setActiveMidiSource(null);
   };
 
   onCleanup(() => {
@@ -183,7 +196,7 @@ export function PianoKeyboard() {
         Array.from(access.inputs.values()).map((i) => i.name ?? 'Unknown device'),
       );
       unsub = onNote(access, (e) => {
-        if (e.type === 'noteOn') playNote(e.note);
+        if (e.type === 'noteOn') playNote(e.note, e.source);
         else stopNote(e.note);
       });
     });
@@ -211,12 +224,29 @@ export function PianoKeyboard() {
 
   return (
     <div class="piano-wrap" role="group" aria-label="Piano keyboard C3 to B4">
+      {/* Scoped style for the device-name chip in the status pill.
+       *  Lives here (not in components.css) because it's a tiny
+       *  presentation tweak tied 1:1 to the adjacent markup — moving
+       *  it to a global stylesheet would force readers to jump files.
+       *  Same colour family as the green `has-active` state but in
+       *  regular weight + italic to read as "label, not number". */}
+      <style>{`
+.piano-midi-source {
+  font-style: italic;
+  font-weight: normal;
+  opacity: 0.85;
+  text-transform: none;
+  letter-spacing: normal;
+  margin-left: 2px;
+}
+`}</style>
       <div class="piano-toolbar">
         <span class="piano-hint">2 octaves (C3–B4) — tap or use MIDI keyboard</span>
         <PianoToolbar
           midiStatus={midiStatus()}
           midiActive={hasActive()}
           midiActiveCount={activeCount()}
+          midiSource={activeMidiSource() ?? undefined}
         />
       </div>
       <div class="piano-keys">

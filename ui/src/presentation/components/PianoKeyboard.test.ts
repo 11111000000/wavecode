@@ -416,7 +416,13 @@ describe('PianoKeyboard component (MIDI status pill + active-count)', () => {
   let render: typeof solidRender;
   let PianoKeyboard: typeof PianoKeyboardFn;
   let unmount: (() => void) | undefined;
-  let noteCb: ((e: { type: 'noteOn' | 'noteOff'; note: number; velocity?: number }) => void) | null;
+  let noteCb: ((e: {
+    type: 'noteOn' | 'noteOff';
+    note: number;
+    velocity?: number;
+    source: string;
+    sourceId: string;
+  }) => void) | null;
   let voices: { voiceId: number; midi: number; instrument: PianoInstrument; released: boolean }[];
   let nextVoiceId: number;
 
@@ -504,7 +510,7 @@ describe('PianoKeyboard component (MIDI status pill + active-count)', () => {
   });
 
   it('renders active-note count when 1 note fires via MIDI', async () => {
-    noteCb!({ type: 'noteOn', note: 60, velocity: 100 });
+    noteCb!({ type: 'noteOn', note: 60, velocity: 100, source: 'Mock Keyboard', sourceId: 'dev-1' });
     await vi.advanceTimersByTimeAsync(50);
     const pill = midiStatus();
     expect(pill!.textContent).toContain('MIDI: 1 device');
@@ -515,22 +521,22 @@ describe('PianoKeyboard component (MIDI status pill + active-count)', () => {
   });
 
   it('updates active count on note-on (increments) and note-off (decrements)', async () => {
-    noteCb!({ type: 'noteOn', note: 60, velocity: 100 });
-    noteCb!({ type: 'noteOn', note: 64, velocity: 100 });
-    noteCb!({ type: 'noteOn', note: 67, velocity: 100 });
+    noteCb!({ type: 'noteOn', note: 60, velocity: 100, source: 'Mock Keyboard', sourceId: 'dev-1' });
+    noteCb!({ type: 'noteOn', note: 64, velocity: 100, source: 'Mock Keyboard', sourceId: 'dev-1' });
+    noteCb!({ type: 'noteOn', note: 67, velocity: 100, source: 'Mock Keyboard', sourceId: 'dev-1' });
     await vi.advanceTimersByTimeAsync(50);
     const pill = midiStatus()!;
     expect(pill.textContent).toContain('3 ноты');
     expect(pill.getAttribute('data-active-count')).toBe('3');
     expect(pill.classList.contains('has-active')).toBe(true);
 
-    noteCb!({ type: 'noteOff', note: 64 });
+    noteCb!({ type: 'noteOff', note: 64, source: 'Mock Keyboard', sourceId: 'dev-1' });
     await vi.advanceTimersByTimeAsync(50);
     expect(pill.textContent).toContain('2 ноты');
     expect(pill.getAttribute('data-active-count')).toBe('2');
 
-    noteCb!({ type: 'noteOff', note: 60 });
-    noteCb!({ type: 'noteOff', note: 67 });
+    noteCb!({ type: 'noteOff', note: 60, source: 'Mock Keyboard', sourceId: 'dev-1' });
+    noteCb!({ type: 'noteOff', note: 67, source: 'Mock Keyboard', sourceId: 'dev-1' });
     await vi.advanceTimersByTimeAsync(50);
     expect(pill.textContent).toContain('MIDI: 1 device');
     expect(pill.textContent).not.toContain('·');
@@ -545,6 +551,168 @@ describe('PianoKeyboard component (MIDI status pill + active-count)', () => {
     const pill = midiStatus()!;
     expect(pill.textContent).toContain('1 нота');
     expect(pill.getAttribute('data-active-count')).toBe('1');
+  });
+});
+
+/**
+ * Component-level tests for the *attribution* half of the MIDI status
+ * pill: which device is currently sending notes. Distinct from the
+ * block above (which only checked counts) — here the mock reports
+ * 2 inputs so the pill has real work to do beyond counting.
+ *
+ * Mock layout:
+ *   - dev-1: AKAI MPK Mini
+ *   - dev-2: Pad Controller
+ * The test fires noteOn / noteOff via captured callback with each
+ * event's `source` set explicitly to one of those names, then asserts
+ * the rendered pill text + `data-midi-source` attribute.
+ */
+describe('PianoKeyboard component (MIDI source attribution in status pill)', () => {
+  let container: HTMLDivElement;
+  let render: typeof solidRender;
+  let PianoKeyboard: typeof PianoKeyboardFn;
+  let unmount: (() => void) | undefined;
+  let noteCb: ((e: {
+    type: 'noteOn' | 'noteOff';
+    note: number;
+    velocity?: number;
+    source: string;
+    sourceId: string;
+  }) => void) | null;
+  let voices: { voiceId: number; midi: number; instrument: PianoInstrument; released: boolean }[];
+  let nextVoiceId: number;
+
+  beforeEach(async () => {
+    vi.useFakeTimers();
+    voices = [];
+    nextVoiceId = 1;
+    noteCb = null;
+
+    vi.resetModules();
+    vi.doMock('~/infrastructure/audio/PianoSynth', () => ({
+      createPianoSynth: (): PianoSynth => ({
+        noteOn: (midi: number, inst: PianoInstrument): number => {
+          const id = nextVoiceId; nextVoiceId += 1;
+          voices.push({ voiceId: id, midi, instrument: inst, released: false });
+          return id;
+        },
+        noteOff: (voiceId: number): void => {
+          const v = voices.find((x) => x.voiceId === voiceId);
+          if (v) v.released = true;
+        },
+        setInstrument: (): number => -1,
+        dispose: (): void => undefined,
+        activeCount: (): number => voices.filter((v) => !v.released).length,
+      }),
+    }));
+    vi.doMock('~/infrastructure/audio/LiveAudioEngine', () => ({
+      unlockAudioContext: (): AudioContext => ({}) as AudioContext,
+    }));
+    vi.doMock('../state/pianoRecStore', () => ({
+      recEnabled: () => false,
+      appendNote: (): void => undefined,
+      updateLastNoteEnd: (): void => undefined,
+      instrument: (): PianoInstrument => 'triangle',
+    }));
+    vi.doMock('~/infrastructure/audio/MidiInput', () => ({
+      isMidiAvailable: () => true,
+      requestMidiAccess: async () => ({
+        inputs: new Map([
+          ['dev-1', { id: 'dev-1', name: 'AKAI MPK Mini', onmidimessage: null }],
+          ['dev-2', { id: 'dev-2', name: 'Pad Controller', onmidimessage: null }],
+        ]),
+        state: 'connected',
+        onstatechange: null,
+      }),
+      onNote: (_access: unknown, cb: typeof noteCb) => {
+        noteCb = cb;
+        return () => { noteCb = null; };
+      },
+    }));
+    render = (await import('solid-js/web')).render;
+    ({ PianoKeyboard } = await import('./PianoKeyboard'));
+    container = document.createElement('div');
+    document.body.appendChild(container);
+    unmount = render(() => PianoKeyboard(), container);
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(50);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    if (unmount) unmount();
+    unmount = undefined;
+    vi.doUnmock('~/infrastructure/audio/PianoSynth');
+    vi.doUnmock('~/infrastructure/audio/LiveAudioEngine');
+    vi.doUnmock('../state/pianoRecStore');
+    vi.doUnmock('~/infrastructure/audio/MidiInput');
+    if (container) container.remove();
+  });
+
+  function midiStatus(): HTMLSpanElement | null {
+    return container.querySelector<HTMLSpanElement>('.piano-midi-status');
+  }
+
+  function sourceChip(): HTMLSpanElement | null {
+    return container.querySelector<HTMLSpanElement>('.piano-midi-source');
+  }
+
+  it('renders "MIDI: 2 devices" with no source attribution before any MIDI activity', () => {
+    const pill = midiStatus()!;
+    expect(pill.textContent).toBe('MIDI: 2 devices');
+    expect(pill.textContent).not.toContain('·');
+    expect(pill.getAttribute('data-active-count')).toBe('0');
+    expect(pill.getAttribute('data-midi-source')).toBe('');
+    expect(sourceChip()).toBeNull();
+  });
+
+  it('shows the active device name after 3 note-ons from that input', async () => {
+    noteCb!({ type: 'noteOn', note: 60, velocity: 100, source: 'AKAI MPK Mini', sourceId: 'dev-1' });
+    noteCb!({ type: 'noteOn', note: 64, velocity: 100, source: 'AKAI MPK Mini', sourceId: 'dev-1' });
+    noteCb!({ type: 'noteOn', note: 67, velocity: 100, source: 'AKAI MPK Mini', sourceId: 'dev-1' });
+    await vi.advanceTimersByTimeAsync(50);
+    const pill = midiStatus()!;
+    expect(pill.textContent).toBe('MIDI: 2 devices · 3 ноты · AKAI MPK Mini');
+    expect(pill.getAttribute('data-active-count')).toBe('3');
+    expect(pill.getAttribute('data-midi-source')).toBe('AKAI MPK Mini');
+    const chip = sourceChip();
+    expect(chip).toBeTruthy();
+    expect(chip!.textContent).toBe('AKAI MPK Mini');
+  });
+
+  it('switches the source when a different input starts sending notes', async () => {
+    // 1. AKAI plays C, E — source becomes AKAI.
+    noteCb!({ type: 'noteOn', note: 60, velocity: 100, source: 'AKAI MPK Mini', sourceId: 'dev-1' });
+    noteCb!({ type: 'noteOn', note: 64, velocity: 100, source: 'AKAI MPK Mini', sourceId: 'dev-1' });
+    await vi.advanceTimersByTimeAsync(50);
+    expect(midiStatus()!.getAttribute('data-midi-source')).toBe('AKAI MPK Mini');
+
+    // 2. Pad Controller takes over with a fresh note — source flips.
+    noteCb!({ type: 'noteOn', note: 67, velocity: 100, source: 'Pad Controller', sourceId: 'dev-2' });
+    await vi.advanceTimersByTimeAsync(50);
+    const pill = midiStatus()!;
+    expect(pill.textContent).toBe('MIDI: 2 devices · 3 ноты · Pad Controller');
+    expect(pill.getAttribute('data-midi-source')).toBe('Pad Controller');
+    expect(sourceChip()!.textContent).toBe('Pad Controller');
+  });
+
+  it('keeps the source attribution while other notes from the same input are still active', async () => {
+    // Press three notes from AKAI, then release ONE of them. Two notes
+    // remain active — the source attribution should NOT disappear just
+    // because one note-off fired. The pill should still name AKAI.
+    noteCb!({ type: 'noteOn', note: 60, velocity: 100, source: 'AKAI MPK Mini', sourceId: 'dev-1' });
+    noteCb!({ type: 'noteOn', note: 64, velocity: 100, source: 'AKAI MPK Mini', sourceId: 'dev-1' });
+    noteCb!({ type: 'noteOn', note: 67, velocity: 100, source: 'AKAI MPK Mini', sourceId: 'dev-1' });
+    await vi.advanceTimersByTimeAsync(50);
+    expect(midiStatus()!.getAttribute('data-active-count')).toBe('3');
+
+    noteCb!({ type: 'noteOff', note: 67, source: 'AKAI MPK Mini', sourceId: 'dev-1' });
+    await vi.advanceTimersByTimeAsync(50);
+    const pill = midiStatus()!;
+    expect(pill.getAttribute('data-active-count')).toBe('2');
+    expect(pill.getAttribute('data-midi-source')).toBe('AKAI MPK Mini');
+    expect(pill.textContent).toBe('MIDI: 2 devices · 2 ноты · AKAI MPK Mini');
+    expect(sourceChip()!.textContent).toBe('AKAI MPK Mini');
   });
 });
 

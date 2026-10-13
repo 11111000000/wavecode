@@ -17,9 +17,29 @@
  *   0xB0+ch  control change
  */
 
+/**
+ * `source` / `sourceId` identify the WebMIDI input that produced the
+ * event. They're always populated — input.name is the WebMIDI device
+ * label (e.g. "AKAI MPK Mini") and we fall back to `'unknown'` only
+ * when the host reports a null name (rare, but possible on some Linux
+ * ALSA backends). `sourceId` is the WebMIDI `input.id` UUID, useful
+ * for grouping notes that came from the same physical device even if
+ * the user renames it between sessions.
+ */
 export type NoteEvent =
-  | { readonly type: 'noteOn'; readonly note: number; readonly velocity: number }
-  | { readonly type: 'noteOff'; readonly note: number };
+  | {
+      readonly type: 'noteOn';
+      readonly note: number;
+      readonly velocity: number;
+      readonly source: string;
+      readonly sourceId: string;
+    }
+  | {
+      readonly type: 'noteOff';
+      readonly note: number;
+      readonly source: string;
+      readonly sourceId: string;
+    };
 
 export type NoteCallback = (e: NoteEvent) => void;
 
@@ -101,14 +121,21 @@ export const onNote = (
   callback: NoteCallback,
 ): (() => void) => {
   const handler = (input: MidiInputLike) => {
+    // Capture source identifying fields ONCE per input binding. The
+    // WebMIDI spec guarantees these don't change for the lifetime of
+    // the port, so we don't need to read them out of every midimessage
+    // event (which would just be busywork in the audio callback-ish
+    // hot path).
+    const source = input.name ?? 'unknown';
+    const sourceId = input.id;
     input.onmidimessage = (ev) => {
       const [status, note, velocity] = ev.data;
       if (status === undefined || note === undefined) return;
       const cmd = status & 0xF0;
       if (cmd === 0x90 && velocity !== undefined && velocity > 0) {
-        callback({ type: 'noteOn', note, velocity });
+        callback({ type: 'noteOn', note, velocity, source, sourceId });
       } else if (cmd === 0x80 || (cmd === 0x90 && velocity === 0)) {
-        callback({ type: 'noteOff', note });
+        callback({ type: 'noteOff', note, source, sourceId });
       }
       // CC (0xB0) и прочее игнорируем — single-note use-case
     };
