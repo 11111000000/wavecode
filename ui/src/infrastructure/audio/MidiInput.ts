@@ -5,7 +5,9 @@
  *
  * Public API:
  *   - isMidiAvailable(): boolean
- *   - requestMidiAccess(): Promise<MIDIAccess | null> (null on iOS)
+ *   - requestMidiAccess(timeoutMs = 1000): Promise<MIDIAccess | null>
+ *       (null on iOS or if the permission prompt hangs past timeoutMs)
+ *   - getMidiPermissionState(): 'granted' | 'denied' | 'prompt' | 'unknown'
  *   - listMidiInputs(access): MIDIInput[] (typed wrapper)
  *   - onNote(access, callback): unsubscribe()
  *
@@ -20,6 +22,8 @@ export type NoteEvent =
   | { readonly type: 'noteOff'; readonly note: number };
 
 export type NoteCallback = (e: NoteEvent) => void;
+
+export type MidiPermissionState = 'granted' | 'denied' | 'prompt' | 'unknown';
 
 // Minimal WebMIDI types (avoid pulling in @types/webmidi).
 export interface MidiInputLike {
@@ -40,14 +44,53 @@ const isWebMidiSupported = (): boolean => {
 
 export const isMidiAvailable = isWebMidiSupported;
 
-export const requestMidiAccess = (): Promise<MidiAccessLike | null> => {
+/**
+ * Race `navigator.requestMIDIAccess` against `timeoutMs` (default 1s).
+ * On timeout, return `null` so callers (e.g. PianoKeyboard.onMount)
+ * don't wait forever when the user-agent silently dismisses the
+ * permission prompt. The signature is back-compat — existing callers
+ * (`requestMidiAccess()`) keep working unchanged.
+ */
+export const requestMidiAccess = (timeoutMs = 1000): Promise<MidiAccessLike | null> => {
   if (!isWebMidiSupported()) return Promise.resolve(null);
-  return (navigator as unknown as {
+  const accessPromise = (navigator as unknown as {
     requestMIDIAccess: (opts?: { sysex?: boolean }) => Promise<MidiAccessLike>;
-  }).requestMIDIAccess({ sysex: false }).catch((err) => {
+  }).requestMIDIAccess({ sysex: false });
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    setTimeout(() => reject(new Error('midi-timeout')), timeoutMs);
+  });
+  return Promise.race<MidiAccessLike | null>([accessPromise, timeoutPromise]).catch((err) => {
+    if (err instanceof Error && err.message === 'midi-timeout') {
+      console.warn('[MidiInput] requestMIDIAccess timed out after', timeoutMs, 'ms');
+      return null;
+    }
     console.warn('[MidiInput] requestMIDIAccess failed:', err);
     return null;
   });
+};
+
+/**
+ * Read the MIDI permission state via `navigator.permissions.query`. Falls
+ * back to `'unknown'` on browsers without a Permissions API for midi
+ * (Safari pre-16.4) or when no Permissions API at all is exposed. Used
+ * by the console UI to render a "MIDI permission needed" affordance
+ * when state === 'denied' / 'prompt'.
+ */
+export const getMidiPermissionState = async (): Promise<MidiPermissionState> => {
+  if (typeof navigator === 'undefined') return 'unknown';
+  const perms = (navigator as unknown as {
+    permissions?: { query: (opts: { name: string; sysex?: boolean }) => Promise<PermissionStatus> };
+  }).permissions;
+  if (!perms || typeof perms.query !== 'function') return 'unknown';
+  try {
+    const status = await perms.query({ name: 'midi', sysex: false });
+    if (status.state === 'granted' || status.state === 'denied' || status.state === 'prompt') {
+      return status.state;
+    }
+    return 'unknown';
+  } catch {
+    return 'unknown';
+  }
 };
 
 export const listMidiInputs = (access: MidiAccessLike): ReadonlyArray<MidiInputLike> =>

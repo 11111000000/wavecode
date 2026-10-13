@@ -346,3 +346,169 @@ describe('PianoKeyboard component (polyphony + note-off)', () => {
     expect(multiNoteSnippet(new Set(['c4', 'e4']))).toContain('stack(');
   });
 });
+
+/**
+ * Component-level tests for the MIDI status pill:
+ *  - "MIDI: N devices" rendering when nothing is pressed
+ *  - "MIDI: N devices · M нот" when M notes are active (via MIDI events)
+ *  - data-active-count attribute mirrors `activeNotes().size`
+ *  - no status element at all on the iOS Safari path (isMidiAvailable
+ *    returns false)
+ *
+ * Setup pattern mirrors the polyphony suite above: doMock
+ * `audioActions` (evalScore spy) and `~/infrastructure/audio/MidiInput`
+ * (with a controllable `requestMidiAccess` + a `onNote` that captures
+ * the callback so the test can fire synthetic noteOn/noteOff events).
+ */
+describe('PianoKeyboard component (MIDI status pill + active-count)', () => {
+  let evalScore: ReturnType<typeof vi.fn>;
+  let container: HTMLDivElement;
+  let render: typeof solidRender;
+  let PianoKeyboard: typeof PianoKeyboardFn;
+  let unmount: (() => void) | undefined;
+  let noteCb: ((e: { type: 'noteOn' | 'noteOff'; note: number; velocity?: number }) => void) | null;
+
+  beforeEach(async () => {
+    vi.useFakeTimers();
+    evalScore = vi.fn().mockResolvedValue(undefined);
+    noteCb = null;
+    vi.resetModules();
+    vi.doMock('../state/audioActions', () => ({ evalScore }));
+    vi.doMock('~/infrastructure/audio/MidiInput', () => ({
+      isMidiAvailable: () => true,
+      requestMidiAccess: async () => ({
+        inputs: new Map([['dev-1', { id: 'dev-1', name: 'Mock Keyboard', onmidimessage: null }]]),
+        state: 'connected',
+        onstatechange: null,
+      }),
+      // Capture the callback so the test can fire noteOn/noteOff
+      // without standing up a real WebMIDI input object.
+      onNote: (_access: unknown, cb: typeof noteCb) => {
+        noteCb = cb;
+        return () => { noteCb = null; };
+      },
+    }));
+    render = (await import('solid-js/web')).render;
+    ({ PianoKeyboard } = await import('./PianoKeyboard'));
+    container = document.createElement('div');
+    document.body.appendChild(container);
+    unmount = render(() => PianoKeyboard(), container);
+    // Let the onMount Promise resolve + the 30ms debounce window tick.
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(50);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    if (unmount) unmount();
+    unmount = undefined;
+    vi.doUnmock('../state/audioActions');
+    vi.doUnmock('~/infrastructure/audio/MidiInput');
+    if (container) container.remove();
+  });
+
+  function midiStatus(): HTMLSpanElement | null {
+    return container.querySelector<HTMLSpanElement>('.piano-midi-status');
+  }
+
+  it('renders "MIDI: 1 device" pill when no notes are active', () => {
+    const pill = midiStatus();
+    expect(pill).toBeTruthy();
+    expect(pill!.textContent).toContain('MIDI: 1 device');
+    expect(pill!.textContent).not.toContain('·');
+    expect(pill!.getAttribute('data-active-count')).toBe('0');
+    expect(pill!.classList.contains('has-active')).toBe(false);
+  });
+
+  it('renders active-note count when 1 note fires via MIDI', async () => {
+    noteCb!({ type: 'noteOn', note: 60, velocity: 100 });
+    await vi.advanceTimersByTimeAsync(50);
+    const pill = midiStatus();
+    expect(pill!.textContent).toContain('MIDI: 1 device');
+    expect(pill!.textContent).toContain('·');
+    expect(pill!.textContent).toContain('1 нота');
+    expect(pill!.getAttribute('data-active-count')).toBe('1');
+    expect(pill!.classList.contains('has-active')).toBe(true);
+  });
+
+  it('updates active count on note-on (increments) and note-off (decrements)', async () => {
+    noteCb!({ type: 'noteOn', note: 60, velocity: 100 });
+    noteCb!({ type: 'noteOn', note: 64, velocity: 100 });
+    noteCb!({ type: 'noteOn', note: 67, velocity: 100 });
+    await vi.advanceTimersByTimeAsync(50);
+    const pill = midiStatus()!;
+    expect(pill.textContent).toContain('3 ноты');
+    expect(pill.getAttribute('data-active-count')).toBe('3');
+    expect(pill.classList.contains('has-active')).toBe(true);
+
+    noteCb!({ type: 'noteOff', note: 64 });
+    await vi.advanceTimersByTimeAsync(50);
+    expect(pill.textContent).toContain('2 ноты');
+    expect(pill.getAttribute('data-active-count')).toBe('2');
+
+    noteCb!({ type: 'noteOff', note: 60 });
+    noteCb!({ type: 'noteOff', note: 67 });
+    await vi.advanceTimersByTimeAsync(50);
+    expect(pill.textContent).toContain('MIDI: 1 device');
+    expect(pill.textContent).not.toContain('·');
+    expect(pill.getAttribute('data-active-count')).toBe('0');
+    expect(pill.classList.contains('has-active')).toBe(false);
+  });
+
+  it('on-screen taps also feed the active count (single source of truth)', async () => {
+    // Press C4 on-screen, then D4.
+    const c4 = container.querySelector<HTMLButtonElement>('button[aria-label="C4"]')!;
+    c4.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    await vi.advanceTimersByTimeAsync(50);
+    const pill = midiStatus()!;
+    expect(pill.textContent).toContain('1 нота');
+    expect(pill.getAttribute('data-active-count')).toBe('1');
+  });
+});
+
+/**
+ * iOS Safari path: isMidiAvailable() === false → the toolbar renders
+ * WITHOUT a `.piano-midi-status` element. Verifies the Show wrapper.
+ */
+describe('PianoKeyboard component (no MIDI status on iOS Safari)', () => {
+  let evalScore: ReturnType<typeof vi.fn>;
+  let container: HTMLDivElement;
+  let render: typeof solidRender;
+  let PianoKeyboard: typeof PianoKeyboardFn;
+  let unmount: (() => void) | undefined;
+
+  beforeEach(async () => {
+    vi.useFakeTimers();
+    evalScore = vi.fn().mockResolvedValue(undefined);
+    vi.resetModules();
+    vi.doMock('../state/audioActions', () => ({ evalScore }));
+    vi.doMock('~/infrastructure/audio/MidiInput', () => ({
+      isMidiAvailable: () => false,
+      requestMidiAccess: async () => null,
+      onNote: () => () => undefined,
+    }));
+    render = (await import('solid-js/web')).render;
+    ({ PianoKeyboard } = await import('./PianoKeyboard'));
+    container = document.createElement('div');
+    document.body.appendChild(container);
+    unmount = render(() => PianoKeyboard(), container);
+    await vi.advanceTimersByTimeAsync(0);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    if (unmount) unmount();
+    unmount = undefined;
+    vi.doUnmock('../state/audioActions');
+    vi.doUnmock('~/infrastructure/audio/MidiInput');
+    if (container) container.remove();
+  });
+
+  it('renders without a .piano-midi-status element when isMidiAvailable() is false', () => {
+    const pill = container.querySelector('.piano-midi-status');
+    expect(pill).toBeNull();
+    // The hint still renders.
+    const hint = container.querySelector('.piano-hint');
+    expect(hint).toBeTruthy();
+  });
+});
