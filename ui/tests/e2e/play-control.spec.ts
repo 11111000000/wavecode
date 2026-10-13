@@ -2,14 +2,17 @@ import { test, expect } from '@playwright/test';
 
 /**
  * Play-control e2e — verifies the FAB-→TransportPanel move from
- * `math/wavecode-play-in-control`.
+ * `math/wavecode-play-in-control` and the subsequent restoration of
+ * Play to its own row (`.app-controls-row`) per
+ * `math/wavecode-play-controls-row-restore`.
  *
  * The previous FAB was fixed-positioned in the bottom-right corner
  * and overlapped the AI-textarea (`[data-ai-textarea]`) on the
  * `ai-primary` layout / mobile BottomSheet `kind='ai'`. This test
  * asserts that:
- *   1. The play button lives inside PresetRow (not fixed), and is
- *      discoverable by `aria-label="Запуск"`.
+ *   1. The play button lives inside the controls row (`.app-controls-row`)
+ *      as a sibling of `.app-preset-row`, not fixed, and is discoverable
+ *      by `aria-label="Запуск"`.
  *   2. Clicking it transitions to the Stop variant
  *      (`aria-label="Стоп"`, cyan tone).
  *   3. The AI-textarea is still visible AND not occluded by any
@@ -44,15 +47,19 @@ test('play button lives in PresetRow, click toggles to Stop, and AI-textarea sta
   page.on('pageerror', (e) => errors.push(`[pageerror] ${e.message}`));
 
   // 1. The play button must exist, have aria-label="Запуск" initially,
-  //    and live inside .app-preset-row (NOT a fixed-position FAB).
+  //    and live inside .app-controls-row (NOT a fixed-position FAB).
+  //    Per math/wavecode-play-controls-row-restore, TransportPanel was
+  //    extracted from .app-preset-row into its own .app-controls-row
+  //    so the Play button is no longer buried at the end of the
+  //    preset-chip row.
   const playBtn = page.locator('[data-testid="transport-play-btn"]');
   await expect(playBtn).toBeVisible({ timeout: 5000 });
   await expect(playBtn).toHaveAttribute('aria-label', 'Запуск');
   await expect(playBtn).toHaveAttribute('data-tone', 'amber');
   await expect(playBtn).toHaveAttribute('aria-pressed', 'false');
 
-  const insidePresetRow = await playBtn.evaluate((el) => Boolean(el.closest('.app-preset-row')));
-  expect(insidePresetRow, 'play button must live inside .app-preset-row').toBe(true);
+  const insideControlsRow = await playBtn.evaluate((el) => Boolean(el.closest('.app-controls-row')));
+  expect(insideControlsRow, 'play button must live inside .app-controls-row').toBe(true);
 
   const isFixed = await playBtn.evaluate((el) => {
     const cs = window.getComputedStyle(el);

@@ -56,14 +56,15 @@
 }
 
 @media (max-width: 720px) {
-  /* На мобиле делаем PresetRow липким сразу под TopBar. Иначе
-   * при открытой AI-панели (max-height: 50vh) пользователь
-   * теряет доступ к play/cps — единственный способ прервать
-   * воспроизведение оказывается за пределами viewport.
-   * Sticky + компактный TransportPanel выше решают обе задачи:
-   * транспорт всегда виден и занимает 1 строку.
+  /* На мобиле делаем .app-controls-row (где живёт Play) липким сразу
+   * под TopBar. Иначе при открытой AI-панели (max-height: 50vh)
+   * пользователь теряет доступ к play/cps — единственный способ
+   * прервать воспроизведение оказывается за пределами viewport.
+   * TransportPanel вынесен из .app-preset-row в отдельную строку
+   * (пакет math/wavecode-play-controls-row-restore), sticky
+   * переехал вместе с ним.
    */
-  .app-preset-row {
+  .app-controls-row {
     position: sticky;
     top: var(--header-h);
     padding: var(--space-xs) var(--space-md);
@@ -71,6 +72,7 @@
     backdrop-filter: blur(12px) saturate(160%);
     -webkit-backdrop-filter: blur(12px) saturate(160%);
     border-bottom: 1px solid var(--border);
+    border-top: none;
   }
 }
 .app-controls-row {
