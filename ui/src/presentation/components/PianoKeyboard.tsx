@@ -1,48 +1,67 @@
-import { For, createSignal, onMount, onCleanup, Show } from 'solid-js';
+import { For, createSignal, onMount, onCleanup } from 'solid-js';
 import {
   rangeNotes,
   noteNumberToName,
   isBlackKey,
   isInPianoRange,
   type NoteName,
+  type PianoInstrument,
 } from '~/domain/music/notes';
 import {
   isMidiAvailable,
   requestMidiAccess,
   onNote,
 } from '~/infrastructure/audio/MidiInput';
-import { evalScore } from '../state/audioActions';
-import { buildPianoSnippet } from './pianoSynth';
+import { createPianoSynth, type PianoSynth } from '~/infrastructure/audio/PianoSynth';
+import { unlockAudioContext } from '~/infrastructure/audio/LiveAudioEngine';
+import {
+  recEnabled,
+  appendNote,
+  updateLastNoteEnd,
+  instrument,
+} from '../state/pianoRecStore';
+import { PianoToolbar } from './PianoToolbar';
 
 /**
  * On-screen 2-octave piano (C3..B4). Tap to play. WebMIDI input
  * auto-binds when available (Chrome/Edge/Firefox desktop + Android).
  * iOS Safari: only on-screen.
  *
- * Polyphony + note-off:
- *   - The component accumulates an `activeNotes: Set<number>` and calls
- *     `evalScore(buildPianoSnippet(set))` on every press/release. The
- *     snippet shapes itself around the held set:
- *       • 0 notes → SILENCE ('silence' literal — Strudel stays silent).
- *       • 1 note  → single voice `note("c4").s("triangle")...`.
- *       • 2+ notes → `stack(note("c4")…, note("e4")…, …)`.
- *   - evalScore is throttled to 30 ms via a trailing-edge setTimeout so
- *     fast trills (or a MIDI keyboard glaze) don't flood the eval queue
- *     with re-evaluations of effectively identical patterns.
- *   - Stopping the LAST held note sends SILENCE so ringing tails are
- *     cut instead of decaying naturally.
+ * Audio path (post wavecode-piano-parallel-rec-instrument):
+ *   - Each tap/release goes through `pianoSynth.noteOn / noteOff`,
+ *     NOT through `evalScore(...)`. The synth is a raw Web Audio
+ *     wrapper (oscillator + ADSR gain envelope) connected directly to
+ *     `audioCtx.destination`. This bypasses the Strudel scheduler
+ *     entirely — pressing a key on the piano does NOT stop/eval the
+ *     main score, so they play in parallel without audible clicks.
  *
- * Sizing (width / height) is fully CSS-driven (see .piano-keys-inner in
- * components.css with `--white-w` / `--black-w` / `--piano-h`). The only
- * dynamic inline value is the `left` of each black key, expressed via
- * `calc(var(--white-w) * <n> - var(--black-w) / 2)` so the @media query
- * override updates the layout without re-rendering.
+ * Visual feedback:
+ *   - `activeNotes: Set<number>` drives the key highlight (.active
+ *     class). Same single source of truth — both on-screen taps and
+ *     WebMIDI events feed it.
+ *   - MIDI status pill renders next to the rec-toggle in PianoToolbar.
+ *
+ * Rec-mode:
+ *   - When `recEnabled()` is true, `playNote` calls `appendNote` (with
+ *     endMs == startMs as a placeholder) and `stopNote` calls
+ *     `updateLastNoteEnd(performance.now())` to fix the timestamp.
+ *     The buffer is consumed by a future "commit to score" action via
+ *     `flushRec()` — kept out of this component to preserve the
+ *     "piano doesn't mutate score" invariant.
+ *
+ * Debounce:
+ *   - 30ms trailing debounce on `noteOn` (module-scope timer) to
+ *     coalesce rapid MIDI re-trigger events into a single press.
+ *     Without it, a MIDI keyboard glaze can stack 30+ noteOn calls
+ *     per second and overwhelm the Web Audio node graph.
+ *
+ * Sizing (width / height) is fully CSS-driven (see .piano-keys-inner
+ * in components.css). Black-key `left` is `calc(var(--white-w) * n -
+ * var(--black-w) / 2)`.
  */
-const EVAL_DEBOUNCE_MS = 30;
+const NOTEON_DEBOUNCE_MS = 30;
 
-/** Russian pluralisation for "нота/ноты/нот". Fewer surprises when
- *  gluing into a localisation system later. Pure helper at module scope
- *  (no closures over component state). */
+/** Russian pluralisation for "нота/ноты/нот". */
 const formatActiveLabel = (count: number): string => {
   const mod10 = count % 10;
   const mod100 = count % 100;
@@ -56,55 +75,101 @@ export function PianoKeyboard() {
   const [midiAvailable, setMidiAvailable] = createSignal(false);
   const [midiInputs, setMidiInputs] = createSignal<ReadonlyArray<string>>([]);
 
-  // White keys: get their index in the white-key sequence (for layout).
   const notes = rangeNotes();
   const whiteNotes = notes.filter((n) => !isBlackKey(n));
   const whiteIndex = (midi: number): number =>
     whiteNotes.findIndex((n) => n === midi);
 
-  // Debounce state — ref-equivalents in Solid are module-scope because
-  // signals would re-render on every change. We want the timer/handle
-  // to be invisible to the JSX tree.
-  let pendingEvalTimer: ReturnType<typeof setTimeout> | null = null;
+  // pianoSynth is created lazily on the first note-on — needs a user
+  // gesture to unlock the AudioContext. Held as a closure-scope let so
+  // re-renders don't accidentally null it out.
+  let pianoSynth: PianoSynth | null = null;
+  /** Map<midi, voiceId> — for noteOff routing. */
+  const voiceMap = new Map<number, number>();
+  /** Set<midi> → noteOn requests still inside the 30ms coalesce window. */
+  const pendingNoteOns = new Set<number>();
+  /** Trailing-edge debounce timer. */
+  let pendingNoteOnTimer: ReturnType<typeof setTimeout> | null = null;
 
-  const scheduleEval = (): void => {
-    if (pendingEvalTimer !== null) clearTimeout(pendingEvalTimer);
-    pendingEvalTimer = setTimeout(() => {
-      pendingEvalTimer = null;
-      void evalScore(buildPianoSnippet(activeNotes()));
-    }, EVAL_DEBOUNCE_MS);
+  const ensureSynth = (): PianoSynth => {
+    if (pianoSynth !== null) return pianoSynth;
+    const ctx = unlockAudioContext();
+    pianoSynth = createPianoSynth(ctx);
+    return pianoSynth;
+  };
+
+  /** Apply the most recent value of `pendingNoteOns` to the synth. */
+  const flushNoteOns = (): void => {
+    pendingNoteOnTimer = null;
+    if (pendingNoteOns.size === 0) return;
+    const synth = ensureSynth();
+    const currentInst = instrument();
+    for (const midi of pendingNoteOns) {
+      if (voiceMap.has(midi)) continue; // already pressed (re-trigger inside window)
+      const voiceId = synth.noteOn(midi, currentInst);
+      voiceMap.set(midi, voiceId);
+      if (recEnabled()) {
+        const now = performance.now();
+        appendNote(midi, now, now);
+      }
+    }
+    pendingNoteOns.clear();
   };
 
   const playNote = (midi: number): void => {
     if (!isInPianoRange(midi)) return;
-    const current = activeNotes();
-    if (current.has(midi)) {
-      // Already pressed (e.g. MIDI key re-trigger without note-off).
-      // Re-eval anyway so the synth stays in sync with the held set.
-      scheduleEval();
-      return;
-    }
-    const next = new Set(current);
+    if (voiceMap.has(midi) || pendingNoteOns.has(midi)) return; // already in flight
+    pendingNoteOns.add(midi);
+    if (pendingNoteOnTimer !== null) clearTimeout(pendingNoteOnTimer);
+    pendingNoteOnTimer = setTimeout(flushNoteOns, NOTEON_DEBOUNCE_MS);
+    // Update visual feedback immediately — UI is allowed to be optimistic
+    // even before the synth actually starts (avoids 30ms input lag).
+    const next = new Set(activeNotes());
     next.add(midi);
     setActiveNotes(next);
-    scheduleEval();
   };
 
   const stopNote = (midi: number): void => {
     if (!isInPianoRange(midi)) return;
+    // Cancel a pending noteOn if the key was pressed and released
+    // within the 30ms window — without this, flushNoteOns would
+    // start a new voice for a key the user already let go of.
+    if (pendingNoteOns.delete(midi)) {
+      // No synth noteOn yet happened — nothing to stop on audio side.
+      const current = activeNotes();
+      if (current.has(midi)) {
+        const next = new Set(current);
+        next.delete(midi);
+        setActiveNotes(next);
+      }
+      return;
+    }
+    const voiceId = voiceMap.get(midi);
+    if (voiceId === undefined) return;
+    if (pianoSynth !== null) pianoSynth.noteOff(voiceId);
+    voiceMap.delete(midi);
+    if (recEnabled()) {
+      updateLastNoteEnd(performance.now());
+    }
     const current = activeNotes();
-    if (!current.has(midi)) return; // already released
+    if (!current.has(midi)) return;
     const next = new Set(current);
     next.delete(midi);
     setActiveNotes(next);
-    scheduleEval();
   };
 
   onCleanup(() => {
-    if (pendingEvalTimer !== null) {
-      clearTimeout(pendingEvalTimer);
-      pendingEvalTimer = null;
+    if (pendingNoteOnTimer !== null) {
+      clearTimeout(pendingNoteOnTimer);
+      pendingNoteOnTimer = null;
     }
+    flushNoteOns();
+    if (pianoSynth !== null) {
+      pianoSynth.dispose();
+      pianoSynth = null;
+    }
+    voiceMap.clear();
+    pendingNoteOns.clear();
   });
 
   // WebMIDI: request access on mount (silently no-op on iOS).
@@ -127,29 +192,32 @@ export function PianoKeyboard() {
     });
   });
 
-  // Active-note count for the MIDI status pill. Same `activeNotes()`
-  // signal that drives the key highlight — single source of truth for
-  // on-screen taps + WebMIDI events. `activeCount()` is a derived
-  // value; Solid recomputes it lazily so there's no re-render storm
-  // when MIDI keyboards fire 50 events/sec.
   const activeCount = (): number => activeNotes().size;
   const hasActive = (): boolean => activeCount() > 0;
+  const midiStatus = (): string | undefined => {
+    if (!midiAvailable()) return undefined;
+    if (midiInputs().length === 0) return 'MIDI: no device';
+    const n = midiInputs().length;
+    const tail = hasActive() ? ` · ${formatActiveLabel(activeCount())}` : '';
+    return `MIDI: ${n} device${n === 1 ? '' : 's'}${tail}`;
+  };
+
+  // Silence "PianoInstrument imported but only used as a type" lint.
+  // The type is consumed by `flushNoteOns` (the currentInst signal
+  // is `PianoInstrument`), so the import is real — this anchor just
+  // documents the dependency for any future reader.
+  const _typeAnchor: PianoInstrument = instrument();
+  void _typeAnchor;
 
   return (
     <div class="piano-wrap" role="group" aria-label="Piano keyboard C3 to B4">
       <div class="piano-toolbar">
         <span class="piano-hint">2 octaves (C3–B4) — tap or use MIDI keyboard</span>
-        <Show when={midiAvailable()}>
-          <span
-            class={`piano-midi-status piano-midi-${midiInputs().length > 0 ? 'ok' : 'pending'}${hasActive() ? ' has-active' : ''}`}
-            data-active-count={activeCount()}
-            aria-live="polite"
-          >
-            {midiInputs().length > 0
-              ? `MIDI: ${midiInputs().length} device${midiInputs().length === 1 ? '' : 's'}${hasActive() ? ` · ${formatActiveLabel(activeCount())}` : ''}`
-              : 'MIDI: no device'}
-          </span>
-        </Show>
+        <PianoToolbar
+          midiStatus={midiStatus()}
+          midiActive={hasActive()}
+          midiActiveCount={activeCount()}
+        />
       </div>
       <div class="piano-keys">
         <div class="piano-keys-inner">
@@ -176,10 +244,6 @@ export function PianoKeyboard() {
               );
             }}
           </For>
-          {/* Black keys overlaid absolute. `left` is the only dynamic
-           *  inline value — expressed as calc() with CSS variables so
-           *  the @media (max-width: 720px) override updates the layout
-           *  without re-rendering or re-reading computed styles. */}
           <For each={notes}>
             {(midi) => {
               if (!isBlackKey(midi)) return null;

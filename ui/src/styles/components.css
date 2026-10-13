@@ -924,6 +924,95 @@ textarea.wc-input {
 }
 .piano-hint { color: var(--fg-dim); }
 
+/* =========================================================================
+ *  PIANO TOOLBAR (wavecode-piano-parallel-rec-instrument)
+ *  Renders inside .piano-toolbar next to .piano-hint. Three affordances:
+ *    1. REC toggle (magenta-when-active, gentle pulse animation)
+ *    2. Instrument selector (4 buttons: △ ∿ ⊿ ⊓, amber-when-active)
+ *    3. MIDI status pill (inherited from legacy .piano-midi-status rules)
+ *  Layout is a horizontal row with flex; on narrow viewports the row
+ *  wraps because the parent .piano-toolbar already has `flex-wrap: wrap`.
+ * ========================================================================= */
+
+.piano-toolbar-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  flex-wrap: wrap;
+  margin-left: auto;
+}
+
+.piano-rec-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2xs);
+  height: 28px;
+  padding: 0 var(--space-sm);
+  font-family: var(--font-mono);
+  font-size: var(--fs-2xs);
+  font-weight: var(--fw-semibold);
+  letter-spacing: var(--ls-wide);
+  text-transform: uppercase;
+  background: transparent;
+  color: var(--fg-dim);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+  transition:
+    color var(--dur-xs) var(--ease),
+    border-color var(--dur-xs) var(--ease),
+    background var(--dur-xs) var(--ease);
+  user-select: none;
+}
+.piano-rec-btn:hover { color: var(--magenta); border-color: var(--magenta); }
+.piano-rec-btn[data-active='true'] {
+  color: var(--fg-inverse);
+  background: var(--magenta);
+  border-color: var(--magenta);
+  box-shadow: 0 0 8px var(--magenta-glow);
+  animation: piano-rec-pulse 1.2s ease-in-out infinite;
+}
+@keyframes piano-rec-pulse {
+  0%, 100% { box-shadow: 0 0 8px var(--magenta-glow); }
+  50%      { box-shadow: 0 0 16px var(--magenta-glow); }
+}
+
+.piano-instrument-selector {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2xs);
+  padding: 2px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+}
+.piano-inst-btn {
+  width: 28px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  color: var(--fg-dim);
+  border: 1px solid transparent;
+  border-radius: var(--radius-pill);
+  font-family: var(--font-mono);
+  font-size: var(--fs-md);
+  cursor: pointer;
+  transition:
+    color var(--dur-xs) var(--ease),
+    background var(--dur-xs) var(--ease),
+    border-color var(--dur-xs) var(--ease);
+  padding: 0;
+}
+.piano-inst-btn:hover { color: var(--fg); }
+.piano-inst-btn[data-active='true'] {
+  color: var(--fg-inverse);
+  background: var(--amber);
+  border-color: var(--amber);
+  box-shadow: var(--shadow-glow-amber);
+}
+
 .piano-midi-status {
   display: inline-flex;
   align-items: center;

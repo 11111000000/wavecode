@@ -1,20 +1,20 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { render as solidRender } from 'solid-js/web';
 import type { PianoKeyboard as PianoKeyboardFn } from './PianoKeyboard';
+import type { PianoSynth } from '~/infrastructure/audio/PianoSynth';
+import type { PianoInstrument } from '~/domain/music/notes';
 import {
   noteNumberToName,
   isInPianoRange,
   rangeNotes,
-  singleNoteSnippet,
-  multiNoteSnippet,
-  SILENCE_SNIPPET,
   isBlackKey,
 } from '~/domain/music/notes';
-import { buildPianoSnippet } from './pianoSynth';
 
-/** Mirror of PianoKeyboard.tsx constants — duplicated here so the test
- *  asserts the layout formula without pulling Solid + DOM into the unit
- *  environment (kept as pure-functional spec). */
+/**
+ * Mirror of PianoKeyboard.tsx constants — duplicated here so the test
+ * asserts the layout formula without pulling Solid + DOM into the unit
+ * environment (kept as pure-functional spec).
+ */
 const PIANO_WHITE_W = 80;
 const PIANO_BLACK_W = 50;
 
@@ -36,27 +36,22 @@ describe('PianoKeyboard mappings (via notes.ts pure fns)', () => {
     expect(noteNumberToName(71)).toBe('B4');
   });
 
-  it('singleNoteSnippet produces valid Strudel for any in-range note', () => {
-    for (const n of rangeNotes()) {
-      const name = noteNumberToName(n);
-      const snippet = singleNoteSnippet(name);
-      expect(snippet).toMatch(/note\(["'][a-g][#b]?[0-9-]+["']\)/);
-      expect(snippet).toContain('triangle');
-      expect(snippet).toContain('attack(0.005)');
-      expect(snippet).toContain('decay(0.4)');
-    }
+  it('pianoInstrumentToOscType: identity for all four waveforms', async () => {
+    const { pianoInstrumentToOscType } = await import('~/domain/music/notes');
+    expect(pianoInstrumentToOscType('triangle')).toBe('triangle');
+    expect(pianoInstrumentToOscType('sine')).toBe('sine');
+    expect(pianoInstrumentToOscType('sawtooth')).toBe('sawtooth');
+    expect(pianoInstrumentToOscType('square')).toBe('square');
   });
 });
 
 /**
  * Layout invariants for the on-screen piano. Mirrors the inline-style
- * formula in PianoKeyboard.tsx (lines 145-152):
+ * formula in PianoKeyboard.tsx (PianoKeyboard.tsx:259-264):
  *   wIdx   = whiteIndex(midi - 1)
  *   bW     = PIANO_BLACK_W
  *   left   = (wIdx + 1) * PIANO_WHITE_W - bW / 2
  *   right  = left + bW
- * Each black key must straddle the boundary between its prev and next
- * white keys (else gaps appear or it covers wrong neighbours).
  */
 describe('PianoKeyboard layout invariants (black-key overlap with neighbours)', () => {
   const whiteNotes = rangeNotes().filter((n) => !isBlackKey(n));
@@ -98,10 +93,6 @@ describe('PianoKeyboard layout invariants (black-key overlap with neighbours)', 
       const black = blackBounds(midi);
       const prevWhite = whiteBounds(midi - 1);
       const nextWhite = whiteBounds(midi + 1);
-      // Чёрная клавиша позиционируется так, чтобы её левый край был
-      // левее правого края предыдущей белой (overlap с prev), а её
-      // правый край — правее левого края следующей белой (overlap с
-      // next). Это и есть шахматное перекрытие.
       expect(black.left).toBeLessThanOrEqual(prevWhite.right);
       expect(black.left).toBeLessThanOrEqual(nextWhite.left);
       expect(black.right).toBeGreaterThanOrEqual(prevWhite.left);
@@ -113,16 +104,11 @@ describe('PianoKeyboard layout invariants (black-key overlap with neighbours)', 
     for (const midi of blackKeys) {
       const black = blackBounds(midi);
       const nextWhite = whiteBounds(midi + 1);
-      // Чёрная не вылезает за правый край следующей белой (визуально
-      // теряется ощущение границы).
       expect(black.right).toBeLessThanOrEqual(nextWhite.right);
     }
   });
 
-it('no two adjacent black keys overlap horizontally', () => {
-    // В пределах одной октавы чёрные клавиши разнесены: C#-D# и F#-G#-A#
-    // (3-полутоновый зазор). Проверяем отсутствие горизонтального
-    // перекрытия для всех пар.
+  it('no two adjacent black keys overlap horizontally', () => {
     for (let i = 0; i < blackKeys.length; i += 1) {
       const aMidi = blackKeys[i]!;
       for (let j = i + 1; j < blackKeys.length; j += 1) {
@@ -130,9 +116,6 @@ it('no two adjacent black keys overlap horizontally', () => {
         const a = blackBounds(aMidi);
         const b = blackBounds(bMidi);
         const overlap = Math.max(0, Math.min(a.right, b.right) - Math.max(a.left, b.left));
-        // Исключение — E# и F# в одной октаве ОКР не бывает; F# не
-        // существует в нашем диапазоне между C# и G# таких пар нет.
-        // Поэтому просто проверяем, что overlap == 0.
         expect(overlap).toBe(0);
       }
     }
@@ -140,85 +123,115 @@ it('no two adjacent black keys overlap horizontally', () => {
 });
 
 /**
- * Pure-helper tests for `buildPianoSnippet` and the polyphony contract
- * between `PianoKeyboard.tsx` and `multiNoteSnippet`. The component
- * itself is exercised through a mocked `evalScore` plus a real JSDOM
- * render below — these pure tests assert the snippet grammar in
- * isolation so a refactor of the Solid lifecycle can't quietly break
- * the snippet contract.
- */
-describe('buildPianoSnippet (polyphony helper)', () => {
-  it('empty MIDI set → SILENCE_SNIPPET', () => {
-    expect(buildPianoSnippet(new Set())).toBe(SILENCE_SNIPPET);
-  });
-
-  it('one MIDI note → single-voice snippet (no stack wrapper)', () => {
-    const snippet = buildPianoSnippet(new Set([60])); // C4
-    expect(snippet).not.toContain('stack(');
-    expect(snippet).toBe(singleNoteSnippet('C4'));
-  });
-
-  it('two MIDI notes → stack() with two voices', () => {
-    const snippet = buildPianoSnippet(new Set([60, 64])); // C4, E4
-    expect(snippet.startsWith('stack(')).toBe(true);
-    expect(snippet).toContain('note("c4")');
-    expect(snippet).toContain('note("e4")');
-    const voiceCount = (snippet.match(/\.gain\(0\.3\)/g) ?? []).length;
-    expect(voiceCount).toBe(2);
-  });
-
-  it('three MIDI notes (chord) → stack() with three voices', () => {
-    const snippet = buildPianoSnippet(new Set([60, 64, 67])); // C4 E4 G4
-    const voices = (snippet.match(/\bstack\s*\(/g) ?? []).length;
-    expect(voices).toBe(1);
-    expect((snippet.match(/\.gain\(0\.3\)/g) ?? []).length).toBe(3);
-  });
-
-  it('out-of-range MIDI numbers pass through with valid note names', () => {
-    // 30 is below PIANO_RANGE (48) but maps to a parseable Strudel name
-    // ("F#1"). buildPianoSnippet does NOT filter out-of-range — that's
-    // the component's job — but the bridge should still produce a valid
-    // multi-note snippet so a future caller can extend the range
-    // without changing the helper.
-    const snippet = buildPianoSnippet(new Set([60, 30]));
-    expect(snippet).toContain('note("c4")');
-    expect(snippet).toContain('note("f#1")');
-    expect(snippet.startsWith('stack(')).toBe(true);
-  });
-});
-
-/**
- * Component-level tests: drives PianoKeyboard via Solid's render in
- * JSDOM. Mocks `evalScore` so we can assert which snippet strings the
- * keyboard sends on press / release / poly / release-all sequences.
+ * Component-level tests for PianoKeyboard (post wavecode-piano-parallel-rec):
+ *   - pianoSynth is wired (noteOn/noteOff/dispose called correctly)
+ *   - evalScore is NEVER called from PianoKeyboard (the whole point of
+ *     the refactor — piano must not interrupt the main score)
+ *   - pianoRecStore.recBuffer accumulates notes when REC is on
+ *   - rapid press within 30ms coalesces into a single noteOn
+ *   - 5-note polyphony = 5 voices tracked
  *
- * The keyboard throttles evalScore calls via setTimeout(30 ms) to
- * coalesce rapid press/release events; tests use vi.useFakeTimers to
- * advance that debounce deterministically.
+ * Mocking strategy:
+ *   - We mock `~/infrastructure/audio/PianoSynth` with a spy that
+ *     records noteOn/noteOff calls per voiceId. The spy also exposes
+ *     activeCount() so the test can assert polyphony.
+ *   - We mock `~/infrastructure/audio/LiveAudioEngine` to provide a
+ *     stub AudioContext (jsdom doesn't implement it). The stub is a
+ *     plain object — PianoSynth in the test takes that context and
+ *     the spy records them.
+ *   - We DO NOT mock `evalScore` — if any code path still calls it
+ *     from PianoKeyboard, the test fails. This is the regression
+ *     guard against re-introducing the "interrupts main track" bug.
  */
-describe('PianoKeyboard component (polyphony + note-off)', () => {
+describe('PianoKeyboard component (parallel synth + no evalScore)', () => {
+  interface Voice {
+    voiceId: number;
+    midi: number;
+    instrument: PianoInstrument;
+    released: boolean;
+  }
+
+  let noteOnSpy: ReturnType<typeof vi.fn>;
+  let noteOffSpy: ReturnType<typeof vi.fn>;
+  let setInstrumentSpy: ReturnType<typeof vi.fn>;
+  let activeCountSpy: ReturnType<typeof vi.fn>;
+  let disposeSpy: ReturnType<typeof vi.fn>;
+  let voices: Voice[];
+  let nextVoiceId: number;
+
   let evalScore: ReturnType<typeof vi.fn>;
   let container: HTMLDivElement;
   let render: typeof solidRender;
   let PianoKeyboard: typeof PianoKeyboardFn;
   let unmount: (() => void) | undefined;
 
+  /** Spy that returns a fake PianoSynth; record every method call. */
+  const fakeSynth = (): PianoSynth => {
+    const handle: PianoSynth = {
+      noteOn: (midi: number, inst: PianoInstrument): number => {
+        const voiceId = noteOnSpy(midi, inst) as number;
+        voices.push({ voiceId, midi, instrument: inst, released: false });
+        return voiceId;
+      },
+      noteOff: (voiceId: number): void => {
+        noteOffSpy(voiceId);
+        const v = voices.find((x) => x.voiceId === voiceId);
+        if (v) v.released = true;
+      },
+      setInstrument: (voiceId: number, inst: PianoInstrument): number => {
+        const newId = setInstrumentSpy(voiceId, inst) as number;
+        const old = voices.find((x) => x.voiceId === voiceId);
+        if (old) {
+          old.released = true;
+          voices.push({ voiceId: newId, midi: old.midi, instrument: inst, released: false });
+        }
+        return newId;
+      },
+      activeCount: (): number => activeCountSpy() as number,
+      dispose: (): void => {
+        disposeSpy();
+        voices.length = 0;
+      },
+    };
+    return handle;
+  };
+
   beforeEach(async () => {
     vi.useFakeTimers();
+    voices = [];
+    nextVoiceId = 1;
+    noteOnSpy = vi.fn((_midi: number, _inst: PianoInstrument): number => {
+      const id = nextVoiceId;
+      nextVoiceId += 1;
+      return id;
+    });
+    noteOffSpy = vi.fn();
+    setInstrumentSpy = vi.fn((_oldId: number, _inst: PianoInstrument): number => {
+      const id = nextVoiceId;
+      nextVoiceId += 1;
+      return id;
+    });
+    activeCountSpy = vi.fn((): number => voices.filter((v) => !v.released).length);
+    disposeSpy = vi.fn();
+
+    // evalScore spy — if PianoKeyboard calls it, the test fails.
+    // (Wrapping in vi.fn means we can assert "never called".)
     evalScore = vi.fn().mockResolvedValue(undefined);
-    // Reset the module registry so each test gets a fresh component
-    // module bound to the current `evalScore` spy. Without this, the
-    // dynamic imports below reuse the cached component which captures
-    // the spy from the first test.
+
     vi.resetModules();
+    vi.doMock('~/infrastructure/audio/PianoSynth', () => ({
+      createPianoSynth: () => fakeSynth(),
+    }));
+    vi.doMock('~/infrastructure/audio/LiveAudioEngine', () => ({
+      unlockAudioContext: () => ({}) as AudioContext,
+    }));
     vi.doMock('../state/audioActions', () => ({ evalScore }));
     vi.doMock('~/infrastructure/audio/MidiInput', () => ({
       isMidiAvailable: () => false,
       requestMidiAccess: async () => null,
       onNote: () => () => undefined,
     }));
-    // Dynamic imports AFTER doMock — evaluate against the mocked
-    // module bindings.
+
     render = (await import('solid-js/web')).render;
     ({ PianoKeyboard } = await import('./PianoKeyboard'));
     container = document.createElement('div');
@@ -231,134 +244,171 @@ describe('PianoKeyboard component (polyphony + note-off)', () => {
     vi.useRealTimers();
     if (unmount) unmount();
     unmount = undefined;
+    vi.doUnmock('~/infrastructure/audio/PianoSynth');
+    vi.doUnmock('~/infrastructure/audio/LiveAudioEngine');
     vi.doUnmock('../state/audioActions');
     vi.doUnmock('~/infrastructure/audio/MidiInput');
     if (container) container.remove();
   });
 
-  /** Press a key by MIDI number — fires onPointerDown. */
-  async function press(midi: number) {
+  async function press(midi: number): Promise<void> {
     const btn = container.querySelector<HTMLButtonElement>(
       `button[aria-label="${noteNumberToName(midi)}"]`,
     );
     expect(btn).toBeTruthy();
     btn!.dispatchEvent(new Event('pointerdown', { bubbles: true }));
-    await vi.advanceTimersByTimeAsync(35); // > EVAL_DEBOUNCE_MS
+    await vi.advanceTimersByTimeAsync(35);
   }
 
-  /** Release a key by MIDI number — fires onPointerUp. */
-  async function release(midi: number) {
+  async function release(midi: number): Promise<void> {
     const btn = container.querySelector<HTMLButtonElement>(
       `button[aria-label="${noteNumberToName(midi)}"]`,
     );
     expect(btn).toBeTruthy();
     btn!.dispatchEvent(new Event('pointerup', { bubbles: true }));
-    await vi.advanceTimersByTimeAsync(35);
+    await vi.advanceTimersByTimeAsync(5);
   }
 
-  it('single press → evalScore called with single-voice snippet', async () => {
+  it('tap a key → activeSet contains midi; evalScore NOT called', async () => {
     await press(60);
-    expect(evalScore).toHaveBeenCalledTimes(1);
-    const arg = evalScore.mock.calls[0]![0] as string;
-    expect(arg).toContain('note("c4")');
-    expect(arg).not.toContain('stack(');
+    expect(noteOnSpy).toHaveBeenCalledTimes(1);
+    expect(noteOnSpy.mock.calls[0]![0]).toBe(60); // midi
+    expect(evalScore).not.toHaveBeenCalled();
+    const btn = container.querySelector<HTMLButtonElement>('button[aria-label="C4"]')!;
+    expect(btn.classList.contains('active')).toBe(true);
   });
 
-  it('two presses (polyphony) → evalScore called with stack()', async () => {
-    await press(60);
-    await press(64);
-    // Most recent call should be the stack snippet.
-    expect(evalScore).toHaveBeenCalledTimes(2);
-    const arg = evalScore.mock.calls.at(-1)![0] as string;
-    expect(arg.startsWith('stack(')).toBe(true);
-    expect(arg).toContain('note("c4")');
-    expect(arg).toContain('note("e4")');
-  });
-
-  it('release all keys → evalScore called with SILENCE_SNIPPET', async () => {
+  it('tap + release → activeSet empty; main score untouched', async () => {
     await press(60);
     await release(60);
-    const last = evalScore.mock.calls.at(-1)![0] as string;
-    expect(last).toBe(SILENCE_SNIPPET);
-  });
-
-  it('release one of two keys → single-voice snippet (not stack, not silence)', async () => {
-    await press(60);
-    await press(64);
-    await release(64);
-    const last = evalScore.mock.calls.at(-1)![0] as string;
-    expect(last).toContain('note("c4")');
-    expect(last).not.toContain('stack(');
-    expect(last).not.toBe(SILENCE_SNIPPET);
-  });
-
-  it('out-of-range note press → no eval', async () => {
-    // MIDI 30 is below PIANO_RANGE.min (48); playNote early-returns
-    // before touching activeNotes or scheduling an eval. The cleanest
-    // way to exercise this is to call the Solid component's playNote
-    // path indirectly: render with the highest in-range key (B4=71),
-    // then dispatch a pointerdown on a button for a hypothetical
-    // midi 30 — but no such button exists in the DOM. So instead we
-    // verify the simpler invariant: nothing has been evaluated yet
-    // because no in-range button was pressed either.
-    //
-    // The component-level guard `if (!isInPianoRange(midi)) return`
-    // is a 5-line code path whose inline math is exercised by
-    // domain-level `isInPianoRange` tests in the first describe
-    // block; here we just confirm the component doesn't fire any
-    // spurious evals on mount or render.
+    expect(noteOnSpy).toHaveBeenCalledTimes(1);
+    expect(noteOffSpy).toHaveBeenCalledTimes(1);
     expect(evalScore).not.toHaveBeenCalled();
+    const btn = container.querySelector<HTMLButtonElement>('button[aria-label="C4"]')!;
+    expect(btn.classList.contains('active')).toBe(false);
   });
 
-  it('debounce: 5 rapid presses coalesce into a single eval with the final set', async () => {
-    // Fire 5 pointerdowns within the 30ms debounce window. setTimeout
-    // is fake here, so as long as we DON'T advance the clock past 30ms
-    // between them, the keyboard's internal trailing timer is the
-    // ONLY thing that ever fires evalScore.
+  it('out-of-range note press → no noteOn (guard via isInPianoRange)', async () => {
+    // No button for midi 30 (below C3=48). The playNote path early-
+    // returns via `if (!isInPianoRange(midi)) return;` — but in jsdom
+    // we can't dispatch a pointer event for a non-existent button. The
+    // equivalent assertion is: tapping nothing doesn't call noteOn.
+    expect(noteOnSpy).not.toHaveBeenCalled();
+  });
+
+  it('debounce: 5 rapid presses coalesce into a single noteOn with final set', async () => {
+    // Fire 5 pointerdowns inside the 30ms window — without advancing
+    // past 30ms the keyboard's internal trailing timer is the only
+    // thing that ever fires noteOn.
     for (const midi of [60, 62, 64, 65, 67]) {
       const btn = container.querySelector<HTMLButtonElement>(
         `button[aria-label="${noteNumberToName(midi)}"]`,
       )!;
       btn.dispatchEvent(new Event('pointerdown', { bubbles: true }));
-      await vi.advanceTimersByTimeAsync(5); // 5ms < 30ms debounce
+      await vi.advanceTimersByTimeAsync(5);
     }
-    // At this point no eval should have run yet (still inside debounce).
+    // At this point no noteOn yet (still inside debounce).
+    expect(noteOnSpy).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(40); // flush trailing timer
+    expect(noteOnSpy).toHaveBeenCalledTimes(5);
+    const midis = noteOnSpy.mock.calls.map((c) => c[0] as number);
+    expect(new Set(midis)).toEqual(new Set([60, 62, 64, 65, 67]));
     expect(evalScore).not.toHaveBeenCalled();
-    // Now flush the final trailing timer.
-    await vi.advanceTimersByTimeAsync(35);
-    expect(evalScore).toHaveBeenCalledTimes(1);
-    const arg = evalScore.mock.calls[0]![0] as string;
-    expect(arg.startsWith('stack(')).toBe(true);
-    expect(arg).toContain('note("c4")');
-    expect(arg).toContain('note("d4")');
-    expect(arg).toContain('note("e4")');
-    expect(arg).toContain('note("f4")');
-    expect(arg).toContain('note("g4")');
-    // 5 voices, each with .gain(0.3).
-    expect((arg.match(/\.gain\(0\.3\)/g) ?? []).length).toBe(5);
   });
 
-  // Silence the "multiNoteSnippet imported but unused" lint check by
-  // referencing it once — it is exercised by the buildPianoSnippet tests
-  // above but we still want the import alive in this file for the
-  // snippet-contract guarantee.
-  it('multiNoteSnippet contract (re-exported from domain)', () => {
-    expect(multiNoteSnippet(new Set(['c4', 'e4']))).toContain('stack(');
+  it('chord: 5 notes pressed → 5 voices tracked; all released on release-all', async () => {
+    for (const midi of [60, 62, 64, 65, 67]) await press(midi);
+    expect(noteOnSpy).toHaveBeenCalledTimes(5);
+    expect(voices.filter((v) => !v.released)).toHaveLength(5);
+
+    for (const midi of [60, 62, 64, 65, 67]) await release(midi);
+    expect(noteOffSpy).toHaveBeenCalledTimes(5);
+    expect(evalScore).not.toHaveBeenCalled();
+    expect(voices.filter((v) => v.released)).toHaveLength(5);
+  });
+
+  it('instrument change applies to next noteOn (next voice has new oscType)', async () => {
+    const { setInstrument } = await import('../state/pianoRecStore');
+    setInstrument('sine');
+    await press(60);
+    expect(noteOnSpy).toHaveBeenCalledTimes(1);
+    expect(noteOnSpy.mock.calls[0]![1]).toBe('sine');
+    await release(60);
+    setInstrument('square');
+    await press(64);
+    expect(noteOnSpy.mock.calls[1]![1]).toBe('square');
+    await release(64);
+  });
+
+  it('rec ON + tap → recBuffer has 1 entry with that midi; flushRec returns it', async () => {
+    const rec = await import('../state/pianoRecStore');
+    rec.setInstrument('triangle');
+    rec.clearRec();
+    rec.toggleRec(); // rec on
+
+    await press(60);
+    await vi.advanceTimersByTimeAsync(40);
+    expect(rec.recBuffer()).toHaveLength(1);
+    expect(rec.recBuffer()[0]!.midi).toBe(60);
+
+    await release(60);
+    expect(rec.recBuffer()[0]!.endMs).toBeGreaterThanOrEqual(rec.recBuffer()[0]!.startMs);
+
+    const flushed = rec.flushRec();
+    expect(flushed).toHaveLength(1);
+    expect(flushed[0]!.midi).toBe(60);
+    expect(rec.recBuffer()).toEqual([]);
+
+    // Cleanup for other tests
+    if (rec.recEnabled()) rec.toggleRec();
+  });
+
+  it('rec OFF + tap → recBuffer is empty (no implicit recording)', async () => {
+    const rec = await import('../state/pianoRecStore');
+    rec.clearRec();
+    if (rec.recEnabled()) rec.toggleRec();
+    await press(60);
+    await release(60);
+    expect(rec.recBuffer()).toEqual([]);
+    expect(evalScore).not.toHaveBeenCalled();
+  });
+
+  it('unmount → pianoSynth.dispose is called', async () => {
+    await press(60); // ensure synth is initialized (lazy)
+    expect(disposeSpy).not.toHaveBeenCalled();
+    unmount!();
+    unmount = undefined;
+    // dispose runs synchronously in onCleanup, no advanceTimers needed.
+    expect(disposeSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('re-press within debounce window does NOT duplicate noteOn (idempotency)', async () => {
+    await press(60);
+    await vi.advanceTimersByTimeAsync(10);
+    // Press the SAME key again before debounce flushes.
+    const btn = container.querySelector<HTMLButtonElement>('button[aria-label="C4"]')!;
+    btn.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    await vi.advanceTimersByTimeAsync(40);
+    expect(noteOnSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('rapid press+release within debounce cancels the pending noteOn (no zombie voice)', async () => {
+    // press + release within 30ms = no audio voice should ever be
+    // created for that key (the pending entry is deleted from the
+    // debounce set).
+    const btn = container.querySelector<HTMLButtonElement>('button[aria-label="C4"]')!;
+    btn.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    await vi.advanceTimersByTimeAsync(5);
+    btn.dispatchEvent(new Event('pointerup', { bubbles: true }));
+    await vi.advanceTimersByTimeAsync(50);
+    expect(noteOnSpy).not.toHaveBeenCalled();
+    expect(noteOffSpy).not.toHaveBeenCalled();
   });
 });
 
 /**
- * Component-level tests for the MIDI status pill:
- *  - "MIDI: N devices" rendering when nothing is pressed
- *  - "MIDI: N devices · M нот" when M notes are active (via MIDI events)
- *  - data-active-count attribute mirrors `activeNotes().size`
- *  - no status element at all on the iOS Safari path (isMidiAvailable
- *    returns false)
- *
- * Setup pattern mirrors the polyphony suite above: doMock
- * `audioActions` (evalScore spy) and `~/infrastructure/audio/MidiInput`
- * (with a controllable `requestMidiAccess` + a `onNote` that captures
- * the callback so the test can fire synthetic noteOn/noteOff events).
+ * MIDI status pill + active-count source-of-truth invariants.
+ * Reuses the spy infra from the parallel-synth suite above.
  */
 describe('PianoKeyboard component (MIDI status pill + active-count)', () => {
   let evalScore: ReturnType<typeof vi.fn>;
@@ -367,12 +417,45 @@ describe('PianoKeyboard component (MIDI status pill + active-count)', () => {
   let PianoKeyboard: typeof PianoKeyboardFn;
   let unmount: (() => void) | undefined;
   let noteCb: ((e: { type: 'noteOn' | 'noteOff'; note: number; velocity?: number }) => void) | null;
+  let voices: { voiceId: number; midi: number; instrument: PianoInstrument; released: boolean }[];
+  let nextVoiceId: number;
 
   beforeEach(async () => {
     vi.useFakeTimers();
+    voices = [];
+    nextVoiceId = 1;
     evalScore = vi.fn().mockResolvedValue(undefined);
     noteCb = null;
+
     vi.resetModules();
+    vi.doMock('~/infrastructure/audio/PianoSynth', () => ({
+      createPianoSynth: (): PianoSynth => ({
+        noteOn: (midi: number, inst: PianoInstrument): number => {
+          const id = nextVoiceId; nextVoiceId += 1;
+          voices.push({ voiceId: id, midi, instrument: inst, released: false });
+          return id;
+        },
+        noteOff: (voiceId: number): void => {
+          const v = voices.find((x) => x.voiceId === voiceId);
+          if (v) v.released = true;
+        },
+        setInstrument: (voiceId: number, inst: PianoInstrument): number => {
+          const v = voices.find((x) => x.voiceId === voiceId);
+          if (v) {
+            v.released = true;
+            const id = nextVoiceId; nextVoiceId += 1;
+            voices.push({ voiceId: id, midi: v.midi, instrument: inst, released: false });
+            return id;
+          }
+          return -1;
+        },
+        activeCount: (): number => voices.filter((v) => !v.released).length,
+        dispose: (): void => { voices.length = 0; },
+      }),
+    }));
+    vi.doMock('~/infrastructure/audio/LiveAudioEngine', () => ({
+      unlockAudioContext: () => ({}) as AudioContext,
+    }));
     vi.doMock('../state/audioActions', () => ({ evalScore }));
     vi.doMock('~/infrastructure/audio/MidiInput', () => ({
       isMidiAvailable: () => true,
@@ -381,19 +464,17 @@ describe('PianoKeyboard component (MIDI status pill + active-count)', () => {
         state: 'connected',
         onstatechange: null,
       }),
-      // Capture the callback so the test can fire noteOn/noteOff
-      // without standing up a real WebMIDI input object.
       onNote: (_access: unknown, cb: typeof noteCb) => {
         noteCb = cb;
         return () => { noteCb = null; };
       },
     }));
+
     render = (await import('solid-js/web')).render;
     ({ PianoKeyboard } = await import('./PianoKeyboard'));
     container = document.createElement('div');
     document.body.appendChild(container);
     unmount = render(() => PianoKeyboard(), container);
-    // Let the onMount Promise resolve + the 30ms debounce window tick.
     await vi.advanceTimersByTimeAsync(0);
     await vi.advanceTimersByTimeAsync(50);
   });
@@ -402,6 +483,8 @@ describe('PianoKeyboard component (MIDI status pill + active-count)', () => {
     vi.useRealTimers();
     if (unmount) unmount();
     unmount = undefined;
+    vi.doUnmock('~/infrastructure/audio/PianoSynth');
+    vi.doUnmock('~/infrastructure/audio/LiveAudioEngine');
     vi.doUnmock('../state/audioActions');
     vi.doUnmock('~/infrastructure/audio/MidiInput');
     if (container) container.remove();
@@ -456,7 +539,6 @@ describe('PianoKeyboard component (MIDI status pill + active-count)', () => {
   });
 
   it('on-screen taps also feed the active count (single source of truth)', async () => {
-    // Press C4 on-screen, then D4.
     const c4 = container.querySelector<HTMLButtonElement>('button[aria-label="C4"]')!;
     c4.dispatchEvent(new Event('pointerdown', { bubbles: true }));
     await vi.advanceTimersByTimeAsync(50);
@@ -471,7 +553,6 @@ describe('PianoKeyboard component (MIDI status pill + active-count)', () => {
  * WITHOUT a `.piano-midi-status` element. Verifies the Show wrapper.
  */
 describe('PianoKeyboard component (no MIDI status on iOS Safari)', () => {
-  let evalScore: ReturnType<typeof vi.fn>;
   let container: HTMLDivElement;
   let render: typeof solidRender;
   let PianoKeyboard: typeof PianoKeyboardFn;
@@ -479,9 +560,18 @@ describe('PianoKeyboard component (no MIDI status on iOS Safari)', () => {
 
   beforeEach(async () => {
     vi.useFakeTimers();
-    evalScore = vi.fn().mockResolvedValue(undefined);
     vi.resetModules();
-    vi.doMock('../state/audioActions', () => ({ evalScore }));
+    vi.doMock('~/infrastructure/audio/PianoSynth', () => ({
+      createPianoSynth: (): PianoSynth => ({
+        noteOn: () => 0, noteOff: () => undefined,
+        setInstrument: () => -1, dispose: () => undefined,
+        activeCount: () => 0,
+      }),
+    }));
+    vi.doMock('~/infrastructure/audio/LiveAudioEngine', () => ({
+      unlockAudioContext: () => ({}) as AudioContext,
+    }));
+    vi.doMock('../state/audioActions', () => ({ evalScore: vi.fn() }));
     vi.doMock('~/infrastructure/audio/MidiInput', () => ({
       isMidiAvailable: () => false,
       requestMidiAccess: async () => null,
@@ -499,6 +589,8 @@ describe('PianoKeyboard component (no MIDI status on iOS Safari)', () => {
     vi.useRealTimers();
     if (unmount) unmount();
     unmount = undefined;
+    vi.doUnmock('~/infrastructure/audio/PianoSynth');
+    vi.doUnmock('~/infrastructure/audio/LiveAudioEngine');
     vi.doUnmock('../state/audioActions');
     vi.doUnmock('~/infrastructure/audio/MidiInput');
     if (container) container.remove();
@@ -510,5 +602,10 @@ describe('PianoKeyboard component (no MIDI status on iOS Safari)', () => {
     // The hint still renders.
     const hint = container.querySelector('.piano-hint');
     expect(hint).toBeTruthy();
+  });
+
+  it('still renders the rec button and instrument selector', () => {
+    expect(container.querySelector('.piano-rec-btn')).toBeTruthy();
+    expect(container.querySelectorAll('.piano-inst-btn')).toHaveLength(4);
   });
 });
