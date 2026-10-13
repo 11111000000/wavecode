@@ -1,19 +1,16 @@
 /**
  * ConsoleSheet — bottom-sheet UI для просмотра логов и ошибок.
  *
- * Source of truth: модуль `infrastructure/log/logger` (Subagent 1).
- * Когда этот модуль отсутствует (текущая master-ветка до merge'а),
- * ConsoleSheet корректно деградирует: bottom-sheet рендерится пустым,
- * подписки нет, copy / clear no-op. После merge'а достаточно
- * перезагрузить страницу — динамический import() подхватит модуль.
+ * Source of truth: модуль `infrastructure/log/logger`. Logger is installed
+ * at boot (see `main.tsx`), so by the time this component evaluates the
+ * ring buffer is already capturing every console.* call site-wide.
  *
  * Подписка:
- *   - logger.setSink(cb) вызывается на каждый push() из console-патча.
- *     Sink bump-ит сигнал `sinkTick` → реактивно перечитываем
- *     `getBuffer()` через createMemo.
- *   - Polling fallback не нужен — sink даёт immediate update. Если
- *     logger-модуль отсутствует, sinkTick остаётся в покое,
- *     getBuffer() возвращает [].
+ *   - logger.setSink(cb) вызывается один раз на module-load. Sink bump-ит
+ *     сигнал `sinkTick` → реактивно перечитываем `getBuffer()` через
+ *     createMemo. setSink может быть вызван ДО install (safe — просто
+ *     сохраняет колбэк); install потом его подхватит.
+ *   - Polling fallback не нужен — sink даёт immediate update.
  *
  * UI:
  *   - Mobile: bottom-sheet на 60vh / 90vh (через inline translateY).
@@ -28,59 +25,17 @@ import {
 import { consoleStore } from './consoleStore';
 import { CloseIcon } from '../icons';
 import { installConsoleGlobals } from './consoleGlobals';
-
-type LogLevel = 'debug' | 'info' | 'warn' | 'error';
-
-type LogEntry = {
-  readonly id: number;
-  readonly level: LogLevel;
-  readonly text: string;
-  readonly source: string;
-  readonly ts: number;
-};
-
-type LogModule = {
-  logger: {
-    getBuffer(): readonly LogEntry[];
-    clear(): void;
-    install(): void;
-    setSink(cb: ((e: LogEntry) => void) | null): void;
-  };
-};
-
-type LoggerState = {
-  mod: LogModule | null;
-  hasLogger: boolean;
-};
-
-let loggerState: LoggerState = { mod: null, hasLogger: false };
-
-const LOG_MODULE_PATH = '~/infrastructure/log';
+import { logger, type LogEntry } from '~/infrastructure/log';
 
 const [sinkTick, sinkTickSet] = createSignal(0);
 
-const logModulePromise: Promise<void> = (async () => {
-  try {
-    const mod = (await import(
-      /* @vite-ignore */ LOG_MODULE_PATH
-    )) as unknown as LogModule;
-    loggerState = { mod, hasLogger: true };
-    mod.logger.install();
-    mod.logger.setSink(() => {
-      sinkTickSet((n) => n + 1);
-    });
-    sinkTickSet((n) => n + 1);
-  } catch {
-    loggerState = { mod: null, hasLogger: false };
-  }
-})();
-
-void logModulePromise;
+logger.setSink(() => {
+  sinkTickSet((n) => n + 1);
+});
 
 const safeReadBuffer = (): readonly LogEntry[] => {
-  if (!loggerState.hasLogger || loggerState.mod === null) return [];
   try {
-    return loggerState.mod.logger.getBuffer();
+    return logger.getBuffer();
   } catch {
     return [];
   }
@@ -114,9 +69,7 @@ const copyToClipboard = async (text: string): Promise<void> => {
 };
 
 const handleClear = (): void => {
-  if (loggerState.hasLogger && loggerState.mod) {
-    try { loggerState.mod.logger.clear(); } catch { /* */ }
-  }
+  try { logger.clear(); } catch { /* safety net for test mocks */ }
   sinkTickSet((n) => n + 1);
   consoleStore.clearToasts();
 };
@@ -204,7 +157,6 @@ export function ConsoleSheet(): JSX.Element {
       <div
         class="console-sheet"
         data-snap={snap()}
-        data-has-logger={loggerState.hasLogger ? 'true' : 'false'}
         role="dialog"
         aria-label="Console"
       >
@@ -270,13 +222,6 @@ export function ConsoleSheet(): JSX.Element {
               <CloseIcon size={14} />
             </button>
           </header>
-
-          <Show when={!loggerState.hasLogger}>
-            <div class="console-empty-warning" data-testid="console-empty-warning">
-              Logger module not installed — sheet is empty.
-              Logs will appear once the Subagent-1 infra log lands.
-            </div>
-          </Show>
 
           <div class="console-body" data-testid="console-body">
             <Show when={activeTab() === 'errors'}>
