@@ -100,16 +100,17 @@ const useHashRoute = (): () => Route => {
 export function App(): JSX.Element {
   const route = useHashRoute();
   return (
-    <Show
-      when={route() === 'admin' ? 'admin' : route() === 'app' ? 'app' : 'landing'}
-      fallback={<Landing />}
-    >
-      {(which) => (
-        <Show when={which() === 'admin'} fallback={<AppShell />}>
-          <Admin />
-        </Show>
-      )}
-    </Show>
+    <>
+      <Show when={route() === 'landing'}>
+        <Landing />
+      </Show>
+      <Show when={route() === 'app'}>
+        <AppShell />
+      </Show>
+      <Show when={route() === 'admin'}>
+        <Admin />
+      </Show>
+    </>
   );
 }
 
