@@ -1591,7 +1591,12 @@ button:not([disabled]):not(.no-shrink):active {
 
 .toast-stack {
   position: fixed;
-  top: calc(var(--header-h) + var(--space-md) + var(--safe-top));
+  /* wavecode-preset-row-and-toast-z: toast висит НА САМОМ ВЕРХУ
+   * viewport'а, нависая над TopBar'ом (z-toast=50 > topbar z=45).
+   * Раньше был `top: calc(var(--header-h) + var(--space-md) +
+   * var(--safe-top))` — toast сидел ПОД TopBar'ом, перекрывая
+   * editor. safe-top оставлен для iOS notch / status-bar. */
+  top: var(--safe-top);
   right: var(--space-md);
   z-index: var(--z-toast);
   display: flex;
@@ -2609,8 +2614,12 @@ button:not([disabled]):not(.no-shrink):active {
   z-index: 0;
   /* wavecode-transport-always-visible: leave room for fixed
    * .app-controls-row (Play/Stop + cps/swing) so content doesn't
-   * slide under the transport. */
-  padding-top: var(--controls-h);
+   * slide under the transport.
+   *
+   * wavecode-preset-row-and-toast-z: добавлен --preset-row-h —
+   * теперь оба fixed-ряда (preset + transport) занимают суммарно
+   * --preset-row-h + --controls-h пикселей сверху. */
+  padding-top: calc(var(--preset-row-h) + var(--controls-h));
   padding-bottom: var(--tabbar-h);
 }
 
@@ -2954,10 +2963,20 @@ textarea.ai-textarea:focus-visible {
   gap: var(--space-xs);
   align-items: center;
   flex-wrap: wrap;
-  /* Должен быть выше .wc-sheet-backdrop (z-sheet=40) — чипы открывают
-   * bottom-sheet и должны быть кликабельными пока другой sheet открыт. */
-  position: relative;
-  z-index: calc(var(--z-sheet) + 5);
+  /* wavecode-preset-row-and-toast-z: выведен из flow (position:fixed)
+   * и поставлен сразу под TopBar'ом. Раньше был position:relative, и
+   * .app-controls-row (z-sheet+12, position:fixed) перекрывал его
+   * целиком, скрывая <select> композиции. */
+  position: fixed;
+  top: var(--header-h);
+  left: 0;
+  right: 0;
+  z-index: calc(var(--z-sheet) + 13);
+  padding: var(--space-2xs) var(--space-md);
+  background: rgba(10, 10, 14, 0.88);
+  backdrop-filter: blur(12px) saturate(160%);
+  -webkit-backdrop-filter: blur(12px) saturate(160%);
+  border-bottom: 1px solid var(--border);
 }
 
 @media (max-width: 720px) {
@@ -2969,14 +2988,22 @@ textarea.ai-textarea:focus-visible {
    * math/wavecode-transport-always-visible: position:fixed works
    * everywhere regardless of scroll context. z-index above sheet.
    * The mobile @media wrap is no longer needed — rule is universal.
+   *
+   * wavecode-preset-row-and-toast-z: на mobile .app-preset-row —
+   * один <select> на всю ширину, без flex-wrap. Уменьшаем padding.
    */
+  .app-preset-row { padding: var(--space-2xs) var(--space-sm); }
 }
 .app-controls-row {
   /* wavecode-transport-always-visible: pinned below TopBar so Play
    * remains clickable when any bottom-sheet (AI/Step/Piano/Mixer/
-   * Status) is open. Sheet has z-sheet+1; this is z-sheet+12. */
+   * Status) is open. Sheet has z-sheet+1; this is z-sheet+12.
+   *
+   * wavecode-preset-row-and-toast-z: сдвинут вниз на --preset-row-h,
+   * потому что .app-preset-row теперь занимает слот сразу под
+   * TopBar'ом. */
   position: fixed;
-  top: var(--header-h);
+  top: calc(var(--header-h) + var(--preset-row-h));
   left: 0;
   right: 0;
   z-index: calc(var(--z-sheet) + 12);
