@@ -1,50 +1,117 @@
-import type { JSX, ParentProps } from 'solid-js';
-import { Show, createSignal, onCleanup, onMount } from 'solid-js';
-
-type Props = ParentProps<{
-  message: string;
-  tone?: 'idle' | 'ok' | 'warn' | 'err';
-  actionLabel?: string;
-  onAction?: () => void;
-  durationMs?: number;
-}>;
-
 /**
- * Toast — non-modal notification, auto-dismiss.
- * В отличие от chat-status, toast перекрывает UI и привлекает внимание.
+ * Toast — стек popover-уведомлений в правом-верхнем углу (desktop)
+ * или full-width strip сверху (mobile).
+ *
+ * Один компонент «глобальный» — навешивается один раз в App.tsx; читает
+ * состояние напрямую из consoleStore. Никаких props.
+ *
+ * Семантика:
+ *   - 'info' / 'warn'             — silent auto-dismiss (Toast всё равно
+ *                                    показывает, но без цветовой агрессии).
+ *   - 'error' / 'critical'        — кликабельный, открывает ConsoleSheet,
+ *                                    severity цвет, на 'critical' — sticky.
  */
-export function Toast(props: Props): JSX.Element | null {
-  const [show, setShow] = createSignal(true);
-  let timer: number | undefined;
+
+import { type JSX, For, Show, onCleanup, onMount, createMemo } from 'solid-js';
+import { consoleStore, type Toast, type ToastSeverity } from './consoleStore';
+import { CloseIcon, PinIcon } from '../icons';
+
+const SEVERITY_TOKEN: Readonly<Record<ToastSeverity, string>> = {
+  info: 'info',
+  warn: 'warn',
+  error: 'err',
+  critical: 'critical',
+};
+
+const SEVERITY_ICON: Readonly<Record<ToastSeverity, string>> = {
+  info: 'ℹ',
+  warn: '⚠',
+  error: '✕',
+  critical: '!',
+};
+
+function severityToTone(s: ToastSeverity): string {
+  return SEVERITY_TOKEN[s];
+}
+
+type ToastItemProps = {
+  toast: Toast;
+};
+
+function ToastItem(props: ToastItemProps): JSX.Element {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const isSticky = (): boolean => props.toast.ttlMs === 0;
+  const isError = (): boolean =>
+    props.toast.severity === 'error' || props.toast.severity === 'critical';
 
   onMount(() => {
-    const ms = props.durationMs ?? 4000;
-    if (ms > 0) {
-      timer = window.setTimeout(() => setShow(false), ms);
+    if (!isSticky() && props.toast.ttlMs > 0) {
+      timer = setTimeout(() => {
+        consoleStore.dismissToast(props.toast.id);
+      }, props.toast.ttlMs);
     }
-    onCleanup(() => {
-      if (timer !== undefined) window.clearTimeout(timer);
-    });
   });
 
+  onCleanup(() => {
+    if (timer !== undefined) clearTimeout(timer);
+  });
+
+  const onClick = (): void => {
+    if (!isError()) return;
+    consoleStore.dismissToast(props.toast.id);
+    consoleStore.setConsoleOpen(true);
+  };
+
   return (
-    <Show when={show()}>
-      <div class="wc-toast" data-tone={props.tone ?? 'idle'} role="status" aria-live="polite">
-        <span>{props.message}</span>
-        {props.children}
-        {props.actionLabel && props.onAction ? (
-          <button
-            type="button"
-            class="wc-toast__action"
-            onClick={() => {
-              props.onAction!();
-              setShow(false);
-            }}
-          >
-            {props.actionLabel}
-          </button>
-        ) : null}
-      </div>
-    </Show>
+    <div
+      class={`toast-item toast-${severityToTone(props.toast.severity)} ${isError() ? 'toast-clickable' : ''}`}
+      role={isError() ? 'button' : 'status'}
+      tabindex={isError() ? 0 : undefined}
+      onClick={onClick}
+      onKeyDown={(e: KeyboardEvent) => {
+        if (isError() && (e.key === 'Enter' || e.key === ' ')) {
+          e.preventDefault();
+          onClick();
+        }
+      }}
+    >
+      <span class="toast-icon" aria-hidden="true">
+        {SEVERITY_ICON[props.toast.severity]}
+      </span>
+      <span class="toast-body">
+        <span class="toast-title">{props.toast.title}</span>
+        <Show when={props.toast.body}>
+          <span class="toast-message">{props.toast.body}</span>
+        </Show>
+        <Show when={props.toast.source}>
+          <span class="toast-source">[{(props.toast.source as string)}]</span>
+        </Show>
+      </span>
+      <Show when={isSticky()}>
+        <span class="toast-pin" aria-label="sticky">
+          <PinIcon size={12} />
+        </span>
+      </Show>
+      <button
+        type="button"
+        class="toast-close"
+        aria-label="Dismiss notification"
+        onClick={(e: MouseEvent) => {
+          e.stopPropagation();
+          consoleStore.dismissToast(props.toast.id);
+        }}
+      >
+        <CloseIcon size={12} />
+      </button>
+    </div>
+  );
+}
+
+export function Toast(): JSX.Element {
+  const items = createMemo(() => consoleStore.toasts());
+  return (
+    <div class="toast-stack" role="region" aria-label="Notifications">
+      <For each={items()}>{(t) => <ToastItem toast={t} />}</For>
+    </div>
   );
 }
