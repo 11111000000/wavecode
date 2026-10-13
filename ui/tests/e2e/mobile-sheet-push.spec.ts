@@ -264,4 +264,56 @@ test.describe('mobile split-pane (412×900)', () => {
     await page.waitForTimeout(200);
     await expect(page.locator('.wc-sheet__snap-feedback')).toHaveCount(0);
   });
+
+  test('Score tab in BottomNav pulses (data-has-open-sheet) when sheet is open', async ({ page }) => {
+    await bootApp(page);
+
+    // No sheet open → no pulse.
+    const scoreTab = page.locator('.wc-tab[aria-label="Score"]');
+    await expect(scoreTab).toHaveAttribute('data-has-open-sheet', 'false');
+
+    // Open Mixer sheet.
+    await page.locator('.wc-tab[aria-label="Mixer"]').click();
+    await page.waitForTimeout(300);
+
+    // Now Score tab gets the pulse attribute.
+    await expect(scoreTab).toHaveAttribute('data-has-open-sheet', 'true');
+
+    // Tap Score → sheet closes, pulse clears.
+    await scoreTab.click();
+    await page.waitForTimeout(300);
+    await expect(scoreTab).toHaveAttribute('data-has-open-sheet', 'false');
+  });
+
+  test('Auto-resize: tapping the editor when sheet is full shrinks it to half', async ({ page }) => {
+    await bootApp(page);
+    await page.locator('.wc-tab[aria-label="Mixer"]').click();
+    await page.waitForTimeout(300);
+
+    // Drag the sheet up to snap=full (70vh).
+    const handle = page.locator('.wc-sheet__top-handle').first();
+    const handleBox = await handle.boundingBox();
+    expect(handleBox).not.toBeNull();
+    const handleX = handleBox!.x + handleBox!.width / 2;
+    const handleY = handleBox!.y + handleBox!.height / 2;
+
+    await page.mouse.move(handleX, handleY);
+    await page.mouse.down();
+    await page.mouse.move(handleX, handleY - 300, { steps: 10 });
+    await page.waitForTimeout(50);
+    await page.mouse.up();
+    await page.waitForTimeout(300);
+
+    // Verify sheet is at 'full'.
+    const sheet = page.locator('.wc-sheet').first();
+    await expect(sheet).toHaveAttribute('data-snap', 'full');
+
+    // Click in the editor.
+    const cmContent = page.locator('.cm-content').first();
+    await cmContent.click();
+    await page.waitForTimeout(300);
+
+    // Sheet auto-shrinks to 'half'.
+    await expect(sheet).toHaveAttribute('data-snap', 'half');
+  });
 });

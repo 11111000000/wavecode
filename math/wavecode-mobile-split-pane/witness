@@ -101,3 +101,50 @@
     +2 uiState test cases (fractional rounding, zero-clamp-to-min);
     +2 e2e cases (snap-points indicator + feedback pill). Total
     suite: 714/714. tsc clean.
+
+- sha: 6084c2400e31a33696b5ec8fddea49b759d602a4
+  date: 2026-10-13
+  kind: polish
+  files:
+    - ui/src/infrastructure/haptics.ts
+    - ui/src/infrastructure/haptics.test.ts
+    - ui/src/presentation/components/BottomSheet.tsx
+    - ui/src/presentation/components/TabBar.tsx
+    - ui/src/presentation/panels/ScorePanel.tsx
+    - ui/src/presentation/state/uiState.ts
+    - ui/src/presentation/state/uiState.test.ts
+    - ui/src/styles/sheets.css
+    - ui/tests/e2e/mobile-sheet-push.spec.ts
+  notes: |
+    Polish-2: tactile + auto-resize + primary-nav affordance.
+
+    (a) Haptic feedback. New infrastructure/haptics.ts — capability
+        gate (no-op on iOS Safari), triggerHaptic(5) on drag-snap
+        threshold crossing, triggerSnapPulse() (10ms) on commit,
+        cancelHaptic() to abort ongoing vibration. Per-threshold
+        guard (lastHapticSnap) — fires only when snap-target actually
+        changes, not on every pointermove.
+
+    (b) Auto-resize on editor focus. ScorePanel's contentDOM focus
+        handler checks isDesktop? + hasOpenSheet? + any-kind-at-full
+        → snapTo('half'). On mobile, tapping into the editor with a
+        full-height sheet auto-shrinks the sheet so the user gets a
+        comfortable editor without manual drag.
+
+    (c) Score-tab pulse affordance. hasOpenSheet() derived signal
+        in uiState. TabBar's Score tab gets data-has-open-sheet=
+        'true' when any sheet snap !== 'closed'. CSS: cyan color +
+        1.6s wc-tab-pulse keyframes (opacity 0.65↔1, cyan-glow box
+        shadow). prefers-reduced-motion respected (animation: none,
+        opacity: 1). Visual cue that tap-Score closes every sheet.
+
+    Coverage: +11 haptics unit cases (capability gate, call contract
+    with mocked navigator.vibrate, iOS Safari no-throw); +4
+    uiState hasOpenSheet cases (false baseline, true after open,
+    false after close, true for any-kind); +2 e2e cases (Score
+    tab pulse attribute lifecycle, auto-resize full→half on
+    editor focus). Total suite: 729/729 (53 files, +15 net new
+    in this commit). tsc --noEmit clean; vite build succeeds.
+
+    Desktop regression: pulse and auto-resize are gated by isDesktop
+    checks, so desktop UX (right-side drawer) is unchanged.

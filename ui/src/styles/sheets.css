@@ -373,6 +373,26 @@
     animation: wc-sheet-fade var(--dur-xs) var(--ease) both;
   }
 
+  /* wavecode-mobile-split-pane polish (c): the "Score" tab in the
+   *  bottom nav pulses cyan when ANY sheet is open — visual
+   *  affordance that tap-Score closes every sheet. 1.6s loop,
+   *  gentle opacity + glow, respects prefers-reduced-motion. */
+  .wc-tab[data-has-open-sheet='true'] {
+    color: var(--cyan);
+    animation: wc-tab-pulse 1.6s ease-in-out infinite;
+  }
+  .wc-tab[data-has-open-sheet='true']::before {
+    background: var(--cyan);
+    box-shadow: 0 0 8px var(--cyan-glow);
+  }
+  @keyframes wc-tab-pulse {
+    0%, 100% { opacity: 0.65; box-shadow: 0 0 0 transparent; }
+    50%      { opacity: 1;    box-shadow: 0 0 12px var(--cyan-glow); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .wc-tab[data-has-open-sheet='true'] { animation: none; opacity: 1; }
+  }
+
   /* FAB: shift up by --sheet-h on mobile so it sits between sheet
    * and tabbar instead of getting covered. */
   .wc-fab {
