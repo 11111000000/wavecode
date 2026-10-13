@@ -44,6 +44,7 @@ import {
  */
 
 const PIANO_COLLAPSE_KEY = 'wavecode-piano-collapse-v1';
+const MINI_TOOLBAR_KEY = 'wavecode-mini-toolbar-v1';
 const DESKTOP_QUERY = '(min-width: 1024px)';
 
 const readStoredCollapsed = (): boolean => {
@@ -65,6 +66,31 @@ const writeStoredCollapsed = (v: boolean): void => {
   }
 };
 
+/**
+ * wavecode-toast-overhead-and-toolbar-toggle: на mobile snippet
+ * toolbar (14 кнопок × 2 ряда = ~110px) ест 12% viewport'а и
+ * сжимает cm-host до 1-2 видимых строк. Default = скрыт на
+ * mobile, открыт на desktop. localStorage override.
+ */
+const readMiniToolbarOpen = (defaultOpen: boolean): boolean => {
+  try {
+    const v = localStorage.getItem(MINI_TOOLBAR_KEY);
+    if (v === 'true') return true;
+    if (v === 'false') return false;
+  } catch {
+    /* localStorage unavailable — silently use default */
+  }
+  return defaultOpen;
+};
+
+const writeMiniToolbarOpen = (v: boolean): void => {
+  try {
+    localStorage.setItem(MINI_TOOLBAR_KEY, String(v));
+  } catch {
+    /* localStorage unavailable — silently no-op */
+  }
+};
+
 const readDesktopMatch = (): boolean => {
   if (typeof window === 'undefined') return false;
   return window.matchMedia(DESKTOP_QUERY).matches;
@@ -74,6 +100,11 @@ export function ScorePanel() {
   const [debug, setDebug] = createSignal(getDebug());
   const [pianoCollapsed, setPianoCollapsed] = createSignal(true);
   const [isDesktop, setIsDesktop] = createSignal(readDesktopMatch());
+  // wavecode-toast-overhead-and-toolbar-toggle: mobile default = closed,
+  // desktop default = open. localStorage wins.
+  const [miniToolbarOpen, setMiniToolbarOpen] = createSignal(
+    readMiniToolbarOpen(readDesktopMatch()),
+  );
   let editorApi: CodeMirrorEditorApi | undefined;
 
   const pollId = window.setInterval(() => setDebug(getDebug()), 500);
@@ -84,11 +115,27 @@ export function ScorePanel() {
     setPianoCollapsed(readStoredCollapsed());
     const mql = window.matchMedia(DESKTOP_QUERY);
     const onChange = (e: MediaQueryListEvent): void => {
+      const wasDesktop = isDesktop();
       setIsDesktop(e.matches);
+      // Cross-breakpoint: re-init mini-toolbar default if localStorage
+      // didn't pin a value. Keeps "mobile=closed, desktop=open" until
+      // user explicitly toggles.
+      if (wasDesktop !== e.matches) {
+        const stored = localStorage.getItem(MINI_TOOLBAR_KEY);
+        if (stored !== 'true' && stored !== 'false') {
+          setMiniToolbarOpen(e.matches);
+        }
+      }
     };
     mql.addEventListener('change', onChange);
     onCleanup(() => mql.removeEventListener('change', onChange));
   });
+
+  const toggleMiniToolbar = (): void => {
+    const next = !miniToolbarOpen();
+    setMiniToolbarOpen(next);
+    writeMiniToolbarOpen(next);
+  };
 
   // Wire the editor API + focus state into pianoRecStore. Re-runs if
   // `editorApi` is reassigned (lazy CodeMirror chunk finishes loading),
@@ -184,9 +231,22 @@ export function ScorePanel() {
         <Show when={debug().superdoughErr}>
           <span class="debug-err">super: {debug().superdoughErr}</span>
         </Show>
+        <button
+          type="button"
+          class="snippet-toggle"
+          data-active={miniToolbarOpen() ? 'true' : 'false'}
+          aria-label={miniToolbarOpen() ? 'Скрыть snippet-клавиатуру' : 'Показать snippet-клавиатуру'}
+          aria-pressed={miniToolbarOpen()}
+          onClick={toggleMiniToolbar}
+          title={miniToolbarOpen() ? 'Скрыть клавиатуру снипов' : 'Показать клавиатуру снипов'}
+        >
+          ✎ snippet
+        </button>
       </div>
 
-      <MiniNotationToolbar editor={() => editorApi} />
+      <Show when={miniToolbarOpen()}>
+        <MiniNotationToolbar editor={() => editorApi} />
+      </Show>
     </div>
   );
 }
