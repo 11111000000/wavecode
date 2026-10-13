@@ -10,7 +10,14 @@ import type { NoteEvent } from '~/domain/midi/encoder';
 import { LiveRecorder, pickSupportedMime } from './AudioRecorder';
 import { renderToWav } from './OfflineRender';
 import { applyVoicingAliases } from './strudelPatches';
-import { wrapSuperdoughLoadBuffer } from './SampleLoader';
+
+// `wrapSuperdoughLoadBuffer` is imported lazily (inside ensureRepl) so
+// that test files which pull in `LiveAudioEngine` (e.g. audioActions.ts,
+// TransportPanel.test.tsx) do NOT eagerly load SampleLoader, which in
+// turn pulls in `@strudel/webaudio` -> `@strudel/core` -> SalatRepl from
+// `@kabelsalat/web` (a CJS-only module that fails the Vitest ESM resolver).
+// The dynamic import is at the call site below (~20ms in production,
+// ~1ms in tests where the test never reaches ensureRepl).
 
 /**
  * Live AudioEngine — реальный Strudel runtime в main thread.
@@ -183,6 +190,14 @@ const ensureRepl = (audioCtx: AudioContext): Promise<ReplHandle> => {
       // banks. The wrap is installed AFTER modules load so the
       // dynamic import inside the wrap resolves to the same module
       // instance that the runtime uses.
+      //
+      // Lazy-import: keep the top-of-file import surface of
+      // LiveAudioEngine free of SampleLoader so unit tests for
+      // upstream callers (audioActions, TransportPanel) don't
+      // transitively pull the CJS-only `@kabelsalat/web` into the
+      // Vitest ESM resolver. The dynamic import is async and
+      // resolves inside `ensureRepl`, which is already async.
+      const { wrapSuperdoughLoadBuffer } = await import('./SampleLoader');
       wrapSuperdoughLoadBuffer();
 
       // Inject chord-symbol aliases (min7 → m7, maj7 → ^7, …) into every
