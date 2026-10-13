@@ -497,6 +497,7 @@
   overflow: hidden;
   position: relative;
   z-index: 0;
+  padding-bottom: var(--tabbar-h);
 }
 
 .collapsible {
