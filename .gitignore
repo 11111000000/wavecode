@@ -29,3 +29,7 @@ test-results/
 playwright-report/
 playwright/.cache/
 .playwright-mcp/
+
+# Local agent worktrees (parallel work)
+.worktrees/
+.paseo-worktrees/
