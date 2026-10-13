@@ -12,6 +12,7 @@ import { injectMix } from '~/application/useCases/injectMix';
 import { LiveRecorder, pickSupportedMime } from './AudioRecorder';
 import { renderToWav } from './OfflineRender';
 import { applyVoicingAliases } from './strudelPatches';
+import { setActive as setRuntimeHighlightActive, clearActive as clearRuntimeHighlightActive } from './runtimeHighlight';
 
 // `wrapSuperdoughLoadBuffer` is imported lazily (inside ensureRepl) so
 // that test files which pull in `LiveAudioEngine` (e.g. audioActions.ts,
@@ -97,6 +98,10 @@ type ReplHandle = {
    * See `math/wavecode-mixer-live-update`.
    */
   setPattern?: (pattern: unknown, autostart?: boolean) => Promise<unknown>;
+  /** Strudel Cyclist scheduler — exposes `.pattern` (active Pattern). */
+  scheduler?: { pattern?: { queryArc?: (a: number, b: number) => unknown[] } };
+  /** Repl state — contains transpiler-emitted `miniLocations`. */
+  state?: { miniLocations?: ReadonlyArray<ReadonlyArray<number>> };
 };
 
 type DebugState = {
@@ -288,6 +293,9 @@ const ensureRepl = (audioCtx: AudioContext): Promise<ReplHandle> => {
           // Reset progress anchor — после stop прогресс должен показать 0,
           // а не «застыть» на значении, бывшем в момент остановки.
           setDebug({ lastEvalClock: 0 });
+          // Clear runtime mini-notation highlight — no active pattern,
+          // any leftover decoration would freeze on stale ranges.
+          clearRuntimeHighlightActive();
         },
         setCps: (cps: number) => {
           // Cyclist (через @strudel/webaudio) поддерживает setCps сразу —
@@ -431,12 +439,25 @@ export const LiveAudioEngine: Layer.Layer<AudioEngine, never, never> = Layer.suc
           // AudioContext itself stays alive (do not call suspend — preserve
           // user-gesture state for subsequent context-stable resumes).
           if (audioCtx.state === 'suspended') await audioCtx.resume();
-          await repl.evaluate(snippet);
-          // Snapshot the snippet SOON AS POSSIBLE — even before the
-          // scheduler's first lookahead resolves. `getActiveHaps` uses
-          // this to re-run `compileAndQuery` against the latest score
-          // without re-starting the scheduler.
-          setDebug({ lastEvaluatedSnippet: snippet });
+await repl.evaluate(snippet);
+            // Snapshot the snippet SOON AS POSSIBLE — even before the
+            // scheduler's first lookahead resolves. `getActiveHaps` uses
+            // this to re-run `compileAndQuery` against the latest score
+            // without re-starting the scheduler.
+            setDebug({ lastEvaluatedSnippet: snippet });
+            // Activate runtime mini-notation highlight (CodeMirror): feed
+            // the freshly-scheduled Pattern + the transpiler's miniLocations
+            // into the bridge so editor decorations start emitting.
+            // See `math/wavecode-runtime-mini-highlight`.
+            const livePattern = repl.scheduler?.pattern;
+            if (livePattern && typeof (livePattern as { queryArc?: unknown }).queryArc === 'function') {
+              setRuntimeHighlightActive({
+                pattern: livePattern as unknown as { queryArc(begin: number, end: number): ReadonlyArray<unknown> },
+                ctx: audioCtx,
+                anchor: audioCtx.currentTime,
+                cps: debugState.cps > 0 ? debugState.cps : 1,
+              });
+            }
         },
         catch: (err) => {
           const msg = err instanceof Error ? err.message : String(err);
@@ -524,6 +545,20 @@ export const LiveAudioEngine: Layer.Layer<AudioEngine, never, never> = Layer.suc
           // same contract as `eval()` itself.
           setDebug({ lastEvaluatedSnippet: newSnippet });
           await repl.evaluate(newSnippet);
+          // Refresh runtime highlight bridge — pattern was hot-swapped;
+          // the new miniLocations (from the re-transpile) must reach the
+          // editor. Use the lastEvalClock as anchor to keep playhead
+          // continuity (mix edits shouldn't shift the highlight phase).
+          const livePattern = repl.scheduler?.pattern;
+          const anchor = debugState.lastEvalClock > 0 ? debugState.lastEvalClock : audioCtx.currentTime;
+          if (livePattern && typeof (livePattern as { queryArc?: unknown }).queryArc === 'function') {
+            setRuntimeHighlightActive({
+              pattern: livePattern as unknown as { queryArc(begin: number, end: number): ReadonlyArray<unknown> },
+              ctx: audioCtx,
+              anchor,
+              cps: debugState.cps > 0 ? debugState.cps : 1,
+            });
+          }
         },
         catch: (err) => {
           // Silent rollback — see packet antithesis (5). The existing
@@ -533,6 +568,8 @@ export const LiveAudioEngine: Layer.Layer<AudioEngine, never, never> = Layer.suc
           // able to inspect why via Debug > Console.
           const msg = err instanceof Error ? err.message : String(err);
           console.warn('[wavecode/LiveAudioEngine.setLayerMix] parse failed, keeping previous pattern:', msg);
+          // Bridge keeps the previous active state — no rollback needed
+          // for highlight; the old pattern is still playing.
           return null as null;
         },
       }).pipe(Effect.catchAll(() => Effect.void)),

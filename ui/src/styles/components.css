@@ -3507,6 +3507,43 @@ textarea.ai-textarea:focus-visible {
   background: var(--amber-soft);
 }
 
+/* Runtime mini-notation highlight — the "дирижёрский луч".
+ *
+ * Applied as a CSS class by CodeMirror marks produced by
+ * `presentation/editor/runtimeMiniHighlight.ts`. The bridge drives the
+ * mark range set based on currently-sounding Haps from Strudel;
+ * animation is a soft "breath" — not synced to cps to avoid jitter.
+ *
+ * See math/wavecode-runtime-mini-highlight/packet.md. */
+.cm-mini-active {
+  background-color: var(--cyan-soft);
+  box-shadow: 0 0 0 1px var(--cyan-glow) inset;
+  border-radius: 2px;
+  color: var(--cyan);
+  transition:
+    background-color 80ms ease,
+    box-shadow 80ms ease,
+    color 80ms ease;
+  animation: cm-mini-pulse 1.6s ease-in-out infinite alternate;
+}
+@keyframes cm-mini-pulse {
+  from {
+    background-color: var(--cyan-soft);
+    box-shadow: 0 0 0 1px var(--cyan-glow) inset;
+  }
+  to {
+    background-color: rgba(94, 234, 212, 0.32);
+    box-shadow: 0 0 0 1px rgba(94, 234, 212, 0.7) inset;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cm-mini-active {
+    animation: none;
+    background-color: rgba(94, 234, 212, 0.32);
+    box-shadow: 0 0 0 1px var(--cyan-glow) inset;
+  }
+}
+
 /* =========================================================================
  *  MINI-NOTATION TOOLBAR
  * ========================================================================= */
