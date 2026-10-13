@@ -145,14 +145,14 @@ status: applied
 axiom: A4
 witness:
   applied_at: 2026-10-13
-  commit: TBD
+  commit: bfa2c33
   supersedes: null
   notes: |
-    SHA TBD on merge. Two invariants are now machine-enforced:
-    (1) `console.*` is forbidden in `src/domain/**` and
-    `src/application/**` (test files exempted); (2) every preset
-    in `BUILTIN_PRESETS` survives the boot-time validator.
-    Pre-commit UX is a single bash script under 50 lines.
+    SHA bfa2c33 — committed on feat/quality-tooling. Two invariants
+    are now machine-enforced: (1) `console.*` is forbidden in
+    `src/domain/**` and `src/application/**` (test files exempted);
+    (2) every preset in `BUILTIN_PRESETS` survives the boot-time
+    validator. Pre-commit UX is a single bash script under 50 lines.
 epistemics:
   - statement: "Built-in ESLint `no-console` is sufficient for the
       layering invariant — domain and application have no
