@@ -87,16 +87,24 @@ synthesis: |
       в консоли.
     - Network tab: POST `/v1/chat/completions` → 200 OK.
   Минимальная правка, точечная, не трогает код клиента.
-status: draft
+status: applied
 witness:
-  applied_at: pending
-  commit: pending
+  applied_at: 2026-10-13
+  commit: b9fde9d9d9af7aa6aaf3b2a7a3f747fa73197b5f5
+  supersedes: null
   notes: |
-    To be populated after implementation.
-    Verification:
-      - .env.local восстановлен
-      - typecheck clean (LiveLLMClient.ts изменён)
-      - vitest 628/628 passing (LLM-тесты мокают env, должны быть
-        unaffected)
-      - manual: prod deploy + curl 200 OK
+    Adds soft-check in LiveLLMClient.ts:220-228 warning if
+    VITE_LLM_PROXY_KEY is set but doesn't start with 'sk-'.
+
+    Actual key prefix restoration in ui/.env.local is operator
+    responsibility (file is .gitignored). deploy.sh has
+    REPLACE-ME guard; manual edit at deploy time:
+      VITE_LLM_PROXY_KEY=sk-litellm-ea6d97e9…
+
+    Verification (locally):
+      - typecheck: clean
+      - vitest: 628/628 passing (LLM tests use vitest.mock, unaffected)
+
+    Pending: prod deploy + curl 200 OK after operator restores
+    the prefix in ui/.env.local on the host.
 ---

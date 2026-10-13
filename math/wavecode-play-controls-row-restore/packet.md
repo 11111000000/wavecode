@@ -89,16 +89,22 @@ synthesis: |
     .app-preset-row — обычная строка (без sticky).
     .app-controls-row — sticky top: var(--header-h), backdrop blur.
     При открытом AI-BottomSheet — Play остаётся виден (sticky).
-status: draft
+status: applied
 witness:
-  applied_at: pending
-  commit: pending
+  applied_at: 2026-10-13
+  commit: b9fde9d9d9af7aa6aaf3b2a7a3f747fa73197b5f5
+  supersedes: math/wavecode-play-in-control/packet.md (visual)
   notes: |
-    To be populated after implementation.
-    Verification:
-      - Play видна в `.app-controls-row` отдельной строкой
-      - На мобиле Play sticky под TopBar
-      - E2E test "click play → bpm-indicator moves" проходит
-      - vitest TransportPanel.test.tsx все 7 кейсов проходят
-      - typecheck clean
+    Restores play-in-control packet synthesis that 74fb853 violated:
+    TransportPanel extracted from PresetRow into a sibling
+    .app-controls-row. Mobile sticky behaviour moves with it.
+
+    Verification (locally):
+      - typecheck: clean
+      - vitest: 628/628 passing
+      - e2e selector updated: play-control.spec.ts asserts
+        .app-controls-row instead of .app-preset-row
+
+    Pending: prod rebuild + manual play-button click in deployed
+    wavecode (not run from this worktree).
 ---
