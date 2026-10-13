@@ -41,10 +41,10 @@ export function Hero(): JSX.Element {
     const q = text().trim()
       ? `?prompt=${encodeURIComponent(text().trim())}`
       : '';
-    goHash(`/app${q}`);
+    goHash(`#/app${q}`);
   };
 
-  const goEditor = (): void => goHash('/app');
+  const goEditor = (): void => goHash('#/app');
 
   return (
     <section class="l-hero" id="top" aria-labelledby="hero-title">
