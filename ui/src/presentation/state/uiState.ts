@@ -316,6 +316,7 @@ export const installKeyboardShortcuts = (refs: {
   focusScore: () => void;
   undoScore: () => void;
   redoScore: () => void;
+  openAdmin?: () => void;
 }): void => {
   const handler = (e: KeyboardEvent) => {
     const mod = e.ctrlKey || e.metaKey;
@@ -350,6 +351,9 @@ export const installKeyboardShortcuts = (refs: {
     } else if (e.shiftKey && e.key.toLowerCase() === 'e') {
       e.preventDefault();
       toggleScore();
+    } else if (e.shiftKey && e.key.toLowerCase() === 'a') {
+      e.preventDefault();
+      refs.openAdmin?.();
     }
   };
   window.addEventListener('keydown', handler);

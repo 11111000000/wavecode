@@ -146,6 +146,7 @@ function AppShell(): JSX.Element {
       },
       undoScore: () => { void stopAudio(); dispatch({ type: 'undoScore' }); },
       redoScore: () => { void stopAudio(); dispatch({ type: 'redoScore' }); },
+      openAdmin: () => { window.history.pushState(null, '', '#/admin'); window.dispatchEvent(new HashChangeEvent('hashchange')); },
     });
   });
 
@@ -215,6 +216,7 @@ function AppShell(): JSX.Element {
           const cur = getLayout();
           setLayout(cur === 'ai-primary' ? 'code-primary' : 'ai-primary');
         }}
+        onOpenAdmin={() => { window.history.pushState(null, '', '#/admin'); window.dispatchEvent(new HashChangeEvent('hashchange')); }}
       />
       <PresetRow
         presetId={presetId()}
@@ -281,9 +283,6 @@ function AppShell(): JSX.Element {
       <TabBar />
       <ConsoleButton />
       <ConsoleSheet />
-      <a class="wc-debug-link" href="#/admin" aria-label="Open debug inspector">
-        → /admin
-      </a>
     </main>
   );
 }
