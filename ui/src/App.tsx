@@ -1,11 +1,11 @@
 import {
-  createSignal, onMount, onCleanup, Show, type JSX,
+  createSignal, createEffect, onMount, onCleanup, Show, untrack, type JSX,
 } from 'solid-js';
 import { Effect } from 'effect';
 import {
   installKeyboardShortcuts,
   setMobileMode,
-  setTab, getMobileMode,
+  setTab, getMobileMode, getActiveTab,
   getLayout, setLayout,
   getSampleStatus,
   type MobileMode,
@@ -22,7 +22,6 @@ import { Repo } from '~/domain/services';
 import { useAppBootstrap } from './presentation/state/useAppBootstrap';
 import { useAutoSave } from './presentation/state/useAutoSave';
 import { TabBar } from './presentation/components/TabBar';
-import { BottomToolstrip } from './presentation/components/BottomToolstrip';
 import { Toast } from './presentation/components/Toast';
 import { ConsoleButton } from './presentation/components/ConsoleButton';
 import { ConsoleSheet } from './presentation/components/ConsoleSheet';
@@ -174,6 +173,15 @@ function AppShell(): JSX.Element {
     installConsoleGlobals();
   });
 
+  // Auto-load grid from current score when user opens Step tab.
+  // Replaces the onBeforeOpenStep prop that BottomToolstrip used to receive.
+  // Runs once per switch to 'step' (Solid effect with [untrack] guard).
+  createEffect(() => {
+    if (getActiveTab() === 'step' && untrack(isGridEmptyState)) {
+      loadFromScore(appStore.score);
+    }
+  });
+
   return (
     <main class="app wc-app">
       <Toast />
@@ -250,13 +258,6 @@ function AppShell(): JSX.Element {
       </div>
       <PanelsLayout />
       <BottomSheets />
-      <BottomToolstrip
-        onBeforeOpenStep={() => {
-          if (isGridEmptyState()) {
-            loadFromScore(appStore.score);
-          }
-        }}
-      />
       <TabBar />
       <ConsoleButton />
       <ConsoleSheet />

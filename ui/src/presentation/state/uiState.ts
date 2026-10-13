@@ -192,7 +192,7 @@ export const setLayout = (layout: Layout): void => {
 
 export type SheetKind = 'ai' | 'mixer' | 'step' | 'piano' | 'status' | 'share' | 'record' | null;
 export type SheetSnap = 'closed' | 'peek' | 'half' | 'full';
-export type TabId = 'score' | 'chat' | 'mixer' | 'status';
+export type TabId = 'score' | 'step' | 'piano' | 'mixer' | 'chat' | 'status';
 
 const [activeSheet, setActiveSheetRaw] = createSignal<SheetKind>(null);
 const [sheetSnap, setSheetSnap] = createSignal<SheetSnap>('closed');
@@ -283,6 +283,10 @@ export const setTab = (tab: TabId): void => {
   } else if (tab === 'status') {
     // Status — отдельный kind со своим BottomSheet, рендерит HelloPanel.
     openKindSheet('status', 'full');
+  } else if (tab === 'step') {
+    openKindSheet('step', 'full');
+  } else if (tab === 'piano') {
+    openKindSheet('piano', 'full');
   } else if (tab === 'score') {
     closeAllSheets();
   }

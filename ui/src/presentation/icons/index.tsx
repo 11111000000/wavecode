@@ -251,6 +251,31 @@ export const TabStatusIcon = (p: Props): JSX.Element => (
   </svg>
 );
 
+/** Step grid — 2×2 squares, one diagonal pair filled (same visual as StepIcon
+ *  but rendered at tab-bar size 18px). */
+export const TabStepIcon = (p: Props): JSX.Element => (
+  <svg {...base(p.size ?? 18)} class={`wc-icon ${p.class ?? ''}`}>
+    <rect x="2" y="2" width="5" height="5" />
+    <rect x="9" y="2" width="5" height="5" fill="currentColor" stroke="none" />
+    <rect x="2" y="9" width="5" height="5" fill="currentColor" stroke="none" />
+    <rect x="9" y="9" width="5" height="5" />
+  </svg>
+);
+
+/** Piano — 7-key keyboard strip with 4 black keys filled. */
+export const TabPianoIcon = (p: Props): JSX.Element => (
+  <svg {...base(p.size ?? 18)} class={`wc-icon ${p.class ?? ''}`}>
+    <rect x="2" y="4" width="12" height="10" />
+    <line x1="5" y1="4" x2="5" y2="14" />
+    <line x1="8" y1="4" x2="8" y2="14" />
+    <line x1="11" y1="4" x2="11" y2="14" />
+    <rect x="3" y="4" width="1.5" height="6" fill="currentColor" stroke="none" />
+    <rect x="6" y="4" width="1.5" height="6" fill="currentColor" stroke="none" />
+    <rect x="9" y="4" width="1.5" height="6" fill="currentColor" stroke="none" />
+    <rect x="12" y="4" width="1.5" height="6" fill="currentColor" stroke="none" />
+  </svg>
+);
+
 export const DragHandleIcon = (p: Props): JSX.Element => (
   <svg {...base(p.size ?? 24)} class={`wc-icon ${p.class ?? ''}`}>
     <line x1="8" y1="5" x2="8" y2="5.01" />
