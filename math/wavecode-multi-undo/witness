@@ -1,5 +1,6 @@
 - sha: 3ed8c73
   date: 2026-10-08
+  branch: feat/wavecode-multi-undo
   kind: creation
   files:
     - math/wavecode-multi-undo/packet.md
@@ -12,6 +13,11 @@
     - ui/src/presentation/state/editorTypingTracker.test.ts
     - ui/src/App.tsx
   notes: |
+    Канонический SHA — feature-branch implementation commit
+    `3ed8c73` (per wavecode convention, см. `math/wavecode-logger-
+    enhancements/witness` для примера). Packet itself created in
+    `d667fbb` (v0.992 marker); merge to master — `b5f4711`.
+
     Скоуп строго по SUBAGENT-PLAN §#3. Двусторонний stack-based
     undo/redo заменил одношаговый scorePrev. `commitHistoryCheckpoint`
     через 600ms debounce в `editorTypingTracker` группирует burst
@@ -24,10 +30,13 @@
     сохраняется, history/future volatile (acceptable: see packet
     substrate).
 
-    Tests: 19 reducer cases (включая history cap overflow,
-    idempotent replaceScore, future-clear-on-new-replace,
-    commitHistoryCheckpoint merge, undo/redo round-trip symmetry) +
-    2 editorTypingTracker pattern tests. Total 77/77 unit pass.
+    Tests: 32 reducer cases (13 multi-undo-specific:
+    history cap overflow, idempotent replaceScore, future-clear-
+    on-new-replace, commitHistoryCheckpoint merge + no-op cases,
+    undo/redo round-trip symmetry, undo/redo no-op-when-empty) +
+    2 editorTypingTracker pattern tests (debounce group + separate
+    bursts). 32/32 + 2/2 = 34 multi-undo tests pass; full suite
+    563/563 unit pass (vitest 2.1.9).
 
     Supersession: math/rollback-and-retry/packet.md получил
     `supersession: math/wavecode-multi-undo/` в YAML frontmatter.
@@ -36,9 +45,28 @@
 
     Typecheck (tsc --noEmit), lint (eslint . --ext .ts,.tsx) — clean.
 
-    Замечание по среде: на этой машине pnpm недоступен, использовал
-    `npm run <script>` — эквивалентны (`package.json` scripts
-    идентичны). node_modules был circular symlink (точнее: указывал
-    на себя), пришлось `rm` его и переустановить в master
-    (один раз), затем worktree использует тот же node_modules через
-    symlink на master — typecheck/lint/test там и запускались.
+- sha: b5f4711
+  date: 2026-10-08
+  branch: master
+  kind: merged_to_master
+  files:
+    - math/rollback-and-retry/packet.md
+    - math/wavecode-multi-undo/packet.md
+    - math/wavecode-multi-undo/witness
+    - ui/src/App.tsx
+    - ui/src/application/reducer.test.ts
+    - ui/src/application/reducer.ts
+    - ui/src/domain/types.ts
+    - ui/src/presentation/state/editorTypingTracker.test.ts
+    - ui/src/presentation/state/editorTypingTracker.ts
+    - ui/src/presentation/state/uiState.ts
+  notes: |
+    Merge commit `b5f4711` (Merge: ae84c77 d667fbb) — `merge:
+    wavecode/multi-undo (stack-based undo/redo)`. Conflict в
+    packet.md (одновременный supersession edit с обеих сторон)
+    resolved per math-coding convention.
+
+    После этого merge пакет `wavecode-multi-undo` живёт в `master`
+    и доступен всем downstream-агентам. Packet остаётся в статусе
+    `applied` (lifecycle не меняется от merge — это recorded event,
+    а не state transition).
