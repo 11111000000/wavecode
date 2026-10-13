@@ -650,6 +650,12 @@ describe('PianoKeyboard component (MIDI source attribution in status pill)', () 
       pianoSlotGlyph: (s: string): string => s,
       previewPillPayload: () => null,
       applyToScore: (): void => undefined,
+      flashDecorations: { __placeholder: true } as never,
+      setFlashDecorations: { __placeholder: true } as never,
+      clearFlashDecorations: { __placeholder: true } as never,
+      buildFlashRange: () => ({ size: 0 }) as never,
+      flashRange: (): void => undefined,
+      flashLastInsertRange: (): void => undefined,
       // Legacy exports still required by other tests
       setInstrument: (): void => undefined,
       setFollow: (): void => undefined,

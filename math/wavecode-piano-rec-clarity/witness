@@ -51,3 +51,50 @@
     the packet's Risks block (collapsible squeeze under 360px drawer,
     view.contentDOM listener re-attach on lazy CodeMirror) are
     covered by tests and the inline CSS cap.
+
+- sha: see git log on feat/piano-rec-clarity-polish (commit
+       follows the implementation commit; SHA is not embedded
+       to avoid the circular SHA-of-the-commit-that-mentions-its-own-SHA
+       trap that comes with --amend + auto-update)
+  date: 2026-10-13
+  kind: polish
+  files:
+    - ui/src/presentation/state/pianoRecStore.ts
+    - ui/src/presentation/state/pianoRecStore.test.ts
+    - ui/src/presentation/components/CodeMirrorEditorImpl.tsx
+    - ui/src/styles/components.css
+    - ui/tests/e2e/piano-rec-slot.spec.ts
+  notes: |
+    Polish pass — closes two outstanding items from the packet's
+    "Что осталось вне scope" block.
+
+    (a) **Flash-decoration hook**. CodeMirror-side highlight on the
+        inserted lines after a successful apply, driven by a new
+        `flashDecorations` StateField in pianoRecStore
+        (`setFlashDecorations` / `clearFlashDecorations` StateEffects
+        + `buildFlashRange` pure line-resolution helper + `flashRange`
+        side-effect). Registered in `CodeMirrorEditorImpl` extensions
+        alongside `miniNotationHighlight` + `runtimeMiniHighlight`.
+        All three applyToScore branches flash:
+          - replace-score → entire new doc
+          - at-cursor     → inserted line range
+          - append-stack  → entire new doc (post-dispatch)
+        Capped at 10 lines per range via `FLASH_LINE_CAP` so a
+        100-line recording doesn't paint 100 simultaneous decorations.
+
+    (b) **TabBar Piano desktop-hidden**. `.wc-tab[aria-label='Piano']`
+        has `display: none` in a `@media (min-width: 1024px)` block —
+        on desktop the tab was a dead no-op (BottomSheet-piano is
+        gated to mobile in the same packet). Mobile keeps the tab
+        because that's where BottomSheet-piano lives.
+
+    New coverage: 4 new vitest cases (buildFlashRange pure-builder
+    + StateEffect exports). 1 new e2e spec (`piano-rec-slot.spec.ts`,
+    6 cases): append-stack, replace-score + undo, at-cursor + focus,
+    preview-pill state, desktop inline toggle, mobile BottomSheet.
+    Full suite 694/694 green; tsc clean; vite build 10.2s.
+
+    Layout follow-up (not in this polish): user feedback indicates
+    the broader TabBar affordance — "sheets should push the editor
+    rather than cover it" — needs a separate packet. Tracked under
+    the proposed `wavecode-sheets-aside-editor` direction.

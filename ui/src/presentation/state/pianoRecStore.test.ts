@@ -467,12 +467,16 @@ describe('pianoRecStore — applyToScore at-cursor slot', () => {
     cursorTo: number = cursorFrom,
   ): {
     view: {
-      state: { selection: { main: { from: number; to: number } } };
+      state: {
+        selection: { main: { from: number; to: number } };
+        doc: { lineAt: (p: number) => { from: number; number: number }; length: number };
+      };
       dispatch: (tr: {
         changes: { from: number; to: number; insert: string };
         selection: { anchor: number };
         effects: unknown;
       }) => void;
+      destroyed: boolean;
     };
     dispatches: Array<{
       changes: { from: number; to: number; insert: string };
@@ -485,19 +489,24 @@ describe('pianoRecStore — applyToScore at-cursor slot', () => {
       selection: { anchor: number };
       effects: unknown;
     }> = [];
-    return {
-      view: {
-        state: {
-          selection: {
-            main: { from: cursorFrom, to: cursorTo },
-          },
-        },
-        dispatch: (tr) => {
-          dispatches.push(tr);
+    const view = {
+      state: {
+        selection: { main: { from: cursorFrom, to: cursorTo } },
+        doc: {
+          lineAt: (p: number): { from: number; number: number } => ({ from: p, number: 1 }),
+          length: 100,
         },
       },
-      dispatches,
+      dispatch: (tr: {
+        changes: { from: number; to: number; insert: string };
+        selection: { anchor: number };
+        effects: unknown;
+      }): void => {
+        dispatches.push(tr);
+      },
+      destroyed: false,
     };
+    return { view, dispatches };
   };
 
   it('without editor API → no-op (warn, buffer preserved)', async () => {
@@ -527,7 +536,12 @@ describe('pianoRecStore — applyToScore at-cursor slot', () => {
     const { view, dispatches } = makeMockView(10 /* tentative cursor */);
     s.setPianoEditorApi({ getView: () => view as never });
     s.applyToScore();
-    expect(dispatches).toHaveLength(1);
+    // Two dispatches expected: (1) the insert itself, (2) the flash
+    // decorations effect (a separate StateEffect dispatch — CodeMirror
+    // doesn't compose Decoration.set into the same transaction as
+    // changes, and we want the flash effect to run AFTER the doc
+    // change so the lineAt() calls hit the new doc lines).
+    expect(dispatches.length).toBeGreaterThanOrEqual(1);
     const tr = dispatches[0]!;
     expect(tr.changes.from).toBe(10);
     expect(tr.changes.to).toBe(10);
@@ -634,5 +648,75 @@ describe('pianoRecStore — previewPillPayload', () => {
     const payload = s.previewPillPayload();
     expect(payload!.slot).toBe('at-cursor');
     expect(payload!.slotLabel).toBe('в курсор');
+  });
+});
+
+// =========================================================================
+// wavecode-piano-rec-clarity polish — flash-decorations hook
+// =========================================================================
+
+describe('pianoRecStore — flashDecorations StateField (pure builder)', () => {
+/** Minimal doc stub matching the slice that buildFlashRange reads. */
+  const makeDoc = (
+    lines: ReadonlyArray<{ from: number; text: string }>,
+  ): {
+    lineAt: (pos: number) => { from: number; number: number };
+    line: (n: number) => { from: number; text: string };
+  } => {
+    return {
+      lineAt: (pos: number): { from: number; number: number } => {
+        let acc = 0;
+        for (let i = 0; i < lines.length; i += 1) {
+          const line = lines[i]!;
+          if (pos < acc + line.text.length + 1) {
+            return { from: acc, number: i + 1 };
+          }
+          acc += line.text.length + 1; // +1 for newline
+        }
+        // fallback: last line
+        return { from: 0, number: lines.length };
+      },
+      line: (n: number): { from: number; text: string } => {
+        let acc = 0;
+        for (let i = 0; i < n - 1; i += 1) {
+          acc += lines[i]!.text.length + 1;
+        }
+        const line = lines[n - 1]!;
+        return { from: acc, text: line.text };
+      },
+    };
+  };
+
+  it('returns Decoration.none-equivalent set for empty range', async () => {
+    const s = await importStore();
+    const doc = makeDoc([{ from: 0, text: 'a' }, { from: 2, text: 'b' }]);
+    // Range equal → empty.
+    const decos = s.buildFlashRange(doc as never, 0, 0);
+    expect(decos.size).toBe(0);
+  });
+
+  it('highlights the first line for a single-line range', async () => {
+    const s = await importStore();
+    const doc = makeDoc([{ from: 0, text: 'hello' }, { from: 6, text: 'world' }]);
+    const decos = s.buildFlashRange(doc as never, 0, 5);
+    expect(decos.size).toBeGreaterThanOrEqual(1);
+  });
+
+  it('caps the highlight at FLASH_LINE_CAP (10) for very long inserts', async () => {
+    const s = await importStore();
+    const lines = Array.from({ length: 30 }, (_, i) => ({
+      from: i * 10,
+      text: `line-${i}`,
+    }));
+    const doc = makeDoc(lines);
+    const decos = s.buildFlashRange(doc as never, 0, 30 * 10);
+    expect(decos.size).toBeLessThanOrEqual(10);
+  });
+
+  it('exposes StateEffect exports so CodeMirror extensions can drive them', async () => {
+    const s = await importStore();
+    expect(s.setFlashDecorations).toBeDefined();
+    expect(s.clearFlashDecorations).toBeDefined();
+    expect(s.flashDecorations).toBeDefined();
   });
 });

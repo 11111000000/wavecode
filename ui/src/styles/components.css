@@ -1269,7 +1269,14 @@ textarea.wc-input {
  *  Same component, two layout contexts. Inline = compact strip inside
  *  ScorePanel (typically a 200px-tall collapsible area). Sheet = full
  *  BottomSheet with extra padding for touch.
+ *
+ * On desktop ≥1024px the TabBar's Piano entry is hidden — the inline
+ * piano under the collapsible header handles it. Mobile keeps the
+ * TabBar entry because that's where BottomSheet-piano lives.
  * ========================================================================= */
+@media (min-width: 1024px) {
+  .wc-tab[aria-label='Piano'] { display: none; }
+}
 .piano-wrap--inline { padding: 0; }
 .piano-wrap--inline .piano-keys { padding: var(--space-2xs) 0; }
 .piano-wrap--inline .piano-keys-inner {
