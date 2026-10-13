@@ -2,7 +2,19 @@ import {
   type JSX, type ParentProps, createSignal, onCleanup, onMount, Show,
 } from 'solid-js';
 import { CloseIcon, ExpandIcon, CollapseIcon } from '../icons';
-import { closeAllSheets, snapTo, getKindSnap, type SheetKind, type SheetSnap } from '../state/uiState';
+import {
+  closeAllSheets,
+  snapTo,
+  getKindSnap,
+  getSheetHeightPx,
+  setSheetHeightPx,
+  resetSheetHeightPx,
+  SHEET_HEIGHT_MIN_PX,
+  SHEET_HEIGHT_MAX_PX,
+  type SheetKind,
+  type SheetSnap,
+} from '../state/uiState';
+import { SheetTabs } from './SheetTabs';
 
 type Props = ParentProps<{
   kind: NonNullable<SheetKind>;
@@ -28,10 +40,25 @@ const TAP_MAX_MS = 300;
 export function BottomSheet(props: Props): JSX.Element {
   const [dragging, setDragging] = createSignal(false);
   const [dragDelta, setDragDelta] = createSignal(0);
+  const [isMobileViewport, setIsMobileViewport] = createSignal(false);
   let startY = 0;
   let startTime = 0;
+  let startSheetH = 0;
   let contentRef: HTMLDivElement | undefined;
   let didDrag = false;
+
+  // Re-evaluate viewport on mount + on resize. Determines which
+  // drag-handle behavior is active (mobile vertical-resize vs
+  // desktop snap-transitions).
+  onMount(() => {
+    const mql = window.matchMedia('(max-width: 720px)');
+    const apply = (e: MediaQueryList | MediaQueryListEvent): void => {
+      setIsMobileViewport(e.matches);
+    };
+    apply(mql);
+    mql.addEventListener('change', apply);
+    onCleanup(() => mql.removeEventListener('change', apply));
+  });
 
   const onPointerDown = (e: PointerEvent): void => {
     if ((e.target as HTMLElement | null)?.closest('[data-no-drag="true"]')) return;
@@ -39,12 +66,23 @@ export function BottomSheet(props: Props): JSX.Element {
     didDrag = false;
     startY = e.clientY;
     startTime = Date.now();
+    startSheetH = getSheetHeightPx() ?? snapHeightFor(currentSnap());
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
   };
   const onPointerMove = (e: PointerEvent): void => {
     if (!dragging()) return;
     const dy = e.clientY - startY;
     if (Math.abs(dy) > TAP_THRESHOLD_PX) didDrag = true;
+    if (isMobileViewport()) {
+      // Mobile: vertical drag resizes sheet height.
+      const next = startSheetH - dy;
+      const clamped = Math.max(
+        SHEET_HEIGHT_MIN_PX,
+        Math.min(SHEET_HEIGHT_MAX_PX, next),
+      );
+      setSheetHeightPx(clamped);
+      return;
+    }
     setDragDelta(Math.max(dy, -50));  // small overshoot up
   };
   const onPointerUp = (e: PointerEvent): void => {
@@ -55,6 +93,27 @@ export function BottomSheet(props: Props): JSX.Element {
     const v = dy / dt;  // px/ms
     (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
     setDragDelta(0);
+
+    if (isMobileViewport()) {
+      // Mobile: snap decision on release.
+      const finalH = getSheetHeightPx() ?? snapHeightFor(currentSnap());
+      const vh = window.innerHeight;
+      if (finalH < SHEET_HEIGHT_MIN_PX) {
+        resetSheetHeightPx();
+        snapTo('closed');
+      } else if (finalH > 0.6 * vh) {
+        // Snap to 'full' — override user height with snap default.
+        resetSheetHeightPx();
+        snapTo('full');
+      } else if (finalH > 0.42 * vh) {
+        resetSheetHeightPx();
+        snapTo('half');
+      } else {
+        resetSheetHeightPx();
+        snapTo('peek');
+      }
+      return;
+    }
 
     // Tap (no drag, fast) → cycle snap full ↔ half
     if (!didDrag && dt < TAP_MAX_MS) {
@@ -86,6 +145,17 @@ export function BottomSheet(props: Props): JSX.Element {
   };
 
   const currentSnap = (): SheetSnap => getKindSnap(props.kind);
+
+/** Default px-height for a given snap mode — used to anchor drag
+ *  start when the user has not resized manually. */
+const snapHeightFor = (snap: SheetSnap): number => {
+  switch (snap) {
+    case 'closed': return 0;
+    case 'peek':   return Math.round(window.innerHeight * 0.35);
+    case 'half':   return Math.round(window.innerHeight * 0.5);
+    case 'full':   return Math.round(window.innerHeight * 0.7);
+  }
+};
 
   const onKey = (e: KeyboardEvent): void => {
     if (e.key === 'Escape') closeAllSheets();
@@ -120,9 +190,18 @@ export function BottomSheet(props: Props): JSX.Element {
         onPointerUp={onPointerUp}
         onPointerCancel={onPointerUp}
         role="dialog"
-        aria-modal="true"
+        aria-modal={isMobileViewport() ? 'false' : 'true'}
         aria-label={props.title}
       >
+        {/* Top-handle is the primary drag-affordance on mobile;
+            on desktop the bottom handle-area does the same job. */}
+        <Show when={isMobileViewport()}>
+          <div
+            class="wc-sheet__top-handle"
+            data-no-drag="false"
+            aria-hidden="true"
+          />
+        </Show>
         <div class="wc-sheet__handle-area">
           <div class="wc-sheet__handle" />
         </div>
@@ -130,6 +209,12 @@ export function BottomSheet(props: Props): JSX.Element {
           <h2 class="wc-sheet__title">{props.title}</h2>
           <Show when={props.subtitle}>
             <span class="wc-sheet__subtitle">{props.subtitle}</span>
+          </Show>
+          {/* Internal sheet tabs: secondary navigation between
+              tools (Mixer/AI/Status/Step/Piano) when sheet is open.
+              Hidden via CSS on desktop (no-op when no sheet open). */}
+          <Show when={isMobileViewport()}>
+            <SheetTabs />
           </Show>
           <div class="wc-sheet__actions">
             <button

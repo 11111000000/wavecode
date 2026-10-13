@@ -221,6 +221,88 @@ describe('uiState bottom-sheet sync', () => {
   });
 });
 
+// =========================================================================
+// wavecode-mobile-split-pane — sheetHeightPx + persistence
+// =========================================================================
+
+describe('uiState sheetHeightPx (mobile split-pane drag-resize)', () => {
+  beforeEach(() => {
+    localStorage.clear();
+    vi.resetModules();
+  });
+
+  it('defaults to null (snap-driven)', async () => {
+    const s = await import('./uiState');
+    expect(s.getSheetHeightPx()).toBeNull();
+  });
+
+  it('setSheetHeightPx clamps below min to SHEET_HEIGHT_MIN_PX', async () => {
+    const s = await import('./uiState');
+    s.setSheetHeightPx(100);
+    expect(s.getSheetHeightPx()).toBe(s.SHEET_HEIGHT_MIN_PX);
+  });
+
+  it('setSheetHeightPx clamps above max to SHEET_HEIGHT_MAX_PX', async () => {
+    const s = await import('./uiState');
+    s.setSheetHeightPx(9999);
+    expect(s.getSheetHeightPx()).toBe(s.SHEET_HEIGHT_MAX_PX);
+  });
+
+  it('setSheetHeightPx accepts mid-range values verbatim', async () => {
+    const s = await import('./uiState');
+    s.setSheetHeightPx(420);
+    expect(s.getSheetHeightPx()).toBe(420);
+  });
+
+  it('setSheetHeightPx persists to localStorage wavecode-mobile-sheet-h-v1', async () => {
+    const s = await import('./uiState');
+    s.setSheetHeightPx(380);
+    expect(localStorage.getItem('wavecode-mobile-sheet-h-v1')).toBe('380');
+  });
+
+  it('resetSheetHeightPx clears the signal + localStorage entry', async () => {
+    const s = await import('./uiState');
+    s.setSheetHeightPx(380);
+    expect(s.getSheetHeightPx()).toBe(380);
+    s.resetSheetHeightPx();
+    expect(s.getSheetHeightPx()).toBeNull();
+    expect(localStorage.getItem('wavecode-mobile-sheet-h-v1')).toBeNull();
+  });
+
+  it('loadStoredSheetHeight restores from localStorage on module init', async () => {
+    localStorage.setItem('wavecode-mobile-sheet-h-v1', '340');
+    vi.resetModules();
+    const s = await import('./uiState');
+    expect(s.getSheetHeightPx()).toBe(340);
+  });
+
+  it('loadStoredSheetHeight ignores out-of-range persisted values', async () => {
+    localStorage.setItem('wavecode-mobile-sheet-h-v1', '999999');
+    vi.resetModules();
+    const s = await import('./uiState');
+    expect(s.getSheetHeightPx()).toBeNull();
+  });
+
+  it('setSheetHeightPx updates the --sheet-h CSS variable on documentElement', async () => {
+    const s = await import('./uiState');
+    s.setSheetHeightPx(400);
+    // give the createEffect a tick to run
+    await new Promise<void>((r) => setTimeout(r, 0));
+    const v = document.documentElement.style.getPropertyValue('--sheet-h');
+    expect(v).toBe('400px');
+  });
+
+  it('resetSheetHeightPx removes the --sheet-h CSS variable', async () => {
+    const s = await import('./uiState');
+    s.setSheetHeightPx(400);
+    await new Promise<void>((r) => setTimeout(r, 0));
+    expect(document.documentElement.style.getPropertyValue('--sheet-h')).toBe('400px');
+    s.resetSheetHeightPx();
+    await new Promise<void>((r) => setTimeout(r, 0));
+    expect(document.documentElement.style.getPropertyValue('--sheet-h')).toBe('');
+  });
+});
+
 describe('uiState keyboard shortcuts (multi-undo)', () => {
   let originalAdd: typeof window.addEventListener;
   let originalRemove: typeof window.removeEventListener;
