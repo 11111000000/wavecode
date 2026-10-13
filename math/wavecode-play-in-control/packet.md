@@ -93,9 +93,9 @@ substrate: |
     (this packet).
   − ничего не удаляется из CSS/UI кода; FAB-компонент и
     его стили сохраняются как потенциально полезные.
-status: draft
+status: applied
 witness:
-  applied_at: TBD
+  applied_at: 2026-10-13
   commit: TBD
   supersedes: null
   notes: |
