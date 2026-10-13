@@ -1,0 +1,51 @@
+applied_at: 2026-10-13
+commits:
+  - 1c76599 docs(math): draft wavecode-ui-minimal-pass
+  - add80d5 fix(ui): drop debug beep buttons (440/220) from PresetRow
+  - 25d124a fix(ui): drop dead audio-loading-skeleton
+  - 114ff8c feat(ui): hide /admin link; access via keyboard + long-press + error badge
+  - 238bdaa feat(ui): TopBar consolidation + OverflowMenu
+  - 27b462c feat(ui): AI settings gear (LLMSettingsPopover)
+  - 9f9a8ca fix(ui): de-emphasize cps-presets and swing-divisor in TransportPanel
+  - 9543825 feat(ui): BottomToolstrip for Step/Piano/Mixer access
+  - f46142a fix(ui): lint cleanup (LLMSettingsPopover <For />, TopBar reactivity)
+branch: wavecode/ui-minimal-pass-v1
+supersedes:
+  - math/wavecode-ui-design-overhaul/packet.md (draft; phase 1 of that plan)
+notes: |
+  Phase 1 of math/wavecode-ui-design-overhaul план — eight-item
+  UI cleanup based on critical review of /app vs landing mockup.
+  Touches:
+    - TopBar.tsx: 10 icons → 7 visible + OverflowMenu (new component)
+    - App.tsx: removed visible /admin link, added OverflowMenu+BottomToolstrip
+    - PresetRow.tsx: dropped 440/220 beep buttons, removed Step/Piano chips
+    - TransportPanel.tsx: untouched functionally; CSS de-emphasis (legacy.css)
+    - AIEditPanel.tsx: replaced 2 inline <select> with ⚙-popover (LLMSettingsPopover.tsx)
+    - uiState.ts: added Ctrl+Shift+A → openAdmin keyboard shortcut
+    - BottomToolstrip.tsx (new): 3-icon toolbar above TabBar for Step/Piano/Mixer
+
+  Verification (locally):
+      - typecheck: clean (pnpm typecheck)
+      - vitest: 628/628 passing (after symlink fix for superdough hoist
+        in worktree's node_modules — env quirk, not code issue)
+      - eslint: 2 errors (preexisting in master Hero.tsx, ConsoleSheet.test.tsx),
+        13 warnings (down from 17 baseline — net positive)
+
+  Admin access (A+B+C from synthesis):
+      - A: Ctrl+Shift+A → openAdmin
+      - B: ⋯ TopBar overflow menu → "Открыть админку 🔧"
+      - C: ⚠ badge in TopBar when appStore.audio.lastError is non-empty
+
+  Visual diff (described):
+    TopBar (7 visible):  Logo · LED · [New] · [↺] [↻] [Share] [⇄] [⋯]
+    PresetRow:           [Creep ▼] (Step/Piano/440/220 chips gone)
+    TransportPanel:      play · cps · BPM · swing · (cps-presets мелко,
+                         swing-divider · transparent underline)
+    ScorePanel:          code editor
+    BottomToolstrip:     [Step] [Piano] [Mixer]    ← новая строка
+    TabBar:              Score · AI · Status
+
+  Pending:
+    - Manual visual review on dev server (UI shell changes, not testable in unit tests)
+    - Mobile responsive check (BottomToolstrip labels collapse <640px)
+    - Merge to master via PR (worktree at .worktrees/ui-minimal-pass-v1)

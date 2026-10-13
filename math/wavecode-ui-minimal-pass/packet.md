@@ -146,5 +146,5 @@ synthesis: |
 
   Error-state TopBar (только при `appStore.audio.lastError`):
     LED заменяется на ⚠ → `#/admin`.
-status: draft
+status: applied
 ---
