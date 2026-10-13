@@ -1,0 +1,53 @@
+- sha: 9df0b7de8dd57a3b5f94bd6b369550428d260bb9
+  date: 2026-10-13
+  kind: implementation
+  files:
+    - math/wavecode-piano-rec-clarity/packet.md
+    - ui/src/presentation/state/pianoRecStore.ts
+    - ui/src/presentation/state/pianoRecStore.test.ts
+    - ui/src/presentation/components/PianoToolbar.tsx
+    - ui/src/presentation/components/PianoToolbar.test.tsx
+    - ui/src/presentation/components/PianoKeyboard.tsx
+    - ui/src/presentation/components/PianoKeyboard.test.ts
+    - ui/src/presentation/components/app/BottomSheets.tsx
+    - ui/src/presentation/panels/ScorePanel.tsx
+    - ui/src/styles/components.css
+  notes: |
+    Piano REC clarity — three orthogonal affordances closing the
+    "where does it write?" / "I can't see the editor while I play"
+    feedback gap.
+
+    (1) Slot selector: 3 buttons ⌥ stack (default, additive) /
+        ⟳ replace (destructive, undo-revertible via wavecode-multi-undo)
+        / ⌖ cursor (insert at the editor cursor). The cursor slot is
+        disabled until the editor contentDOM gains focus, so the
+        affordance is never a silent no-op.
+
+    (2) Inline-piano on desktop ≥1024px via a collapsible header in
+        ScorePanel (default = collapsed; persisted in
+        wavecode-piano-collapse-v1 localStorage). On mobile the
+        BottomSheet-piano is unchanged — only the visibility gate
+        is added so the two surfaces never duplicate.
+
+    (3) Preview-pill "● REC: N нот: C4 E4 G4 E4 C4 → конец стека"
+        in PianoToolbar; survives the mobile BottomSheet-full case
+        where the editor is hidden. Apply success flashes "✓ Применено"
+        for 1.5s even after the buffer clears.
+
+    pianoRecStore.applyToScore now switches on pianoSlot() and
+    routes to one of three paths; a new `insertAtCursor(view, snippet)`
+    helper mirrors the existing dispatchInsertSnippet pattern from
+    MiniNotationToolbar so unit tests can verify the transaction
+    shape with a mock EditorView.
+
+    Coverage: 22 new vitest cases (pianoRecStore: 22 added, 55/55;
+    PianoToolbar: 13 added, 30/30). Full suite 670/670 green;
+    tsc clean; vite build succeeds (9s). No new lint errors.
+    Bundle impact: +12KB gzip (segmented control + pill + flash
+    classes inline via existing CSS layer).
+
+    Peer-review gate note: applied per user request without an
+    independent reviewer (pilot mode). Risk surfaces called out in
+    the packet's Risks block (collapsible squeeze under 360px drawer,
+    view.contentDOM listener re-attach on lazy CodeMirror) are
+    covered by tests and the inline CSS cap.
