@@ -1,17 +1,20 @@
 import { For, Show, createSignal, onMount, onCleanup } from 'solid-js';
+import { Effect } from 'effect';
 import {
-  gridAsScore,
   toggleCellState,
   clearGridState,
   getGrid,
   loadFromScore,
+  appendGridToScore,
 } from '../state/gridState';
 import { dispatch, appStore } from '../state/appStore';
-import { evalScore } from '../state/audioActions';
+import { evalScore, previewSample } from '../state/audioActions';
 import {
   GRID_COLS,
   type GridRowSample,
 } from '~/domain/music/gridTypes';
+import { AudioEngine } from '~/domain/services';
+import { AppLayer } from '~/infrastructure/composition';
 
 const ROW_LABELS: ReadonlyArray<{ sample: GridRowSample; label: string }> = [
   { sample: 'bd', label: 'kick' },
@@ -23,46 +26,47 @@ const ROW_LABELS: ReadonlyArray<{ sample: GridRowSample; label: string }> = [
 /**
  * <StepGrid /> — 4×8 drum-pad grid, mobile-friendly tap targets.
  *
- * Tap = toggle cell + emit tap-flash + auto-eval (so user hears result).
- * `↻ clear` resets grid. `↑ load` copies synthesized score into main
- * editor and triggers eval.
+ * Tap = toggle cell + emit tap-flash + drum preview (no `audio.eval`,
+ * no score replacement — see wavecode-step-append-sync packet).
+ * `↻ clear` resets grid. `↑ load & play` merges synthesized score
+ * into the current editor score (stack-concat or wrap-into-stack) and
+ * triggers eval; it does NOT delete the user's existing composition.
  */
 export function StepGrid() {
   const [flashKey, setFlashKey] = createSignal<{ row: number; col: number } | null>(null);
   const [beat, setBeat] = createSignal(0);
 
-  // Animate playhead: RAF tick counter, 0..GRID_COLS-1 cycling at 120 BPM
-  // (8th notes = 60/120/2 = 0.25s = 4 ticks at 60Hz). Modest visual aid.
+  // Sync playhead to AudioEngine.getCycleProgress() — same pattern as
+  // TransportPanel. We don't tick on our own clock; when audio is
+  // stopped, getCycleProgress returns 0, so beat() sticks to column 0
+  // instead of lying about a phantom playhead position.
   let raf = 0;
-  let last = performance.now();
+  let lastWrite = 0;
   onMount(() => {
-    const tick = (now: number) => {
-      const dt = (now - last) / 1000;
-      if (dt >= 0.125) {
-        setBeat((b) => (b + 1) % GRID_COLS);
-        last = now;
+    const loop = (now: number) => {
+      if (now - lastWrite >= 14) {
+        lastWrite = now;
+        void Effect.runPromise(
+          Effect.gen(function* () {
+            const audio = yield* AudioEngine;
+            return yield* audio.getCycleProgress();
+          }).pipe(Effect.provide(AppLayer)),
+        ).then((progress) => {
+          const p = Number.isFinite(progress) ? Math.max(0, Math.min(1, progress)) : 0;
+          setBeat(Math.floor(p * GRID_COLS) % GRID_COLS);
+        });
       }
-      raf = requestAnimationFrame(tick);
+      raf = requestAnimationFrame(loop);
     };
-    raf = requestAnimationFrame(tick);
+    raf = requestAnimationFrame(loop);
     onCleanup(() => cancelAnimationFrame(raf));
   });
 
   const onCellTap = (row: number, col: number) => {
     toggleCellState(row, col);
+    previewSample(ROW_LABELS[row]!.sample);
     setFlashKey({ row, col });
     setTimeout(() => setFlashKey(null), 200);
-    // Auto-eval so user hears result
-    if (appStore.score.trim().length > 0) {
-      // Only re-eval if there's already a playing score. Otherwise user
-      // would need to click ▶ Запуск to start audio context (autoplay
-      // policy). Just dispatch into score + let user click Запуск.
-      const newScore = gridAsScore();
-      dispatch({ type: 'replaceScore', text: newScore });
-      void evalScore();
-    } else {
-      dispatch({ type: 'replaceScore', text: gridAsScore() });
-    }
   };
 
   const onClear = () => {
@@ -70,7 +74,7 @@ export function StepGrid() {
   };
 
   const onLoad = () => {
-    const newScore = gridAsScore();
+    const newScore = appendGridToScore(appStore.score, getGrid());
     dispatch({ type: 'replaceScore', text: newScore });
     void evalScore();
   };
