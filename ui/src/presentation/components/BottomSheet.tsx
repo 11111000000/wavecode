@@ -9,6 +9,7 @@ import {
   getSheetHeightPx,
   setSheetHeightPx,
   resetSheetHeightPx,
+  getActiveTab,
   SHEET_HEIGHT_MIN_PX,
   SHEET_HEIGHT_MAX_PX,
   type SheetKind,
@@ -30,17 +31,29 @@ const TAP_MAX_MS = 300;
 
 /**
  * BottomSheet — draggable sheet с 3 snap-точками.
- * Mobile:    bottom sheet, snap = closed | peek(60%) | half(40%) | full(0)
+ * Mobile:    bottom sheet (in-flow, push-mode), snap = closed | peek(35vh)
+ *            | half(50vh) | full(70vh), drag-handle resizes between
+ *            240..560px (persisted).
  * Desktop ≥1024px: right-side drawer, snap = closed | open (width 480/720)
  *
  * Drag реализован на pointer events; snap выбирается по release-velocity
  * + position. Tap на handle-area или header toggle-ит snap (full ↔ half);
  * кнопка expand/collapse в шапке даёт явный affordance.
+ *
+ * Polish (wavecode-mobile-split-pane polish):
+ *   - Snap-points indicator (3 dots) inside top-handle shows the
+ *     current target snap. Live-updated during drag.
+ *   - Snap-feedback pill (cyan "PEEK"/"HALF"/"FULL") floats below
+ *     the handle during drag, names the snap level the pointer
+ *     position resolves to.
+ *   - Sheet body fade-in keyed on `data-content-key` so internal
+ *     tab switching (Mixer → AI) cross-fades smoothly.
  */
 export function BottomSheet(props: Props): JSX.Element {
   const [dragging, setDragging] = createSignal(false);
   const [dragDelta, setDragDelta] = createSignal(0);
   const [isMobileViewport, setIsMobileViewport] = createSignal(false);
+  const [snapTarget, setSnapTarget] = createSignal<SheetSnap | null>(null);
   let startY = 0;
   let startTime = 0;
   let startSheetH = 0;
@@ -59,6 +72,29 @@ export function BottomSheet(props: Props): JSX.Element {
     mql.addEventListener('change', apply);
     onCleanup(() => mql.removeEventListener('change', apply));
   });
+
+  const currentSnap = (): SheetSnap => getKindSnap(props.kind);
+
+  /** Default px-height for a given snap mode — used to anchor drag
+   *  start when the user has not resized manually. */
+  const snapHeightFor = (snap: SheetSnap): number => {
+    switch (snap) {
+      case 'closed': return 0;
+      case 'peek':   return Math.round(window.innerHeight * 0.35);
+      case 'half':   return Math.round(window.innerHeight * 0.5);
+      case 'full':   return Math.round(window.innerHeight * 0.7);
+    }
+  };
+
+  /** Map a current sheet height in px to a snap target. Used during
+   *  drag to drive the snap-points indicator + feedback pill. */
+  const targetSnapForHeight = (h: number): SheetSnap => {
+    const vh = window.innerHeight;
+    if (h < SHEET_HEIGHT_MIN_PX) return 'closed';
+    if (h > 0.6 * vh) return 'full';
+    if (h > 0.42 * vh) return 'half';
+    return 'peek';
+  };
 
   const onPointerDown = (e: PointerEvent): void => {
     if ((e.target as HTMLElement | null)?.closest('[data-no-drag="true"]')) return;
@@ -81,6 +117,9 @@ export function BottomSheet(props: Props): JSX.Element {
         Math.min(SHEET_HEIGHT_MAX_PX, next),
       );
       setSheetHeightPx(clamped);
+      // Update snap-target live so the 3-dot indicator + feedback
+      // pill reflect the current pointer position.
+      setSnapTarget(targetSnapForHeight(clamped));
       return;
     }
     setDragDelta(Math.max(dy, -50));  // small overshoot up
@@ -93,6 +132,7 @@ export function BottomSheet(props: Props): JSX.Element {
     const v = dy / dt;  // px/ms
     (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
     setDragDelta(0);
+    setSnapTarget(null);
 
     if (isMobileViewport()) {
       // Mobile: snap decision on release.
@@ -144,19 +184,6 @@ export function BottomSheet(props: Props): JSX.Element {
     closeAllSheets();
   };
 
-  const currentSnap = (): SheetSnap => getKindSnap(props.kind);
-
-/** Default px-height for a given snap mode — used to anchor drag
- *  start when the user has not resized manually. */
-const snapHeightFor = (snap: SheetSnap): number => {
-  switch (snap) {
-    case 'closed': return 0;
-    case 'peek':   return Math.round(window.innerHeight * 0.35);
-    case 'half':   return Math.round(window.innerHeight * 0.5);
-    case 'full':   return Math.round(window.innerHeight * 0.7);
-  }
-};
-
   const onKey = (e: KeyboardEvent): void => {
     if (e.key === 'Escape') closeAllSheets();
   };
@@ -177,12 +204,28 @@ const snapHeightFor = (snap: SheetSnap): number => {
     else snapTo('full');
   };
 
+  // Content key drives the sheet-body fade-in animation. Changes
+  // when the active tab inside the sheet switches (so Mixer → AI
+  // cross-fades) or when the user reopens the sheet.
+  const contentKey = (): string => `${currentSnap()}:${getActiveTab()}`;
+
+  const snapTargetLabel = (s: SheetSnap | null): string => {
+    if (s === null) return '';
+    switch (s) {
+      case 'closed': return 'закрыть';
+      case 'peek':   return 'peek';
+      case 'half':   return 'half';
+      case 'full':   return 'full';
+    }
+  };
+
   return (
     <Show when={currentSnap() !== 'closed'}>
       <div class="wc-sheet-backdrop" data-open="true" onClick={onBackdropClick} aria-hidden="true" />
       <div
         class="wc-sheet"
         data-snap={currentSnap()}
+        data-snap-target={snapTarget() ?? ''}
         data-kind={props.kind}
         style={style()}
         onPointerDown={onPointerDown}
@@ -193,14 +236,29 @@ const snapHeightFor = (snap: SheetSnap): number => {
         aria-modal={isMobileViewport() ? 'false' : 'true'}
         aria-label={props.title}
       >
-        {/* Top-handle is the primary drag-affordance on mobile;
-            on desktop the bottom handle-area does the same job. */}
+        {/* Top-handle: drag-affordance + snap-points indicator +
+            snap-feedback pill (latter visible only during drag). */}
         <Show when={isMobileViewport()}>
           <div
             class="wc-sheet__top-handle"
             data-no-drag="false"
             aria-hidden="true"
-          />
+          >
+            <div class="wc-sheet__snap-points" aria-hidden="true">
+              <span class="wc-sheet__snap-point" data-snap-id="peek" />
+              <span class="wc-sheet__snap-point" data-snap-id="half" />
+              <span class="wc-sheet__snap-point" data-snap-id="full" />
+            </div>
+            <Show when={dragging() && snapTarget() !== null}>
+              <span
+                class="wc-sheet__snap-feedback"
+                role="status"
+                aria-live="polite"
+              >
+                {snapTargetLabel(snapTarget())}
+              </span>
+            </Show>
+          </div>
         </Show>
         <div class="wc-sheet__handle-area">
           <div class="wc-sheet__handle" />
@@ -243,6 +301,7 @@ const snapHeightFor = (snap: SheetSnap): number => {
         <div
           class={`wc-sheet__body ${props.scrollBody ? 'wc-sheet__body--scroll' : ''}`}
           data-no-drag="true"
+          data-content-key={contentKey()}
           ref={contentRef}
         >
           {props.children}

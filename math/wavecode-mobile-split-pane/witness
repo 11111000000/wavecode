@@ -22,7 +22,7 @@
         Backdrop removed on mobile (was the source of the blur);
         body scroll unlocked.
 
-    (b) Drag-handle. New wc-sheet__top-handle (cyan pill, 16px
+    (b) Drag-handle. New wc-sheet__top-handle (cyan pill, 24px
         hit-area, cursor:ns-resize). Pointer drag in
         BottomSheet.onPointerMove updates setSheetHeightPx (clamp
         240..560px). Snap decisions on release: <240 → closed,
@@ -49,18 +49,55 @@
         flex parent). Desktop ≥1024px sheets.css @media override
         restores position:fixed right-side drawer.
 
-    Coverage: +9 uiState cases (sheetHeightPx clamps [240..560],
-    localStorage round-trip, --sheet-h CSS var effect); +8
-    SheetTabs cases (5 tabs render, click delegation, active state).
-    New e2e mobile-sheet-push.spec.ts (5 cases): split-pane
-    layout assertion, editor interactive while sheet open, internal
-    tab switch, Score tab closes sheet, drag-handle resize with
-    --sheet-h CSS var.
+    (g) Snap-points indicator (polish). 3-dot vertical column inside
+        top-handle. The dot matching current data-snap-target (peek /
+        half / full) lights up cyan + 1.5× scale. Live-updated during
+        drag so the user sees where they'll snap BEFORE releasing.
 
-    Verification: vitest 712/712 (52 files, +17 net new);
+    (h) Snap-feedback pill (polish). Cyan pill ('PEEK' / 'HALF' /
+        'FULL') below the handle, role=status + aria-live=polite,
+        visible only during drag. Pop animation 200ms spring.
+
+    (i) Content-key fade (polish). sheet body data-content-key=
+        '<snap>:<tab>'. CSS animation wc-sheet-fade 200ms keyed
+        on the attribute — internal tab switching (Mixer → AI)
+        cross-fades smoothly.
+
+    Coverage: +11 uiState cases (sheetHeightPx clamps [240..560],
+    localStorage round-trip, --sheet-h CSS var effect, fractional
+    rounding, zero-clamp-to-min); +8 SheetTabs cases (5 tabs render,
+    click delegation, active state). New e2e
+    mobile-sheet-push.spec.ts (7 cases): split-pane layout,
+    editor interactive while sheet open, internal tab switch,
+    Score tab closes sheet, drag-handle resize, snap-points
+    indicator (3 dots + live target), snap-feedback pill (shown
+    only during drag).
+
+    Verification: vitest 714/714 (52 files, +19 net new);
     tsc --noEmit clean; vite build succeeds. No new lint errors.
 
     Desktop regression: piano-rec-slot.spec.ts e2e continues to
     pass unchanged — sheets.css desktop override preserves the
     right-side drawer geometry. The desktop-affordance surface
     (right drawer, snap-transitions on drag) is intact.
+
+- sha: cec3730d702a05e92c461ee6d946065d3fc177c9
+  date: 2026-10-13
+  kind: polish
+  files:
+    - ui/src/presentation/components/BottomSheet.tsx
+    - ui/src/presentation/state/uiState.test.ts
+    - ui/src/styles/sheets.css
+    - ui/tests/e2e/mobile-sheet-push.spec.ts
+  notes: |
+    Polish commit on feat/mobile-sheet-polish branch — three visual
+    refinements to the mobile split-pane drag affordance.
+
+    (g) Snap-points indicator (3 dots inside top-handle, live target
+        highlight on drag).
+    (h) Snap-feedback pill (cyan, role=status, shows during drag).
+    (i) Content-key fade (sheet body cross-fades on tab switch).
+
+    +2 uiState test cases (fractional rounding, zero-clamp-to-min);
+    +2 e2e cases (snap-points indicator + feedback pill). Total
+    suite: 714/714. tsc clean.

@@ -221,13 +221,18 @@
   /* Disable bottom handle-area on mobile — top-handle does the work. */
   .wc-sheet__handle-area { display: none !important; }
 
-  /* Top-handle: drag-affordance. 16px-high hit-area, 40×4 cyan pill. */
+  /* Top-handle: drag-affordance + snap-points indicator. 24px-high,
+   *  40×4 cyan pill (centered) + 3-dot snap indicator (right of pill).
+   *  During drag, the indicator dot matching the target snap lights
+   *  up in cyan; the others stay dim. This gives a clear visual
+   *  "you'll snap to peek/half/full" preview before release. */
   .wc-sheet__top-handle {
     flex-shrink: 0;
     display: flex;
     align-items: center;
     justify-content: center;
-    height: 16px;
+    gap: var(--space-xs);
+    height: 24px;
     cursor: ns-resize;
     touch-action: pan-y;
     user-select: none;
@@ -247,6 +252,62 @@
   .wc-sheet__top-handle:hover::before { background: var(--cyan); }
   .wc-sheet__top-handle:active { cursor: ns-resize; }
   .wc-sheet__top-handle:active::before { background: var(--cyan); }
+
+  /* 3-dot snap indicator: peek (top) / half (middle) / full (bottom).
+   *  Their vertical positions in the 24px handle hint at the visual
+   *  ordering of snap levels. The dot matching the current
+   *  data-snap-target is highlighted cyan + 1.4× scale. */
+  .wc-sheet__snap-points {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    height: 16px;
+    width: 8px;
+  }
+  .wc-sheet__snap-point {
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    background: var(--border-strong);
+    transition:
+      background 120ms var(--ease),
+      transform 120ms var(--ease);
+  }
+  .wc-sheet[data-snap-target='peek']  .wc-sheet__snap-point[data-snap-id='peek'],
+  .wc-sheet[data-snap-target='half']  .wc-sheet__snap-point[data-snap-id='half'],
+  .wc-sheet[data-snap-target='full']  .wc-sheet__snap-point[data-snap-id='full'] {
+    background: var(--cyan);
+    transform: scale(1.5);
+  }
+
+  /* Snap-feedback pill: shown ONLY during drag, anchored to the
+   *  handle. Tells the user exactly which snap level the current
+   *  pointer position resolves to. */
+  .wc-sheet__snap-feedback {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, 16px);
+    background: var(--cyan);
+    color: var(--fg-inverse);
+    font-family: var(--font-mono);
+    font-size: var(--fs-2xs);
+    font-weight: var(--fw-semibold);
+    letter-spacing: var(--ls-wide);
+    text-transform: uppercase;
+    padding: 2px 8px;
+    border-radius: var(--radius-pill);
+    pointer-events: none;
+    animation: wc-snap-feedback-pop var(--dur-xs) var(--ease-spring);
+    z-index: 1;
+    box-shadow: var(--shadow-glow-cyan);
+  }
+  @keyframes wc-snap-feedback-pop {
+    0%   { transform: translate(-50%, 24px); opacity: 0; }
+    100% { transform: translate(-50%, 16px); opacity: 1; }
+  }
 
   /* Internal sheet tabs — Mixer/AI/Status/Step/Piano */
   .wc-sheet__tabs {
@@ -291,8 +352,8 @@
   }
 
   /* ScorePanel: flex child that takes the remainder of .app-body
-   * above the sheet. min-height 200px so the editor stays readable
-   * even when the sheet is full (70vh). */
+    * above the sheet. min-height 200px so the editor stays readable
+    * even when the sheet is full (70vh). */
   .score-panel {
     flex: 1 1 auto;
     min-height: 200px;
@@ -303,6 +364,14 @@
     overflow: hidden;
   }
   .score-panel-inner { min-height: 0; }
+
+  /* Sheet body fade-in on content change (tab switch). 200ms ease.
+   *  Keyed on data-content-key attribute set by BottomSheet when
+   *  the active tab changes — provides a smooth fade when
+   *  SheetTabs toggles between Mixer/AI/Status. */
+  .wc-sheet__body[data-content-key] {
+    animation: wc-sheet-fade var(--dur-xs) var(--ease) both;
+  }
 
   /* FAB: shift up by --sheet-h on mobile so it sits between sheet
    * and tabbar instead of getting covered. */

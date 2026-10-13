@@ -301,6 +301,18 @@ describe('uiState sheetHeightPx (mobile split-pane drag-resize)', () => {
     await new Promise<void>((r) => setTimeout(r, 0));
     expect(document.documentElement.style.getPropertyValue('--sheet-h')).toBe('');
   });
+
+  it('setSheetHeightPx rounds fractional values to integers (px)', async () => {
+    const s = await import('./uiState');
+    s.setSheetHeightPx(420.7);
+    expect(s.getSheetHeightPx()).toBe(421);
+  });
+
+  it('setSheetHeightPx(0) clamps to SHEET_HEIGHT_MIN_PX (not zero)', async () => {
+    const s = await import('./uiState');
+    s.setSheetHeightPx(0);
+    expect(s.getSheetHeightPx()).toBe(s.SHEET_HEIGHT_MIN_PX);
+  });
 });
 
 describe('uiState keyboard shortcuts (multi-undo)', () => {
