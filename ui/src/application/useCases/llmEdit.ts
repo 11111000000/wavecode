@@ -262,7 +262,12 @@ export const applyEdit = (
     (window as unknown as { __wavecodeLastRaw?: string }).__wavecodeLastRaw = raw;
 
     const cleaned = cleanLLMResponse(raw);
-    console.log('[wavecode/applyEdit] raw length:', raw.length, 'cleaned length:', cleaned.length);
+    // Note: raw/cleaned length diagnostics used to be logged via `console.log`
+    // here. Removed in feat/quality-tooling — application/ has no-console:'error',
+    // and the raw response is already stashed on globalThis
+    // (`__wavecodeLastRaw`, retrieved via getLastRawLLMResponse) for any
+    // debug UI that wants it. Verbose logging now flows through the
+    // centralised logger (infrastructure/log/*) when wired up.
     return cleaned;
   });
 

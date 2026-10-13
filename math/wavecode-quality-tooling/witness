@@ -1,0 +1,58 @@
+- sha: bfa2c33
+  date: 2026-10-13
+  branch: feat/quality-tooling
+  kind: creation
+  files:
+    - ui/eslint.config.js
+    - ui/package.json
+    - ui/src/application/useCases/llmEdit.ts
+    - scripts/pre-commit
+    - scripts/validate-presets.ts
+    - package.json
+    - math/wavecode-quality-tooling/packet.md
+  notes: |
+    Two machine-enforced invariants on every git commit:
+
+    (1) LAYERING INVARIANT — ui/eslint.config.js adds `no-console:
+        error` override scoped to `src/domain/**/*.ts` and
+        `src/application/**/*.ts` (production code only; `*.test.ts`
+        siblings are exempt). One existing `console.log` in
+        `src/application/useCases/llmEdit.ts:265` removed (verbose
+        log from Phase 5 commit 2eab0d3; raw LLM response is already
+        stashed on globalThis via `__wavecodeLastRaw` and reachable
+        via `getLastRawLLMResponse`).
+    (2) PRESET SCHEMA INVARIANT — scripts/validate-presets.ts
+        dynamic-imports `@strudel/transpiler` from `ui/node_modules`
+        via `createRequire` + `paths: ['<repo>/ui/node_modules']`
+        (Node ESM resolution from `scripts/` doesn't see the
+        sibling `node_modules/`). Runs `validatePreset` (from
+        `domain/presets.ts`, added in Phase 5's feat/presets-decode-
+        race) against every `BUILTIN_PRESETS` entry. Falls back to
+        `new Function(preset.score)` syntactic smoke test when the
+        transpiler fails to load (Node without DOM, `@kabelsalat/web`
+        browser-only). Exits 0 if all 18 presets pass, 1 if any
+        warning or error emitted.
+
+    PRE-COMMIT UX — scripts/pre-commit (40-line bash, set -euo
+        pipefail): runs typecheck + vitest + lint:no-console +
+        validate:presets in 4 steps. ~5-7s end-to-end on warm cache.
+        Install via `ln -s ../../scripts/pre-commit .git/hooks/pre-
+        commit` or `npm run precommit:install` (added to root
+        package.json).
+
+    NEW SCRIPTS — root `package.json` (NEW, 14 lines): top-level
+        `validate:presets` + `precommit:install`. ui/package.json
+        adds `lint:no-console`, `validate:presets`, `test:precommit`.
+
+    TESTS — 0 new unit tests on this worktree. ESLint config is
+        config-only (no test surface). validate-presets.ts is a CLI
+        covered indirectly by 8 preset-validation cases in
+        `presets.test.ts` (mock transpiler). pre-commit bash script
+        verified manually: `bash scripts/pre-commit` from repo root
+        passes with exit 0 on a clean tree.
+
+    Baseline (master before this commit): 366 vitest tests, 14 lint
+    warnings (0 errors), 1 stray console.log in application layer.
+    After this commit: 366/366 tests pass, 14 lint warnings
+    (unchanged), 0 console.log in domain or application. Typecheck
+    clean. `bash scripts/pre-commit` exits 0.
