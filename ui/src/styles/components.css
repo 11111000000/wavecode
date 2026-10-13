@@ -2098,6 +2098,10 @@ button:not([disabled]):not(.no-shrink):active {
 /* ── Bottom toolstrip (Step / Piano / Mixer) ───────────────────────────── */
 
 .wc-toolstrip {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: calc(var(--tabbar-h) + var(--safe-bottom));
   display: flex;
   gap: var(--space-xs);
   justify-content: center;
@@ -2106,6 +2110,7 @@ button:not([disabled]):not(.no-shrink):active {
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   border-top: 1px solid var(--border);
+  z-index: calc(var(--z-sheet) + 11);
 }
 .wc-toolstrip-btn {
   display: inline-flex;
