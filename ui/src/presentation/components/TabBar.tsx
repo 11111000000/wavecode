@@ -1,7 +1,7 @@
 import type { JSX } from 'solid-js';
 import { Show, For } from 'solid-js';
 import {
-  getActiveTab, setTab, type TabId,
+  getActiveTab, setTab, hasOpenSheet, type TabId,
 } from '../state/uiState';
 import {
   TabScoreIcon, TabStepIcon, TabPianoIcon, TabMixerIcon, TabChatIcon, TabStatusIcon,
@@ -45,6 +45,7 @@ export function TabBar(): JSX.Element {
               type="button"
               class="wc-tab"
               data-active={getActiveTab() === item.id ? 'true' : 'false'}
+              data-has-open-sheet={item.id === 'score' && hasOpenSheet() ? 'true' : 'false'}
               onClick={() => setTab(item.id)}
               aria-label={item.label}
               aria-pressed={getActiveTab() === item.id}
