@@ -2030,3 +2030,67 @@ button:not([disabled]):not(.no-shrink):active {
     max-width: calc(100vw - var(--space-md) * 2);
   }
 }
+
+/* ── LLM settings gear (AI footer) ──────────────────────────────────────── */
+
+.wc-llm-popover-wrap {
+  position: relative;
+  display: inline-flex;
+}
+.wc-llm-settings-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2xs);
+  padding: var(--space-2xs) var(--space-sm);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  color: var(--fg-muted);
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  letter-spacing: var(--ls-tight);
+  cursor: pointer;
+  white-space: nowrap;
+  min-height: 32px;
+}
+.wc-llm-settings-btn:hover {
+  color: var(--fg);
+  border-color: var(--amber);
+  background: var(--amber-soft);
+}
+.wc-llm-settings-btn__sep {
+  opacity: 0.4;
+}
+.wc-llm-popover {
+  position: absolute;
+  bottom: calc(100% + var(--space-xs));
+  left: 0;
+  min-width: 240px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-overlay);
+  padding: var(--space-sm);
+  z-index: var(--z-popover);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+.wc-llm-popover__field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2xs);
+}
+.wc-llm-popover__label {
+  font-family: var(--font-mono);
+  font-size: var(--fs-2xs);
+  text-transform: uppercase;
+  letter-spacing: var(--ls-wide);
+  color: var(--fg-muted);
+}
+.wc-llm-popover__hint {
+  margin: 0;
+  font-size: var(--fs-2xs);
+  color: var(--fg-ghost);
+  line-height: var(--lh-snug);
+}
