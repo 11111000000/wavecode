@@ -243,7 +243,20 @@ synthesis: |
   - editorFocused signal: view.contentDOM пересоздаётся при lazy-load CodeMirror; re-attach listener при editorApi change. Если не сделать — флаг застрянет в `false`.
   - view.dispatch с insert + scrollIntoView + flash: три эффекта в одном dispatch. На огромном snippet'е (100+ строк) — flash на каждой строке = 100 decorations, потенциально медленно. Защита: flash только на первой и последней строке (визуально достаточно), или cap на 10 строк.
   - Mobile at-cursor: editor за BottomSheet-piano скрыт; кнопка disabled. UX-flow: пользователь переключает таб Score → BottomSheet закрывается → editor visible → tap → фокус. Это 2-3 тапа. Если юзер не понимает, кнопка остаётся серой. Tooltip критичен.
-status: draft
+status: applied
+witness:
+  applied_at: 2026-10-13
+  branch: feat/piano-rec-clarity
+  commit: 9df0b7de8dd57a3b5f94bd6b369550428d260bb9
+  supersedes: null
+  notes: |
+    Implementation completed on 2026-10-13 on branch
+    `feat/piano-rec-clarity`. Test counts (vitest): 670/670 passing
+    across 50 files. Net new tests: +35 split across pianoRecStore
+    (slot selector, 3-way applyToScore, atCursorSpec pure builder,
+    previewPillPayload), PianoToolbar (slot buttons + editor-focus
+    gating + preview-pill + apply-flash). tsc --noEmit clean;
+    vite build succeeds (9s). No new lint errors.
 axiom: A5
 epistemics:
   - statement: "На desktop ≥1024px ScorePanel может быть 360px drawer (AI-primary) или flex-1 (code-primary) в зависимости от uiState.layout"
