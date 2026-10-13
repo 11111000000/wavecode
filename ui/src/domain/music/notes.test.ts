@@ -4,6 +4,8 @@ import {
   midiToStrudelNote,
   strudelNoteToMidi,
   singleNoteSnippet,
+  multiNoteSnippet,
+  SILENCE_SNIPPET,
   isInPianoRange,
   rangeNotes,
   isBlackKey,
@@ -52,6 +54,54 @@ describe('notes', () => {
     expect(snippet).toContain('triangle');
     expect(snippet).toContain('attack(0.005)');
     expect(snippet).toContain('decay(0.4)');
+  });
+
+  it('multiNoteSnippet: empty set returns SILENCE_SNIPPET', () => {
+    expect(multiNoteSnippet(new Set())).toBe(SILENCE_SNIPPET);
+    expect(SILENCE_SNIPPET).toBe('silence');
+  });
+
+  it('multiNoteSnippet: single note → bare voice (no stack wrapper)', () => {
+    const snippet = multiNoteSnippet(new Set(['c4']));
+    expect(snippet).not.toContain('stack(');
+    expect(snippet).toContain('note("c4")');
+    expect(snippet).toContain('s("triangle")');
+    expect(snippet).toContain('gain(0.3)');
+    expect(snippet).toContain('attack(0.005)');
+    expect(snippet).toContain('decay(0.4)');
+  });
+
+  it('multiNoteSnippet: chord → stack() with one voice per note', () => {
+    const snippet = multiNoteSnippet(new Set(['c4', 'e4', 'g4']));
+    expect(snippet.startsWith('stack(')).toBe(true);
+    expect(snippet.endsWith(')')).toBe(true);
+    expect(snippet).toContain('note("c4")');
+    expect(snippet).toContain('note("e4")');
+    expect(snippet).toContain('note("g4")');
+    // Each voice carries its own gain — the mixer in injectMix may
+    // override these per-layer, but the snippet must not omit them,
+    // otherwise stack() layers would be mixer-less on first eval.
+    const voiceCount = (snippet.match(/\.gain\(0\.3\)/g) ?? []).length;
+    expect(voiceCount).toBe(3);
+  });
+
+  it('multiNoteSnippet: invalid note names are dropped silently', () => {
+    const snippet = multiNoteSnippet(new Set(['c4', 'xx99', 'q']));
+    expect(snippet).toContain('note("c4")');
+    expect(snippet).not.toContain('xx99');
+    expect(snippet).not.toContain('note("q")');
+  });
+
+  it('multiNoteSnippet: all notes invalid → SILENCE_SNIPPET', () => {
+    const snippet = multiNoteSnippet(new Set(['xx99', 'q', '']));
+    expect(snippet).toBe(SILENCE_SNIPPET);
+  });
+
+  it('multiNoteSnippet: normalizes uppercase note names to lowercase', () => {
+    const snippet = multiNoteSnippet(new Set(['C4', 'E4', 'G4']));
+    expect(snippet).toContain('note("c4")');
+    expect(snippet).toContain('note("e4")');
+    expect(snippet).toContain('note("g4")');
   });
 
   it('isInPianoRange', () => {
