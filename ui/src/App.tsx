@@ -56,7 +56,26 @@ export function App(): JSX.Element {
   const audio = useAppBootstrap();
   useAutoSave();
 
-  const [presetId, setPresetId] = createSignal('creep');
+  // Лендинг передаёт выбранный пресет через ?preset=<id>.
+  // Подхватываем его в onMount, чтобы не было вспышки "creep" при заходе.
+  const initialPresetId = (() => {
+    try {
+      const p = new URLSearchParams(window.location.search).get('preset');
+      if (p && getPreset(p)) return p;
+    } catch { /* malformed URL — игнорируем */ }
+    return 'creep';
+  })();
+
+  const [presetId, setPresetId] = createSignal(initialPresetId);
+  // Если пришли с лендинга — сразу подставить score в редактор.
+  // Пользователь сам нажмёт ▶, потому что autoplay без user gesture
+  // браузер блокирует (AudioContext.resume требует click/keydown).
+  if (initialPresetId !== 'creep') {
+    const preset = getPreset(initialPresetId);
+    if (preset) {
+      dispatch({ type: 'replaceScore', text: preset.score });
+    }
+  }
   const [showSavePreset, setShowSavePreset] = createSignal(false);
   const [showStepGrid, setShowStepGrid] = createSignal(false);
   const [showPiano, setShowPiano] = createSignal(false);

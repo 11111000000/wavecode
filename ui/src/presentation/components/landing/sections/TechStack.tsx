@@ -8,27 +8,26 @@ type Stack = {
 };
 
 const CORE: ReadonlyArray<Stack> = [
-  { name: 'TypeScript',      note: 'strict',         tone: 'cyan'    },
-  { name: 'Solid.js 1.8',    note: 'reactive UI',    tone: 'amber'   },
-  { name: 'Effect-TS',       note: 'DI · Layer',     tone: 'magenta' },
-  { name: 'CodeMirror 6',    note: 'editor',         tone: 'cyan'    },
-  { name: '@strudel/webaudio', note: 'runtime',      tone: 'amber'   },
-  { name: 'idb-keyval',      note: 'persistence',    tone: 'magenta' },
+  { name: 'TypeScript',      note: 'строгая типизация',     tone: 'cyan'    },
+  { name: 'Solid.js',        note: 'быстрый UI',            tone: 'amber'   },
+  { name: 'Effect-TS',       note: 'архитектура',           tone: 'magenta' },
+  { name: 'CodeMirror 6',   note: 'редактор кода',         tone: 'cyan'    },
+  { name: 'Strudel',         note: 'музыкальный движок',    tone: 'amber'   },
+  { name: 'Web Audio',       note: 'звук в браузере',       tone: 'magenta' },
 ];
 
-const TEST: ReadonlyArray<Stack> = [
-  { name: 'Vitest',          note: 'unit',           tone: 'ok'      },
-  { name: 'Playwright',      note: 'e2e',            tone: 'ok'      },
-  { name: '@solidjs/testing-library', note: 'DOM',  tone: 'silver'  },
-  { name: 'ESLint 9',        note: 'lint',           tone: 'silver'  },
-  { name: 'typescript-eslint', note: 'typecheck',    tone: 'silver'  },
+const QUALITY: ReadonlyArray<Stack> = [
+  { name: 'Vitest',            note: 'тесты',         tone: 'ok'      },
+  { name: 'Playwright',        note: 'e2e',           tone: 'ok'      },
+  { name: 'ESLint 9',          note: 'линтер',        tone: 'silver'  },
+  { name: 'TypeScript ESLint', note: 'типы',          tone: 'silver'  },
 ];
 
 const DEPLOY: ReadonlyArray<Stack> = [
-  { name: 'Vite 5',          note: 'bundler',        tone: 'cyan'    },
-  { name: 'vite-plugin-pwa', note: 'service worker', tone: 'amber'   },
-  { name: 'No Nix / Docker', note: 'pure static',    tone: 'silver'  },
-  { name: 'Web Audio + WebMIDI', note: 'native',     tone: 'cyan'    },
+  { name: 'Vite 5',          note: 'сборка',               tone: 'cyan'    },
+  { name: 'vite-plugin-pwa', note: 'кеш в браузере',       tone: 'amber'   },
+  { name: 'Caddy',           note: 'reverse proxy',        tone: 'silver'  },
+  { name: 'NixOS',           note: 'хостинг',              tone: 'silver'  },
 ];
 
 const StackBadge = (p: { s: Stack }): JSX.Element => (
@@ -39,24 +38,26 @@ const StackBadge = (p: { s: Stack }): JSX.Element => (
   </span>
 );
 
+/**
+ * TechStack — что внутри. Простым языком, без «vite-plugin-pwa
+ * с generateSW стратегией precacheAndRoute». Только названия и зачем.
+ */
 export function TechStack(): JSX.Element {
   return (
     <section class="l-section" aria-labelledby="stack-title">
       <header class="l-section__head">
-        <span class="l-section__kicker">07 · stack</span>
+        <span class="l-section__kicker">05 · из чего сделано</span>
         <h2 class="l-section__title" id="stack-title">
-          Стек, который держит лендинг и редактор на одной базе.
+          Open source. Без своих серверов. Без vendor lock-in.
         </h2>
         <p class="l-section__sub">
-          Только first-party зависимости Vite-экосистемы и Web API.
-          Никаких кастомных серверов, никаких обёрток над апи
-          фреймворков.
+          Только открытые библиотеки. Никакой проприетарной магии.
         </p>
       </header>
 
       <h3 class="l-stack__group-title"
           style={{ 'font-family': 'var(--font-mono)', 'font-size': 'var(--fs-xs)', 'letter-spacing': '0.10em', 'text-transform': 'uppercase', color: 'var(--fg-dim)', 'margin-bottom': 'var(--space-md)' }}>
-        Runtime
+        В работе
       </h3>
       <div class="l-stack" role="list">
         <For each={CORE}>{(s) => <StackBadge s={s} />}</For>
@@ -64,15 +65,15 @@ export function TechStack(): JSX.Element {
 
       <h3 class="l-stack__group-title"
           style={{ 'font-family': 'var(--font-mono)', 'font-size': 'var(--fs-xs)', 'letter-spacing': '0.10em', 'text-transform': 'uppercase', color: 'var(--fg-dim)', 'margin': 'var(--space-2xl) 0 var(--space-md)' }}>
-        Quality
+        Качество
       </h3>
       <div class="l-stack" role="list">
-        <For each={TEST}>{(s) => <StackBadge s={s} />}</For>
+        <For each={QUALITY}>{(s) => <StackBadge s={s} />}</For>
       </div>
 
       <h3 class="l-stack__group-title"
           style={{ 'font-family': 'var(--font-mono)', 'font-size': 'var(--fs-xs)', 'letter-spacing': '0.10em', 'text-transform': 'uppercase', color: 'var(--fg-dim)', 'margin': 'var(--space-2xl) 0 var(--space-md)' }}>
-        Deploy
+        Хостинг
       </h3>
       <div class="l-stack" role="list">
         <For each={DEPLOY}>{(s) => <StackBadge s={s} />}</For>

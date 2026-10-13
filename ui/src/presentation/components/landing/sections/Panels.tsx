@@ -13,67 +13,71 @@ type Panel = {
 
 const PANELS: ReadonlyArray<Panel> = [
   {
-    name: 'Transport',
-    body: 'Play · Stop · Cycle (cps) · BPM. Loop-сегмент, A/B playhead для stage-сетапов.',
+    name: 'Play / Stop',
+    body: 'Запустить, остановить, поставить на паузу. Одна кнопка снизу справа.',
     tone: 'amber',
     Icon: TransportIcon,
   },
   {
-    name: 'Mixer',
-    body: 'Per-track gain, pan, reverb send, mute. Звук микшируется на лету без перезапуска eval.',
+    name: 'Микшер',
+    body: 'Громкость каждого трека, панорама, общие эффекты — ревер и эхо.',
     tone: 'cyan',
     Icon: MixerIcon,
   },
   {
-    name: 'Piano',
-    body: 'Экранная MIDI-клавиатура 2 октавы. Клик + MIDI-in через WebMIDI. Active-notes indicator.',
+    name: 'Клавиатура',
+    body: 'Экранное пианино. Можно играть мышкой или подключить MIDI-клавиатуру.',
     tone: 'magenta',
     Icon: PianoIcon24,
   },
   {
-    name: 'Step Grid',
-    body: 'Drum-machine: 16 шагов × 8 треков. Click → toggle. Изменения сразу попадают в pattern.',
+    name: 'Бит-бокс',
+    body: 'Сетка 16×8 для ударных. Клик — нота звучит. Меняешь сетку — меняется бит.',
     tone: 'amber',
     Icon: StepGridIcon,
   },
   {
-    name: 'Recording',
-    body: 'Record в .mid прямо в браузере через @tonejs/midi. Share-link — без бэкенда.',
+    name: 'Запись',
+    body: 'Сыграй что-нибудь — получится .mid файл, который можно скачать.',
     tone: 'cyan',
     Icon: RecordIcon24,
   },
   {
-    name: 'MIDI I/O',
-    body: 'WebMIDI-устройства: in/out. Auto-reconnect на devicechange. 60 fps без блокировок.',
+    name: 'MIDI',
+    body: 'Подключай любые MIDI-устройства — клавиатуры, контроллеры, синтезаторы.',
     tone: 'magenta',
     Icon: MidiIcon,
   },
   {
-    name: 'Sample Bank',
-    body: 'Freesound CC0: drums, piano, bass, toms. Прогресс через Service Worker cache, pre-load на старте.',
+    name: 'Библиотека звуков',
+    body: 'Готовые наборы ударных, фортепиано, баса — не нужно ничего скачивать.',
     tone: 'amber',
     Icon: SampleIcon,
   },
   {
-    name: 'Console',
-    body: 'Bottom-right FAB. Кольцо ошибок Strudel / source auto-detect. Клик — вкладки Errors / All / By source.',
+    name: 'Подсказки',
+    body: 'Если что-то пошло не так — внизу справа кнопка, покажет подробности ошибки.',
     tone: 'silver',
     Icon: ConsoleIcon,
   },
 ];
 
+/**
+ * Panels — восемь инструментов редактора простым языком.
+ * Без «MIDI I/O», «WebMIDI devicechange» — только то, что
+ * имеет смысл для нового пользователя.
+ */
 export function Panels(): JSX.Element {
   return (
     <section id="tools" class="l-section" aria-labelledby="tools-title">
       <header class="l-section__head">
-        <span class="l-section__kicker">06 · tools</span>
+        <span class="l-section__kicker">04 · что внутри</span>
         <h2 class="l-section__title" id="tools-title">
-          8 инструментов внутри редактора.
+          Восемь инструментов в редакторе.
         </h2>
         <p class="l-section__sub">
-          Каждая панель открывается контекстно — через FAB или chip в
-          верхней панели. Никаких перекрытий, draggable bottom-sheets,
-          snap-points 30% / 90%, safe-area на iPhone-notch.
+          Каждый открывается в отдельной панели. Не нужно изучать
+          всё сразу — начни с кнопки Play и пресетов.
         </p>
       </header>
 
