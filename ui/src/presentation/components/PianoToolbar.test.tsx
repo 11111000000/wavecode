@@ -18,6 +18,10 @@ beforeEach(async () => {
   rec.clearRec();
   if (rec.recEnabled()) rec.toggleRec();
   if (rec.followEnabled()) rec.toggleFollow();
+  // Reset slot + editor wiring to per-test defaults.
+  if (rec.pianoSlot() !== 'append-stack') rec.setPianoSlot('append-stack');
+  rec.setEditorFocused(false);
+  rec.setPianoEditorApi(undefined);
   // Reset score so applyToScore tests start from empty editor.
   const { dispatch } = await import('../state/appStore');
   dispatch({ type: 'replaceScore', text: '' });
@@ -227,5 +231,162 @@ describe('PianoToolbar — ↑ apply button (wavecode-piano-modes-and-gain)', ()
     fireEvent.click(apply);
     expect(appStore.score).toContain('note("c4")');
     expect(rec.recBuffer()).toEqual([]); // buffer cleared after apply
+  });
+});
+
+// =========================================================================
+// wavecode-piano-rec-clarity — slot selector + preview-pill
+// =========================================================================
+
+describe('PianoToolbar — slot selector (wavecode-piano-rec-clarity)', () => {
+  it('renders three slot buttons with correct aria-labels', async () => {
+    const { container } = render(() => <PianoToolbar />);
+    const slots = container.querySelectorAll<HTMLButtonElement>('.piano-slot-btn');
+    expect(slots).toHaveLength(3);
+    expect(slots[0]!.getAttribute('data-slot')).toBe('append-stack');
+    expect(slots[1]!.getAttribute('data-slot')).toBe('replace-score');
+    expect(slots[2]!.getAttribute('data-slot')).toBe('at-cursor');
+    expect(slots[0]!.getAttribute('aria-label')).toMatch(/конец стека/);
+    expect(slots[1]!.getAttribute('aria-label')).toMatch(/заменить score/);
+    expect(slots[2]!.getAttribute('aria-label')).toMatch(/курсор/);
+  });
+
+  it('default slot is append-stack (data-active=true)', async () => {
+    const { container } = render(() => <PianoToolbar />);
+    const slots = container.querySelectorAll<HTMLButtonElement>('.piano-slot-btn');
+    expect(slots[0]!.getAttribute('data-active')).toBe('true');
+    expect(slots[1]!.getAttribute('data-active')).toBe('false');
+    expect(slots[2]!.getAttribute('data-active')).toBe('false');
+  });
+
+  it('clicking a slot flips data-active', async () => {
+    const rec = await import('../state/pianoRecStore');
+    const { container, getByLabelText } = render(() => <PianoToolbar />);
+    fireEvent.click(getByLabelText(/заменить score/) as HTMLButtonElement);
+    expect(rec.pianoSlot()).toBe('replace-score');
+    const slots = container.querySelectorAll<HTMLButtonElement>('.piano-slot-btn');
+    expect(slots[1]!.getAttribute('data-active')).toBe('true');
+    expect(slots[0]!.getAttribute('data-active')).toBe('false');
+  });
+
+  it('at-cursor slot is disabled when editor is not focused', async () => {
+    const rec = await import('../state/pianoRecStore');
+    rec.setEditorFocused(false);
+    const { container } = render(() => <PianoToolbar />);
+    const cursorBtn = container.querySelector<HTMLButtonElement>(
+      '.piano-slot-btn[data-slot="at-cursor"]',
+    )!;
+    expect(cursorBtn.disabled).toBe(true);
+    expect(cursorBtn.getAttribute('title')).toMatch(/Тапните в редактор/);
+  });
+
+  it('at-cursor slot becomes enabled when editor is focused', async () => {
+    const rec = await import('../state/pianoRecStore');
+    rec.setEditorFocused(true);
+    const { container } = render(() => <PianoToolbar />);
+    const cursorBtn = container.querySelector<HTMLButtonElement>(
+      '.piano-slot-btn[data-slot="at-cursor"]',
+    )!;
+    expect(cursorBtn.disabled).toBe(false);
+    expect(cursorBtn.getAttribute('title')).toMatch(/Вставить в позицию курсора/);
+  });
+
+  it('clicking apply with replace-score slot overwrites the score (no wrap)', async () => {
+    const rec = await import('../state/pianoRecStore');
+    const { appStore, dispatch } = await import('../state/appStore');
+    if (!rec.recEnabled()) rec.toggleRec();
+    rec.setPianoSlot('replace-score');
+    dispatch({ type: 'replaceScore', text: 's("hh*4")' });
+    rec.appendNote(60, 0, 100);
+    const { container } = render(() => <PianoToolbar />);
+    const apply = container.querySelector<HTMLButtonElement>('.piano-apply-btn')!;
+    fireEvent.click(apply);
+    expect(appStore.score).toContain('note("c4")');
+    expect(appStore.score).not.toContain('hh*4'); // destructive
+  });
+
+  it('clicking apply with at-cursor slot dispatches insert via editor API', async () => {
+    const rec = await import('../state/pianoRecStore');
+    const { appStore, dispatch } = await import('../state/appStore');
+    if (!rec.recEnabled()) rec.toggleRec();
+    rec.setPianoSlot('at-cursor');
+    dispatch({ type: 'replaceScore', text: 'note("e4")' });
+    rec.appendNote(60, 0, 100);
+    // Mock view with cursor at offset 10
+    const dispatches: Array<unknown> = [];
+    const fakeView = {
+      state: { selection: { main: { from: 10, to: 10 } } },
+      dispatch: (tr: unknown) => {
+        dispatches.push(tr);
+      },
+    };
+    rec.setPianoEditorApi({ getView: () => fakeView as never });
+    rec.setEditorFocused(true);
+    const { container } = render(() => <PianoToolbar />);
+    const apply = container.querySelector<HTMLButtonElement>('.piano-apply-btn')!;
+    fireEvent.click(apply);
+    expect(dispatches).toHaveLength(1);
+    // Editor's text was inserted in the fake view, NOT dispatched as
+    // a global replaceScore — `appStore.score` is unchanged.
+    expect(appStore.score).toBe('note("e4")');
+  });
+});
+
+describe('PianoToolbar — preview-pill (wavecode-piano-rec-clarity)', () => {
+  it('is hidden when the buffer is empty', () => {
+    const { container } = render(() => <PianoToolbar />);
+    expect(container.querySelector('.piano-rec-pill')).toBeNull();
+  });
+
+  it('is hidden when REC is off (even with non-empty buffer)', async () => {
+    const rec = await import('../state/pianoRecStore');
+    if (rec.recEnabled()) rec.toggleRec();
+    rec.appendNote(60, 0, 100);
+    const { container } = render(() => <PianoToolbar />);
+    expect(container.querySelector('.piano-rec-pill')).toBeNull();
+  });
+
+  it('renders count + first note names + slot label when REC on + buffer non-empty', async () => {
+    const rec = await import('../state/pianoRecStore');
+    if (!rec.recEnabled()) rec.toggleRec();
+    rec.appendNote(60, 0, 100); // C4
+    rec.appendNote(64, 100, 200); // E4
+    const { container } = render(() => <PianoToolbar />);
+    const pill = container.querySelector<HTMLSpanElement>('.piano-rec-pill');
+    expect(pill).toBeTruthy();
+    expect(pill!.textContent).toContain('REC');
+    expect(pill!.textContent).toContain('2');
+    expect(pill!.textContent).toContain('C4');
+    expect(pill!.textContent).toContain('E4');
+    expect(pill!.textContent).toContain('конец стека');
+    expect(pill!.getAttribute('data-slot')).toBe('append-stack');
+    expect(pill!.getAttribute('data-active')).toBe('true');
+  });
+
+  it('reflects current slot label (replace-score / at-cursor)', async () => {
+    const rec = await import('../state/pianoRecStore');
+    if (!rec.recEnabled()) rec.toggleRec();
+    rec.appendNote(60, 0, 100);
+    rec.setPianoSlot('replace-score');
+    const { container } = render(() => <PianoToolbar />);
+    const pill = container.querySelector<HTMLSpanElement>('.piano-rec-pill');
+    expect(pill!.textContent).toContain('заменить score');
+    expect(pill!.getAttribute('data-slot')).toBe('replace-score');
+  });
+
+  it('shows "✓ Применено" briefly after a successful apply', async () => {
+    const rec = await import('../state/pianoRecStore');
+    if (!rec.recEnabled()) rec.toggleRec();
+    rec.appendNote(60, 0, 100);
+    const { container } = render(() => <PianoToolbar />);
+    const apply = container.querySelector<HTMLButtonElement>('.piano-apply-btn')!;
+    fireEvent.click(apply);
+    // Solid's <Show> memoises + updates reactively; let the
+    // microtask queue drain before re-querying the DOM.
+    await new Promise((r) => setTimeout(r, 0));
+    const applied = container.querySelector<HTMLSpanElement>('.piano-rec-pill--applied');
+    expect(applied).toBeTruthy();
+    expect(applied!.getAttribute('data-applied')).toBe('true');
+    expect(applied!.textContent).toMatch(/✓ Применено/);
   });
 });

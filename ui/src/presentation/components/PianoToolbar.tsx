@@ -1,4 +1,4 @@
-import { For, Show, type JSX } from 'solid-js';
+import { For, Show, createSignal, type JSX } from 'solid-js';
 import { RecordIcon } from '../icons';
 import {
   recEnabled,
@@ -9,11 +9,18 @@ import {
   applyToScore,
   instrument,
   setInstrument,
+  pianoSlot,
+  setPianoSlot,
+  editorFocused,
+  previewPillPayload,
+  pianoSlotLabel,
+  pianoSlotGlyph,
+  type PianoSlot,
 } from '../state/pianoRecStore';
 import type { PianoInstrument } from '~/domain/music/notes';
 
 /**
- * PianoToolbar — REC + FOLLOW + apply + instrument selector for the piano.
+ * PianoToolbar — REC + FOLLOW + slot selector + apply + preview + instrument.
  *
  * Rendered inline inside `.piano-toolbar` (next to the existing
  * `.piano-hint` text and optional MIDI status pill). The component
@@ -22,17 +29,29 @@ import type { PianoInstrument } from '~/domain/music/notes';
  * routing lives in PianoKeyboard; this component owns only the UI
  * affordances.
  *
- * Four affordances (post wavecode-piano-modes-and-gain):
+ * Six affordances:
  *   1. REC toggle (magenta pulse when on) — writes pressed keys into
  *      the rec buffer.
  *   2. FOLLOW toggle (cyan when on) — independent of REC. When on,
  *      PianoKeyboard polls `AudioEngine.getActiveHaps()` every 50ms
  *      and lights up the piano keys whose MIDI numbers are currently
  *      in the scheduler. Audition / REC / FOLLOW compose orthogonally.
- *   3. ↑ apply button — visible only when REC is on AND the buffer is
- *      non-empty. Calls `applyToScore()` which commits the buffer to
- *      the editor via `dispatch(replaceScore)`.
- *   4. Instrument selector — 4 inline buttons (△ ∿ ⊿ ⊓), amber when
+ *   3. Slot segmented control (wavecode-piano-rec-clarity) — three
+ *      buttons: `↵ stack` (append at end of stack), `⟳ replace`
+ *      (destructive replace of the whole score), `⌖ cursor` (insert
+ *      at the editor cursor). `⌖ cursor` is disabled when the
+ *      editor is not focused; tooltip explains how to enable.
+ *   4. ↑ apply button — visible only when REC is on AND the buffer is
+ *      non-empty. Calls `applyToScore()` which reads `pianoSlot()`
+ *      and dispatches accordingly. After successful apply, the pill
+ *      flashes "✓ Применено" for 1.5s before clearing (buffer is
+ *      cleared → pill naturally hides).
+ *   5. Preview-pill (wavecode-piano-rec-clarity) — "● REC: 5 нот:
+ *      C4 E4 G4 E4 C4 → конец стека". Shows the user what will be
+ *      committed and to which slot, BEFORE apply. Visible whenever
+ *      the buffer is non-empty. Critical for the mobile BottomSheet
+ *      case where the editor is hidden under the sheet.
+ *   6. Instrument selector — 4 inline buttons (△ ∿ ⊿ ⊓), amber when
  *      active. Each label is a unicode glyph chosen for legibility at
  *      24px without external SVG.
  *
@@ -64,6 +83,32 @@ export type PianoToolbarProps = {
 
 const INSTRUMENTS: ReadonlyArray<PianoInstrument> = ['triangle', 'sine', 'sawtooth', 'square'];
 
+const SLOTS: ReadonlyArray<{
+  readonly id: PianoSlot;
+  readonly ariaLabel: string;
+  readonly titleEnabled: string;
+  readonly titleDisabled: string | undefined;
+}> = [
+  {
+    id: 'append-stack',
+    ariaLabel: 'Слот: конец стека — дописать как слой в существующий stack',
+    titleEnabled: 'Записать в конец стека — будет дописано как новый слой',
+    titleDisabled: undefined,
+  },
+  {
+    id: 'replace-score',
+    ariaLabel: 'Слот: заменить score — перезаписать весь score целиком (⌘Z для отмены)',
+    titleEnabled: 'Заменит весь score. ⌘Z для отмены',
+    titleDisabled: undefined,
+  },
+  {
+    id: 'at-cursor',
+    ariaLabel: 'Слот: в позицию курсора — вставить в редактор там, где стоит курсор',
+    titleEnabled: 'Вставить в позицию курсора в редакторе',
+    titleDisabled: 'Тапните в редактор чтобы ставить ноты в курсор',
+  },
+];
+
 const instrumentGlyph = (inst: PianoInstrument): string => {
   switch (inst) {
     case 'triangle': return '△';
@@ -74,6 +119,9 @@ const instrumentGlyph = (inst: PianoInstrument): string => {
   }
 };
 
+/** Duration of the "✓ Применено" pill flash after a successful apply. */
+const APPLY_FLASH_MS = 1500;
+
 export const PianoToolbar = (props: PianoToolbarProps): JSX.Element => {
   const midiPillTone = (): 'ok' | 'pending' => {
     const s = props.midiStatus ?? '';
@@ -81,6 +129,32 @@ export const PianoToolbar = (props: PianoToolbarProps): JSX.Element => {
   };
 
   const canApply = (): boolean => recEnabled() && recBuffer().length > 0;
+
+  // Apply-flash state — local to the toolbar, fires only on a successful
+  // commit. The flash lasts 1.5s and persists even after the buffer
+  // is cleared (otherwise the user would never see "Применено" —
+  // the pill would hide as soon as the buffer empties).
+  const [applyFlash, setApplyFlash] = createSignal(false);
+  const [appliedCount, setAppliedCount] = createSignal(0);
+  let flashTimer: ReturnType<typeof setTimeout> | null = null;
+
+  const handleApply = (): void => {
+    const bufLen = recBuffer().length;
+    applyToScore();
+    // applyToScore cleared the buffer only on success. Show flash only
+    // when something actually got committed.
+    if (recBuffer().length < bufLen) {
+      setAppliedCount(bufLen);
+      setApplyFlash(true);
+      if (flashTimer !== null) clearTimeout(flashTimer);
+      flashTimer = setTimeout(() => {
+        setApplyFlash(false);
+        flashTimer = null;
+      }, APPLY_FLASH_MS);
+    }
+  };
+
+  const pillPayload = (): ReturnType<typeof previewPillPayload> => previewPillPayload();
 
   return (
     <div class="piano-toolbar-row">
@@ -107,16 +181,84 @@ export const PianoToolbar = (props: PianoToolbarProps): JSX.Element => {
       >
         FOLLOW
       </button>
+      <div class="piano-slot-selector" role="group" aria-label="Куда применить записанные ноты">
+        <For each={SLOTS}>
+          {(slot) => {
+            const isActive = (): boolean => pianoSlot() === slot.id;
+            const isDisabled = (): boolean =>
+              slot.id === 'at-cursor' && !editorFocused();
+            const title = (): string => {
+              if (isDisabled() && slot.titleDisabled !== undefined) {
+                return slot.titleDisabled;
+              }
+              return slot.titleEnabled;
+            };
+            return (
+              <button
+                type="button"
+                class="piano-slot-btn"
+                data-slot={slot.id}
+                data-active={isActive() ? 'true' : 'false'}
+                disabled={isDisabled()}
+                title={title()}
+                aria-label={slot.ariaLabel}
+                aria-pressed={isActive()}
+                onClick={() => setPianoSlot(slot.id)}
+              >
+                {pianoSlotGlyph(slot.id)}
+              </button>
+            );
+          }}
+        </For>
+      </div>
       <Show when={canApply()}>
         <button
           type="button"
           class="piano-apply-btn"
-          onClick={() => applyToScore()}
+          onClick={handleApply}
           title="Применить записанные ноты к score"
           aria-label="Применить записанные ноты к score"
         >
           ↑ apply
         </button>
+      </Show>
+      <Show when={applyFlash() || (recEnabled() && pillPayload() !== null)}>
+        <Show
+          when={applyFlash()}
+          fallback={
+            <Show when={pillPayload()}>
+              {(payload) => (
+                <span
+                  class="piano-rec-pill"
+                  data-active={recEnabled() ? 'true' : 'false'}
+                  data-slot={payload().slot}
+                  aria-live="polite"
+                >
+                  <span class="piano-rec-pill__dot" aria-hidden="true" />
+                  <span class="piano-rec-pill__count">
+                    REC: {payload().count} н{payload().count === 1 ? 'ота' : 'от'}
+                  </span>
+                  <span class="piano-rec-pill__notes">
+                    {payload().firstNames.join(' ')}
+                    {payload().overflow > 0 ? ` +${payload().overflow}` : ''}
+                  </span>
+                  <span class="piano-rec-pill__arrow" aria-hidden="true">
+                    →
+                  </span>
+                  <span class="piano-rec-pill__slot">{pianoSlotLabel(payload().slot)}</span>
+                </span>
+              )}
+            </Show>
+          }
+        >
+          <span
+            class="piano-rec-pill piano-rec-pill--applied"
+            data-applied="true"
+            aria-live="polite"
+          >
+            ✓ Применено → {appliedCount()} н{appliedCount() === 1 ? 'ота' : 'от'}
+          </span>
+        </Show>
       </Show>
       <div class="piano-instrument-selector" role="group" aria-label="Инструмент">
         <For each={INSTRUMENTS}>
