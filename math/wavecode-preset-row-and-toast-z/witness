@@ -1,0 +1,38 @@
+applied_at: 2026-10-14
+branch: fix/preset-and-toast-z
+commits:
+  - 3024181 fix(ui): preset row visible under TopBar, toast on top of toolbar
+supersedes: null
+notes: |
+  Two regressions caused by wavecode-transport-always-visible moving
+  .app-controls-row to position:fixed (z-sheet+12 = 52). The fixed
+  transport row was rendered on top of the in-flow PresetRow, hiding
+  the composition <select>. Toast stack sat at top:calc(--header-h +
+  space), pinned under the toolbar.
+
+  Fix:
+    - .app-preset-row → position:fixed; top:var(--header-h);
+      z-index:calc(var(--z-sheet) + 13) = 53.
+    - .app-controls-row → top:calc(var(--header-h) +
+      var(--preset-row-h)) (sits below preset row).
+    - .app-body padding-top → calc(var(--preset-row-h) +
+      var(--controls-h)) = 44 + 52 = 96px (keeps CodeMirror below
+      both fixed rows).
+    - .toast-stack → top:var(--safe-top) (overlays TopBar visually;
+      z-toast=50 > topbar z=45, pointer-events:none on stack
+      preserves TopBar clickability around the chip).
+    - tokens.css: new --preset-row-h: 44px.
+
+  Counts:
+    - components.css: +37 / -9 lines
+    - tokens.css:     +1 line (--preset-row-h)
+    - packet.md:      +201 lines (new math/wavecode-preset-row-and-toast-z/packet.md)
+
+  Verification:
+    - typecheck (tsc --noEmit): clean
+    - vitest: 694/694 pass (no test changes — pure CSS)
+    - build (vite): success, 8.79s
+    - manual visual (logical): TopBar (56) → preset-row (44) →
+      transport (52) → app-body (96 reserved) = stacks correctly.
+      Toast at top:safe-top overlays TopBar at any toast push
+      (e.g. samples-loaded event).
