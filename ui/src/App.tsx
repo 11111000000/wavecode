@@ -31,6 +31,7 @@ import { PresetRow } from './presentation/components/app/PresetRow';
 import { PanelsLayout } from './presentation/components/app/PanelsLayout';
 import { BottomSheets } from './presentation/components/app/BottomSheets';
 import { Admin } from './presentation/pages/Admin';
+import { Landing } from './presentation/components/landing/Landing';
 import { TransportPanel } from './presentation/components/TransportPanel';
 
 const NEW_COMPOSITION_TEMPLATE = '// Начни новую композицию здесь\n';
@@ -65,26 +66,29 @@ const confirmNew = (): boolean => window.confirm(
  * `/admin` as a third route would require touching `package.json` —
  * which other agents own.
  *
- * For two routes (#/app + #/admin) a 30-line router is cheaper than
- * pulling in `@solidjs/router` + its peer deps and threading it back
- * through `main.tsx` (also out of scope). Behavior:
+ * For three routes (#/, #/app, #/admin) a 30-line router is cheaper
+ * than pulling in `@solidjs/router` + its peer deps and threading it
+ * back through `main.tsx` (also out of scope). Behavior:
  *
- *   #/         → AppShell (editor)
+ *   #/         → Landing (marketing page, math/wavecode-landing-restore)
  *   #/app      → AppShell (editor)
  *   #/admin    → Admin (debug inspector)
- *   anything else → AppShell (fallback)
+ *   anything else → Landing (fallback — bare URL goes to marketing)
  *
  * Hash changes are observed via `hashchange` and stored in a signal so
  * the JSX re-evaluates. SSR-safe (no `window` reads outside `onMount`).
  */
-const useHashRoute = (): () => 'app' | 'admin' => {
-  const readHash = (): 'app' | 'admin' => {
-    if (typeof window === 'undefined') return 'app';
+type Route = 'landing' | 'app' | 'admin';
+const useHashRoute = (): () => Route => {
+  const readHash = (): Route => {
+    if (typeof window === 'undefined') return 'landing';
     const h = window.location.hash;
     if (h === '#/admin' || h.startsWith('#/admin?')) return 'admin';
-    return 'app';
+    if (h === '#/app' || h.startsWith('#/app?') || h.startsWith('#/app&')) return 'app';
+    // #/, '', or anything else → landing
+    return 'landing';
   };
-  const [route, setRoute] = createSignal<'app' | 'admin'>(readHash());
+  const [route, setRoute] = createSignal<Route>(readHash());
   onMount(() => {
     const onHash = (): void => { setRoute(readHash()); };
     window.addEventListener('hashchange', onHash);
@@ -96,8 +100,15 @@ const useHashRoute = (): () => 'app' | 'admin' => {
 export function App(): JSX.Element {
   const route = useHashRoute();
   return (
-    <Show when={route() === 'admin'} fallback={<AppShell />}>
-      <Admin />
+    <Show
+      when={route() === 'admin' ? 'admin' : route() === 'app' ? 'app' : 'landing'}
+      fallback={<Landing />}
+    >
+      {(which) => (
+        <Show when={which() === 'admin'} fallback={<AppShell />}>
+          <Admin />
+        </Show>
+      )}
     </Show>
   );
 }
