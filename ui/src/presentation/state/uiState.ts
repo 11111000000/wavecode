@@ -194,6 +194,71 @@ export type SheetKind = 'ai' | 'mixer' | 'step' | 'piano' | 'status' | 'share' |
 export type SheetSnap = 'closed' | 'peek' | 'half' | 'full';
 export type TabId = 'score' | 'step' | 'piano' | 'mixer' | 'chat' | 'status';
 
+/** wavecode-mobile-split-pane — sheet height (in CSS px) on mobile.
+ *  null = snap-only (snap decides height via CSS rules in sheets.css
+ *  `@media (max-width: 720px)`). Non-null = user-resized via
+ *  drag-handle; persisted across sessions in localStorage. */
+const SHEET_H_KEY = 'wavecode-mobile-sheet-h-v1';
+export const SHEET_HEIGHT_MIN_PX = 240;
+export const SHEET_HEIGHT_MAX_PX = 560;
+
+const [sheetHeightPx, setSheetHeightPxRaw] = createSignal<number | null>(null);
+
+export const getSheetHeightPx = sheetHeightPx;
+
+export const setSheetHeightPx = (px: number): void => {
+  const clamped = Math.max(SHEET_HEIGHT_MIN_PX, Math.min(SHEET_HEIGHT_MAX_PX, Math.round(px)));
+  setSheetHeightPxRaw(clamped);
+  try {
+    localStorage.setItem(SHEET_H_KEY, String(clamped));
+  } catch {
+    /* localStorage unavailable — silently no-op */
+  }
+};
+
+export const resetSheetHeightPx = (): void => {
+  setSheetHeightPxRaw(null);
+  try {
+    localStorage.removeItem(SHEET_H_KEY);
+  } catch {
+    /* localStorage unavailable — silently no-op */
+  }
+};
+
+const loadStoredSheetHeight = (): number | null => {
+  try {
+    const raw = localStorage.getItem(SHEET_H_KEY);
+    if (raw === null) return null;
+    const n = Number.parseInt(raw, 10);
+    if (!Number.isFinite(n)) return null;
+    if (n < SHEET_HEIGHT_MIN_PX || n > SHEET_HEIGHT_MAX_PX) return null;
+    return n;
+  } catch {
+    return null;
+  }
+};
+
+// Initialize from localStorage at module load.
+setSheetHeightPxRaw(loadStoredSheetHeight());
+
+// Reactive CSS var — every change to sheetHeightPx() updates
+// `--sheet-h` on document root. sheets.css reads this var.
+const _sheetHeightCssVarDispose = createRoot((d) => {
+  createEffect(() => {
+    const h = sheetHeightPx();
+    if (typeof document === 'undefined') return;
+    if (h === null) {
+      document.documentElement.style.removeProperty('--sheet-h');
+    } else {
+      document.documentElement.style.setProperty('--sheet-h', `${h}px`);
+    }
+  });
+  return d;
+});
+if (import.meta.hot) {
+  import.meta.hot.dispose(() => _sheetHeightCssVarDispose());
+}
+
 const [activeSheet, setActiveSheetRaw] = createSignal<SheetKind>(null);
 const [sheetSnap, setSheetSnap] = createSignal<SheetSnap>('closed');
 const [activeTab, setActiveTab] = createSignal<TabId>('score');
