@@ -535,9 +535,15 @@
   background: var(--surface-1);
 }
 
-.ai-panel { background: var(--surface-0); }
+.ai-panel {
+  background: var(--surface-0);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
 .ai-panel[data-open='true'] {
-  flex: 0 0 auto;
+  flex: 1 1 0;
   min-height: 240px;
   max-height: 50vh;
 }
@@ -597,10 +603,11 @@
 
 .ai-panel > :not(.panel-header),
 .status-panel > :not(.panel-header) {
-  padding: var(--space-md) var(--space-lg);
-  overflow: auto;
+  padding: 0;
   flex: 1 1 auto;
   min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 /* =========================================================================
@@ -675,6 +682,12 @@
   font-size: var(--fs-xs);
   white-space: pre-wrap;
   line-height: var(--lh-base);
+  /* Один Strudel-ответ может быть на 30+ строк. Без лимита он
+   * раздувает .ai-messages, и панель лезет поверх transport.
+   * Скролл внутри пузыря + max-height даёт bounded rendering. */
+  max-height: 220px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .ai-footer {
