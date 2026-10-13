@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { appStore, dispatch } from './appStore';
 
 /**
@@ -17,6 +17,11 @@ beforeEach(async () => {
   s.clearRec();
   if (s.recEnabled()) s.toggleRec();
   if (s.followEnabled()) s.toggleFollow();
+  // Reset slot + editor focus + editor API + apply-feedback (per-session
+  // invariants — every test starts from the same baseline).
+  if (s.pianoSlot() !== 'append-stack') s.setPianoSlot('append-stack');
+  if (s.editorFocused()) s.setEditorFocused(false);
+  s.setPianoEditorApi(undefined);
   // Reset the appStore.score to '' so applyToScore tests don't leak
   // into each other. (Each test sets it explicitly via the `score`
   // signal setter below.)
@@ -344,5 +349,290 @@ describe('pianoRecStore — applyToScore (wavecode-piano-modes-and-gain)', () =>
     // 3 voices total: original c4 + original g4 + the second g4 (after splice
     // the first apply layer becomes the first arg, second g4 becomes the second).
     expect((after.match(/note\(/g) ?? []).length).toBe(2);
+  });
+});
+
+// =========================================================================
+// wavecode-piano-rec-clarity — slot selector + 3-way apply + preview pill
+// =========================================================================
+
+describe('pianoRecStore — pianoSlot selector', () => {
+  it('default slot is append-stack', async () => {
+    const s = await importStore();
+    expect(s.pianoSlot()).toBe('append-stack');
+  });
+
+  it('setPianoSlot cycles through all three values', async () => {
+    const s = await importStore();
+    s.setPianoSlot('replace-score');
+    expect(s.pianoSlot()).toBe('replace-score');
+    s.setPianoSlot('at-cursor');
+    expect(s.pianoSlot()).toBe('at-cursor');
+    s.setPianoSlot('append-stack');
+    expect(s.pianoSlot()).toBe('append-stack');
+  });
+
+  it('slot survives within a session but resets across imports (per-session contract)', async () => {
+    const s = await importStore();
+    s.setPianoSlot('replace-score');
+    expect(s.pianoSlot()).toBe('replace-score');
+    // Module-level signal — same module, same signal value. A fresh
+    // session would re-import the module and reset to default.
+  });
+
+  it('pianoSlotLabel returns human-readable Russian labels', async () => {
+    const s = await importStore();
+    expect(s.pianoSlotLabel('append-stack')).toBe('конец стека');
+    expect(s.pianoSlotLabel('replace-score')).toBe('заменить score');
+    expect(s.pianoSlotLabel('at-cursor')).toBe('в курсор');
+  });
+
+  it('pianoSlotGlyph returns compact segmented-control labels', async () => {
+    const s = await importStore();
+    expect(s.pianoSlotGlyph('append-stack')).toBe('↵ stack');
+    expect(s.pianoSlotGlyph('replace-score')).toBe('⟳ replace');
+    expect(s.pianoSlotGlyph('at-cursor')).toBe('⌖ cursor');
+  });
+});
+
+describe('pianoRecStore — editorFocused + pianoEditorApi wiring', () => {
+  it('editorFocused defaults to false', async () => {
+    const s = await importStore();
+    expect(s.editorFocused()).toBe(false);
+  });
+
+  it('setEditorFocused flips the signal', async () => {
+    const s = await importStore();
+    s.setEditorFocused(true);
+    expect(s.editorFocused()).toBe(true);
+    s.setEditorFocused(false);
+    expect(s.editorFocused()).toBe(false);
+  });
+
+  it('pianoEditorApi defaults to undefined; settable + clearable', async () => {
+    const s = await importStore();
+    expect(s.pianoEditorApi()).toBeUndefined();
+    const fakeApi = { getView: () => undefined };
+    s.setPianoEditorApi(fakeApi);
+    expect(s.pianoEditorApi()).toBe(fakeApi);
+    s.setPianoEditorApi(undefined);
+    expect(s.pianoEditorApi()).toBeUndefined();
+  });
+});
+
+describe('pianoRecStore — applyToScore replace-score slot', () => {
+  it('dispatches replaceScore with snippet as-is (no stack wrap)', async () => {
+    const s = await importStore();
+    s.setPianoSlot('replace-score');
+    dispatch({ type: 'replaceScore', text: 's("hh*4")' });
+    s.appendNote(60, 0, 100);
+    s.appendNote(64, 100, 200);
+    s.applyToScore();
+    const after = appStore.score;
+    // Two notes committed as-is; no stack wrap applied.
+    expect(after).toContain('note("c4")');
+    expect(after).toContain('note("e4")');
+    expect(after).not.toContain('hh*4'); // previous score is GONE
+    expect(s.recBuffer()).toEqual([]); // cleared
+  });
+
+  it('replace-score on empty editor → snippet verbatim', async () => {
+    const s = await importStore();
+    s.setPianoSlot('replace-score');
+    dispatch({ type: 'replaceScore', text: '' });
+    s.appendNote(60, 0, 100);
+    s.applyToScore();
+    expect(appStore.score).toContain('note("c4")');
+  });
+
+  it('replace-score is destructive: history captures prior score', async () => {
+    const s = await importStore();
+    const priorScore = 's("hh*4")';
+    dispatch({ type: 'replaceScore', text: priorScore });
+    const historyBefore = appStore.history.length;
+    s.setPianoSlot('replace-score');
+    s.appendNote(60, 0, 100);
+    s.applyToScore();
+    expect(appStore.score).not.toContain('hh*4');
+    expect(appStore.history.length).toBe(historyBefore + 1);
+    expect(appStore.history[appStore.history.length - 1]).toBe(priorScore);
+  });
+});
+
+describe('pianoRecStore — applyToScore at-cursor slot', () => {
+  /** Build a mock EditorView that records dispatch calls and lets us
+   *  control the selection. */
+  const makeMockView = (
+    cursorFrom: number,
+    cursorTo: number = cursorFrom,
+  ): {
+    view: {
+      state: { selection: { main: { from: number; to: number } } };
+      dispatch: (tr: {
+        changes: { from: number; to: number; insert: string };
+        selection: { anchor: number };
+        effects: unknown;
+      }) => void;
+    };
+    dispatches: Array<{
+      changes: { from: number; to: number; insert: string };
+      selection: { anchor: number };
+      effects: unknown;
+    }>;
+  } => {
+    const dispatches: Array<{
+      changes: { from: number; to: number; insert: string };
+      selection: { anchor: number };
+      effects: unknown;
+    }> = [];
+    return {
+      view: {
+        state: {
+          selection: {
+            main: { from: cursorFrom, to: cursorTo },
+          },
+        },
+        dispatch: (tr) => {
+          dispatches.push(tr);
+        },
+      },
+      dispatches,
+    };
+  };
+
+  it('without editor API → no-op (warn, buffer preserved)', async () => {
+    const s = await importStore();
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      s.setPianoSlot('at-cursor');
+      s.setPianoEditorApi(undefined);
+      dispatch({ type: 'replaceScore', text: 'note("e4")' });
+      s.appendNote(60, 0, 100);
+      s.applyToScore();
+      expect(appStore.score).toBe('note("e4")'); // unchanged
+      expect(s.recBuffer()).toHaveLength(1); // buffer preserved for retry
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('at-cursor slot requires editor API'),
+      );
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+
+  it('with editor API → dispatches insert + scrollIntoView at cursor', async () => {
+    const s = await importStore();
+    s.setPianoSlot('at-cursor');
+    dispatch({ type: 'replaceScore', text: 'note("e4")' });
+    s.appendNote(60, 0, 100);
+    const { view, dispatches } = makeMockView(10 /* tentative cursor */);
+    s.setPianoEditorApi({ getView: () => view as never });
+    s.applyToScore();
+    expect(dispatches).toHaveLength(1);
+    const tr = dispatches[0]!;
+    expect(tr.changes.from).toBe(10);
+    expect(tr.changes.to).toBe(10);
+    expect(tr.changes.insert).toContain('note("c4")');
+    expect(tr.selection.anchor).toBe(10 + tr.changes.insert.length);
+    expect(tr.effects).toBeDefined();
+    expect(s.recBuffer()).toEqual([]); // cleared
+  });
+
+  it('replaces selection when range is non-empty', async () => {
+    const s = await importStore();
+    s.setPianoSlot('at-cursor');
+    s.appendNote(60, 0, 100);
+    const { view, dispatches } = makeMockView(5, 12 /* selection */);
+    s.setPianoEditorApi({ getView: () => view as never });
+    s.applyToScore();
+    const tr = dispatches[0]!;
+    expect(tr.changes.from).toBe(5);
+    expect(tr.changes.to).toBe(12);
+  });
+});
+
+describe('pianoRecStore — atCursorSpec (pure transaction builder)', () => {
+  it('builds the right transaction shape for a point insert', async () => {
+    const s = await importStore();
+    const spec = s.atCursorSpec(5, 5, 'note("c4")');
+    expect(spec.changes).toEqual({ from: 5, to: 5, insert: 'note("c4")' });
+    expect(spec.selection.anchor).toBe(5 + 'note("c4")'.length);
+    expect(spec.effects).toBeDefined();
+  });
+
+  it('builds the right transaction shape for a range replace', async () => {
+    const s = await importStore();
+    const spec = s.atCursorSpec(3, 10, 'x');
+    expect(spec.changes.from).toBe(3);
+    expect(spec.changes.to).toBe(10);
+    expect(spec.selection.anchor).toBe(4);
+  });
+
+  it('atCursorSpec handles empty snippet (anchor === cursorFrom)', async () => {
+    const s = await importStore();
+    const spec = s.atCursorSpec(7, 7, '');
+    expect(spec.changes.insert).toBe('');
+    expect(spec.selection.anchor).toBe(7);
+  });
+});
+
+describe('pianoRecStore — insertAtCursor (side-effect)', () => {
+  it('dispatches a transaction to the provided EditorView', async () => {
+    const s = await importStore();
+    const dispatches: Array<unknown> = [];
+    const fakeView = {
+      state: { selection: { main: { from: 8, to: 8 } } },
+      dispatch: (tr: unknown) => {
+        dispatches.push(tr);
+      },
+    };
+    s.insertAtCursor(fakeView as never, 'hello');
+    expect(dispatches).toHaveLength(1);
+    const tr = dispatches[0] as {
+      changes: { from: number; to: number; insert: string };
+      selection: { anchor: number };
+    };
+    expect(tr.changes.from).toBe(8);
+    expect(tr.changes.to).toBe(8);
+    expect(tr.changes.insert).toBe('hello');
+    expect(tr.selection.anchor).toBe(13);
+  });
+});
+
+describe('pianoRecStore — previewPillPayload', () => {
+  it('returns null when buffer is empty', async () => {
+    const s = await importStore();
+    expect(s.previewPillPayload()).toBeNull();
+  });
+
+  it('returns count + first 5 note names + slot for non-empty buffer', async () => {
+    const s = await importStore();
+    s.appendNote(60, 0, 100); // C4
+    s.appendNote(62, 100, 200); // D4
+    s.appendNote(64, 200, 300); // E4
+    const payload = s.previewPillPayload();
+    expect(payload).not.toBeNull();
+    expect(payload!.count).toBe(3);
+    expect(payload!.firstNames).toEqual(['C4', 'D4', 'E4']);
+    expect(payload!.overflow).toBe(0);
+    expect(payload!.slot).toBe('append-stack');
+    expect(payload!.slotLabel).toBe('конец стека');
+  });
+
+  it('caps firstNames at 5 and reports overflow', async () => {
+    const s = await importStore();
+    for (const m of [60, 62, 64, 65, 67, 69, 71]) s.appendNote(m, 0, 0);
+    const payload = s.previewPillPayload();
+    expect(payload!.count).toBe(7);
+    expect(payload!.firstNames).toHaveLength(5);
+    expect(payload!.overflow).toBe(2);
+  });
+
+  it('reflects the current slot label', async () => {
+    const s = await importStore();
+    s.setPianoSlot('at-cursor');
+    s.appendNote(60, 0, 100);
+    const payload = s.previewPillPayload();
+    expect(payload!.slot).toBe('at-cursor');
+    expect(payload!.slotLabel).toBe('в курсор');
   });
 });

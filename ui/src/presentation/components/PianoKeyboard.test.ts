@@ -640,6 +640,23 @@ describe('PianoKeyboard component (MIDI source attribution in status pill)', () 
       updateLastNoteEnd: (): void => undefined,
       instrument: (): PianoInstrument => 'triangle',
       followEnabled: () => false,
+      pianoSlot: () => 'append-stack',
+      setPianoSlot: (): void => undefined,
+      editorFocused: () => false,
+      setEditorFocused: (): void => undefined,
+      pianoEditorApi: () => undefined,
+      setPianoEditorApi: (): void => undefined,
+      pianoSlotLabel: (s: string): string => s,
+      pianoSlotGlyph: (s: string): string => s,
+      previewPillPayload: () => null,
+      applyToScore: (): void => undefined,
+      // Legacy exports still required by other tests
+      setInstrument: (): void => undefined,
+      setFollow: (): void => undefined,
+      toggleRec: (): void => undefined,
+      toggleFollow: (): void => undefined,
+      clearRec: (): void => undefined,
+      recBuffer: (): ReadonlyArray<unknown> => [],
     }));
     vi.doMock('~/infrastructure/audio/MidiInput', () => ({
       isMidiAvailable: () => true,

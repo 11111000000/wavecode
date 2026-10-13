@@ -49,15 +49,23 @@ import { PianoToolbar } from './PianoToolbar';
  *   - When `recEnabled()` is true, `playNote` calls `appendNote` (with
  *     endMs == startMs as a placeholder) and `stopNote` calls
  *     `updateLastNoteEnd(performance.now())` to fix the timestamp.
- *     The buffer is consumed by a future "commit to score" action via
- *     `flushRec()` — kept out of this component to preserve the
- *     "piano doesn't mutate score" invariant.
+ *     The buffer is consumed by the `↑ apply` toolbar button via
+ *     `applyToScore()` in pianoRecStore — kept out of this component
+ *     to preserve the "piano doesn't mutate score" invariant.
  *
  * Debounce:
  *   - 30ms trailing debounce on `noteOn` (module-scope timer) to
  *     coalesce rapid MIDI re-trigger events into a single press.
  *     Without it, a MIDI keyboard glaze can stack 30+ noteOn calls
  *     per second and overwhelm the Web Audio node graph.
+ *
+ * Variants (wavecode-piano-rec-clarity):
+ *   - `sheet` (default) — used inside the BottomSheet on mobile.
+ *     Renders `.piano-wrap.piano-wrap--sheet`. Vertical sheet layout.
+ *   - `inline` — used inside the ScorePanel collapsible header on
+ *     desktop. Renders `.piano-wrap.piano-wrap--inline` and the CSS
+ *     tightens the layout to fit a ~200px-tall strip next to the
+ *     editor. Functionality is identical.
  *
  * Sizing (width / height) is fully CSS-driven (see .piano-keys-inner
  * in components.css). Black-key `left` is `calc(var(--white-w) * n -
@@ -66,6 +74,13 @@ import { PianoToolbar } from './PianoToolbar';
 const NOTEON_DEBOUNCE_MS = 30;
 /** FOLLOW mode poll cadence (ms). 20Hz → ~2ms/sec CPU. */
 const FOLLOW_POLL_MS = 50;
+
+/** Display variant — affects CSS class only, audio/state paths are identical. */
+export type PianoKeyboardVariant = 'inline' | 'sheet';
+
+export type PianoKeyboardProps = {
+  readonly variant?: PianoKeyboardVariant | undefined;
+};
 
 /** Russian pluralisation for "нота/ноты/нот". */
 const formatActiveLabel = (count: number): string => {
@@ -76,7 +91,7 @@ const formatActiveLabel = (count: number): string => {
   return `${count} нот`;
 };
 
-export function PianoKeyboard() {
+export function PianoKeyboard(props: PianoKeyboardProps = {}) {
   const [activeNotes, setActiveNotes] = createSignal<ReadonlySet<number>>(new Set());
   const [midiAvailable, setMidiAvailable] = createSignal(false);
   const [midiInputs, setMidiInputs] = createSignal<ReadonlyArray<string>>([]);
@@ -293,7 +308,12 @@ export function PianoKeyboard() {
   void _typeAnchor;
 
   return (
-    <div class="piano-wrap" role="group" aria-label="Piano keyboard C3 to B4">
+    <div
+      class={`piano-wrap piano-wrap--${props.variant ?? 'sheet'}`}
+      role="group"
+      aria-label="Piano keyboard C3 to B4"
+      data-variant={props.variant ?? 'sheet'}
+    >
       {/* Scoped style for the device-name chip in the status pill.
        *  Lives here (not in components.css) because it's a tiny
        *  presentation tweak tied 1:1 to the adjacent markup — moving

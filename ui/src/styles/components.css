@@ -1265,6 +1265,191 @@ textarea.wc-input {
 }
 
 /* =========================================================================
+ *  PIANO VARIANTS (wavecode-piano-rec-clarity)
+ *  Same component, two layout contexts. Inline = compact strip inside
+ *  ScorePanel (typically a 200px-tall collapsible area). Sheet = full
+ *  BottomSheet with extra padding for touch.
+ * ========================================================================= */
+.piano-wrap--inline { padding: 0; }
+.piano-wrap--inline .piano-keys { padding: var(--space-2xs) 0; }
+.piano-wrap--inline .piano-keys-inner {
+  --piano-h: 140px;
+  --white-w: 64px;
+  --black-w: 40px;
+}
+.piano-wrap--sheet { padding: 0; }
+
+/* =========================================================================
+ *  PIANO SLOT SELECTOR (wavecode-piano-rec-clarity)
+ *  Segmented control picking where `↑ apply` writes the buffer. Three
+ *  positions: append-stack / replace-score / at-cursor. The at-cursor
+ *  option is disabled (greyed) when the editor isn't focused — UI
+ *  affordance for "not now, not here".
+ * ========================================================================= */
+.piano-slot-selector {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+}
+.piano-slot-btn {
+  height: 24px;
+  padding: 0 var(--space-xs);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  color: var(--fg-dim);
+  border: 1px solid transparent;
+  border-radius: var(--radius-pill);
+  font-family: var(--font-mono);
+  font-size: var(--fs-2xs);
+  font-weight: var(--fw-medium);
+  letter-spacing: 0;
+  text-transform: none;
+  cursor: pointer;
+  transition:
+    color var(--dur-xs) var(--ease),
+    background var(--dur-xs) var(--ease),
+    border-color var(--dur-xs) var(--ease);
+}
+.piano-slot-btn:hover:not([disabled]) { color: var(--fg); }
+.piano-slot-btn[data-active='true'] {
+  color: var(--fg-inverse);
+  background: var(--amber);
+  border-color: var(--amber);
+}
+.piano-slot-btn[disabled] {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* =========================================================================
+ *  PREVIEW-PILL (wavecode-piano-rec-clarity)
+ *  Compact magenta-bordered pill in the piano toolbar showing the
+ *  current rec buffer + active slot. Critical for the mobile case
+ *  where the editor is hidden under BottomSheet-piano — the pill is
+ *  the only place the user can see "5 notes queued, will go to end of
+ *  stack" before tapping apply.
+ * ========================================================================= */
+.piano-rec-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2xs);
+  padding: 3px var(--space-sm);
+  border-radius: var(--radius-pill);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-left: 2px solid var(--magenta);
+  font-family: var(--font-mono);
+  font-size: var(--fs-2xs);
+  color: var(--fg);
+  white-space: nowrap;
+  max-width: 360px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.piano-rec-pill__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: var(--radius-full);
+  background: var(--magenta);
+  flex-shrink: 0;
+}
+.piano-rec-pill[data-active='true'] .piano-rec-pill__dot {
+  animation: piano-rec-pulse 1.2s ease-in-out infinite;
+}
+.piano-rec-pill__count { font-weight: var(--fw-semibold); color: var(--magenta); }
+.piano-rec-pill__notes { color: var(--fg-dim); }
+.piano-rec-pill__arrow { color: var(--fg-ghost); }
+.piano-rec-pill__slot { color: var(--amber); font-weight: var(--fw-medium); }
+
+.piano-rec-pill--applied {
+  border-left-color: var(--ok);
+  background: rgba(94, 234, 212, 0.12);
+  color: var(--ok);
+  font-weight: var(--fw-semibold);
+  animation: piano-rec-pill-fade var(--dur-md) var(--ease);
+}
+@keyframes piano-rec-pill-fade {
+  0%   { transform: scale(1.04); opacity: 0.7; }
+  20%  { transform: scale(1.04); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+/* =========================================================================
+ *  SCORE PANEL — INLINE PIANO HEADER (wavecode-piano-rec-clarity)
+ *  A thin row at the top of ScorePanel on desktop hosting a single
+ *  `▼ Piano` toggle. Collapsed = ~32px button (header row), expanded
+ *  = the same + ~200px strip with the keyboard. Default collapsed
+ *  because most score-panel use is editing, not recording.
+ * ========================================================================= */
+.score-piano-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-2xs) var(--space-md);
+  background: var(--surface-1);
+  border-bottom: 1px solid var(--border);
+}
+.piano-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2xs);
+  height: 28px;
+  padding: 0 var(--space-sm);
+  background: transparent;
+  color: var(--fg-dim);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  font-family: var(--font-mono);
+  font-size: var(--fs-2xs);
+  font-weight: var(--fw-medium);
+  text-transform: uppercase;
+  letter-spacing: var(--ls-wide);
+  cursor: pointer;
+  transition:
+    color var(--dur-xs) var(--ease),
+    border-color var(--dur-xs) var(--ease);
+}
+.piano-toggle:hover { color: var(--amber); border-color: var(--amber); }
+.piano-toggle[data-collapsed='false'] {
+  color: var(--amber);
+  border-color: var(--amber);
+}
+.piano-toggle__caret { font-size: 10px; }
+
+.score-piano-inline {
+  background: var(--surface-1);
+  border-bottom: 1px solid var(--border);
+  /* Cap height — when expanded, the inline piano takes ~180px. Inside
+   * the 360px AI-primary drawer, this leaves ~150px for the editor
+   * (still usable for reading; vertical scroll handles overflow). */
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+/* =========================================================================
+ *  CODEMIRROR — INSERT-FLASH (wavecode-piano-rec-clarity)
+ *  Brief yellow fade applied to inserted lines after a successful
+ *  apply, regardless of slot (stack/replace/cursor). Driven via
+ *  EditorView.decorations — see flashInsertedLines helper if added
+ *  later. For now, classes are defined here so a future PR can plug
+ *  in the editor-side hook without re-touching CSS.
+ * ========================================================================= */
+.cm-line-flash {
+  background: rgba(255, 193, 7, 0.18);
+  animation: cm-line-flash-fade 1.2s ease-out forwards;
+}
+@keyframes cm-line-flash-fade {
+  0%   { background: rgba(255, 193, 7, 0.42); }
+  100% { background: rgba(255, 193, 7, 0); }
+}
+
+/* =========================================================================
  *  MINI-NOTATION TOOLBAR — visibility (fix: not position: sticky).
  *  Отдельный блок в components.css, чтобы legacy.css (импортируется ПОСЛЕ
  *  components.css) не мог перебить эти свойства без повышения специфичности.
