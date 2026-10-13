@@ -68,6 +68,16 @@
  *    ConsoleSheet (or any future UI consumer) can restore the last
  *    error trace after a page reload. See `./idbBuffer.ts`.
  *
+ * `prepend(entries)` (Phase 3 enhancement)
+ *  • Inserts a batch of entries at the HEAD of the ring buffer,
+ *    dropping the oldest entries if capacity (MAX_LOG_ENTRIES) is
+ *    exceeded. Intended for the boot path: after
+ *    `loadPersistedErrors()` resolves, ConsoleSheet calls
+ *    `prepend(persisted)` so the last-100 errors from IDB appear
+ *    BEFORE any live buffer activity that occurred during page
+ *    load. Calls `sink(entries[entries.length - 1])` exactly once
+ *    so the UI re-renders.
+ *
  * @see ./cleanLogArgs.ts — CSS-strip utility used here.
  * @see ./throttle.ts — pure per-source rate-limit helper.
  * @see ./idbBuffer.ts — IndexedDB-backed error ring slice.
@@ -277,5 +287,31 @@ export const logger = {
    */
   loadPersistedErrors(): Promise<readonly LogEntry[]> {
     return idbLoadPersistedErrors();
+  },
+
+  /**
+   * Insert a batch of entries at the HEAD of the ring buffer, oldest
+   * dropped if capacity (MAX_LOG_ENTRIES) is exceeded. Used by the
+   * boot path to surface the last-100 errors from IDB BEFORE live
+   * buffer activity that occurred during boot.
+   *
+   * No-op when `entries` is empty. Calls `sink` exactly once with
+   * the last prepended entry so any active subscriber re-renders
+   * once. Sink errors are swallowed (same contract as `push`).
+   */
+  prepend(entries: readonly LogEntry[]): void {
+    if (entries.length === 0) return;
+    const newBuffer = [...entries, ...buffer];
+    if (newBuffer.length > MAX_LOG_ENTRIES) {
+      newBuffer.splice(0, newBuffer.length - MAX_LOG_ENTRIES);
+    }
+    buffer = newBuffer;
+    if (sink) {
+      try {
+        sink(entries[entries.length - 1]!);
+      } catch {
+        /* sink errors must not break the buffer pipeline */
+      }
+    }
   },
 };
