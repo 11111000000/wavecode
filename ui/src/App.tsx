@@ -31,6 +31,7 @@ import { PresetRow } from './presentation/components/app/PresetRow';
 import { PanelsLayout } from './presentation/components/app/PanelsLayout';
 import { BottomSheets } from './presentation/components/app/BottomSheets';
 import { Admin } from './presentation/pages/Admin';
+import { TransportPanel } from './presentation/components/TransportPanel';
 
 const NEW_COMPOSITION_TEMPLATE = '// Начни новую композицию здесь\n';
 
@@ -209,8 +210,6 @@ function AppShell(): JSX.Element {
         showPiano={showPiano()}
         showSavePreset={showSavePreset()}
         newPresetName={newPresetName()}
-        audioRunning={audio.audioRunning}
-        audioStarting={audioStarting}
         onLoadPreset={(id) => {
           const preset = getPreset(id);
           if (!preset) return;
@@ -251,14 +250,20 @@ function AppShell(): JSX.Element {
           setShowSavePreset(false);
           setNewPresetName('');
         }}
-        onPlay={() => {
-          setAudioStarting(true);
-          void evalScore();
-        }}
-        onStop={() => {
-          void stopAudio();
-        }}
       />
+      <div class="app-controls-row">
+        <TransportPanel
+          audioRunning={audio.audioRunning}
+          audioStarting={audioStarting}
+          onPlay={() => {
+            setAudioStarting(true);
+            void evalScore();
+          }}
+          onStop={() => {
+            void stopAudio();
+          }}
+        />
+      </div>
       <PanelsLayout />
       <BottomSheets />
       <TabBar />
