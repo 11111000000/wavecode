@@ -15,6 +15,11 @@
  *    error level (red badge) instead of a styled capsule; everywhere else the
  *    message is plain text with no CSS garbage.
  *
+ *    The actual CSS-strip logic lives in `infrastructure/log/cleanLogArgs`
+ *    so it can be shared with `infrastructure/log/logger` (which captures
+ *    console.* for the in-app Console UI). This file is now a thin
+ *    detection + reroute wrapper.
+ *
  * 2. applyVoicingAliases — `@strudel/tonal/voicings.mjs:144` does
  *    `dictionary[symbol].map(...)` on the voicing dictionary; if `symbol`
  *    (chord suffix like `maj7` or `min7`) is not a key the call throws and
@@ -45,7 +50,7 @@
  * SampleLoader.ts, not as a post-load patch.)
  */
 
-const STRUDEU_CSS_HEURISTIC = /background-color:|color:\s*white|border-radius/;
+import { cleanLogArgs } from '~/infrastructure/log/cleanLogArgs';
 
 let logWrapped = false;
 export const wrapStrudelLogger = (): void => {
@@ -60,12 +65,21 @@ export const wrapStrudelLogger = (): void => {
       args.length >= 2
       && typeof args[0] === 'string'
       && args[0].startsWith('%c[')
-      && typeof args[1] === 'string'
-      && STRUDEU_CSS_HEURISTIC.test(args[1])
     ) {
-      const cleaned = args[0].replace(/%c/g, '');
-      const rest = args.slice(2);
-      console.error.call(console, cleaned, ...rest);
+      const cleaned = cleanLogArgs(args);
+      console.error.call(console, ...cleaned);
+      return;
+    }
+    // Also try to strip embedded CSS in single-arg calls (rare Strudel
+    // source-transform shape where CSS is concatenated into one string).
+    if (
+      args.length === 1
+      && typeof args[0] === 'string'
+      && /%c\[/.test(args[0])
+      && /background-color:|border-radius/.test(args[0])
+    ) {
+      const cleaned = cleanLogArgs(args);
+      console.error.call(console, ...cleaned);
       return;
     }
     return original.apply(this, args);
