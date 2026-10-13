@@ -429,6 +429,16 @@ export const LiveAudioEngine: Layer.Layer<AudioEngine, never, never> = Layer.suc
     setCps: (cps: number) =>
       Effect.tryPromise({
         try: async () => {
+          // Update debug.cps SYNCHRONOUSLY before any awaits. Without
+          // this, an early setCps call (from useTransportAudioSync's
+          // 100ms debounce — repl may not yet exist) silently no-ops
+          // and debugState.cps stays 0; the subsequent audio.eval
+          // captures evalCps=0 → getCycleProgress returns 0 →
+          // playhead sticks at column 0. The inner repl.setCps
+          // (ensureRepl::callable) also writes setDebug — that's
+          // idempotent once repl exists. See packet
+          // math/wavecode-step-grid-autoload-and-sync.
+          setDebug({ cps });
           if (!cachedRepl) return;
           const repl = await cachedRepl;
           repl.setCps?.(cps);

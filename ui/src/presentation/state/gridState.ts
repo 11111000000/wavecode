@@ -39,13 +39,18 @@ export const clearGridState = (): void => {
 export const loadFromScore = (snippet: string): Grid => {
   const rowRegex = /s\(\s*"([^"]+)"\s*\)/g;
   const matches = [...snippet.matchAll(rowRegex)];
-  const next: Grid = emptyGrid();
+  let next: Grid = emptyGrid();
   for (let r = 0; r < GRID_ROWS.length && r < matches.length; r += 1) {
     const tokens = (matches[r]![1] ?? '').trim().split(/\s+/);
     for (let c = 0; c < GRID_COLS && c < tokens.length; c += 1) {
       const tok = tokens[c]!.toLowerCase();
       const isRest = tok === '~' || tok === '.';
-      if (!isRest) setCell(next, r, c, true);
+      // setCell is immutable — re-assign next each iteration. Bug
+      // history: prior code discarded the return value, leaving
+      // grid empty for every score. (Discovered when
+      // wavecode-step-grid-autoload-and-sync exposed the silent
+      // no-op via auto-load-on-sheet-open.)
+      if (!isRest) next = setCell(next, r, c, true);
     }
   }
   setGrid(next);

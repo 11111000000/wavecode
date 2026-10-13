@@ -13,6 +13,7 @@ import {
 import { appStore, dispatch } from './presentation/state/appStore';
 import { installTypingTracker } from './presentation/state/editorTypingTracker';
 import { evalScore, stopAudio } from './presentation/state/audioActions';
+import { isGridEmptyState, loadFromScore } from './presentation/state/gridState';
 import {
   getPreset, saveCustomPreset, deleteCustomPreset, resetAllBrowserData,
 } from './presentation/state/presetsStore';
@@ -221,6 +222,15 @@ function AppShell(): JSX.Element {
           if (showStepGrid()) { setShowStepGrid(false); closeKindSheet('step'); return; }
           setShowPiano(false);
           closeKindSheet('piano');
+          // Auto-populate grid from current score on first open
+          // (when grid is empty). Mirrors the `↓ read score` button;
+          // user's mental model: open sheet → see current pattern.
+          // Manual edits (taps) are preserved on subsequent opens
+          // because grid is no longer empty. Packet
+          // math/wavecode-step-grid-autoload-and-sync.
+          if (isGridEmptyState()) {
+            loadFromScore(appStore.score);
+          }
           setShowStepGrid(true);
           openKindSheet('step', 'full');
         }}
