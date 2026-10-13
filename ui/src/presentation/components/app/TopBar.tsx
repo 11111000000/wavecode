@@ -42,6 +42,14 @@ export function TopBar(props: TopBarProps): JSX.Element {
 
   return (
     <header class="wc-topbar">
+      <a
+        href="/"
+        class="wc-topbar__home"
+        aria-label="На главную (лендинг)"
+        title="На главную"
+      >
+        ←
+      </a>
       <BrandLogo size={22} />
       <h1 class="wc-topbar__title">wavecode</h1>
       <Show when={props.ctxState().state === 'suspended' && props.audioStarting}>

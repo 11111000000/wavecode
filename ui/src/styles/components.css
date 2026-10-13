@@ -105,6 +105,31 @@
 .wc-icon-btn[data-tone='cyan'][data-active='true']    { color: var(--cyan);    background: var(--cyan-soft); }
 .wc-icon-btn[data-tone='magenta'][data-active='true'] { color: var(--magenta); background: var(--magenta-soft); }
 
+.wc-topbar__home {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--touch-target);
+  height: var(--touch-target);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  color: var(--fg-dim);
+  font-family: var(--font-mono);
+  font-size: 18px;
+  text-decoration: none;
+  flex-shrink: 0;
+  transition: color var(--dur-xs) var(--ease),
+              border-color var(--dur-xs) var(--ease),
+              background var(--dur-xs) var(--ease);
+}
+.wc-topbar__home:hover {
+  color: var(--amber);
+  border-color: var(--amber);
+  background: var(--amber-soft);
+}
+.wc-topbar__home:active { transform: scale(0.94); }
+
 .wc-icon-btn__badge {
   position: absolute;
   top: 4px;
