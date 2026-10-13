@@ -41,6 +41,18 @@ export default [
           ],
         },
       ],
+      // domain is pure: no side-channel logging. If a test needs to assert
+      // on console behaviour, it injects `opts.console` (see presets.ts) —
+      // calling the GLOBAL `console.*` from domain code is forbidden.
+      'no-console': 'error',
+    },
+  },
+
+  {
+    // domain tests are allowed to use console (for assertions / debug output).
+    files: ['src/domain/**/*.test.ts'],
+    rules: {
+      'no-console': 'off',
     },
   },
 
@@ -59,6 +71,17 @@ export default [
           ],
         },
       ],
+      // application is effect-typed; logging routes through the centralised
+      // logger in infrastructure/log — never the global console.
+      'no-console': 'error',
+    },
+  },
+
+  {
+    // application tests are allowed to use console.
+    files: ['src/application/**/*.test.ts'],
+    rules: {
+      'no-console': 'off',
     },
   },
 

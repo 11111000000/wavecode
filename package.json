@@ -1,0 +1,14 @@
+{
+  "name": "wavecode",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Live-coding music studio (browser SPA). ui/ is the workspace; root scripts delegate to ui/.",
+  "type": "module",
+  "engines": {
+    "node": ">=20.10"
+  },
+  "scripts": {
+    "validate:presets": "npm --prefix ui run validate:presets",
+    "precommit:install": "ln -sf ../../scripts/pre-commit .git/hooks/pre-commit && echo \"pre-commit hook installed at .git/hooks/pre-commit\""
+  }
+}
