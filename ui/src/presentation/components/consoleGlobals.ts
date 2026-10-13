@@ -4,29 +4,56 @@
  * monkey-patching (за это отвечает logger из Subagent 1).
  *
  * Подписываемся на:
- *   - 'error'            → window.onerror  (uncaught exceptions)
+ *   - 'error'              → window.onerror  (uncaught exceptions)
  *   - 'unhandledrejection' → Promise.reject без catch
+ *   - 'keydown'            → toggle console via Cmd/Ctrl+` (backtick).
  *
  * Важно: ставим фильтр дублей по `fingerprint = title|body`. Один и тот
  * же TypeError может засыпать тост-стек сотнями копий; фильтруем через
  * TTL-window 1с.
+ *
+ * Hotkey (Phase-2 polish):
+ *   DevTools-style: Cmd+` (Mac) / Ctrl+` (Win/Linux). Matches
+ *   `consoleHotkey.matchesHotkey` semantics (metaKey||ctrlKey OR'd,
+ *   no shift, no alt). Suppressed when focus is inside INPUT /
+ *   TEXTAREA / contenteditable so the hotkey doesn't interfere with
+ *   typing in the CodeMirror editor or any input field.
  */
 
 import { consoleStore } from './consoleStore';
+import { matchesHotkey } from './consoleHotkey';
+
+const TOGGLE_HOTKEY = { key: '`', shift: false, alt: false } as const;
 
 type GlobalsState = {
   installed: boolean;
   lastErrorAt: number;
   lastFingerprint: string;
+  keydownListener: ((e: KeyboardEvent) => void) | null;
 };
 
 const state: GlobalsState = {
   installed: false,
   lastErrorAt: 0,
   lastFingerprint: '',
+  keydownListener: null,
 };
 
 const DEDUPE_WINDOW_MS = 1000;
+
+const isEditableTarget = (target: EventTarget | null): boolean => {
+  if (!(target instanceof HTMLElement)) return false;
+  if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') return true;
+  if (target.isContentEditable) return true;
+  return false;
+};
+
+const onKeyDown = (e: KeyboardEvent): void => {
+  if (isEditableTarget(e.target)) return;
+  if (!matchesHotkey(e, TOGGLE_HOTKEY)) return;
+  e.preventDefault();
+  consoleStore.setConsoleOpen(!consoleStore.consoleOpen());
+};
 
 const fingerprint = (a: string, b: string): string => `${a}|${b}`;
 
@@ -79,4 +106,22 @@ export const installConsoleGlobals = (): void => {
     const { title, body } = formatRejection(e);
     pushIfFresh(title, body);
   });
+
+  window.addEventListener('keydown', onKeyDown);
+  state.keydownListener = onKeyDown;
+};
+
+/**
+ * Uninstall helper (used by hot-reload / tests). Safe to call when
+ * not installed. Removes ONLY the keydown listener; the error /
+ * unhandledrejection listeners are intentionally left in place
+ * (they are page-lifetime via install-once semantics).
+ */
+export const uninstallConsoleGlobals = (): void => {
+  if (!state.installed) return;
+  if (typeof window === 'undefined') return;
+  if (state.keydownListener !== null) {
+    window.removeEventListener('keydown', state.keydownListener);
+    state.keydownListener = null;
+  }
 };
