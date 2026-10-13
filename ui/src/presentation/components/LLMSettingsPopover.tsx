@@ -1,4 +1,4 @@
-import { Show, createSignal, onMount, onCleanup, type JSX } from 'solid-js';
+import { Show, For, createSignal, onMount, onCleanup, type JSX } from 'solid-js';
 import { getLLMSettings, setModel, setThinking, type Model, type Thinking } from '~/presentation/state/llmSettings';
 import { SettingsIcon } from '~/presentation/icons';
 
@@ -79,17 +79,17 @@ export function LLMSettingsPopover(): JSX.Element {
           <label class="wc-llm-popover__field">
             <span class="wc-llm-popover__label">Модель</span>
             <select class="llm-select" value={settings().model} onChange={onModelChange}>
-              {MODEL_OPTIONS.map((o) => (
-                <option value={o.value}>{o.label} — {o.hint}</option>
-              ))}
+              <For each={MODEL_OPTIONS}>
+                {(o) => <option value={o.value}>{o.label} — {o.hint}</option>}
+              </For>
             </select>
           </label>
           <label class="wc-llm-popover__field">
             <span class="wc-llm-popover__label">Размышление</span>
             <select class="llm-select" value={settings().thinking} onChange={onThinkingChange}>
-              {THINKING_OPTIONS.map((o) => (
-                <option value={o.value}>{o.label}</option>
-              ))}
+              <For each={THINKING_OPTIONS}>
+                {(o) => <option value={o.value}>{o.label}</option>}
+              </For>
             </select>
           </label>
           <p class="wc-llm-popover__hint">
