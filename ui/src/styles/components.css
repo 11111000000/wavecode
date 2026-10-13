@@ -1628,3 +1628,75 @@ button:not([disabled]):not(.no-shrink):active {
   from { transform: translateY(40px); opacity: 0; }
   to   { transform: translateY(0);    opacity: 1; }
 }
+
+/* =========================================================================
+ *  SAMPLE PROGRESS BADGE — small inline pill in the TabBar showing
+ *  "Загружено N/M семплов" while preload is running. Self-hides when
+ *  status flips to 'idle' / 'loaded' / 'error'.
+ *
+ *  Token choices:
+ *    - background --surface-2:  muted, blends with TabBar backdrop.
+ *    - text --fg-dim:           tertiary foreground, doesn't compete
+ *                              with active tab accent (--amber).
+ *    - progress fill --cyan:    "audio-active" accent (cyan token in
+ *                              tokens.css L37, "playing-state audio-active").
+ *                              Matches the audio-in-motion feel; distinct
+ *                              from amber (tabs) and magenta (record).
+ *    - progress track --surface-3: same elevation as the TabBar track.
+ *    - monospace font:          tabular numbers so N/M counter doesn't
+ *                              jitter while loading.
+ * ========================================================================= */
+
+.wc-tabbar__tabs {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: stretch;
+  min-width: 0;
+}
+
+.sample-progress {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-xs) var(--space-sm);
+  margin-right: var(--space-md);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  font-family: var(--font-mono);
+  color: var(--fg-dim);
+  align-self: center;
+  flex: 0 0 auto;
+  max-width: 50%;
+  animation: wc-sheet-fade var(--dur-xs) var(--ease) both;
+}
+.sample-progress-label {
+  font-size: var(--fs-xs);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  letter-spacing: var(--ls-wide);
+}
+.sample-progress-bar {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 64px;
+  height: 4px;
+  border: none;
+  border-radius: var(--radius-pill);
+  background: var(--surface-3);
+  overflow: hidden;
+  flex: 0 0 auto;
+}
+.sample-progress-bar::-webkit-progress-bar {
+  background: var(--surface-3);
+  border-radius: var(--radius-pill);
+}
+.sample-progress-bar::-webkit-progress-value {
+  background: var(--cyan);
+  border-radius: var(--radius-pill);
+  transition: width var(--dur-sm) var(--ease);
+}
+.sample-progress-bar::-moz-progress-bar {
+  background: var(--cyan);
+  border-radius: var(--radius-pill);
+}

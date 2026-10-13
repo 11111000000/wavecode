@@ -6,6 +6,7 @@ import {
 import {
   TabScoreIcon, TabChatIcon, TabMixerIcon, TabStatusIcon,
 } from '../icons';
+import { SampleProgressBadge } from './SampleProgressBadge';
 
 type Item = {
   id: TabId;
@@ -29,24 +30,27 @@ const ITEMS: Item[] = [
 export function TabBar(): JSX.Element {
   return (
     <nav class="wc-tabbar" aria-label="Главная навигация">
-      <For each={ITEMS}>
-        {(item) => (
-          <button
-            type="button"
-            class="wc-tab"
-            data-active={getActiveTab() === item.id ? 'true' : 'false'}
-            onClick={() => setTab(item.id)}
-            aria-label={item.label}
-            aria-pressed={getActiveTab() === item.id}
-          >
-            <item.icon size={20} />
-            <span class="wc-tab__label">{item.label}</span>
-            <Show when={item.badge && item.badge() > 0}>
-              <span class="wc-tab__badge">{item.badge!()}</span>
-            </Show>
-          </button>
-        )}
-      </For>
+      <div class="wc-tabbar__tabs">
+        <For each={ITEMS}>
+          {(item) => (
+            <button
+              type="button"
+              class="wc-tab"
+              data-active={getActiveTab() === item.id ? 'true' : 'false'}
+              onClick={() => setTab(item.id)}
+              aria-label={item.label}
+              aria-pressed={getActiveTab() === item.id}
+            >
+              <item.icon size={20} />
+              <span class="wc-tab__label">{item.label}</span>
+              <Show when={item.badge && item.badge() > 0}>
+                <span class="wc-tab__badge">{item.badge!()}</span>
+              </Show>
+            </button>
+          )}
+        </For>
+      </div>
+      <SampleProgressBadge />
     </nav>
   );
 }
