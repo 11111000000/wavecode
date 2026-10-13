@@ -6,7 +6,7 @@ test('Eval button plays audio without errors', async ({ page }) => {
   page.on('console', (m) => consoleMsgs.push({ type: m.type(), text: m.text() }));
   page.on('pageerror', (e) => errors.push(e.message));
 
-  await page.goto('/', { waitUntil: 'networkidle', timeout: 30000 });
+  await page.goto('/', { waitUntil: 'domcontentloaded', timeout: 30000 });
 
   // Solid mount.
   await page.waitForSelector('main.app', { timeout: 15000 });
