@@ -44,9 +44,6 @@ export function TopBar(props: TopBarProps): JSX.Element {
     <header class="wc-topbar">
       <WavecodeLogo size={22} />
       <h1 class="wc-topbar__title">wavecode</h1>
-      <Show when={props.ctxState().state === 'suspended' && props.audioStarting}>
-        <span class="audio-loading-skeleton" role="status" aria-live="polite" aria-label="Аудио загружается">♪…</span>
-      </Show>
       <Show when={props.sampleStatus === 'loading'}>
         <span class="audio-loading-pill" title="Sample banks loading…">♪ samples</span>
       </Show>

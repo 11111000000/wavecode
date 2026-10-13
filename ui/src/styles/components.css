@@ -1326,32 +1326,6 @@ button:not([disabled]):not(.no-shrink):active {
 .score-empty-state p { margin: 0; }
 
 /* =========================================================================
- *  AUDIO LOADING SKELETON — shimmer-pulse рядом с LED пока AudioContext
- *  переходит suspended → running после клика play. Скрывается по таймауту
- *  2s на случай если unlock не сработал.
- * ========================================================================= */
-
-.audio-loading-skeleton {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2xs);
-  padding: var(--space-xs) var(--space-md);
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  color: var(--cyan);
-  font-family: var(--font-mono);
-  font-size: var(--fs-sm);
-  letter-spacing: var(--ls-wide);
-  animation: skeleton-pulse 1.2s ease-in-out infinite;
-}
-
-@keyframes skeleton-pulse {
-  0%, 100% { opacity: 0.4; }
-  50%      { opacity: 1;   }
-}
-
-/* =========================================================================
  *  AI-PRIMARY LAYOUT (desktop ≥1024px)
  *  Когда .app-body[data-layout='ai-primary'] — AI-чат доминирует по
  *  площади (≥60% ширины, ≥320px min-height), партитура уходит в
