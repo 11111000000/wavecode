@@ -1,36 +1,37 @@
 /*
  * wavecode — Synthwave Modern Terminal.
  *
- * 7-слойная архитектура через CSS cascade layers (mobile-first):
+ * 6-слойная архитектура через CSS cascade layers (mobile-first):
  *
  *   tokens      палитра spectrum (amber+cyan+magenta), surface-0..4,
  *               motion (--ease-spring), radius scale, z-scale
  *   base        reset, Geist typography, focus ring, scrollbars,
  *               safe-area padding, prefers-reduced-motion override
- *   legacy      shim для старых селекторов в modern-палитре (постепенно
- *               вытесняется components)
- *   components  новые «wc-*» компоненты: btn, card, chip, pill,
- *               led, slider, big-slider, tabbar, fab, toast,
- *               topbar, stat-grid, chat, overflow-menu, toolstrip
+ *   components  основной набор компонентов: wc-*, app-*, score-*,
+ *               transport-*, cps-*, swing-*, ai-*, mixer-*, midi-*,
+ *               step-grid-*, piano-key*, record-*, share-modal-*,
+ *               cm-host, mini-toolbar*, и прочие
  *   sheets      bottom-sheet, side-drawer, snap-points, drag-handle,
  *               body-scroll-lock
  *   icons       иконки и анимации
  *   landing     page-specific для лендинга (#/)
  *
- * Cascade order: tokens < base < legacy < components < sheets < icons
+ * Cascade order: tokens < base < components < sheets < icons
  * < landing. Первый в объявлении = низший приоритет. Установлено
  * через `@layer` декларацию в index.css, чтобы cascade был
  * декларативным, а не зависел от порядка @import.
  *
- * Reference: math/wavecode-css-consolidate/packet.md
+ * History:
+ *   - math/wavecode-css-consolidate: введены cascade layers
+ *   - math/wavecode-legacy-eat-{transport,ai,all}: legacy.css
+ *     полностью съеден components.css, файл удалён
  */
 
-@layer tokens, base, legacy, components, sheets, icons, landing;
+@layer tokens, base, components, sheets, icons, landing;
 
 @import './styles/tokens.css' layer(tokens);
 @import './styles/base.css' layer(base);
 @import './styles/components.css' layer(components);
 @import './styles/sheets.css' layer(sheets);
 @import './styles/icons.css' layer(icons);
-@import './styles/legacy.css' layer(legacy);
 @import './styles/landing.css' layer(landing);
