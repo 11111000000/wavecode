@@ -1,0 +1,32 @@
+- sha: TBD
+  date: 2026-10-13
+  branch: feature/preset-decode-race
+  kind: fix
+  files:
+    - ui/src/domain/presets.ts
+    - ui/src/domain/presets.test.ts
+    - ui/src/infrastructure/audio/SampleLoader.ts
+    - ui/src/infrastructure/audio/SampleLoader.test.ts
+    - ui/src/infrastructure/audio/withConcurrency.ts
+    - ui/src/App.tsx
+    - math/wavecode-preset-decode-race/packet.md
+  notes: |
+    Two paired correctness defects:
+
+    A. `n("note_name")` → `note("note_name")` in 7 preset
+       lines (jazz, bossa, trap, reggaeton, idm-glitch,
+       dreampop, piano-ballad). Creep's `n("<55 67 …>")`
+       stays — that one's correctly numeric.
+
+    B. Sample race: `withConcurrency(urls, 4, fn)` new
+       helper; `preloadAllBuffers` awaits + caps parallel
+       decodes at 4; optional `onProgress(loaded, total)`
+       plumbed for future UI.
+
+    Plus `validatePreset(preset)` static lint helper
+    (empty score, missing stack(), missing .s(), balanced
+    parens), called from boot + tested per-preset.
+
+    Tests: 297 → 301 (+4 net). typecheck clean.
+    Build OK.
+---
