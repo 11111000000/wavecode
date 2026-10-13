@@ -306,7 +306,12 @@ const ensureRepl = (audioCtx: AudioContext): Promise<ReplHandle> => {
           }
         },
         audioCtx,
-      };
+        // Expose scheduler + state so callers (runtime mini-notation
+        // highlight, future inspector tools) can reach the live Pattern
+        // and the transpiler's miniLocations from outside the closure.
+        scheduler: repl.scheduler as unknown as ReplHandle['scheduler'],
+        state: repl.state as unknown as ReplHandle['state'],
+      } as ReplHandle;
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       setDebug({ replErr: msg });
@@ -314,7 +319,7 @@ const ensureRepl = (audioCtx: AudioContext): Promise<ReplHandle> => {
       throw err;
     }
   })();
-  return cachedRepl;
+  return cachedRepl as Promise<ReplHandle>;
 };
 
 type HapLike = {
@@ -446,17 +451,34 @@ await repl.evaluate(snippet);
             // without re-starting the scheduler.
             setDebug({ lastEvaluatedSnippet: snippet });
             // Activate runtime mini-notation highlight (CodeMirror): feed
-            // the freshly-scheduled Pattern + the transpiler's miniLocations
-            // into the bridge so editor decorations start emitting.
+            // the freshly-scheduled Pattern into the bridge so editor
+            // decorations start emitting. We call setActive unconditionally
+            // and let the bridge filter — if the pattern is missing or
+            // has no queryArc, bridge simply computes empty ranges.
             // See `math/wavecode-runtime-mini-highlight`.
             const livePattern = repl.scheduler?.pattern;
-            if (livePattern && typeof (livePattern as { queryArc?: unknown }).queryArc === 'function') {
+            const hasQueryArc = !!livePattern && typeof (livePattern as { queryArc?: unknown }).queryArc === 'function';
+            // Diagnostic surface — published every eval so we can tell
+            // from devtools whether scheduler.pattern was populated
+            // when setActive was called.
+            if (typeof window !== 'undefined') {
+              (window as unknown as { __wavecodeReplState?: unknown }).__wavecodeReplState = {
+                hasRepl: !!repl,
+                hasScheduler: !!repl.scheduler,
+                hasPattern: !!livePattern,
+                hasQueryArc,
+                patternType: livePattern ? (typeof livePattern).toString() : null,
+              };
+            }
+            if (livePattern) {
               setRuntimeHighlightActive({
                 pattern: livePattern as unknown as { queryArc(begin: number, end: number): ReadonlyArray<unknown> },
                 ctx: audioCtx,
                 anchor: audioCtx.currentTime,
                 cps: debugState.cps > 0 ? debugState.cps : 1,
               });
+            } else if (process.env.NODE_ENV !== 'production') {
+              console.warn('[wavecode/LiveAudioEngine.eval] no livePattern; setActive skipped (repl.scheduler=', !!repl.scheduler, 'hasPattern=', !!livePattern, ')');
             }
         },
         catch: (err) => {

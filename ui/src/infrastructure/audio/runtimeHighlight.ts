@@ -98,7 +98,11 @@ let nowFn: () => number = defaultNow;
 
 type HapLike = {
   context?: {
-    locations?: ReadonlyArray<{ from?: unknown; to?: unknown } | null | undefined>;
+    locations?: ReadonlyArray<
+      | { start?: unknown; end?: unknown; from?: unknown; to?: unknown }
+      | null
+      | undefined
+    >;
   };
 };
 
@@ -112,8 +116,15 @@ const extractFromHaps = (haps: ReadonlyArray<unknown>): ReadonlyArray<CharRange>
     if (!Array.isArray(locs)) continue;
     for (const loc of locs) {
       if (!loc) continue;
-      const f = Number((loc as { from?: unknown }).from);
-      const t = Number((loc as { to?: unknown }).to);
+      // `Pattern.withLoc(start, end)` (core/pattern.mjs:558) stores the
+      // location as `{ start, end }`. Earlier Strudel versions used
+      // `{ from, to }`; we accept both for forward-compat.
+      const rawStart = (loc as { start?: unknown; from?: unknown }).start
+        ?? (loc as { start?: unknown; from?: unknown }).from;
+      const rawEnd = (loc as { end?: unknown; to?: unknown }).end
+        ?? (loc as { end?: unknown; to?: unknown }).to;
+      const f = Number(rawStart);
+      const t = Number(rawEnd);
       if (!Number.isFinite(f) || !Number.isFinite(t) || t <= f) continue;
       const key = `${f}|${t}`;
       if (seen.has(key)) continue;
@@ -205,20 +216,55 @@ const stopLoop = (): void => {
 };
 
 /* ------------------------------------------------------------------ */
+/* Diagnostic state — exposed on window for inspection from devtools. */
+/* Module-level init ensures the surface is published eagerly, so we  */
+/* can distinguish "module loaded but setActive never called" from    */
+/* "module not loaded at all".                                         */
+/* ------------------------------------------------------------------ */
+
+const __diag: { initialized: boolean; setActiveCalls: number; clearActiveCalls: number } = {
+  initialized: false,
+  setActiveCalls: 0,
+  clearActiveCalls: 0,
+};
+
+const publishDiag = (): void => {
+  if (typeof window === 'undefined') return;
+  (window as unknown as { __wavecodeRuntimeHighlight?: unknown }).__wavecodeRuntimeHighlight = {
+    __diag: () => ({ ...__diag, hasActive: active !== null, subscribers: subscribers.size, loopRunning: rafHandle !== null }),
+    getActive: () => active,
+    getSubscribersCount: () => subscribers.size,
+    isLoopRunning: () => rafHandle !== null,
+    getLastEmitAt: () => lastEmitAt,
+    getLastRangesKey: () => lastRangesKey,
+    computeRangesFor: computeRanges,
+  };
+  __diag.initialized = true;
+};
+
+if (typeof window !== 'undefined') publishDiag();
+
+/* ------------------------------------------------------------------ */
 /* Public API used by LiveAudioEngine.                                */
 /* ------------------------------------------------------------------ */
 
 export const setActive = (state: ActiveState): void => {
   active = state;
+  __diag.setActiveCalls += 1;
   lastEmitAt = 0;
   lastRangesKey = '';
   if (subscribers.size > 0) ensureLoop();
+  // Always (re-)publish the diagnostic surface — even after clearActive
+  // happened earlier. Cheap; reads stay valid across full lifetime.
+  publishDiag();
 };
 
 export const clearActive = (): void => {
   active = null;
+  __diag.clearActiveCalls += 1;
   lastEmitAt = 0;
   lastRangesKey = '';
+  publishDiag();
 };
 
 /* ------------------------------------------------------------------ */
