@@ -268,6 +268,55 @@ export const PinIcon = (p: Props): JSX.Element => (
 );
 
 /**
+ * Severity icons — paired с цветами severity-tokens в `.toast-icon`.
+ * 24×24 viewBox (немного крупнее штатных 16px иконок) для читаемости в
+ * маленьком квадрате `.toast-icon`. color-blind accessibility: иконка +
+ * цвет = два независимых канала; см. Toast.tsx.
+ */
+
+/** InfoIcon — круг с буквой 'i' (informational hint). */
+export const InfoIcon = (p: Props): JSX.Element => (
+  <svg {...base(p.size ?? 16)} class={`wc-icon ${p.class ?? ''}`}>
+    <circle cx="8" cy="8" r="6.25" />
+    <circle cx="8" cy="5" r="0.7" fill="currentColor" stroke="none" />
+    <line x1="8" y1="7.2" x2="8" y2="11.5" />
+  </svg>
+);
+
+/** WarnIcon — треугольник с восклицательным знаком (warning). */
+export const WarnIcon = (p: Props): JSX.Element => (
+  <svg {...base(p.size ?? 16)} class={`wc-icon ${p.class ?? ''}`}>
+    <path d="M8 2 L14.5 13 L1.5 13 Z" />
+    <line x1="8" y1="6" x2="8" y2="9.8" />
+    <circle cx="8" cy="11.5" r="0.7" fill="currentColor" stroke="none" />
+  </svg>
+);
+
+/** ErrorIcon — круг с крестом (soft error). */
+export const ErrorIcon = (p: Props): JSX.Element => (
+  <svg {...base(p.size ?? 16)} class={`wc-icon ${p.class ?? ''}`}>
+    <circle cx="8" cy="8" r="6.25" />
+    <line x1="5.2" y1="5.2" x2="10.8" y2="10.8" />
+    <line x1="10.8" y1="5.2" x2="5.2" y2="10.8" />
+  </svg>
+);
+
+/**
+ * CriticalIcon — восьмиугольник (octagon) с восклицательным знаком.
+ * Восьмиугольник — международный символ «stop / critical» (как
+ * знак STOP на дороге), визуально отличается от WarnIcon's
+ * triangle. Используется для severity critical и fatal (последняя
+ * в consoleStore обрабатывается идентично critical).
+ */
+export const CriticalIcon = (p: Props): JSX.Element => (
+  <svg {...base(p.size ?? 16)} class={`wc-icon ${p.class ?? ''}`}>
+    <path d="M5 1.5 L11 1.5 L14.5 5 L14.5 11 L11 14.5 L5 14.5 L1.5 11 L1.5 5 Z" />
+    <line x1="8" y1="4.5" x2="8" y2="9.5" />
+    <circle cx="8" cy="11.5" r="0.7" fill="currentColor" stroke="none" />
+  </svg>
+);
+
+/**
  * BrandLogo — стилизованная осциллограмма «W» + spectrum dot + cursor.
  * Использует currentColor для основных paths + hardcoded accents
  * (надёжнее, чем SVG-linearGradient в headless-render).
