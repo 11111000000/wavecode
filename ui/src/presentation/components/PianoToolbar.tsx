@@ -3,13 +3,17 @@ import { RecordIcon } from '../icons';
 import {
   recEnabled,
   toggleRec,
+  followEnabled,
+  toggleFollow,
+  recBuffer,
+  applyToScore,
   instrument,
   setInstrument,
 } from '../state/pianoRecStore';
 import type { PianoInstrument } from '~/domain/music/notes';
 
 /**
- * PianoToolbar — REC toggle + instrument selector for the piano.
+ * PianoToolbar — REC + FOLLOW + apply + instrument selector for the piano.
  *
  * Rendered inline inside `.piano-toolbar` (next to the existing
  * `.piano-hint` text and optional MIDI status pill). The component
@@ -18,12 +22,19 @@ import type { PianoInstrument } from '~/domain/music/notes';
  * routing lives in PianoKeyboard; this component owns only the UI
  * affordances.
  *
- * Visual contract:
- *   - Rec button: outlined when off; magenta pulse when on. Icon is
- *     a filled circle (RecordIcon). aria-pressed mirrors recEnabled.
- *   - Instrument selector: 4 inline buttons, the active one amber-
- *     filled. Icons are unicode glyphs (△ ∿ ⊿ ⊓) — chosen for
- *     legibility at 24px without external SVG.
+ * Four affordances (post wavecode-piano-modes-and-gain):
+ *   1. REC toggle (magenta pulse when on) — writes pressed keys into
+ *      the rec buffer.
+ *   2. FOLLOW toggle (cyan when on) — independent of REC. When on,
+ *      PianoKeyboard polls `AudioEngine.getActiveHaps()` every 50ms
+ *      and lights up the piano keys whose MIDI numbers are currently
+ *      in the scheduler. Audition / REC / FOLLOW compose orthogonally.
+ *   3. ↑ apply button — visible only when REC is on AND the buffer is
+ *      non-empty. Calls `applyToScore()` which commits the buffer to
+ *      the editor via `dispatch(replaceScore)`.
+ *   4. Instrument selector — 4 inline buttons (△ ∿ ⊿ ⊓), amber when
+ *      active. Each label is a unicode glyph chosen for legibility at
+ *      24px without external SVG.
  *
  * The MIDI status pill (when present) is rendered in the same row via
  * the `midiStatus` prop. PianoKeyboard owns the actual pill markup
@@ -65,12 +76,11 @@ const instrumentGlyph = (inst: PianoInstrument): string => {
 
 export const PianoToolbar = (props: PianoToolbarProps): JSX.Element => {
   const midiPillTone = (): 'ok' | 'pending' => {
-    // The label "MIDI: 1 device" vs "MIDI: no device" determines tone.
-    // Without inspecting the string we use a heuristic: if the
-    // string starts with "MIDI: N device" → ok; otherwise pending.
     const s = props.midiStatus ?? '';
     return /^MIDI:\s+\d+\s+device/.test(s) ? 'ok' : 'pending';
   };
+
+  const canApply = (): boolean => recEnabled() && recBuffer().length > 0;
 
   return (
     <div class="piano-toolbar-row">
@@ -86,6 +96,28 @@ export const PianoToolbar = (props: PianoToolbarProps): JSX.Element => {
         <RecordIcon size={14} />
         REC
       </button>
+      <button
+        type="button"
+        class="piano-follow-btn"
+        data-active={followEnabled() ? 'true' : 'false'}
+        onClick={() => toggleFollow()}
+        title={followEnabled() ? 'FOLLOW ON — клавиши подсвечиваются от scheduler' : 'FOLLOW OFF — только мои нажатия'}
+        aria-label="Подсветка от scheduler"
+        aria-pressed={followEnabled()}
+      >
+        FOLLOW
+      </button>
+      <Show when={canApply()}>
+        <button
+          type="button"
+          class="piano-apply-btn"
+          onClick={() => applyToScore()}
+          title="Применить записанные ноты к score"
+          aria-label="Применить записанные ноты к score"
+        >
+          ↑ apply
+        </button>
+      </Show>
       <div class="piano-instrument-selector" role="group" aria-label="Инструмент">
         <For each={INSTRUMENTS}>
           {(inst) => (

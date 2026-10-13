@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
+import { appStore, dispatch } from './appStore';
 
 /**
  * The pianoRecStore holds module-level Solid signals. Each test
@@ -15,6 +16,11 @@ beforeEach(async () => {
   s.setInstrument('triangle');
   s.clearRec();
   if (s.recEnabled()) s.toggleRec();
+  if (s.followEnabled()) s.toggleFollow();
+  // Reset the appStore.score to '' so applyToScore tests don't leak
+  // into each other. (Each test sets it explicitly via the `score`
+  // signal setter below.)
+  dispatch({ type: 'replaceScore', text: '' });
 });
 
 describe('pianoRecStore — recEnabled toggle', () => {
@@ -146,5 +152,197 @@ describe('pianoRecStore — clearRec', () => {
     s.appendNote(60, 0, 0);
     s.clearRec();
     expect(s.recBuffer()).toEqual([]);
+  });
+});
+
+describe('pianoRecStore — followEnabled toggle (wavecode-piano-modes-and-gain)', () => {
+  it('toggleFollow flips followEnabled', async () => {
+    const s = await importStore();
+    expect(s.followEnabled()).toBe(false);
+    s.toggleFollow();
+    expect(s.followEnabled()).toBe(true);
+    s.toggleFollow();
+    expect(s.followEnabled()).toBe(false);
+  });
+
+  it('setFollow forces a specific value (used by PianoKeyboard on unmount)', async () => {
+    const s = await importStore();
+    s.setFollow(true);
+    expect(s.followEnabled()).toBe(true);
+    s.setFollow(true); // idempotent
+    expect(s.followEnabled()).toBe(true);
+    s.setFollow(false);
+    expect(s.followEnabled()).toBe(false);
+  });
+
+  it('followEnabled is independent of recEnabled (orthogonal toggles)', async () => {
+    const s = await importStore();
+    s.toggleRec(); // rec on
+    s.toggleFollow(); // follow on
+    expect(s.recEnabled()).toBe(true);
+    expect(s.followEnabled()).toBe(true);
+    s.toggleRec(); // rec off — follow stays on
+    expect(s.recEnabled()).toBe(false);
+    expect(s.followEnabled()).toBe(true);
+  });
+});
+
+describe('pianoRecStore — commitSnippet (wavecode-piano-modes-and-gain)', () => {
+  it('empty buffer → empty string', async () => {
+    const s = await importStore();
+    expect(s.commitSnippet([], 'triangle')).toBe('');
+  });
+
+  it('single note → single voice snippet with selected instrument', async () => {
+    const s = await importStore();
+    const out = s.commitSnippet([{ midi: 60, startMs: 0, endMs: 100 }], 'triangle');
+    expect(out).toBe(
+      'note("c4").s("triangle").attack(0.005).decay(0.4).sustain(0.1).gain(0.3)',
+    );
+  });
+
+  it('3 notes → 3 newline-separated lines (no wrapping stack)', async () => {
+    const s = await importStore();
+    const out = s.commitSnippet(
+      [
+        { midi: 60, startMs: 0, endMs: 100 },
+        { midi: 64, startMs: 100, endMs: 200 },
+        { midi: 67, startMs: 200, endMs: 300 },
+      ],
+      'sine',
+    );
+    const lines = out.split('\n');
+    expect(lines).toHaveLength(3);
+    expect(lines[0]).toContain('note("c4")');
+    expect(lines[0]).toContain('.s("sine")');
+    expect(lines[1]).toContain('note("e4")');
+    expect(lines[2]).toContain('note("g4")');
+  });
+
+  it('reflects instrument parameter (triangle/sine/sawtooth/square)', async () => {
+    const s = await importStore();
+    for (const inst of ['triangle', 'sine', 'sawtooth', 'square'] as const) {
+      const out = s.commitSnippet([{ midi: 60, startMs: 0, endMs: 100 }], inst);
+      expect(out).toContain(`.s("${inst}")`);
+    }
+  });
+});
+
+describe('pianoRecStore — stackAppend (wavecode-piano-modes-and-gain)', () => {
+  it('empty editor → snippet verbatim (no wrap)', async () => {
+    const s = await importStore();
+    const out = s.stackAppend('', 'note("c4").s("triangle")');
+    expect(out).toBe('note("c4").s("triangle")');
+  });
+
+  it('whitespace-only editor → snippet verbatim', async () => {
+    const s = await importStore();
+    const out = s.stackAppend('   \n  ', 'note("c4").s("triangle")');
+    expect(out).toBe('note("c4").s("triangle")');
+  });
+
+  it('non-stack editor → wrap both in a fresh stack(...)', async () => {
+    const s = await importStore();
+    const out = s.stackAppend('note("e4 g4")', 'note("c4").s("triangle")');
+    expect(out).toMatch(/^stack\(/);
+    expect(out).toContain('note("e4 g4")');
+    expect(out).toContain('note("c4").s("triangle")');
+    expect(out.trimEnd().endsWith(')')).toBe(true);
+  });
+
+  it('editor already has top-level stack(...) → splice inside, no double-wrap', async () => {
+    const s = await importStore();
+    const existing = 'stack(\n  note("e4"),\n  s("hh*4")\n)';
+    const out = s.stackAppend(existing, 'note("c4").s("triangle")');
+    expect(out.startsWith('stack(')).toBe(true);
+    // Outer stack call preserved — count of `stack(` strings must be exactly 1.
+    expect((out.match(/\bstack\s*\(/g) ?? []).length).toBe(1);
+    expect(out).toContain('note("e4")');
+    expect(out).toContain('s("hh*4")');
+    expect(out).toContain('note("c4").s("triangle")');
+  });
+
+  it('survives inline commas in nested parens (s("<a, b, c>"))', async () => {
+    const s = await importStore();
+    const out = s.stackAppend('s("<a, b, c>")', 'note("c4")');
+    expect(out).toContain('s("<a, b, c>")');
+    expect(out).toContain('note("c4")');
+  });
+
+  it('survives a leading comment block', async () => {
+    const s = await importStore();
+    const out = s.stackAppend('// my riff\nnote("c4")', 'note("e4").s("sine")');
+    expect(out).toMatch(/^stack\(/);
+    expect(out).toContain('note("c4")');
+    expect(out).toContain('note("e4").s("sine")');
+  });
+});
+
+describe('pianoRecStore — applyToScore (wavecode-piano-modes-and-gain)', () => {
+  it('empty buffer → noop (no dispatch, score unchanged)', async () => {
+    const s = await importStore();
+    dispatch({ type: 'replaceScore', text: 's("hh*4")' });
+    const before = appStore.score;
+    s.applyToScore();
+    expect(appStore.score).toBe(before);
+    expect(s.recBuffer()).toEqual([]);
+  });
+
+  it('empty score + apply: 1 note → score becomes the snippet verbatim', async () => {
+    const s = await importStore();
+    dispatch({ type: 'replaceScore', text: '' });
+    s.appendNote(60, 0, 100);
+    s.applyToScore();
+    expect(appStore.score).toBe(
+      'note("c4").s("triangle").attack(0.005).decay(0.4).sustain(0.1).gain(0.3)',
+    );
+    expect(s.recBuffer()).toEqual([]); // buffer cleared after apply
+  });
+
+  it('with stack(score, …) → score appends snippet inside (no double-wrap)', async () => {
+    const s = await importStore();
+    dispatch({
+      type: 'replaceScore',
+      text: 'stack(\n  note("e4 g4"),\n  s("hh*4")\n)',
+    });
+    s.appendNote(60, 0, 100);
+    s.appendNote(64, 100, 200);
+    s.applyToScore();
+    const after = appStore.score;
+    expect(after.startsWith('stack(')).toBe(true);
+    expect((after.match(/\bstack\s*\(/g) ?? []).length).toBe(1); // exactly one stack wrap
+    expect(after).toContain('note("e4 g4")');
+    expect(after).toContain('s("hh*4")');
+    expect(after).toContain('note("c4")');
+    expect(after).toContain('note("e4")');
+  });
+
+  it('with non-stack score → wraps both editor + new snippet in a stack(...)', async () => {
+    const s = await importStore();
+    dispatch({ type: 'replaceScore', text: 's("hh*4")' });
+    s.appendNote(60, 0, 100);
+    s.applyToScore();
+    const after = appStore.score;
+    expect(after).toMatch(/^stack\(/);
+    expect(after).toContain('s("hh*4")');
+    expect(after).toContain('note("c4")');
+    expect(after.trimEnd().endsWith(')')).toBe(true);
+  });
+
+  it('twice in a row: two applies → score contains two rec layers (3 voices total)', async () => {
+    const s = await importStore();
+    dispatch({ type: 'replaceScore', text: '' });
+    s.appendNote(60, 0, 100); // first apply → c4
+    s.applyToScore();
+    expect(appStore.score).toContain('note("c4")');
+
+    s.appendNote(67, 100, 200); // second apply → g4
+    s.applyToScore();
+    const after = appStore.score;
+    expect(after).toContain('note("c4")');
+    expect(after).toContain('note("g4")');
+    // 3 voices total: original c4 + original g4 + the second g4 (after splice
+    // the first apply layer becomes the first arg, second g4 becomes the second).
+    expect((after.match(/note\(/g) ?? []).length).toBe(2);
   });
 });

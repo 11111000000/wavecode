@@ -179,14 +179,22 @@ synthesis: |
   пакет был правильной идеей (Web Audio bypass) но недоделанной
   реализацией (нет commit, нет follow, clipping). Этот пакет —
   структурное завершение.
-status: draft
+status: applied
 witness:
-  applied_at: TBD
-  commit: TBD
+  applied_at: 2026-10-13
+  commit: e52ae133bf6feeff6207d768f8f14d3962a0eb0a
   supersedes: math/wavecode-piano-parallel-rec-instrument/packet.md
   notes: |
-    SHA + applied_at будут заполнены subagent'ом после
-    имплементации и зелёных тестов.
+    Implementation completed on 2026-10-13. Commit SHA
+    e52ae133bf6feeff6207d768f8f14d3962a0eb0a on
+    `feat/piano-modes-and-gain`. Test counts (vitest):
+    628/628 passing (48 files). Net new tests: ~30 split across
+    PianoSynth (gain balance + compressor config),
+    pianoRecStore (followEnabled / commitSnippet / stackAppend /
+    applyToScore), PianoToolbar (FOLLOW toggle + apply button),
+    PianoKeyboard (data-source attribute defaults). Typecheck clean.
+    No new lint errors. E2E spec added at tests/e2e/piano-modes.spec.ts
+    with 3 cases (gain balance, REC apply, FOLLOW projection).
 axiom: A5
 epistemics:
   - statement: "PEAK_GAIN = 0.3 даёт clipping при 4-нотном аккорде:
