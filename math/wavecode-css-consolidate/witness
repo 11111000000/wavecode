@@ -1,0 +1,56 @@
+applied_at: 2026-10-13
+branch: wavecode/css-consolidate
+commits:
+  - 87f4dbe docs(math): draft wavecode-css-consolidate
+  - b196dc2 feat(ui): CSS cascade layers (declarative cascade priority)
+  - 5e03b8d fix(ui): BottomToolstrip position:fixed above TabBar (z-index)
+supersedes:
+  - architectural debt: implicit cascade by @import order
+notes: |
+  CSS consolidation Phase 1 — declarative cascade.
+
+  Problem: 14 classes overlap between components.css (newer) and
+  legacy.css (older). Today cascade resolved by import order
+  (legacy.css imported last → legacy wins) — WRONG direction for
+  .piano-key and .step-grid* since components actually use newer
+  styles.
+
+  Solution: CSS cascade layers in index.css. Single @layer
+  declaration sets priority:
+    tokens < base < legacy < components < sheets < icons < landing
+
+  Result:
+    - 11 conflicts: no-op (legacy applies, components only
+      references classes in touch-target lists / selectors)
+    - 3 conflicts (.piano-key, .step-grid + 8 child classes) now
+      correctly apply components.css (the design PianoKeyboard.tsx
+      and StepGrid.tsx actually use)
+    - Future refactor can drop legacy.css without cascade surprises
+
+  Bonus fix: BottomToolstrip was unclickable on mobile because
+  position-less vs TabBar's position:fixed + higher z-index. Added
+  position:fixed + bottom offset + z-index above tabbar.
+
+  Verification:
+    - typecheck: clean (pnpm typecheck)
+    - vitest: 628/628 passing
+    - lint: 2 errors (preexisting, unchanged)
+    - build (vite): succeeds, output CSS contains @layer declaration
+      + piano-key + step-grid rules in both layers with components
+      winning by layer priority order
+    - dev server smoke test (playwright): TopBar/PresetRow/
+      TransportPanel/BottomToolstrip/TabBar render correctly. Found
+      BottomToolstrip z-index bug → fixed in 5e03b8d.
+
+  Audit summary:
+    - legacy.css unique classes: 120
+    - components.css unique classes: 140
+    - overlap: 14
+    - behavioral change: 3 (.piano-key, .step-grid*)
+
+  Not done (deferred):
+    - Drop legacy.css entirely (separate packet; layer-based eating
+      is safer than monolithic merge)
+    - Migrate unique-to-legacy classes to components.css
+    - Replace inline critical CSS in dist/index.html with @layer-aware
+      inline subset

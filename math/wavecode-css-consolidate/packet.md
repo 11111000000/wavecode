@@ -146,5 +146,5 @@ synthesis: |
   `.piano-key` и `.step-grid*` (теперь применяется новый design).
   Оба компонента (PianoKeyboard, StepGrid) используют новые
   классы — визуал улучшается, не ломается.
-status: draft
+status: applied
 ---
