@@ -2751,3 +2751,779 @@ textarea.ai-textarea:focus-visible {
 }
 .ai-status-ok { color: var(--ok); }
 .ai-status-err { color: var(--err); }
+
+/* =========================================================================
+ *  LEGACY SECTIONS — migrated from legacy.css (final batch v3)
+ *
+ *  Включает: APP SHELL, BUTTON, SAVE PRESET BAR, SCORE PANEL,
+ *  MIDI I/O BAR, MIXER PANEL, RECORD, SHARE MODAL, CODEMIRROR,
+ *  MINI-NOTATION TOOLBAR, PIANO & STEP GRID.
+ *
+ *  Файл legacy.css удалён этим коммитом; cascade layer `legacy`
+ *  остаётся в index.css как declaration-only (no-op).
+ * ========================================================================= */
+/* =========================================================================
+ *  APP SHELL
+ * ========================================================================= */
+
+.app { display: flex; flex-direction: column; height: 100%; }
+
+.app-header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  padding: var(--space-sm) var(--space-md);
+  background: var(--surface-1);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.app-title {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-md);
+}
+.app-header h1 {
+  margin: 0;
+  font-size: var(--fs-display);
+  font-weight: var(--fw-semibold);
+  letter-spacing: var(--ls-tight);
+  color: var(--fg);
+  font-family: var(--font-display);
+}
+.app-subtitle {
+  color: var(--fg-dim);
+  font-size: var(--fs-sm);
+  font-family: var(--font-sans);
+}
+
+.app-header-row1 {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+}
+.app-preset-row {
+  display: flex;
+  gap: var(--space-xs);
+  align-items: center;
+  flex-wrap: wrap;
+  /* Должен быть выше .wc-sheet-backdrop (z-sheet=40) — чипы открывают
+   * bottom-sheet и должны быть кликабельными пока другой sheet открыт. */
+  position: relative;
+  z-index: calc(var(--z-sheet) + 5);
+}
+
+@media (max-width: 720px) {
+  /* На мобиле делаем .app-controls-row (где живёт Play) липким сразу
+   * под TopBar. Иначе при открытой AI-панели (max-height: 50vh)
+   * пользователь теряет доступ к play/cps — единственный способ
+   * прервать воспроизведение оказывается за пределами viewport.
+   * TransportPanel вынесен из .app-preset-row в отдельную строку
+   * (пакет math/wavecode-play-controls-row-restore), sticky
+   * переехал вместе с ним.
+   */
+  .app-controls-row {
+    position: sticky;
+    top: var(--header-h);
+    padding: var(--space-xs) var(--space-md);
+    background: rgba(10, 10, 14, 0.92);
+    backdrop-filter: blur(12px) saturate(160%);
+    -webkit-backdrop-filter: blur(12px) saturate(160%);
+    border-bottom: 1px solid var(--border);
+    border-top: none;
+  }
+}
+.app-controls-row {
+  display: flex;
+  gap: var(--space-sm);
+  align-items: center;
+  flex-wrap: wrap;
+  padding-top: var(--space-sm);
+  border-top: 1px solid var(--border);
+}
+
+/* =========================================================================
+ *  BUTTON (preset-btn, ctrl-btn, mixer-btn, midi-io-btn, etc.)
+ * ========================================================================= */
+
+.preset-btn,
+.ctrl-btn,
+.mixer-btn,
+.midi-io-btn,
+.save-preset-bar button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-xs);
+  min-height: var(--touch-target);
+  padding: 0 var(--space-md);
+  font-family: var(--font-sans);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+  line-height: 1;
+  color: var(--fg);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+  transition: all var(--dur-xs) var(--ease);
+}
+.preset-btn:hover:not(:disabled),
+.ctrl-btn:hover:not(:disabled),
+.mixer-btn:hover:not(:disabled),
+.midi-io-btn:hover:not(:disabled) {
+  background: var(--surface-3);
+  border-color: var(--border-strong);
+}
+.preset-btn:active:not(:disabled),
+.ctrl-btn:active:not(:disabled) { transform: scale(0.97); }
+.preset-btn:disabled,
+.ctrl-btn:disabled,
+.mixer-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.ctrl-btn-primary {
+  color: var(--amber);
+  border-color: var(--amber);
+  background: var(--amber-soft);
+}
+.ctrl-btn-primary:hover:not(:disabled) {
+  background: var(--amber);
+  color: var(--fg-inverse);
+  box-shadow: var(--shadow-glow-amber);
+}
+
+.preset-btn-new {
+  color: var(--amber);
+  border-color: var(--amber);
+  font-weight: var(--fw-semibold);
+}
+.preset-btn-new:hover:not(:disabled) {
+  background: var(--amber);
+  color: var(--fg-inverse);
+  box-shadow: var(--shadow-glow-amber);
+}
+
+.preset-btn-danger:hover:not(:disabled) {
+  color: var(--err);
+  border-color: var(--err);
+  background: var(--err-soft);
+}
+
+.ctrl-btn-record.recording {
+  color: var(--magenta);
+  border-color: var(--magenta);
+  background: var(--magenta-soft);
+  animation: wc-rec-pulse 1.4s ease-in-out infinite;
+}
+.ctrl-btn-record.stopping { opacity: 0.6; cursor: progress; }
+.ctrl-btn-record.error { color: var(--err); border-color: var(--err); }
+
+/* =========================================================================
+ *  SAVE PRESET BAR
+ * ========================================================================= */
+
+.save-preset-bar {
+  display: flex;
+  gap: var(--space-sm);
+  padding: var(--space-sm) var(--space-md);
+  background: var(--surface-1);
+  border-bottom: 1px solid var(--border);
+  align-items: center;
+}
+.save-preset-bar input[type='text'] {
+  flex: 1;
+  min-height: var(--touch-target);
+  padding: 0 var(--space-md);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  color: var(--fg);
+  font-family: var(--font-sans);
+  max-width: 320px;
+}
+.save-preset-bar input[type='text']:focus-visible {
+  border-color: var(--cyan);
+  box-shadow: 0 0 0 3px var(--cyan-soft);
+  outline: none;
+}
+
+
+
+
+/* =========================================================================
+ *  SCORE PANEL
+ * ========================================================================= */
+
+.score-controls {
+  display: flex;
+  gap: var(--space-sm);
+  margin-top: var(--space-md);
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.ctx-state {
+  font-size: var(--fs-xs);
+  color: var(--fg-dim);
+  font-family: var(--font-mono);
+  margin-left: auto;
+}
+.ctx-state strong {
+  color: var(--amber);
+  font-weight: var(--fw-semibold);
+}
+.status-running    { color: var(--cyan); }
+.status-idle,
+.status-stopped,
+.status-uninitialized { color: var(--fg-dim); }
+.status-suspended  { color: var(--warn); }
+.status-closed     { color: var(--err); }
+
+.score-debug {
+  display: flex;
+  gap: var(--space-lg);
+  margin-top: var(--space-sm);
+  font-size: var(--fs-xs);
+  color: var(--fg-dim);
+  font-family: var(--font-mono);
+  flex-wrap: wrap;
+}
+.score-debug .debug-err { color: var(--err); word-break: break-word; }
+
+/* =========================================================================
+ *  MIDI I/O BAR
+ * ========================================================================= */
+
+.score-panel-inner > .midi-io-bar {
+  flex-shrink: 0;
+  border-top: 1px solid var(--border);
+  background: var(--surface-1);
+  font-size: var(--fs-sm);
+  font-family: var(--font-sans);
+}
+.midi-io-bar[open] > .midi-io-summary {
+  padding: var(--space-sm) var(--space-md);
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border);
+  font-weight: var(--fw-semibold);
+  cursor: pointer;
+  user-select: none;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+}
+.midi-io-summary {
+  padding: var(--space-sm) var(--space-md);
+  cursor: pointer;
+  user-select: none;
+  color: var(--fg-dim);
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+}
+.midi-io-summary:hover { color: var(--fg); }
+.midi-io-row {
+  display: flex;
+  gap: var(--space-lg);
+  align-items: center;
+  flex-wrap: wrap;
+  padding: var(--space-sm) var(--space-md);
+}
+.midi-io-field {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  font-family: var(--font-sans);
+}
+.midi-io-label { color: var(--fg-dim); }
+.midi-io-field input[type='number'] {
+  width: 64px;
+  height: 36px;
+  padding: 0 var(--space-sm);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  color: var(--amber);
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+}
+.midi-io-field input[type='file'] {
+  font-size: var(--fs-sm);
+  font-family: inherit;
+  color: var(--fg-dim);
+  max-width: 220px;
+}
+
+/* =========================================================================
+ *  MIXER PANEL
+ * ========================================================================= */
+
+.score-panel-inner > .mixer-panel {
+  flex-shrink: 0;
+  border-top: 1px solid var(--border);
+  background: var(--surface-1);
+  font-size: var(--fs-sm);
+  font-family: var(--font-sans);
+}
+.mixer-panel[open] > .mixer-summary {
+  padding: var(--space-sm) var(--space-md);
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border);
+  font-weight: var(--fw-semibold);
+  cursor: pointer;
+  user-select: none;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+}
+.mixer-summary {
+  padding: var(--space-sm) var(--space-md);
+  cursor: pointer;
+  user-select: none;
+  color: var(--fg-dim);
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+}
+.mixer-summary:hover { color: var(--fg); }
+.mixer-empty {
+  padding: var(--space-sm) var(--space-md);
+  color: var(--fg-dim);
+  font-family: var(--font-sans);
+}
+.mixer-list {
+  display: flex;
+  flex-direction: column;
+  padding: var(--space-sm);
+  gap: var(--space-xs);
+  max-height: 360px;
+  overflow-y: auto;
+}
+.mixer-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  min-height: 56px;
+  padding: var(--space-xs) var(--space-sm);
+  border-radius: var(--radius-md);
+  font-family: var(--font-sans);
+}
+.mixer-row:hover { background: var(--surface-2); }
+.mixer-btn {
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-bold);
+}
+.mixer-mute.is-active {
+  background: var(--err);
+  border-color: var(--err);
+  color: var(--fg-inverse);
+  box-shadow: 0 0 8px var(--err);
+}
+.mixer-solo.is-active {
+  background: var(--warn);
+  border-color: var(--warn);
+  color: var(--fg-inverse);
+}
+.mixer-name {
+  flex: 0 1 auto;
+  min-width: 80px;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--fg);
+  font-size: var(--fs-sm);
+}
+.mixer-gain {
+  flex: 1 1 auto;
+  min-width: 80px;
+  height: 48px;
+  accent-color: var(--amber);
+}
+.mixer-gain::-webkit-slider-runnable-track {
+  height: 4px;
+  background: var(--surface-3);
+  border-radius: var(--radius-pill);
+}
+.mixer-gain::-moz-range-track {
+  height: 4px;
+  background: var(--surface-3);
+  border-radius: var(--radius-pill);
+}
+.mixer-gain::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 18px;
+  height: 18px;
+  background: var(--amber);
+  border: 2px solid var(--surface-0);
+  border-radius: var(--radius-full);
+  margin-top: -7px;
+  cursor: pointer;
+  box-shadow: 0 0 0 0 var(--amber-soft);
+}
+.mixer-gain::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  background: var(--amber);
+  border: 2px solid var(--surface-0);
+  border-radius: var(--radius-full);
+  cursor: pointer;
+}
+.mixer-gain-val {
+  flex: 0 0 auto;
+  min-width: 48px;
+  text-align: right;
+  color: var(--fg-dim);
+  font-size: var(--fs-sm);
+  font-family: var(--font-mono);
+}
+
+/* =========================================================================
+ *  RECORD (offline render)
+ * ========================================================================= */
+
+.record-err {
+  font-size: var(--fs-sm);
+  color: var(--err);
+  padding: var(--space-xs) var(--space-md);
+  word-break: break-word;
+  font-family: var(--font-mono);
+}
+.record-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: var(--surface-overlay);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: var(--z-modal);
+  backdrop-filter: blur(4px);
+}
+.record-modal {
+  background: var(--surface-1);
+  border: 1px solid var(--amber);
+  border-radius: var(--radius-xl);
+  padding: var(--space-lg);
+  width: min(420px, 92vw);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  font-family: var(--font-sans);
+  font-size: var(--fs-sm);
+  box-shadow: var(--shadow-glow-amber), var(--shadow-overlay);
+}
+.record-modal-title {
+  font-size: var(--fs-lg);
+  font-weight: var(--fw-semibold);
+  color: var(--amber);
+  border-bottom: 1px solid var(--border);
+  padding-bottom: var(--space-sm);
+  letter-spacing: var(--ls-tight);
+}
+.record-modal-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+.record-modal-label {
+  color: var(--fg-dim);
+  min-width: 80px;
+}
+.record-modal-input {
+  width: 100px;
+  height: var(--touch-target);
+  padding: 0 var(--space-md);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  color: var(--amber);
+  font-family: var(--font-mono);
+}
+.record-modal-hint {
+  color: var(--fg-dim);
+  font-size: var(--fs-xs);
+}
+.record-modal-progress {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+.record-modal-progress-bar {
+  height: var(--space-sm);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  position: relative;
+  overflow: hidden;
+}
+.record-modal-progress-bar-fill {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  background: var(--amber);
+  box-shadow: var(--shadow-glow-amber);
+  width: 0;
+  transition: width var(--dur-base) var(--ease);
+  border-radius: var(--radius-pill);
+}
+.record-modal-actions {
+  display: flex;
+  gap: var(--space-sm);
+  justify-content: flex-end;
+}
+
+/* =========================================================================
+ *  SHARE MODAL
+ * ========================================================================= */
+
+.share-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: var(--surface-overlay);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: var(--z-modal);
+  backdrop-filter: blur(4px);
+}
+.share-modal {
+  background: var(--surface-1);
+  border: 1px solid var(--amber);
+  border-radius: var(--radius-xl);
+  padding: var(--space-lg);
+  width: min(480px, 92vw);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  font-family: var(--font-sans);
+  box-shadow: var(--shadow-glow-amber), var(--shadow-overlay);
+}
+.share-modal textarea {
+  width: 100%;
+  min-height: 88px;
+  padding: var(--space-md);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  color: var(--amber);
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+  resize: vertical;
+}
+.share-modal-actions {
+  display: flex;
+  gap: var(--space-sm);
+  justify-content: flex-end;
+}
+
+/* =========================================================================
+ *  CODEMIRROR
+ * ========================================================================= */
+
+.cm-host {
+  position: relative;
+  background: var(--surface-0);
+  flex: 1 1 auto;
+  min-height: 0;
+}
+.cm-host.cm-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 200px;
+  color: var(--fg-dim);
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+  letter-spacing: var(--ls-wide);
+  text-transform: lowercase;
+  opacity: 0.7;
+}
+.cm-host .cm-editor {
+  background: transparent;
+  height: 100%;
+  font-family: var(--font-mono);
+  color: var(--fg);
+}
+.cm-host .cm-editor .cm-content { font-family: var(--font-mono); }
+.cm-host .cm-editor.cm-focused { outline: none; }
+.cm-host .cm-editor .cm-gutters {
+  background: var(--surface-0);
+  color: var(--fg-ghost);
+  border-right: 1px solid var(--border);
+}
+.cm-host .cm-editor .cm-cursor {
+  border-left-color: var(--amber);
+  box-shadow: 0 0 6px var(--amber);
+}
+.cm-host .cm-editor .cm-activeLine {
+  background: var(--amber-soft);
+}
+
+/* =========================================================================
+ *  MINI-NOTATION TOOLBAR
+ * ========================================================================= */
+
+.mini-toolbar,
+.mini-notation-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+  padding: var(--space-sm) var(--space-md);
+  background: var(--surface-1);
+  border-top: 1px solid var(--border);
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+}
+.mini-toolbar-btn {
+  min-height: 36px;
+  padding: 0 var(--space-sm);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--fg-dim);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.mini-toolbar-btn:hover {
+  color: var(--amber);
+  border-color: var(--amber);
+}
+
+/* =========================================================================
+ *  PIANO & STEP GRID
+ * ========================================================================= */
+
+.piano-keyboard {
+  display: flex;
+  position: relative;
+  background: var(--surface-1);
+  border-top: 1px solid var(--border);
+  padding: var(--space-md) 0;
+  user-select: none;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.piano-key {
+  border: 1px solid var(--border-strong);
+  background: var(--surface-2);
+  color: var(--fg-dim);
+  font-family: var(--font-mono);
+  font-size: var(--fs-2xs);
+  cursor: pointer;
+  min-width: 32px;
+  min-height: 44px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding-bottom: 4px;
+  transition: all var(--dur-xs) var(--ease);
+}
+.piano-keyboard .piano-key.white {
+  background: var(--surface-2);
+  color: var(--fg-ghost);
+  height: 96px;
+  flex: 1 1 0;
+  border-color: var(--border-strong);
+}
+.piano-keyboard .piano-key.black {
+  background: var(--surface-3);
+  color: var(--amber);
+  height: 64px;
+  flex: 0 0 22px;
+  position: relative;
+  z-index: 1;
+  margin: 0 -11px;
+}
+.piano-keyboard .piano-key.active {
+  background: var(--amber);
+  color: var(--fg-inverse);
+  box-shadow: var(--shadow-glow-amber);
+  transform: scaleY(0.95);
+}
+
+.step-grid {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  padding: var(--space-md);
+  background: var(--surface-1);
+  border-top: 1px solid var(--border);
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+}
+
+.step-grid-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2xs);
+  align-items: center;
+}
+.step-grid-toolbar .step-grid-hint {
+  flex-basis: 100%;
+  font-size: var(--fs-xs);
+  color: var(--fg-dim);
+  margin-top: var(--space-2xs);
+}
+
+.step-grid-rows {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2xs);
+}
+.step-grid-row {
+  display: grid;
+  grid-template-columns: 64px repeat(8, 1fr);
+  gap: var(--space-2xs);
+  align-items: center;
+}
+.step-grid-row-label {
+  display: flex;
+  flex-direction: column;
+  font-size: var(--fs-2xs);
+  line-height: 1.1;
+  text-align: right;
+  color: var(--fg-dim);
+  padding-right: var(--space-xs);
+  min-width: 0;
+}
+.step-grid-row-sample {
+  color: var(--amber);
+  font-weight: var(--fw-semibold);
+  text-transform: lowercase;
+}
+.step-grid-row-name {
+  color: var(--fg-ghost);
+  font-size: 9px;
+}
+.step-grid-btn {
+  height: 48px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--fg-dim);
+  font-family: inherit;
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semibold);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all var(--dur-xs) var(--ease);
+}
+.step-grid-btn:hover { border-color: var(--amber); color: var(--amber); }
+.step-grid-btn.active {
+  background: var(--amber);
+  border-color: var(--amber);
+  color: var(--fg-inverse);
+  box-shadow: var(--shadow-glow-amber);
+  transform: scale(0.96);
+}
