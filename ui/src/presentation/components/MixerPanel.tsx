@@ -1,6 +1,7 @@
 import { For, Show, createMemo } from 'solid-js';
 import { appStore, dispatch } from '../state/appStore';
 import { parseStackTopLayers } from '~/domain/layers/parseStack';
+import { scheduleMixLive } from '../state/audioActions';
 
 /**
  * MixerPanel — collapsible `<details>` со списком слоёв текущей партитуры.
@@ -13,6 +14,12 @@ import { parseStackTopLayers } from '~/domain/layers/parseStack';
  *
  * Side-state: `appStore.layerMix` — отдельный от `score` срез, поэтому
  * ИИ-edit не задевает mixer. Reconciled при `setLayerCount`.
+ *
+ * Live push: каждый onInput / onClick дёргает `dispatch(...)` (single
+ * source of truth) И `scheduleMixLive(layerMix)` (debounced 50 ms
+ * AudioEngine.setLayerMix — hot-swap через `repl.evaluate(newSnippet)`
+ * без stop()). Listen-back в DAW-стиле без ручного ▶ Play.
+ * Пакет: `math/wavecode-mixer-live-update`.
  */
 export function MixerPanel() {
   const layers = createMemo(() => parseStackTopLayers(appStore.score));
@@ -48,7 +55,10 @@ export function MixerPanel() {
                     classList={{ 'is-active': muted() }}
                     aria-pressed={muted()}
                     title={`Mute layer ${layer.index}`}
-                    onClick={() => dispatch({ type: 'toggleLayerMute', index: layer.index })}
+                    onClick={() => {
+                      dispatch({ type: 'toggleLayerMute', index: layer.index });
+                      scheduleMixLive(appStore.layerMix);
+                    }}
                   >
                     M
                   </button>
@@ -58,7 +68,10 @@ export function MixerPanel() {
                     classList={{ 'is-active': soloed() }}
                     aria-pressed={soloed()}
                     title={`Solo layer ${layer.index}`}
-                    onClick={() => dispatch({ type: 'toggleLayerSolo', index: layer.index })}
+                    onClick={() => {
+                      dispatch({ type: 'toggleLayerSolo', index: layer.index });
+                      scheduleMixLive(appStore.layerMix);
+                    }}
                   >
                     S
                   </button>
@@ -73,13 +86,14 @@ export function MixerPanel() {
                     step="0.01"
                     value={gain()}
                     aria-label={`Gain for layer ${layer.index}`}
-                    onInput={(e) =>
+                    onInput={(e) => {
                       dispatch({
                         type: 'setLayerGain',
                         index: layer.index,
                         gain: Number(e.currentTarget.value),
-                      })
-                    }
+                      });
+                      scheduleMixLive(appStore.layerMix);
+                    }}
                   />
                   <span class="mixer-gain-val">{gain().toFixed(2)}</span>
                 </div>

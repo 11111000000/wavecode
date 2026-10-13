@@ -2,6 +2,7 @@ import { Effect } from 'effect';
 import { dispatch, appStore } from '../state/appStore';
 import { AppLayer } from '~/infrastructure/composition';
 import { AudioEngine } from '~/domain/services';
+import type { LayerMix } from '~/domain/types';
 import { injectMix } from '~/application/useCases/injectMix';
 import { evalWithTransport } from '~/application/useCases/evalWithTransport';
 import {
@@ -13,6 +14,47 @@ import {
  * Аудио-действия — общие для всех компонентов (header кнопки, etc).
  * Используют Effect + AppLayer напрямую, без передачи пропсов.
  */
+
+/**
+ * Debounce window for live mixer hot-swaps. Tuned against DAW-typical
+ * feedback latency (ProTools HW controller ~30ms, Ableton Push ~60ms).
+ * Smaller = snappier slider feel, more parse cycles under fast drag.
+ * Larger = less CPU but audible lag between drag and sound change.
+ *
+ * See `math/wavecode-mixer-live-update` packet — empirically tune on
+ * iPhone SE if 50ms proves too aggressive.
+ */
+export const MIX_DEBOUNCE_MS = 50;
+
+let mixTimer: ReturnType<typeof setTimeout> | null = null;
+let mixPending: ReadonlyArray<LayerMix> | null = null;
+
+/**
+ * Schedule a debounced live mix push. Coalesces fast slider/mute/solo
+ * edits into a single `AudioEngine.setLayerMix` call after 50ms of
+ * silence. Always pushes the LATEST snapshot — layers mutated mid-debounce
+ * overwrite earlier captures (closest to user intent).
+ *
+ * Companion of `setCps` debounce in `useTransportAudioSync.ts:35`.
+ */
+export const scheduleMixLive = (
+  layerMix: ReadonlyArray<LayerMix>,
+): void => {
+  mixPending = layerMix;
+  if (mixTimer !== null) clearTimeout(mixTimer);
+  mixTimer = setTimeout(() => {
+    mixTimer = null;
+    const snapshot = mixPending;
+    mixPending = null;
+    if (snapshot === null) return;
+    void Effect.runPromise(
+      Effect.gen(function* () {
+        const audio = yield* AudioEngine;
+        yield* audio.setLayerMix(snapshot);
+      }).pipe(Effect.provide(AppLayer)),
+    );
+  }, MIX_DEBOUNCE_MS);
+};
 
 export const evalScore = async (overrideScore?: string): Promise<void> => {
   const score = overrideScore ?? appStore.score;
