@@ -945,6 +945,17 @@ textarea.wc-input {
 .piano-midi-ok      { color: var(--ok);   background: rgba(94, 234, 212, 0.1); }
 .piano-midi-pending { color: var(--warn); background: rgba(255, 170, 59, 0.1); }
 
+/* Active-note indicator: stronger green tint + bolder border. Active
+ * notes themselves already pulse via the .active class on individual
+ * keys, so the toolbar pill doesn't need its own animation — just
+ * a steady "yes, something is playing" signal at-a-glance. */
+.piano-midi-status.has-active {
+  color: var(--ok);
+  background: rgba(94, 234, 212, 0.18);
+  box-shadow: 0 0 0 1px rgba(94, 234, 212, 0.35);
+  font-weight: var(--fw-bold);
+}
+
 .piano-keys {
   overflow-x: auto;
   overflow-y: hidden;
