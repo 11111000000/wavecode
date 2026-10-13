@@ -127,6 +127,7 @@
 
   /* ── LAYOUT ───────────────────────────────────────────────── */
   --header-h:        56px;
+  --controls-h:      52px;   /* wavecode-transport-always-visible: TransportPanel fixed row */
   --tabbar-h:        60px;
   --fab-size:        56px;
   --fab-size-mini:   40px;
