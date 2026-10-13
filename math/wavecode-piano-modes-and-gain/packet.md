@@ -182,16 +182,19 @@ synthesis: |
 status: applied
 witness:
   applied_at: 2026-10-13
-  commit: TBD
+  commit: e52ae133bf6feeff6207d768f8f14d3962a0eb0a
   supersedes: math/wavecode-piano-parallel-rec-instrument/packet.md
   notes: |
-    Implementation completed on 2026-10-13. SHA + commit reference
-    populated right after `git commit` in the final wrap-up step.
-    Test counts (vitest): 628/628 passing, 33 new (4 PianoSynth gain +
-    17 pianoRecStore commitSnippet/stackAppend/followEnabled/applyToScore
-    + 4 PianoToolbar FOLLOW/apply + ~8 PianoKeyboard data-source
-    integration). Typecheck clean. No new lint errors. See README in
-    packet witness file `witness` for milestone.
+    Implementation completed on 2026-10-13. Commit SHA
+    e52ae133bf6feeff6207d768f8f14d3962a0eb0a on
+    `feat/piano-modes-and-gain`. Test counts (vitest):
+    628/628 passing (48 files). Net new tests: ~30 split across
+    PianoSynth (gain balance + compressor config),
+    pianoRecStore (followEnabled / commitSnippet / stackAppend /
+    applyToScore), PianoToolbar (FOLLOW toggle + apply button),
+    PianoKeyboard (data-source attribute defaults). Typecheck clean.
+    No new lint errors. E2E spec added at tests/e2e/piano-modes.spec.ts
+    with 3 cases (gain balance, REC apply, FOLLOW projection).
 axiom: A5
 epistemics:
   - statement: "PEAK_GAIN = 0.3 даёт clipping при 4-нотном аккорде:
