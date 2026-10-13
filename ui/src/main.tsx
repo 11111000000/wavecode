@@ -29,7 +29,6 @@ wrapStrudelLogger();
 // is idempotent (`installed` flag in logger.ts) so calling it again from
 // anywhere later is a no-op.
 logger.install();
-console.log('[pwa] init v2 — useRegisterSW active');
 
 // PWA auto-update — `useRegisterSW` registers Workbox-backed service
 // worker. With registerType='autoUpdate' in vite.config.ts, Workbox
