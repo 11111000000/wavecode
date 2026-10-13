@@ -200,4 +200,68 @@ test.describe('mobile split-pane (412×900)', () => {
       .count();
     expect(closedExists).toBeGreaterThanOrEqual(1);
   });
+
+  test('Snap-points indicator: 3 dots visible inside top-handle', async ({ page }) => {
+    await bootApp(page);
+    await page.locator('.wc-tab[aria-label="Mixer"]').click();
+    await page.waitForTimeout(300);
+
+    // 3-dot indicator inside top-handle.
+    const dots = page.locator('.wc-sheet__snap-point');
+    await expect(dots).toHaveCount(3);
+    await expect(dots.nth(0)).toHaveAttribute('data-snap-id', 'peek');
+    await expect(dots.nth(1)).toHaveAttribute('data-snap-id', 'half');
+    await expect(dots.nth(2)).toHaveAttribute('data-snap-id', 'full');
+
+    // At rest, no data-snap-target set on .wc-sheet.
+    const sheet = page.locator('.wc-sheet').first();
+    expect(await sheet.getAttribute('data-snap-target')).toBe('');
+
+    // During drag, data-snap-target gets a value matching one of
+    // the snap IDs.
+    const handle = page.locator('.wc-sheet__top-handle').first();
+    const handleBox = await handle.boundingBox();
+    expect(handleBox).not.toBeNull();
+    const handleX = handleBox!.x + handleBox!.width / 2;
+    const handleY = handleBox!.y + handleBox!.height / 2;
+
+    await page.mouse.move(handleX, handleY);
+    await page.mouse.down();
+    await page.mouse.move(handleX, handleY - 100, { steps: 5 });
+    await page.waitForTimeout(50);
+    const targetDuringDrag = await sheet.getAttribute('data-snap-target');
+    expect(['peek', 'half', 'full']).toContain(targetDuringDrag);
+    await page.mouse.up();
+    await page.waitForTimeout(200);
+    expect(await sheet.getAttribute('data-snap-target')).toBe('');
+  });
+
+  test('Snap-feedback pill: shown during drag, hidden at rest', async ({ page }) => {
+    await bootApp(page);
+    await page.locator('.wc-tab[aria-label="Mixer"]').click();
+    await page.waitForTimeout(300);
+
+    // At rest, no feedback pill.
+    await expect(page.locator('.wc-sheet__snap-feedback')).toHaveCount(0);
+
+    // During drag, the pill appears.
+    const handle = page.locator('.wc-sheet__top-handle').first();
+    const handleBox = await handle.boundingBox();
+    expect(handleBox).not.toBeNull();
+    const handleX = handleBox!.x + handleBox!.width / 2;
+    const handleY = handleBox!.y + handleBox!.height / 2;
+
+    await page.mouse.move(handleX, handleY);
+    await page.mouse.down();
+    await page.mouse.move(handleX, handleY - 100, { steps: 5 });
+    await page.waitForTimeout(80);
+    const pill = page.locator('.wc-sheet__snap-feedback');
+    await expect(pill).toBeVisible();
+    const label = (await pill.textContent())?.trim().toLowerCase();
+    expect(['peek', 'half', 'full']).toContain(label);
+
+    await page.mouse.up();
+    await page.waitForTimeout(200);
+    await expect(page.locator('.wc-sheet__snap-feedback')).toHaveCount(0);
+  });
 });
