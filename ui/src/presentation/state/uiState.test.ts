@@ -207,3 +207,116 @@ describe('uiState bottom-sheet sync', () => {
     expect(getKindSnap('mixer')).toBe('closed');
   });
 });
+
+describe('uiState keyboard shortcuts (multi-undo)', () => {
+  let originalAdd: typeof window.addEventListener;
+  let originalRemove: typeof window.removeEventListener;
+  let undoMock: ReturnType<typeof vi.fn>;
+  let redoMock: ReturnType<typeof vi.fn>;
+
+  const captureHandler = (): void => {
+    const origAdd = originalAdd.bind(window);
+    window.addEventListener = ((event: string, handler: EventListenerOrEventListenerObject) => {
+      if (event === 'keydown' && typeof handler === 'function') {
+        (window as unknown as { __keydownHandler: (e: KeyboardEvent) => void }).__keydownHandler =
+          handler as (e: KeyboardEvent) => void;
+      }
+      return origAdd(event, handler);
+    }) as typeof window.addEventListener;
+  };
+
+  const fire = (init: KeyboardEventInit, target?: EventTarget | null): void => {
+    const handler = (window as unknown as { __keydownHandler?: (e: KeyboardEvent) => void })
+      .__keydownHandler;
+    if (!handler) throw new Error('keydown handler not captured');
+    const event = new KeyboardEvent('keydown', { bubbles: true, cancelable: true, ...init });
+    if (target) Object.defineProperty(event, 'target', { value: target, configurable: true });
+    handler(event);
+  };
+
+  const focusOn = (el: HTMLElement): HTMLElement => {
+    document.body.appendChild(el);
+    return el;
+  };
+
+  beforeEach(async () => {
+    localStorage.clear();
+    vi.resetModules();
+    originalAdd = window.addEventListener;
+    originalRemove = window.removeEventListener;
+    captureHandler();
+    undoMock = vi.fn();
+    redoMock = vi.fn();
+    const mod = await import('./uiState');
+    mod.installKeyboardShortcuts({
+      focusAI: vi.fn(),
+      focusScore: vi.fn(),
+      undoScore: undoMock,
+      redoScore: redoMock,
+    });
+  });
+
+  afterEach(() => {
+    window.addEventListener = originalAdd;
+    window.removeEventListener = originalRemove;
+    delete (window as unknown as { __keydownHandler?: unknown }).__keydownHandler;
+    document.body.innerHTML = '';
+  });
+
+  it('Ctrl+Z (no shift) outside text fields triggers undoScore', () => {
+    const target = focusOn(document.createElement('div'));
+    fire({ key: 'z', ctrlKey: true }, target);
+    expect(undoMock).toHaveBeenCalledTimes(1);
+    expect(redoMock).not.toHaveBeenCalled();
+  });
+
+  it('Ctrl+Z is suppressed when focus is inside a textarea (lets native text-undo work)', () => {
+    const ta = document.createElement('textarea');
+    focusOn(ta);
+    fire({ key: 'z', ctrlKey: true }, ta);
+    expect(undoMock).not.toHaveBeenCalled();
+  });
+
+  it('Ctrl+Z is suppressed when focus is inside an input (not checkbox/radio)', () => {
+    const input = document.createElement('input');
+    input.type = 'text';
+    focusOn(input);
+    fire({ key: 'z', ctrlKey: true }, input);
+    expect(undoMock).not.toHaveBeenCalled();
+  });
+
+  it('Ctrl+Z IS triggered when focus is on a checkbox (non-text input)', () => {
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    focusOn(cb);
+    fire({ key: 'z', ctrlKey: true }, cb);
+    expect(undoMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('Ctrl+Y triggers redoScore (no shift)', () => {
+    const target = focusOn(document.createElement('div'));
+    fire({ key: 'y', ctrlKey: true }, target);
+    expect(redoMock).toHaveBeenCalledTimes(1);
+    expect(undoMock).not.toHaveBeenCalled();
+  });
+
+  it('Ctrl+Shift+Z triggers redoScore (macOS convention)', () => {
+    const target = focusOn(document.createElement('div'));
+    fire({ key: 'z', ctrlKey: true, shiftKey: true }, target);
+    expect(redoMock).toHaveBeenCalledTimes(1);
+    expect(undoMock).not.toHaveBeenCalled();
+  });
+
+  it('plain key (no Ctrl/Meta) is ignored', () => {
+    const target = focusOn(document.createElement('div'));
+    fire({ key: 'z' }, target);
+    expect(undoMock).not.toHaveBeenCalled();
+    expect(redoMock).not.toHaveBeenCalled();
+  });
+
+  it('Meta+Z (macOS Cmd+Z) is treated as Ctrl+Z (undo)', () => {
+    const target = focusOn(document.createElement('div'));
+    fire({ key: 'z', metaKey: true }, target);
+    expect(undoMock).toHaveBeenCalledTimes(1);
+  });
+});
