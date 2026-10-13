@@ -15,7 +15,7 @@ import { test, expect } from '@playwright/test';
  * "piano interrupts main track" bug that motivated this packet.
  */
 
-const BASE_URL = 'http://127.0.0.1:5173';
+const BASE_URL = 'http://127.0.0.1:4173';
 
 async function unlockAudio(page: import('@playwright/test').Page): Promise<void> {
   await page.locator('.app-preset-row button:has-text("Piano")').click();

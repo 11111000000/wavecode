@@ -30,7 +30,7 @@ import { test, expect } from '@playwright/test';
  *     flips to Stop, we still verify the layout invariants.
  */
 
-const BASE_URL = 'http://127.0.0.1:5173';
+const BASE_URL = 'http://127.0.0.1:4173';
 
 test.beforeEach(async ({ page }) => {
   await page.goto(BASE_URL, { waitUntil: 'domcontentloaded' });

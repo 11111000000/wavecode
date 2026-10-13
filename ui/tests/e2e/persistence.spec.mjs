@@ -14,13 +14,17 @@ test('Score is autosaved to IndexedDB and restored after page reload', async ({ 
   // so the typed marker below is the only thing that could possibly match after reload.
   // Confirm dialog must be accepted.
   page.once('dialog', (d) => d.accept());
-  await page.locator('button[title="Сбросить всё"]').click();
+  await page.locator('button[aria-label="Сбросить всё"]').click();
   await page.waitForTimeout(2000);
   await page.waitForSelector('main.app', { timeout: 15000 });
 
   const MARKER = 'wavecode-persist-marker-9f3a7c';
+  // Focus the editor via Ctrl+, (focusScore keyboard shortcut).
+  await page.keyboard.press('Control+,');
+  await page.waitForTimeout(300);
+
   const editor = page.locator('.cm-content');
-  await editor.click();
+  await editor.click({ force: true });
   await page.waitForTimeout(200);
   await page.keyboard.type(MARKER, { delay: 10 });
 

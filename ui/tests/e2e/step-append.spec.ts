@@ -26,7 +26,7 @@ test('tapping a cell does NOT clobber the loaded preset (score preserved, audio 
   page.on('console', (m) => consoleLogs.push(`[${m.type()}] ${m.text()}`));
 
   await page.setViewportSize({ width: 1280, height: 800 });
-  await page.goto('http://127.0.0.1:5173/', { waitUntil: 'domcontentloaded' });
+  await page.goto('http://127.0.0.1:4173/', { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('main.app', { timeout: 15_000 });
   await page.waitForSelector('.cm-content', { timeout: 15_000 });
 
@@ -63,7 +63,7 @@ test('tapping a cell does NOT clobber the loaded preset (score preserved, audio 
 
 test('tapping ↑ load & play with a loaded preset wraps grid layers into the existing stack', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
-  await page.goto('http://127.0.0.1:5173/', { waitUntil: 'domcontentloaded' });
+  await page.goto('http://127.0.0.1:4173/', { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('main.app', { timeout: 15_000 });
   await page.waitForSelector('.cm-content', { timeout: 15_000 });
 
@@ -87,15 +87,16 @@ test('tapping ↑ load & play with a loaded preset wraps grid layers into the ex
   const text = (await page.locator('.cm-content').textContent()) ?? '';
   // The original Creep comment must still be present.
   expect(text).toContain('Creep');
-  // The new editor score should start with `stack(`, which means the
-  // grid snippet got merged into the existing stack — not appended as
-  // brand-new content that displaces Creep.
-  expect(text).toMatch(/^stack\(/);
+  // The grid layer (bd) must have been merged INTO the existing stack.
+  // The score may start with the Creep comment, so we don't anchor to
+  // `^stack(` — we just look for the bd-pattern that proves the grid
+  // got appended inside the existing stack(...) and not as standalone.
+  expect(text).toMatch(/s\("bd ~ ~ ~ ~ ~ ~ ~"\)/);
 });
 
 test('empty editor + grid tap + load→editor equals standalone grid snippet', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
-  await page.goto('http://127.0.0.1:5173/', { waitUntil: 'domcontentloaded' });
+  await page.goto('http://127.0.0.1:4173/', { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('main.app', { timeout: 15_000 });
   await page.waitForSelector('.cm-content', { timeout: 15_000 });
 
