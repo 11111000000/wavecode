@@ -1,0 +1,66 @@
+- sha: a79534ed4f5630521f8bb904883f6825ab6e0e21
+  date: 2026-10-13
+  kind: implementation
+  files:
+    - math/wavecode-mobile-split-pane/packet.md
+    - ui/src/App.tsx
+    - ui/src/presentation/components/BottomSheet.tsx
+    - ui/src/presentation/components/app/PanelsLayout.tsx
+    - ui/src/presentation/components/SheetTabs.tsx
+    - ui/src/presentation/components/SheetTabs.test.tsx
+    - ui/src/presentation/state/uiState.ts
+    - ui/src/presentation/state/uiState.test.ts
+    - ui/src/styles/sheets.css
+    - ui/tests/e2e/mobile-sheet-push.spec.ts
+  notes: |
+    Mobile split-pane layout — fixes the "BottomSheet blurs the editor
+    and editor is unusable while sheet is open" complaint.
+
+    (a) In-flow sheet. .app-body is now column flex on mobile;
+        BottomSheet is a flex-child instead of position:fixed overlay.
+        ScorePanel flex:1, sheet flex:0 0 var(--sheet-h, 50vh).
+        Backdrop removed on mobile (was the source of the blur);
+        body scroll unlocked.
+
+    (b) Drag-handle. New wc-sheet__top-handle (cyan pill, 16px
+        hit-area, cursor:ns-resize). Pointer drag in
+        BottomSheet.onPointerMove updates setSheetHeightPx (clamp
+        240..560px). Snap decisions on release: <240 → closed,
+        >60vh → full, mid → half/peek. Persisted in localStorage
+        wavecode-mobile-sheet-h-v1.
+
+    (c) Internal sheet tabs. New SheetTabs component renders
+        Mixer / AI / Status / Step / Piano inside the sheet header
+        (hidden on desktop). Switches between tools without closing
+        the sheet. setTab() is already single-active — Score tab in
+        BottomNav closes everything (primary navigation back to
+        editor full-height).
+
+    (d) FAB shift. .wc-fab bottom: calc(tabbar-h + safe-bottom +
+        sheet-h + space-md); 240ms spring transition. Sits above
+        the sheet when open, below tabbar when closed.
+
+    (e) ScorePanel max-height: calc(100dvh - header-h - tabbar-h -
+        safe-bottom - sheet-h, 50vh), min-height: 200px. Readable
+        even when sheet is full (70vh).
+
+    (f) Layout refactor. BottomSheets moved from App.tsx
+        sibling-of-body into PanelsLayout child-of-body (column
+        flex parent). Desktop ≥1024px sheets.css @media override
+        restores position:fixed right-side drawer.
+
+    Coverage: +9 uiState cases (sheetHeightPx clamps [240..560],
+    localStorage round-trip, --sheet-h CSS var effect); +8
+    SheetTabs cases (5 tabs render, click delegation, active state).
+    New e2e mobile-sheet-push.spec.ts (5 cases): split-pane
+    layout assertion, editor interactive while sheet open, internal
+    tab switch, Score tab closes sheet, drag-handle resize with
+    --sheet-h CSS var.
+
+    Verification: vitest 712/712 (52 files, +17 net new);
+    tsc --noEmit clean; vite build succeeds. No new lint errors.
+
+    Desktop regression: piano-rec-slot.spec.ts e2e continues to
+    pass unchanged — sheets.css desktop override preserves the
+    right-side drawer geometry. The desktop-affordance surface
+    (right drawer, snap-transitions on drag) is intact.

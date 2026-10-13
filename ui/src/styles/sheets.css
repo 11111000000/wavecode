@@ -153,6 +153,168 @@
   background: var(--surface-0);
 }
 
+/* =========================================================================
+ *  SPLIT-PANE LAYOUT (wavecode-mobile-split-pane)
+ *  На mobile (≤720px) BottomSheet больше не overlay — он in-flow
+ *  flex-child .app-body. ScorePanel занимает остаток сверху, sheet
+ *  занимает bottom `var(--sheet-h, 50vh)`. Drag-handle в верхней части
+ *  sheet ресайзит высоту (clamp 240..560px), persisted в localStorage.
+ *
+ *  Desktop ≥1024px: см. @media ниже — все overrides возвращают
+ *  position:fixed / right-side drawer.
+ * ========================================================================= */
+
+@media (max-width: 720px) {
+  /* Drop the dim/blur overlay — sheet is in-flow, no need to dim
+   * the score panel below. */
+  .wc-sheet-backdrop { display: none !important; }
+
+  body[data-sheet-open='true'] {
+    /* overlay-locked body scroll is no longer needed; the page
+     * itself stays scrollable because the sheet pushes the editor
+     * up rather than covering it. */
+    overflow: auto !important;
+  }
+
+  /* Make `.app-body` a column flex so ScorePanel + sheet stack
+   * vertically instead of overlaying. */
+  .app-body {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  /* The sheet itself: in-flow, no transform, height driven by
+   * either snap (closed/peek/half/full) or explicit --sheet-h. */
+  .wc-sheet {
+    position: relative !important;
+    left: auto !important;
+    right: auto !important;
+    bottom: auto !important;
+    width: 100% !important;
+    max-width: none !important;
+    height: var(--sheet-h, 50vh) !important;
+    max-height: 70vh !important;
+    min-height: 0 !important;
+    transform: none !important;
+    border-radius: 12px 12px 0 0 !important;
+    border-top: 1px solid var(--border-strong);
+    border-left: none;
+    border-right: none;
+    border-bottom: none;
+    box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.5);
+    transition: height 240ms var(--ease-spring);
+    flex: 0 0 auto;
+  }
+  .wc-sheet[data-snap='closed'] {
+    height: 0 !important;
+    visibility: hidden;
+    border: none;
+    box-shadow: none;
+    padding: 0;
+  }
+  .wc-sheet[data-snap='peek']   { height: 35vh !important; }
+  .wc-sheet[data-snap='half']   { height: 50vh !important; }
+  .wc-sheet[data-snap='full']   { height: 70vh !important; }
+
+  /* Disable bottom handle-area on mobile — top-handle does the work. */
+  .wc-sheet__handle-area { display: none !important; }
+
+  /* Top-handle: drag-affordance. 16px-high hit-area, 40×4 cyan pill. */
+  .wc-sheet__top-handle {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 16px;
+    cursor: ns-resize;
+    touch-action: pan-y;
+    user-select: none;
+    -webkit-user-select: none;
+    background: var(--surface-0);
+    border-bottom: 1px solid var(--border);
+    position: relative;
+  }
+  .wc-sheet__top-handle::before {
+    content: '';
+    width: 40px;
+    height: 4px;
+    border-radius: var(--radius-pill);
+    background: var(--border-strong);
+    transition: background var(--dur-xs) var(--ease);
+  }
+  .wc-sheet__top-handle:hover::before { background: var(--cyan); }
+  .wc-sheet__top-handle:active { cursor: ns-resize; }
+  .wc-sheet__top-handle:active::before { background: var(--cyan); }
+
+  /* Internal sheet tabs — Mixer/AI/Status/Step/Piano */
+  .wc-sheet__tabs {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    padding: 2px;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-pill);
+    margin-left: var(--space-sm);
+  }
+  .wc-sheet__tab {
+    height: 26px;
+    min-width: 44px;
+    padding: 0 var(--space-xs);
+    background: transparent;
+    color: var(--fg-dim);
+    border: 1px solid transparent;
+    border-radius: var(--radius-pill);
+    cursor: pointer;
+    font-family: var(--font-mono);
+    font-size: var(--fs-2xs);
+    font-weight: var(--fw-medium);
+    letter-spacing: 0;
+    text-transform: none;
+    transition:
+      color var(--dur-xs) var(--ease),
+      background var(--dur-xs) var(--ease),
+      border-color var(--dur-xs) var(--ease);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-2xs);
+    -webkit-tap-highlight-color: transparent;
+  }
+  .wc-sheet__tab:hover { color: var(--fg); }
+  .wc-sheet__tab[data-active='true'] {
+    color: var(--fg-inverse);
+    background: var(--cyan);
+    border-color: var(--cyan);
+  }
+
+  /* ScorePanel: flex child that takes the remainder of .app-body
+   * above the sheet. min-height 200px so the editor stays readable
+   * even when the sheet is full (70vh). */
+  .score-panel {
+    flex: 1 1 auto;
+    min-height: 200px;
+    max-height: calc(
+      100dvh - var(--header-h, 48px) - var(--tabbar-h, 56px)
+      - var(--safe-bottom, 0px) - var(--sheet-h, 50vh)
+    );
+    overflow: hidden;
+  }
+  .score-panel-inner { min-height: 0; }
+
+  /* FAB: shift up by --sheet-h on mobile so it sits between sheet
+   * and tabbar instead of getting covered. */
+  .wc-fab {
+    bottom: calc(
+      var(--tabbar-h) + var(--safe-bottom) + var(--sheet-h, 0px)
+      + var(--space-md)
+    ) !important;
+    transition: bottom 240ms var(--ease-spring);
+  }
+}
+
 /* Modaal (centered) — для dialogs, не для sheets */
 .wc-modal {
   position: fixed;

@@ -5,6 +5,7 @@ import {
 import { HelloPanel } from '~/presentation/panels/HelloPanel';
 import { ScorePanel } from '~/presentation/panels/ScorePanel';
 import { AIEditPanel } from '~/presentation/panels/AIEditPanel';
+import { BottomSheets } from './BottomSheets';
 
 function CollapsibleHeader(props: {
   title: string;
@@ -63,6 +64,14 @@ export function PanelsLayout(_: PanelsLayoutProps): JSX.Element {
           </Show>
         </aside>
       </Show>
+
+      {/* wavecode-mobile-split-pane: BottomSheets live INSIDE
+          .app-body so the mobile split-pane layout (column flex:
+          ScorePanel + Sheet) takes effect via sheets.css @media
+          (max-width: 720px). On desktop ≥1024px the sheets
+          restore position:fixed / right-side drawer through CSS
+          overrides in the same media-query block. */}
+      <BottomSheets />
     </div>
   );
 }

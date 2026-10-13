@@ -29,7 +29,6 @@ import { installConsoleGlobals } from './presentation/components/consoleGlobals'
 import { TopBar } from './presentation/components/app/TopBar';
 import { PresetRow } from './presentation/components/app/PresetRow';
 import { PanelsLayout } from './presentation/components/app/PanelsLayout';
-import { BottomSheets } from './presentation/components/app/BottomSheets';
 import { Admin } from './presentation/pages/Admin';
 import { Landing } from './presentation/components/landing/Landing';
 import { TransportPanel } from './presentation/components/TransportPanel';
@@ -257,7 +256,6 @@ function AppShell(): JSX.Element {
         />
       </div>
       <PanelsLayout />
-      <BottomSheets />
       <TabBar />
       <ConsoleButton />
       <ConsoleSheet />
