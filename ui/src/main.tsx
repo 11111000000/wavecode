@@ -1,7 +1,9 @@
 /* <reference types="solid-js" /> */
 import { render } from 'solid-js/web';
+import { HashRouter, Route } from '@solidjs/router';
 import { wrapStrudelLogger } from './infrastructure/audio/strudelPatches';
 import { App } from './App';
+import { Landing } from './presentation/components/landing';
 import './index.css';
 import { setPendingShare } from './presentation/state/shareState';
 import { parseShareUrl } from './domain/urlCodec';
@@ -25,4 +27,16 @@ root.replaceChildren();
 //     (юзер явно подтверждает перезапись локальной работы).
 setPendingShare(parseShareUrl(window.location.search));
 
-render(() => <App />, root);
+// HashRouter — для статического деплоя без rewrite-правил.
+//   #/     → лендинг
+//   #/app  → редактор
+//   #/?s=… → лендинг (sharing-score доступен только из редактора)
+render(
+  () => (
+    <HashRouter>
+      <Route path="/" component={Landing} />
+      <Route path="/app" component={App} />
+    </HashRouter>
+  ),
+  root,
+);
