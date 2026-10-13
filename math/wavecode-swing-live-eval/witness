@@ -1,0 +1,11 @@
+applied_at: 2026-10-13
+branch: fix/swing-live-eval
+commit: 244b68f
+supersedes: null
+evidence:
+  - test: vitest (49 files, 632 tests passed)
+  - files:
+      - ui/src/presentation/state/useTransportAudioSync.ts (swing-эффект + gate)
+      - ui/src/presentation/state/useTransportAudioSync.test.ts (4 теста)
+      - ui/src/presentation/state/audioActions.ts (reEvalScoreWithTransport + runWrapAndEval)
+      - math/wavecode-swing-live-eval/packet.md
