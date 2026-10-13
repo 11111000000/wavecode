@@ -5,7 +5,7 @@ import { Effect } from 'effect';
 import {
   installKeyboardShortcuts,
   setMobileMode,
-  openKindSheet, closeKindSheet, setTab, getMobileMode,
+  setTab, getMobileMode,
   getLayout, setLayout,
   getSampleStatus,
   type MobileMode,
@@ -22,6 +22,7 @@ import { Repo } from '~/domain/services';
 import { useAppBootstrap } from './presentation/state/useAppBootstrap';
 import { useAutoSave } from './presentation/state/useAutoSave';
 import { TabBar } from './presentation/components/TabBar';
+import { BottomToolstrip } from './presentation/components/BottomToolstrip';
 import { Toast } from './presentation/components/Toast';
 import { ConsoleButton } from './presentation/components/ConsoleButton';
 import { ConsoleSheet } from './presentation/components/ConsoleSheet';
@@ -120,11 +121,8 @@ function AppShell(): JSX.Element {
 
   const [presetId, setPresetId] = createSignal('creep');
   const [showSavePreset, setShowSavePreset] = createSignal(false);
-  const [showStepGrid, setShowStepGrid] = createSignal(false);
-  const [showPiano, setShowPiano] = createSignal(false);
   const [audioStarting, setAudioStarting] = createSignal(false);
   const [mobileMode, setMobileModeSignal] = createSignal<MobileMode>(getMobileMode());
-  const [showMobileMenu, setShowMobileMenu] = createSignal(false);
   const [newPresetName, setNewPresetName] = createSignal('');
 
   onMount(() => {
@@ -146,6 +144,7 @@ function AppShell(): JSX.Element {
       },
       undoScore: () => { void stopAudio(); dispatch({ type: 'undoScore' }); },
       redoScore: () => { void stopAudio(); dispatch({ type: 'redoScore' }); },
+      openAdmin: () => { window.history.pushState(null, '', '#/admin'); window.dispatchEvent(new HashChangeEvent('hashchange')); },
     });
   });
 
@@ -184,14 +183,11 @@ function AppShell(): JSX.Element {
         ctxState={audio.ctxState}
         presetId={presetId()}
         mobileMode={mobileMode()}
-        showMobileMenu={showMobileMenu()}
         sampleStatus={getSampleStatus()}
         chooseMobileMode={(m) => {
           setMobileMode(m);
           setMobileModeSignal(m);
-          setShowMobileMenu(false);
         }}
-        setShowMobileMenu={(v) => setShowMobileMenu(v)}
         onSavePreset={() => setShowSavePreset((v) => !v)}
         onRollback={undo}
         onRedo={redo}
@@ -215,11 +211,10 @@ function AppShell(): JSX.Element {
           const cur = getLayout();
           setLayout(cur === 'ai-primary' ? 'code-primary' : 'ai-primary');
         }}
+        onOpenAdmin={() => { window.history.pushState(null, '', '#/admin'); window.dispatchEvent(new HashChangeEvent('hashchange')); }}
       />
       <PresetRow
         presetId={presetId()}
-        showStepGrid={showStepGrid()}
-        showPiano={showPiano()}
         showSavePreset={showSavePreset()}
         newPresetName={newPresetName()}
         onLoadPreset={(id) => {
@@ -228,29 +223,6 @@ function AppShell(): JSX.Element {
           setPresetId(id);
           dispatch({ type: 'replaceScore', text: preset.score });
           void evalScore();
-        }}
-        onToggleStepGrid={() => {
-          if (showStepGrid()) { setShowStepGrid(false); closeKindSheet('step'); return; }
-          setShowPiano(false);
-          closeKindSheet('piano');
-          // Auto-populate grid from current score on first open
-          // (when grid is empty). Mirrors the `↓ read score` button;
-          // user's mental model: open sheet → see current pattern.
-          // Manual edits (taps) are preserved on subsequent opens
-          // because grid is no longer empty. Packet
-          // math/wavecode-step-grid-autoload-and-sync.
-          if (isGridEmptyState()) {
-            loadFromScore(appStore.score);
-          }
-          setShowStepGrid(true);
-          openKindSheet('step', 'full');
-        }}
-        onTogglePiano={() => {
-          if (showPiano()) { setShowPiano(false); closeKindSheet('piano'); return; }
-          setShowStepGrid(false);
-          closeKindSheet('step');
-          setShowPiano(true);
-          openKindSheet('piano', 'full');
         }}
         onShowSavePreset={(v) => setShowSavePreset(v)}
         onNewPresetName={(v) => setNewPresetName(v)}
@@ -278,12 +250,16 @@ function AppShell(): JSX.Element {
       </div>
       <PanelsLayout />
       <BottomSheets />
+      <BottomToolstrip
+        onBeforeOpenStep={() => {
+          if (isGridEmptyState()) {
+            loadFromScore(appStore.score);
+          }
+        }}
+      />
       <TabBar />
       <ConsoleButton />
       <ConsoleSheet />
-      <a class="wc-debug-link" href="#/admin" aria-label="Open debug inspector">
-        → /admin
-      </a>
     </main>
   );
 }
