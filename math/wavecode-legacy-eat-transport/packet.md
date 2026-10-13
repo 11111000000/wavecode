@@ -69,5 +69,5 @@ synthesis: |
     - smoke test (playwright): открыть #/app, проверить
       computed style cps-preset-btn (должен быть background:
       transparent после Phase 1 de-emphasis)
-status: draft
+status: applied
 ---
