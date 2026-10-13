@@ -1857,3 +1857,35 @@ button:not([disabled]):not(.no-shrink):active {
   background: var(--cyan);
   border-radius: var(--radius-pill);
 }
+
+/* ── /admin debug link ────────────────────────────────────────── */
+
+.wc-debug-link {
+  position: fixed;
+  right: var(--space-md);
+  bottom: calc(var(--tabbar-h) + var(--space-md));
+  z-index: var(--z-tabbar);
+  font-family: var(--font-mono);
+  font-size: var(--fs-2xs);
+  font-weight: var(--fw-semibold);
+  letter-spacing: var(--ls-wide);
+  text-transform: uppercase;
+  text-decoration: none;
+  color: var(--magenta);
+  background: var(--magenta-soft);
+  border: 1px solid var(--magenta);
+  border-radius: var(--radius-pill);
+  padding: var(--space-2xs) var(--space-sm);
+  box-shadow: var(--shadow-fab);
+  opacity: 0.6;
+  transition: opacity var(--dur-xs) var(--ease);
+}
+.wc-debug-link:hover {
+  opacity: 1;
+}
+@media (max-width: 720px) {
+  .wc-debug-link {
+    bottom: calc(var(--tabbar-h) + var(--space-sm));
+    right: var(--space-sm);
+  }
+}
