@@ -2415,6 +2415,10 @@ button:not([disabled]):not(.no-shrink):active {
   overflow: hidden;
   position: relative;
   z-index: 0;
+  /* wavecode-transport-always-visible: leave room for fixed
+   * .app-controls-row (Play/Stop + cps/swing) so content doesn't
+   * slide under the transport. */
+  padding-top: var(--controls-h);
   padding-bottom: var(--tabbar-h);
 }
 
@@ -2765,32 +2769,34 @@ textarea.ai-textarea:focus-visible {
 }
 
 @media (max-width: 720px) {
-  /* На мобиле делаем .app-controls-row (где живёт Play) липким сразу
-   * под TopBar. Иначе при открытой AI-панели (max-height: 50vh)
-   * пользователь теряет доступ к play/cps — единственный способ
-   * прервать воспроизведение оказывается за пределами viewport.
-   * TransportPanel вынесен из .app-preset-row в отдельную строку
-   * (пакет math/wavecode-play-controls-row-restore), sticky
-   * переехал вместе с ним.
+  /* On mobile, .app-controls-row (where Play lives) was sticky at top
+   * of .wc-app. But sticky needs a scrolling parent; .wc-app is
+   * height:100% with overflow:hidden (broken). The rule was a no-op
+   * and transport got covered by any open bottom-sheet.
+   *
+   * math/wavecode-transport-always-visible: position:fixed works
+   * everywhere regardless of scroll context. z-index above sheet.
+   * The mobile @media wrap is no longer needed — rule is universal.
    */
-  .app-controls-row {
-    position: sticky;
-    top: var(--header-h);
-    padding: var(--space-xs) var(--space-md);
-    background: rgba(10, 10, 14, 0.92);
-    backdrop-filter: blur(12px) saturate(160%);
-    -webkit-backdrop-filter: blur(12px) saturate(160%);
-    border-bottom: 1px solid var(--border);
-    border-top: none;
-  }
 }
 .app-controls-row {
+  /* wavecode-transport-always-visible: pinned below TopBar so Play
+   * remains clickable when any bottom-sheet (AI/Step/Piano/Mixer/
+   * Status) is open. Sheet has z-sheet+1; this is z-sheet+12. */
+  position: fixed;
+  top: var(--header-h);
+  left: 0;
+  right: 0;
+  z-index: calc(var(--z-sheet) + 12);
   display: flex;
   gap: var(--space-sm);
   align-items: center;
   flex-wrap: wrap;
-  padding-top: var(--space-sm);
-  border-top: 1px solid var(--border);
+  padding: var(--space-xs) var(--space-md);
+  background: rgba(10, 10, 14, 0.92);
+  backdrop-filter: blur(12px) saturate(160%);
+  -webkit-backdrop-filter: blur(12px) saturate(160%);
+  border-bottom: 1px solid var(--border);
 }
 
 /* =========================================================================
