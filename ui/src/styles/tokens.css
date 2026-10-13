@@ -168,7 +168,7 @@
   --z-fab:       20;
   --z-tabbar:    30;
   --z-sheet:     40;
-  --z-toast:     50;
+  --z-toast:     80;   /* wavecode-toast-overhead-and-toolbar-toggle: выше modal=60 и всех fixed-рядов (52/53) — toast всегда поверх всего */
   --z-modal:     60;
 
   color-scheme: dark;
