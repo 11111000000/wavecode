@@ -63,5 +63,5 @@ synthesis: |
   sections: APP SHELL, BUTTON, SAVE PRESET BAR, MIDI I/O BAR,
   MIXER PANEL, RECORD, SHARE MODAL, CODEMIRROR, MINI-NOTATION
   TOOLBAR, PIANO & STEP GRID.
-status: draft
+status: applied
 ---
