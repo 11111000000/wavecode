@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+# scripts/pre-commit — run fast checks on staged files before commit.
+#
+# Install (from repo root):
+#   ln -s ../../scripts/pre-commit .git/hooks/pre-commit
+# Or use the npm helper:
+#   npm run precommit:install
+#
+# Skip a single commit (use sparingly):
+#   git commit --no-verify
+#
+# What runs (in order):
+#   1. typecheck          — tsc --noEmit on ui/  (catches type regressions)
+#   2. vitest             — unit tests for ui/   (~16s on cold cache, ~5s warm)
+#   3. lint:no-console    — fail if domain/application use global console.*
+#   4. validate:presets   — syntactic smoke test of every BUILTIN_PRESETS score
+#
+# ~5-7s total on a warm node_modules cache. If ANY step exits non-zero,
+# the commit is aborted. Each step has clear output so the failure
+# points to the failing check, not to a swallowed error.
+#
+# Why a bash script and not Husky / lint-staged:
+#   * Husky adds a runtime dep + a node_modules/ link to the git plumbing,
+#     which violates the "shell-out, fail fast" UX we want for pre-commit.
+#   * lint-staged would only run on staged files; we want full-suite
+#     validation of the layering invariant (since domain/application
+#     don't have the kind of boundaries that "only affects these files"
+#     can express).
+#   * A plain bash script under scripts/ is one file the operator can
+#     read in 30s and modify without npm lifecycle complexity.
+
+set -euo pipefail
+
+REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$REPO_ROOT"
+
+echo "==> typecheck"
+(cd ui && npm run typecheck)
+
+echo "==> vitest"
+(cd ui && npx vitest run)
+
+echo "==> lint:no-console (domain + application)"
+(cd ui && npm run lint:no-console)
+
+echo "==> validate:presets"
+(cd ui && npm run validate:presets)
+
+echo "✓ pre-commit checks passed"
