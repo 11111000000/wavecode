@@ -1,0 +1,30 @@
+applied_at: 2026-10-13
+branch: wavecode/ui-minimal-pass-v2
+commits:
+  - cd050a9 docs(math): draft wavecode-ui-minimal-pass-phase-2
+  - b0cb0b4 feat(ui): remove Mixer from TabBar (3 tabs: Score, AI, Status)
+  - 63ae269 feat(ui): global prefers-reduced-motion override (WCAG 2.3.3)
+supersedes:
+  - phase 1 of math/wavecode-ui-design-overhaul
+notes: |
+  Phase 2 of wavecode-ui-minimal-pass cleanup. Touches:
+    - TabBar.tsx: 4 → 3 tabs (Mixer dropped, redundant with BottomToolstrip)
+    - base.css: prefers-reduced-motion global override (WCAG 2.3.3 AAA)
+
+  Verification:
+    - typecheck: clean (pnpm typecheck)
+    - vitest: 628/628 passing
+    - eslint: 2 errors (preexisting in master, unchanged from Phase 1)
+
+  Visual after:
+    TabBar mobile: [Score] [AI] [Status]
+    All pulse animations + transitions honour OS-level reduce-motion
+
+  Not done in this phase (deferred):
+    - legacy.css ↔ components.css merge (risky, separate packet)
+    - Mixer/Step/Piano → drawer instead of bottom-sheet (Phase 3 candidate)
+    - Pulse animations on mobile unconditionally (covered by reduce-motion override)
+
+  Pending:
+    - Visual review on dev server
+    - Merge to master via PR
