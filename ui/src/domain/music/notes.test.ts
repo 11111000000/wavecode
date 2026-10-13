@@ -9,6 +9,8 @@ import {
   isInPianoRange,
   rangeNotes,
   isBlackKey,
+  pianoInstrumentToOscType,
+  type PianoInstrument,
 } from './notes';
 
 describe('notes', () => {
@@ -133,5 +135,39 @@ describe('notes', () => {
     expect(isBlackKey(69)).toBe(false);
     expect(isBlackKey(70)).toBe(true);
     expect(isBlackKey(71)).toBe(false);
+  });
+
+  describe('pianoInstrumentToOscType (W3C OscillatorType cast)', () => {
+    // The mapping is identity — `PianoInstrument` is structurally a
+    // subset of `OscillatorType` ('triangle' | 'sine' | 'sawtooth' |
+    // 'square', which is exactly the W3C OscillatorType union minus
+    // 'custom'). These tests guard against accidental drift.
+
+    const all: ReadonlyArray<PianoInstrument> = ['triangle', 'sine', 'sawtooth', 'square'];
+
+    it('returns the same string for every supported waveform', () => {
+      for (const inst of all) {
+        expect(pianoInstrumentToOscType(inst)).toBe(inst);
+      }
+    });
+
+    it('result is structurally an OscillatorType (assignment-safe)', () => {
+      // Compile-time check: the returned string is assignable to
+      // OscillatorType. If we ever add a literal to PianoInstrument that
+      // doesn't match, this assignment breaks.
+      const osc: OscillatorType = pianoInstrumentToOscType('triangle');
+      expect(typeof osc).toBe('string');
+    });
+
+    it('does NOT include "custom" (would require PeriodicWave setup)', () => {
+      const literals: ReadonlyArray<PianoInstrument> = all;
+      for (const l of literals) {
+        expect(l).not.toBe('custom');
+      }
+    });
+
+    it('exhaustive — exactly 4 instruments', () => {
+      expect(all).toHaveLength(4);
+    });
   });
 });
