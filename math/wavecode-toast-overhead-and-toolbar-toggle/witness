@@ -1,0 +1,63 @@
+applied_at: 2026-10-14
+branch: fix/toast-z-and-editor
+commits:
+  - 2e97b07 fix(ui): toast above all fixed rows, mobile editor fit, snippet toolbar toggle
+supersedes: null
+notes: |
+  Four orthogonal fixes to mobile (412×900) layout that
+  wavecode-preset-row-and-toast-z left incomplete:
+
+  1. **Toast above all fixed rows.** --z-toast 50 → 80.
+     Toast now stacks above modal=60 and all fixed rows
+     (preset-row=53, controls-row=52). Visual guarantee:
+     error/critical/info toasts always visible, never
+     covered by Play panel. TopBar buttons around toast
+     remain clickable (pointer-events:none on stack,
+     pointer-events:auto on .toast-item).
+
+  2. **preset-row visually transparent.** Removed
+     background, border-bottom, backdrop-filter from
+     .app-preset-row. Only the <select> with its own
+     outline remains. controls-row is now the sole visual
+     frame of the command bar; its border was moved from
+     bottom to top so the divider sits at the top of the
+     controls row instead of duplicated between two rows.
+
+  3. **Mobile cm-content font-size 12px → 11px** under
+     @media (max-width:720px). line-height 1.4. On a
+     412px viewport this gives one more visible line
+     without losing readability (Retina @3x, 11px ≈ 33
+     CSS px²).
+
+  4. **MiniNotationToolbar collapsed by default on
+     mobile.** ScorePanel wraps <MiniNotationToolbar> in
+     <Show when={miniToolbarOpen()}>; default
+     readMiniToolbarOpen(isDesktop) — closed on mobile,
+     open on desktop. localStorage 'wavecode-mini-toolbar-v1'
+     overrides. New '✎ snippet' chip in .score-debug row
+     toggles the state with aria-pressed + data-active.
+     Net effect: cm-host goes from ~46px (1-2 lines) to
+     ~216px (5-6 lines) on a 412×900 viewport with the
+     split-pane sheet open.
+
+  Counts:
+    - tokens.css:     +1 / -1 (--z-toast)
+    - components.css: +55 / -16 (.app-preset-row cleanup,
+      .app-controls-row border swap, mobile cm-content
+      font, .snippet-toggle, .score-debug align-items)
+    - ScorePanel.tsx: +58 / -4 (readMiniToolbarOpen +
+      writeMiniToolbarOpen + signal + toggle handler +
+      Show wrapper + toggle button)
+    - packet.md:      +248 (new math/wavecode-toast-overhead-and-toolbar-toggle/packet.md)
+
+  Verification:
+    - typecheck (tsc --noEmit): clean
+    - vitest: 716/716 pass (MiniNotationToolbar.test.tsx 9/9
+      pass — component API unchanged; only consumer-side
+      conditional rendering changed)
+    - build (vite): success, 15.97s
+    - manual reasoning: 412×900 mobile, sheet open,
+      cm-host ≈ (900 − 56 header − 60 tabbar − 44 preset −
+      52 controls − 450 sheet − 22 score-debug − 0 mini-toolbar)
+      = 216px (5-6 lines @11px). On desktop, layout
+      unchanged except preset-row background removed.
