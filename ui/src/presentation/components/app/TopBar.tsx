@@ -1,11 +1,12 @@
-import { Show, For, onMount, onCleanup, type JSX } from 'solid-js';
+import { Show, onCleanup, type JSX } from 'solid-js';
 import { appStore } from '~/presentation/state/appStore';
 import type { MobileMode } from '~/presentation/state/uiState';
 import {
-  UndoIcon, RedoIcon, NewIcon, SaveIcon, TrashIcon, ResetIcon, PhoneIcon,
+  UndoIcon, RedoIcon, NewIcon,
   LayoutSwapIcon, WavecodeLogo,
 } from '~/presentation/icons';
 import { ShareButton } from '~/presentation/components/ShareButton';
+import { OverflowMenu } from './OverflowMenu';
 
 type CtxState = { state: string; sampleRate: number | null };
 
@@ -15,9 +16,7 @@ export type TopBarProps = {
   ctxState: () => CtxState;
   presetId: string;
   mobileMode: MobileMode;
-  showMobileMenu: boolean;
   chooseMobileMode: (m: MobileMode) => void;
-  setShowMobileMenu: (v: boolean) => void;
   onSavePreset: () => void;
   onRollback: () => void;
   onRedo: () => void;
@@ -32,17 +31,6 @@ export type TopBarProps = {
 const LONG_PRESS_MS = 3000;
 
 export function TopBar(props: TopBarProps): JSX.Element {
-  onMount(() => {
-    const onDocClick = (e: MouseEvent): void => {
-      if (!props.showMobileMenu) return;
-      const target = e.target as HTMLElement | null;
-      if (target && target.closest('.mobile-menu-wrap')) return;
-      props.setShowMobileMenu(false);
-    };
-    document.addEventListener('click', onDocClick);
-    onCleanup(() => document.removeEventListener('click', onDocClick));
-  });
-
   let pressTimer: number | null = null;
   const startPress = (): void => {
     pressTimer = window.setTimeout(() => {
@@ -56,6 +44,7 @@ export function TopBar(props: TopBarProps): JSX.Element {
       pressTimer = null;
     }
   };
+  onCleanup(() => cancelPress());
 
   return (
     <header class="wc-topbar">
@@ -93,6 +82,16 @@ export function TopBar(props: TopBarProps): JSX.Element {
           type="button"
           class="wc-icon-btn"
           data-tone="ghost"
+          onClick={props.onNew}
+          aria-label="Новая"
+          title="Новая композиция"
+        >
+          <NewIcon size={18} />
+        </button>
+        <button
+          type="button"
+          class="wc-icon-btn"
+          data-tone="ghost"
           onClick={props.onRollback}
           disabled={appStore.history.length === 0}
           aria-label="Отменить"
@@ -111,26 +110,6 @@ export function TopBar(props: TopBarProps): JSX.Element {
         >
           <RedoIcon size={18} />
         </button>
-        <button
-          type="button"
-          class="wc-icon-btn"
-          data-tone="ghost"
-          onClick={props.onNew}
-          aria-label="Новая"
-          title="Новая композиция"
-        >
-          <NewIcon size={18} />
-        </button>
-        <button
-          type="button"
-          class="wc-icon-btn"
-          data-tone="ghost"
-          onClick={props.onSavePreset}
-          aria-label="Сохранить"
-          title="Сохранить как пресет"
-        >
-          <SaveIcon size={18} />
-        </button>
         <ShareButton />
         <button
           type="button"
@@ -143,62 +122,15 @@ export function TopBar(props: TopBarProps): JSX.Element {
         >
           <LayoutSwapIcon size={18} />
         </button>
-        <div class="mobile-menu-wrap">
-          <button
-            type="button"
-            class="wc-icon-btn"
-            data-tone="ghost"
-            onClick={() => props.setShowMobileMenu(!props.showMobileMenu)}
-            aria-label="Мобильный режим"
-            aria-haspopup="true"
-            aria-expanded={props.showMobileMenu}
-          >
-            <PhoneIcon size={18} />
-          </button>
-          <Show when={props.showMobileMenu}>
-            <div class="mobile-menu" role="menu">
-              <For each={(['auto', 'compact', 'full'] as const)}>
-                {(mode) => (
-                  <button
-                    type="button"
-                    class={`mobile-menu-item${props.mobileMode === mode ? ' is-active' : ''}`}
-                    onClick={() => props.chooseMobileMode(mode)}
-                    role="menuitemradio"
-                    aria-checked={props.mobileMode === mode}
-                  >
-                    <span class="mobile-menu-mark">{props.mobileMode === mode ? '●' : '○'}</span>
-                    <span>
-                      {mode === 'auto' ? 'Авто' : mode === 'compact' ? 'Компактно' : 'Полно'}
-                    </span>
-                    <span class="mobile-menu-hint">
-                      {mode === 'auto' ? 'по ширине' : mode === 'compact' ? 'только партитура' : 'все 3 панели'}
-                    </span>
-                  </button>
-                )}
-              </For>
-            </div>
-          </Show>
-        </div>
-        <Show when={props.presetId.startsWith('custom-')}>
-          <button
-            type="button"
-            class="wc-icon-btn"
-            data-tone="ghost"
-            onClick={props.onDeletePreset}
-            aria-label="Удалить пресет"
-          >
-            <TrashIcon size={18} />
-          </button>
-        </Show>
-        <button
-          type="button"
-          class="wc-icon-btn"
-          data-tone="ghost"
-          onClick={props.onResetAll}
-          aria-label="Сбросить всё"
-        >
-          <ResetIcon size={18} />
-        </button>
+        <OverflowMenu
+          presetId={props.presetId}
+          mobileMode={props.mobileMode}
+          chooseMobileMode={props.chooseMobileMode}
+          onSavePreset={props.onSavePreset}
+          onDeletePreset={props.onDeletePreset}
+          onResetAll={props.onResetAll}
+          onOpenAdmin={props.onOpenAdmin}
+        />
       </div>
     </header>
   );

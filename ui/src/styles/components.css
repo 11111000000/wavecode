@@ -1294,7 +1294,7 @@ textarea.wc-input {
 .mini-toolbar-btn,
 .ctrl-btn,
 .ai-apply-btn,
-.mobile-menu-item {
+.wc-overflow-item {
   min-width: 44px;
   min-height: 44px;
 }
@@ -1936,4 +1936,97 @@ button:not([disabled]):not(.no-shrink):active {
 @keyframes admin-warn-pulse {
   0%, 100% { opacity: 0.7; }
   50%      { opacity: 1; }
+}
+
+/* ── TopBar overflow menu (⋯) ─────────────────────────────────────────── */
+
+.wc-overflow-menu {
+  position: relative;
+  display: inline-flex;
+}
+.wc-overflow-menu__panel {
+  position: absolute;
+  top: calc(100% + var(--space-xs));
+  right: 0;
+  min-width: 220px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-overlay);
+  padding: var(--space-2xs) 0;
+  z-index: var(--z-popover);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3xs);
+}
+.wc-overflow-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-2xs) var(--space-md);
+  background: transparent;
+  border: 0;
+  color: var(--fg);
+  font-family: var(--font-sans);
+  font-size: var(--fs-sm);
+  text-align: left;
+  cursor: pointer;
+  white-space: nowrap;
+  min-width: auto;
+  min-height: 36px;
+}
+.wc-overflow-item:hover {
+  background: var(--surface-3);
+}
+.wc-overflow-item.is-active {
+  color: var(--amber);
+}
+.wc-overflow-item__mark {
+  display: inline-block;
+  width: 12px;
+  color: var(--amber);
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+}
+.wc-overflow-item--nested {
+  padding-left: calc(var(--space-md) + var(--space-md));
+  font-size: var(--fs-xs);
+}
+.wc-overflow-item--danger {
+  color: var(--err);
+}
+.wc-overflow-item--danger:hover {
+  background: var(--err-soft);
+}
+.wc-overflow-submenu {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3xs);
+  padding: var(--space-2xs) 0;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  margin: var(--space-2xs) 0;
+}
+.wc-overflow-submenu__label {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  padding: var(--space-2xs) var(--space-md);
+  color: var(--fg-muted);
+  font-size: var(--fs-2xs);
+  text-transform: uppercase;
+  letter-spacing: var(--ls-wide);
+}
+.wc-overflow-sep {
+  height: 1px;
+  background: var(--border);
+  margin: var(--space-2xs) 0;
+}
+@media (max-width: 639px) {
+  .wc-overflow-menu__panel {
+    right: 0;
+    left: auto;
+    min-width: 240px;
+    max-width: calc(100vw - var(--space-md) * 2);
+  }
 }
