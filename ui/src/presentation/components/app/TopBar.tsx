@@ -33,9 +33,10 @@ const LONG_PRESS_MS = 3000;
 export function TopBar(props: TopBarProps): JSX.Element {
   let pressTimer: number | null = null;
   const startPress = (): void => {
+    const onOpen = props.onOpenAdmin;
     pressTimer = window.setTimeout(() => {
       pressTimer = null;
-      props.onOpenAdmin();
+      onOpen();
     }, LONG_PRESS_MS);
   };
   const cancelPress = (): void => {
