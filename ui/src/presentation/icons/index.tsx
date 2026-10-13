@@ -322,67 +322,55 @@ export const CriticalIcon = (p: Props): JSX.Element => (
  * (надёжнее, чем SVG-linearGradient в headless-render).
  * Sizes: small (32×11) для topbar, large (128×44) для boot screen.
  */
-export const BrandLogo = (p: { size?: number; class?: string }): JSX.Element => {
-  const h = p.size ?? 22;
-  const w = h * 3;
+/**
+ * WavecodeLogo — square 48×48 spectrum-tile logo: amber→cyan→magenta
+ * gradient waveform on a slate rounded-square with a pulsing amber dot
+ * и magenta cursor-block. Заменил старый BrandLogo с <text>wc</text>.
+ * Единый для boot loader (favicon.svg), TopBar, TopNav (лендинг).
+ */
+export const WavecodeLogo = (p: { size?: number; class?: string }): JSX.Element => {
+  const s = p.size ?? 28;
   return (
     <svg
-      width={w}
-      height={h}
-      viewBox="0 0 48 16"
+      width={s}
+      height={s}
+      viewBox="0 0 48 48"
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
-      class={`wc-brand-logo ${p.class ?? ''}`}
+      class={p.class ?? 'wc-wavecode-logo'}
       aria-hidden="true"
     >
-      {/* W waveform — основной «W» из spike-сегментов */}
+      <defs>
+        <linearGradient id="wclogo-grad" x1="0" y1="0" x2="48" y2="48" gradientUnits="userSpaceOnUse">
+          <stop offset="0"   stop-color="#ffaa3b"/>
+          <stop offset="0.5" stop-color="#5eead4"/>
+          <stop offset="1"   stop-color="#f472b6"/>
+        </linearGradient>
+      </defs>
+      <rect x="2" y="2" width="44" height="44" rx="10" fill="#0a0a0e" stroke="url(#wclogo-grad)" stroke-width="1.6"/>
       <path
-        d="M2 8 L4 8 L5 4 L6 12 L7 5 L8 11 L9 8 L11 8"
-        stroke="currentColor"
-        stroke-width="1.6"
+        d="M8 24 L11 24 L13 14 L15 34 L17 18 L20 30 L22 24 L25 24"
+        stroke="url(#wclogo-grad)"
+        stroke-width="2.4"
         stroke-linecap="round"
         stroke-linejoin="round"
       />
-      {/* Center spectrum dot — pulse core, amber */}
-      <circle cx="14" cy="8" r="1.5" fill="#ffaa3b">
-        <animate attributeName="opacity" values="1;0.5;1" dur="1.6s" repeatCount="indefinite" />
+      <circle cx="32" cy="24" r="2.6" fill="#ffaa3b">
+        <animate attributeName="opacity" values="1;0.5;1" dur="1.6s" repeatCount="indefinite"/>
       </circle>
-      {/* Waveform echo (правее) — currentColor dim */}
-      <path
-        d="M17 8 L19 8 L20 5 L21 11 L22 8 L24 8"
-        stroke="currentColor"
-        stroke-width="1.2"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-        opacity="0.5"
-      />
-      {/* Terminal cursor — animated block, magenta */}
-      <rect x="26" y="6" width="1.8" height="4" fill="#f472b6">
-        <animate attributeName="opacity" values="1;0;1" dur="1.0s" repeatCount="indefinite" />
+      <rect x="38" y="20" width="2" height="8" rx="0.6" fill="#f472b6">
+        <animate attributeName="opacity" values="1;0;1" dur="1.0s" repeatCount="indefinite"/>
       </rect>
-      {/* Far right: «» chevron — call-to-action, cyan */}
-      <path
-        d="M30 8 L32.5 5.5 M30 8 L32.5 10.5"
-        stroke="#5eead4"
-        stroke-width="1"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-        opacity="0.8"
-      />
-      {/* ascii ▢ — cell marker, cyan pulse */}
-      <rect x="35" y="4.5" width="2.5" height="7" stroke="#5eead4" stroke-width="1" fill="none" opacity="0.8">
-        <animate attributeName="opacity" values="0.4;1;0.4" dur="2.2s" repeatCount="indefinite" />
-      </rect>
-      {/* Hex-like bottom text «wc» в micro-form, slate */}
-      <g transform="translate(40 12)" font-family="monospace" font-size="3.6" fill="#71717a" opacity="0.9">
-        <text x="0" y="0">wc</text>
-      </g>
-      {/* Tiny corner dots — grid markers, dim slate */}
-      <circle cx="2"  cy="2"  r="0.5" fill="#3f3f46" />
-      <circle cx="46" cy="2"  r="0.5" fill="#3f3f46" />
-      <circle cx="2"  cy="14" r="0.5" fill="#3f3f46" />
-      <circle cx="46" cy="14" r="0.5" fill="#3f3f46" />
     </svg>
   );
 };
+
+/**
+ * BrandLogo — оставлен как алиас = WavecodeLogo для обратной
+ * совместимости (использовался в TopBar, search показал
+ * только это место). Содержимое старого BrandLogo с
+ * <text>wc</text> удалено; если что-то ещё импортирует
+ * BrandLogo, увидит новый спектр-логотип.
+ */
+export const BrandLogo = WavecodeLogo;
 ;
