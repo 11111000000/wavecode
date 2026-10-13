@@ -7,6 +7,7 @@ import { createEffect, onCleanup, onMount, untrack } from 'solid-js';
 import { miniNotationHighlight } from '../editor/miniNotationHighlight';
 import { runtimeMiniHighlight } from '../editor/runtimeMiniHighlight';
 import { strudelCompletions } from '../editor/strudelCompletions';
+import { flashDecorations } from '../state/pianoRecStore';
 
 export type CodeMirrorEditorApi = {
   readonly getView: () => EditorView | undefined;
@@ -50,6 +51,7 @@ export function CodeMirrorEditor(props: Props) {
         miniNotationHighlight,
         runtimeMiniHighlight,
         autocompletion({ override: [strudelCompletions] }),
+        flashDecorations,
         EditorView.contentAttributes.of({
           autocorrect: 'off',
           autocapitalize: 'off',

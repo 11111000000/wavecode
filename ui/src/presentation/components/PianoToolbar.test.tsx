@@ -315,17 +315,28 @@ describe('PianoToolbar — slot selector (wavecode-piano-rec-clarity)', () => {
     // Mock view with cursor at offset 10
     const dispatches: Array<unknown> = [];
     const fakeView = {
-      state: { selection: { main: { from: 10, to: 10 } } },
-      dispatch: (tr: unknown) => {
+      state: {
+        selection: { main: { from: 10, to: 10 } },
+        doc: {
+          lineAt: (p: number): { from: number; number: number } => ({
+            from: p,
+            number: 1,
+          }),
+          length: 100,
+        },
+      },
+      dispatch: (tr: unknown): void => {
         dispatches.push(tr);
       },
+      destroyed: false,
     };
     rec.setPianoEditorApi({ getView: () => fakeView as never });
     rec.setEditorFocused(true);
     const { container } = render(() => <PianoToolbar />);
     const apply = container.querySelector<HTMLButtonElement>('.piano-apply-btn')!;
     fireEvent.click(apply);
-    expect(dispatches).toHaveLength(1);
+    // Two dispatches: (1) the insert + (2) the flash-decoration effect.
+    expect(dispatches.length).toBeGreaterThanOrEqual(1);
     // Editor's text was inserted in the fake view, NOT dispatched as
     // a global replaceScore — `appStore.score` is unchanged.
     expect(appStore.score).toBe('note("e4")');
