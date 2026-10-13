@@ -1,0 +1,58 @@
+applied_at: 2026-10-13
+branch: wavecode/legacy-eat-all
+commits:
+  - 92113ce docs(math): draft wavecode-legacy-eat-all
+  - 5123322 refactor(ui): drop legacy.css — all 11 remaining sections migrated
+supersedes: |
+  Completes wavecode-css-consolidate Phase 2 (gradual eating).
+  Retires legacy.css as a separate file.
+notes: |
+  Final batch: 11 remaining sections of legacy.css migrated to
+  components.css in one mechanical move. legacy.css then deleted;
+  its @import dropped from index.css; @layer legacy declaration
+  removed from cascade order.
+
+  Sections migrated (~770 lines):
+    APP SHELL, BUTTON, SAVE PRESET BAR, SCORE PANEL,
+    MIDI I/O BAR, MIXER PANEL, RECORD, SHARE MODAL,
+    CODEMIRROR, MINI-NOTATION TOOLBAR, PIANO & STEP GRID
+
+  Counts:
+    - components.css: 2753 → 3529 lines (+776)
+    - legacy.css:     DELETED (was 770 lines)
+    - styles/ dir:    7 → 6 CSS files
+    - @layer count:   7 → 6 in index.css
+    - cascade order:  tokens < base < components < sheets < icons
+                       < landing (no more `legacy`)
+
+  Verification:
+    - typecheck: clean
+    - vitest: 632/632
+    - lint: 2 errors (preexisting, unchanged)
+    - build (vite): success
+    - smoke test (playwright): #/app renders fully; clicking
+      Piano opens dialog with 14 white + 10 black keys, computed
+      styles match components.css (linear-gradient, 80×220px
+      white keys, var-based black keys). All UI surfaces
+      (TopBar, PresetRow, TransportPanel, BottomToolstrip,
+      TabBar, AI panel, Status panel) render without regression.
+
+  Result: two-system CSS architecture (legacy shim + modern
+  components) is now unified into a single components.css. The
+  `wavecode-modern-mobile-redesign` design system fully subsumes
+  the older `wavecode-redesign-repl-phosphor` shim.
+
+  Known follow-up (deferred):
+    - ~47 lines of dead code in PIANO & STEP GRID section
+      (.piano-keyboard container never in DOM). Cleanup in a
+      separate wavecode-css-deadcode-eat packet.
+    - Inline critical CSS in dist/index.html references some
+      legacy-style rules; this is fine (CSS is in the bundle)
+      but could be made @layer-aware in another refactor.
+
+  After this packet: legacy.css gone. The original
+  `math/wavecode-redesign-repl-phosphor` is now technically
+  retired (its styles all live in components.css with no
+  legacy layer wrapper).
+
+  Pending: merge to master.
