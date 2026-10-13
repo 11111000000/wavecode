@@ -489,6 +489,65 @@ textarea.wc-input {
   border-radius: var(--radius-full);
 }
 
+/* =========================================================================
+ *  TRANSPORT PLAY BUTTON
+ *  Lives inside .transport-controls (inline, NOT fixed). First child =
+ *  most prominent = leftmost. Tones: amber=play, cyan=stop. While
+ *  AudioContext is starting (audioStarting=true && !audioRunning) we
+ *  apply aria-busy + disabled + pointer-events: none so a double-tap
+ *  can't queue a second eval before the first reaches 'running'.
+ * ========================================================================= */
+
+.transport-play-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-xs);
+  height: 32px;
+  min-width: 32px;
+  padding: 0 var(--space-sm);
+  border: 1px solid var(--amber);
+  border-radius: var(--radius-md);
+  background: var(--amber-soft);
+  color: var(--amber);
+  font-family: var(--font-sans);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semibold);
+  cursor: pointer;
+  user-select: none;
+  flex-shrink: 0;
+  transition:
+    color var(--dur-xs) var(--ease),
+    background var(--dur-xs) var(--ease),
+    border-color var(--dur-xs) var(--ease),
+    box-shadow var(--dur-xs) var(--ease),
+    transform var(--dur-2xs) var(--ease);
+}
+.transport-play-btn:hover:not(:disabled) {
+  background: var(--amber);
+  color: var(--fg-inverse);
+  box-shadow: var(--shadow-glow-amber);
+}
+.transport-play-btn:active:not(:disabled) { transform: scale(0.96); }
+
+.transport-play-btn[data-tone='cyan'] {
+  background: var(--cyan-soft);
+  color: var(--cyan);
+  border-color: var(--cyan);
+}
+.transport-play-btn[data-tone='cyan']:hover:not(:disabled) {
+  background: var(--cyan);
+  color: var(--fg-inverse);
+  box-shadow: var(--shadow-glow-cyan);
+}
+
+.transport-play-btn[aria-busy='true'],
+.transport-play-btn:disabled {
+  opacity: 0.55;
+  cursor: progress;
+  pointer-events: none;
+}
+
 /* FAB action list (extended speed-dial) */
 .wc-fab-stack {
   position: fixed;

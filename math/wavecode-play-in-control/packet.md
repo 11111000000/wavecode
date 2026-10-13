@@ -93,14 +93,24 @@ substrate: |
     (this packet).
   − ничего не удаляется из CSS/UI кода; FAB-компонент и
     его стили сохраняются как потенциально полезные.
-status: draft
+status: applied
 witness:
-  applied_at: TBD
-  commit: TBD
+  applied_at: 2026-10-13
+  commit: 74fb853f2c3a63e7240c47ea37b1620140adae2f
   supersedes: null
   notes: |
-    SHA + applied_at будут заполнены subagent'ом после
-    имплементации и зелёных тестов.
+    Implementation commit: 74fb853f2c3a63e7240c47ea37b1620140adae2f
+    Docs follow-up commit:   03640004143553f17efd1bd4ca004584593b189c
+    (self-referential packet metadata update; not the `commit` SHA).
+
+    vitest 448/448 pass (вкл. 7 новых кейсов в
+    TransportPanel.test.tsx — 6 из packet'а + 1 extra: «default
+    props = noop»). tsc --noEmit pass. lint:no-console pass.
+    Playwright e2e (tests/e2e/play-control.spec.ts) pass через
+    системный chromium (/run/current-system/sw/bin/chromium),
+    потому что playwright-bundled chromium-headless-shell v1243
+    не установлен в этой среде и npx playwright install
+    таймаутит на CDN (см. epistemics).
 axiom: A4
 epistemics:
   - statement: "FAB на текущем мастер-коде перекрывает AI-
@@ -138,4 +148,18 @@ epistemics:
       the visible surface first; the implementation is
       derivable from the surface.' Удаление FAB = derivable
       от UX-контракта; реализация следует за surface."
+  - statement: "Playwright e2e запущен через системный chromium,
+      потому что playwright-bundled chromium-headless-shell
+      v1243 не предустановлен."
+    marker: fact
+    evidence: "/home/az/.cache/ms-playwright/ содержит только
+      chromium-1194 (без бинаря) и chromium_headless_shell-1194.
+      `npx playwright install chromium` таймаутит на CDN
+      (cdn.playwright.dev 30s timeout). Workaround: ad-hoc config
+      с `executablePath: '/run/current-system/sw/bin/chromium'
+      + launchOptions.args: ['--no-sandbox']`. Тест
+      tests/e2e/play-control.spec.ts проходит с этим override.
+      Standard `playwright.config.ts` не модифицирован —
+      e2e инфраструктура (browser install) — out of scope
+      данного packet'а."
 ---

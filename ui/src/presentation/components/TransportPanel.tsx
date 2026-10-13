@@ -1,4 +1,4 @@
-import { createSignal, onCleanup, onMount, For } from 'solid-js';
+import { createSignal, onCleanup, onMount, For, type JSX } from 'solid-js';
 import { Effect } from 'effect';
 import { AudioEngine } from '~/domain/services';
 import { AppLayer } from '~/infrastructure/composition';
@@ -10,6 +10,7 @@ import {
   setSwingAmountLocal,
   setSwingDivisorLocal,
 } from '~/presentation/state/transportState';
+import { PlayIcon, StopIcon } from '~/presentation/icons';
 
 const CPS_MIN = 0.05;
 const CPS_MAX = 2.0;
@@ -46,7 +47,21 @@ const readProgress = async (): Promise<number> => {
   }
 };
 
-export function TransportPanel() {
+const noop = (): void => undefined;
+
+export type TransportPanelProps = {
+  audioRunning?: () => boolean;
+  audioStarting?: () => boolean;
+  onPlay?: () => void;
+  onStop?: () => void;
+};
+
+export function TransportPanel(props: TransportPanelProps = {}): JSX.Element {
+  const audioRunning = (): boolean => props.audioRunning?.() ?? false;
+  const audioStarting = (): boolean => props.audioStarting?.() ?? false;
+  const handlePlay = (): void => { (props.onPlay ?? noop)(); };
+  const handleStop = (): void => { (props.onStop ?? noop)(); };
+
   const [localCps, setLocalCps] = createSignal(cps());
   let rafId: number | null = null;
   let playheadEl: HTMLDivElement | undefined;
@@ -107,6 +122,22 @@ export function TransportPanel() {
   return (
     <div class="transport-panel" data-testid="transport-panel">
       <div class="transport-controls">
+        <button
+          type="button"
+          class="transport-play-btn"
+          data-tone={audioRunning() ? 'cyan' : 'amber'}
+          data-state={audioRunning() ? 'stop' : 'play'}
+          aria-label={audioRunning() ? 'Стоп' : 'Запуск'}
+          aria-pressed={audioRunning()}
+          aria-busy={!audioRunning() && audioStarting()}
+          disabled={!audioRunning() && audioStarting()}
+          data-testid="transport-play-btn"
+          title={audioRunning() ? 'Стоп (running)' : 'Запуск (play)'}
+          onClick={() => { if (audioRunning()) handleStop(); else handlePlay(); }}
+        >
+          {audioRunning() ? <StopIcon size={16} /> : <PlayIcon size={16} />}
+        </button>
+
         <label class="cps-control">
           <span class="cps-label">cps</span>
           <input
