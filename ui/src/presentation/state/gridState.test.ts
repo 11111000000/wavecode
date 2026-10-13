@@ -3,6 +3,10 @@ import { emptyGrid, gridToScore, setCell, type Grid } from '~/domain/music/gridT
 import {
   appendGridToScore,
   hasTopLevelStack,
+  isGridEmptyState,
+  loadFromScore,
+  setGridDirect,
+  getGrid,
 } from './gridState';
 
 /**
@@ -106,5 +110,78 @@ describe('appendGridToScore — hasTopLevelStack classifier', () => {
 
   it('true on top-level stack with a leading comment', () => {
     expect(hasTopLevelStack('// hi\nstack(\n)')).toBe(true);
+  });
+});
+
+/**
+ * loadFromScore — best-effort reverse of gridToScore. Regressions here
+ * silently leave the Step sheet blank on open (pre-fix bug: setCell was
+ * called for side effect but its immutable return was discarded, so the
+ * grid stayed empty for every score). See
+ * math/wavecode-step-grid-autoload-and-sync.
+ */
+describe('loadFromScore — populates grid from s("…") rows', () => {
+  it('simple 4-row score yields 4 active cells (col 0 each)', () => {
+    const score = [
+      'stack(',
+      '  s("bd ~ sd ~ hh ~ cp ~"),',
+      '  s("hh hh hh hh hh"),',
+      '  s("cp cp cp cp cp"),',
+      '  s("~ ~ ~ ~ ~ ~ ~ bd"),',
+      ')',
+    ].join('\n');
+    const result = loadFromScore(score);
+    expect(result[0]).toEqual([true, false, true, false, true, false, true, false]);
+    expect(result[3]?.[7]).toBe(true);
+    expect(result.some((r) => r.every((c) => !c))).toBe(false);
+    // Re-read via getGrid to confirm setGrid signal was updated.
+    expect(getGrid()).toBe(result);
+  });
+
+  it('skips ~ and . tokens, activates everything else', () => {
+    const score = 's("bd . ~ sd hh ~ cp ~")';
+    const result = loadFromScore(score);
+    expect(result[0]).toEqual([true, false, false, true, true, false, true, false]);
+  });
+
+  it('returns empty grid for score with no s("…") rows', () => {
+    const score = 'note("c4 e4 g4")';
+    const result = loadFromScore(score);
+    expect(result.every((r) => r.every((c) => !c))).toBe(true);
+  });
+
+  it('picks the FIRST 4 s("…") calls, ignores the rest', () => {
+    const score = [
+      'stack(',
+      '  s("bd ~ ~ ~ ~ ~ ~ ~"),',
+      '  s("~ sd ~ ~ ~ ~ ~ ~"),',
+      '  s("~ ~ hh ~ ~ ~ ~ ~"),',
+      '  s("~ ~ ~ cp ~ ~ ~ ~"),',
+      '  s("ignored x 1 y 1"),', // 5th — must be ignored
+      ')',
+    ].join('\n');
+    const result = loadFromScore(score);
+    expect(result[0]?.[0]).toBe(true);
+    expect(result[1]?.[1]).toBe(true);
+    expect(result[2]?.[2]).toBe(true);
+    expect(result[3]?.[3]).toBe(true);
+    // 5th row never makes it (would be row 4 = out of bounds anyway).
+  });
+
+  it('isGridEmptyState reflects whether grid has any active cell', () => {
+    setGridDirect(emptyGrid());
+    expect(isGridEmptyState()).toBe(true);
+    loadFromScore('s("bd ~ ~ ~ ~ ~ ~ ~")');
+    expect(isGridEmptyState()).toBe(false);
+  });
+
+  it('REGRESSION: previous code discarded setCell return — must NOT silently no-op', () => {
+    // If this fails, loadFromScore regressed to the pre-fix bug where
+    // setCell(g, r, c, true) was called but its return was discarded.
+    const before = getGrid();
+    loadFromScore('s("bd ~ sd ~ hh ~ cp ~")');
+    const after = getGrid();
+    expect(after).not.toEqual(before);
+    expect(after[0]).toEqual([true, false, true, false, true, false, true, false]);
   });
 });
