@@ -1,6 +1,6 @@
 applied_at: 2026-10-13
 branch: fix/swing-live-eval
-commit: 244b68f
+commit: ea7e6cf
 supersedes: null
 evidence:
   - test: vitest (49 files, 632 tests passed)
