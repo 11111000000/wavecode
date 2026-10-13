@@ -5,12 +5,12 @@ import { createSignal } from 'solid-js';
  * Persistence — localStorage (это UI-state, не доменный, в IDB не нужно).
  */
 
-type Model = 'smart' | 'fast';
-type Thinking = 'low' | 'high' | 'off';
+export type Model = 'smart' | 'fast';
+export type Thinking = 'low' | 'high' | 'off';
 
 type LLMSettings = {
-  model: Model;
-  thinking: Thinking;
+  readonly model: Model;
+  readonly thinking: Thinking;
 };
 
 const KEY = 'wavecode-llm-settings-v1';

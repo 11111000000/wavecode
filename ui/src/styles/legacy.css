@@ -328,20 +328,21 @@
 }
 
 .cps-preset-btn {
-  height: 28px;
-  padding: 0 var(--space-sm);
-  background: var(--surface-2);
-  color: var(--fg-dim);
+  height: 22px;
+  padding: 0 var(--space-xs);
+  background: transparent;
+  color: var(--fg-muted);
   border: 1px solid var(--border);
   border-radius: var(--radius-pill);
   cursor: pointer;
   font-family: var(--font-mono);
   font-size: var(--fs-2xs);
-  font-weight: var(--fw-medium);
+  font-weight: var(--fw-regular);
   text-transform: lowercase;
-  letter-spacing: var(--ls-wide);
+  letter-spacing: var(--ls-tight);
+  opacity: 0.7;
 }
-.cps-preset-btn:hover { color: var(--amber); border-color: var(--amber); }
+.cps-preset-btn:hover { color: var(--amber); border-color: var(--amber); opacity: 1; }
 
 .bpm-indicator {
   display: inline-flex;
@@ -421,15 +422,18 @@
   text-align: right;
 }
 .swing-divisor {
-  background: var(--surface-2);
-  color: var(--fg);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-pill);
-  padding: 0 var(--space-sm);
+  background: transparent;
+  color: var(--fg-muted);
+  border: 0;
+  border-bottom: 1px dashed var(--border);
+  border-radius: 0;
+  padding: 0 var(--space-2xs);
   font-family: var(--font-mono);
   font-size: var(--fs-2xs);
-  height: 28px;
+  height: 22px;
+  opacity: 0.7;
 }
+.swing-divisor:hover { opacity: 1; color: var(--amber); border-bottom-color: var(--amber); }
 
 @media (max-width: 720px) {
   /* На мобиле сворачиваем TransportPanel в компактный чип:
@@ -1109,55 +1113,6 @@ textarea.ai-textarea:focus-visible {
   gap: var(--space-sm);
   justify-content: flex-end;
 }
-
-/* =========================================================================
- *  MOBILE MENU
- * ========================================================================= */
-
-.mobile-menu-wrap { position: relative; display: inline-block; }
-.mobile-menu {
-  position: absolute;
-  top: calc(100% + 8px);
-  right: 0;
-  min-width: 240px;
-  background: var(--surface-2);
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-pop);
-  padding: var(--space-xs);
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  z-index: var(--z-fab);
-}
-.mobile-menu-item {
-  display: grid;
-  grid-template-columns: 20px 1fr auto;
-  align-items: center;
-  gap: var(--space-sm);
-  padding: var(--space-sm) var(--space-md);
-  font-family: var(--font-sans);
-  font-size: var(--fs-sm);
-  color: var(--fg-dim);
-  background: transparent;
-  border: none;
-  border-radius: var(--radius-md);
-  cursor: pointer;
-  text-align: left;
-  width: 100%;
-  min-height: var(--touch-target);
-}
-.mobile-menu-item:hover {
-  background: var(--surface-3);
-  color: var(--fg);
-}
-.mobile-menu-item.is-active {
-  color: var(--amber);
-  background: var(--amber-soft);
-}
-.mobile-menu-mark { color: var(--amber); }
-.mobile-menu-item:not(.is-active) .mobile-menu-mark { color: var(--fg-ghost); }
-.mobile-menu-hint { color: var(--fg-ghost); font-size: var(--fs-xs); }
 
 /* =========================================================================
  *  SHARE MODAL
