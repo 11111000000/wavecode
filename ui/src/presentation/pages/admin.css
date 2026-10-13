@@ -1,0 +1,366 @@
+/*
+ * /admin — debug inspector styles.
+ *
+ * Layout: vertical stack of collapsible <details> sections, each with
+ * summary (title + count badge) and body (data display). Uses existing
+ * tokens from tokens.css (surface-*, amber/cyan/magenta accents, mono
+ * font) so the page inherits the synthwave-modern-terminal palette.
+ *
+ * Scope: only `.admin-*` classes. Re-uses `.wc-btn`, `.sample-progress-bar`
+ * from the global stylesheet for buttons and progress meters.
+ */
+
+.admin-page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  min-height: 100vh;
+  padding: var(--space-xl);
+  background: var(--surface-0);
+  color: var(--fg);
+  font-family: var(--font-sans);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-base);
+  box-sizing: border-box;
+}
+
+.admin-title {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: var(--fs-display);
+  font-weight: var(--fw-bold);
+  letter-spacing: var(--ls-tight);
+  color: var(--fg);
+}
+.admin-title-sub {
+  color: var(--amber);
+  font-weight: var(--fw-regular);
+  margin-left: var(--space-2xs);
+}
+
+.admin-sub {
+  margin: var(--space-xs) 0 var(--space-md);
+  color: var(--fg-dim);
+  font-size: var(--fs-sm);
+}
+
+.admin-nav {
+  display: flex;
+  gap: var(--space-md);
+  margin-bottom: var(--space-md);
+}
+.admin-nav-link {
+  color: var(--cyan);
+  text-decoration: none;
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  padding: var(--space-2xs) var(--space-sm);
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--cyan-soft);
+  background: var(--cyan-soft);
+  transition: background var(--dur-xs) var(--ease);
+}
+.admin-nav-link:hover {
+  background: var(--cyan-glow);
+  border-color: var(--cyan);
+}
+
+/* ── Section (collapsible <details>) ──────────────────────────── */
+
+.admin-section {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-1);
+  overflow: hidden;
+}
+.admin-section[open] {
+  border-color: var(--border-strong);
+}
+.admin-section-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  list-style: none;
+  padding: var(--space-sm) var(--space-md);
+  background: var(--surface-2);
+  user-select: none;
+}
+.admin-section-summary::-webkit-details-marker { display: none; }
+.admin-section-summary::before {
+  content: '▸';
+  display: inline-block;
+  width: 14px;
+  margin-right: var(--space-xs);
+  color: var(--fg-ghost);
+  transition: transform var(--dur-xs) var(--ease);
+}
+.admin-section[open] > .admin-section-summary::before {
+  transform: rotate(90deg);
+  color: var(--amber);
+}
+.admin-section-title {
+  font-family: var(--font-mono);
+  font-weight: var(--fw-semibold);
+  font-size: var(--fs-sm);
+  letter-spacing: var(--ls-wide);
+  text-transform: uppercase;
+  color: var(--fg);
+}
+.admin-section-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  height: 22px;
+  padding: 0 var(--space-xs);
+  border-radius: var(--radius-pill);
+  background: var(--amber-soft);
+  color: var(--amber);
+  font-family: var(--font-mono);
+  font-size: var(--fs-2xs);
+  font-weight: var(--fw-bold);
+  font-variant-numeric: tabular-nums;
+}
+.admin-section-body {
+  padding: var(--space-md);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+/* ── Filter bar (logger section) ───────────────────────────────── */
+
+.admin-filter {
+  display: flex;
+  gap: var(--space-md);
+  align-items: center;
+  flex-wrap: wrap;
+  padding-bottom: var(--space-xs);
+  border-bottom: 1px dashed var(--border);
+}
+.admin-filter-label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  color: var(--fg-dim);
+}
+.admin-filter-select {
+  background: var(--surface-0);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 2px var(--space-xs);
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+}
+
+/* ── Log list (logger + persisted) ────────────────────────────── */
+
+.admin-log-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  max-height: 360px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-0);
+}
+.admin-log-row {
+  display: grid;
+  grid-template-columns: 88px 56px 80px 1fr;
+  gap: var(--space-sm);
+  align-items: baseline;
+  padding: var(--space-xs) var(--space-sm);
+  border-bottom: 1px solid var(--border);
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  word-break: break-word;
+}
+.admin-log-row:last-child {
+  border-bottom: none;
+}
+.admin-log-time {
+  color: var(--fg-ghost);
+  white-space: nowrap;
+}
+.admin-log-level {
+  display: inline-block;
+  padding: 0 var(--space-xs);
+  border-radius: var(--radius-xs);
+  font-size: var(--fs-2xs);
+  font-weight: var(--fw-semibold);
+  text-transform: uppercase;
+  letter-spacing: var(--ls-wide);
+  white-space: nowrap;
+  text-align: center;
+}
+.admin-log-debug { background: var(--surface-3);    color: var(--fg-dim); }
+.admin-log-info  { background: var(--cyan-soft);    color: var(--cyan); }
+.admin-log-warn  { background: var(--warn-soft);    color: var(--warn); }
+.admin-log-error { background: var(--err-soft);     color: var(--err); }
+.admin-log-fatal { background: var(--magenta-soft); color: var(--magenta); }
+
+.admin-log-source {
+  color: var(--magenta);
+  font-weight: var(--fw-semibold);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.admin-log-text {
+  color: var(--fg);
+}
+
+.admin-empty {
+  padding: var(--space-lg) var(--space-md);
+  color: var(--fg-ghost);
+  text-align: center;
+  font-style: italic;
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  list-style: none;
+}
+
+/* ── Console store toasts ──────────────────────────────────────── */
+
+.admin-toast-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-0);
+}
+.admin-toast {
+  display: grid;
+  grid-template-columns: 64px 1fr auto;
+  grid-template-rows: auto auto;
+  gap: var(--space-2xs) var(--space-sm);
+  padding: var(--space-xs) var(--space-sm);
+  border-bottom: 1px solid var(--border);
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+}
+.admin-toast:last-child {
+  border-bottom: none;
+}
+.admin-toast-sev {
+  display: inline-block;
+  padding: 0 var(--space-xs);
+  border-radius: var(--radius-xs);
+  font-size: var(--fs-2xs);
+  font-weight: var(--fw-semibold);
+  text-transform: uppercase;
+  letter-spacing: var(--ls-wide);
+  text-align: center;
+  white-space: nowrap;
+}
+.admin-toast-sev-info     { background: var(--cyan-soft);    color: var(--cyan); }
+.admin-toast-sev-warn     { background: var(--warn-soft);    color: var(--warn); }
+.admin-toast-sev-error    { background: var(--err-soft);     color: var(--err); }
+.admin-toast-sev-critical { background: var(--magenta-soft); color: var(--magenta); }
+.admin-toast-sev-fatal    { background: var(--magenta-soft); color: var(--magenta); }
+
+.admin-toast-title {
+  color: var(--fg);
+  font-weight: var(--fw-semibold);
+}
+.admin-toast-body {
+  grid-column: 1 / -1;
+  grid-row: 2;
+  color: var(--fg-dim);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.admin-toast-ts {
+  color: var(--fg-ghost);
+  font-size: var(--fs-2xs);
+  white-space: nowrap;
+  align-self: center;
+}
+
+/* ── Actions (persisted errors: Clear / Refresh) ────────────────── */
+
+.admin-actions {
+  display: flex;
+  gap: var(--space-sm);
+}
+
+/* ── Key-value pairs (audio / piano / sample totals) ───────────── */
+
+.admin-kv {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: var(--space-2xs) var(--space-md);
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+}
+.admin-kv-row {
+  display: contents;
+}
+.admin-kv-k {
+  color: var(--fg-dim);
+  text-transform: uppercase;
+  letter-spacing: var(--ls-wide);
+  font-size: var(--fs-2xs);
+  font-weight: var(--fw-semibold);
+  align-self: center;
+}
+.admin-kv-v {
+  color: var(--fg);
+  margin: 0;
+  padding: 2px var(--space-xs);
+  background: var(--surface-0);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Sample bank grid ──────────────────────────────────────────── */
+
+.admin-bank-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: var(--space-sm);
+}
+.admin-bank {
+  display: grid;
+  grid-template-columns: 60px 1fr 80px;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-xs) var(--space-sm);
+  background: var(--surface-0);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+}
+.admin-bank-name {
+  color: var(--cyan);
+  font-weight: var(--fw-semibold);
+  text-transform: uppercase;
+  letter-spacing: var(--ls-wide);
+  font-size: var(--fs-2xs);
+}
+.admin-bank-count {
+  color: var(--fg);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+.admin-bank-progress {
+  width: 100%;
+  height: 4px;
+}
+
+/* ── Hints ─────────────────────────────────────────────────────── */
+
+.admin-hint {
+  color: var(--fg-ghost);
+  font-size: var(--fs-2xs);
+  font-style: italic;
+  margin: 0;
+}

@@ -1,5 +1,5 @@
 import {
-  createSignal, onMount, onCleanup, type JSX,
+  createSignal, onMount, onCleanup, Show, type JSX,
 } from 'solid-js';
 import { Effect } from 'effect';
 import {
@@ -29,6 +29,7 @@ import { TopBar } from './presentation/components/app/TopBar';
 import { PresetRow } from './presentation/components/app/PresetRow';
 import { PanelsLayout } from './presentation/components/app/PanelsLayout';
 import { BottomSheets } from './presentation/components/app/BottomSheets';
+import { Admin } from './presentation/pages/Admin';
 
 const NEW_COMPOSITION_TEMPLATE = '// Начни новую композицию здесь\n';
 
@@ -51,7 +52,55 @@ const confirmNew = (): boolean => window.confirm(
   'Создать новую композицию?\nТекущая партитура и история диалога сбросятся.',
 );
 
+/**
+ * Tiny in-house hash router.
+ *
+ * Why no `@solidjs/router`
+ * ------------------------
+ * The landing-page commit (0e048a7) wired up `HashRouter` + two `Route`s,
+ * and was rolled back by later refactors that simplified `App.tsx` to a
+ * single render. The package was removed from `dependencies` so adding
+ * `/admin` as a third route would require touching `package.json` —
+ * which other agents own.
+ *
+ * For two routes (#/app + #/admin) a 30-line router is cheaper than
+ * pulling in `@solidjs/router` + its peer deps and threading it back
+ * through `main.tsx` (also out of scope). Behavior:
+ *
+ *   #/         → AppShell (editor)
+ *   #/app      → AppShell (editor)
+ *   #/admin    → Admin (debug inspector)
+ *   anything else → AppShell (fallback)
+ *
+ * Hash changes are observed via `hashchange` and stored in a signal so
+ * the JSX re-evaluates. SSR-safe (no `window` reads outside `onMount`).
+ */
+const useHashRoute = (): () => 'app' | 'admin' => {
+  const readHash = (): 'app' | 'admin' => {
+    if (typeof window === 'undefined') return 'app';
+    const h = window.location.hash;
+    if (h === '#/admin' || h.startsWith('#/admin?')) return 'admin';
+    return 'app';
+  };
+  const [route, setRoute] = createSignal<'app' | 'admin'>(readHash());
+  onMount(() => {
+    const onHash = (): void => { setRoute(readHash()); };
+    window.addEventListener('hashchange', onHash);
+    onCleanup(() => window.removeEventListener('hashchange', onHash));
+  });
+  return route;
+};
+
 export function App(): JSX.Element {
+  const route = useHashRoute();
+  return (
+    <Show when={route() === 'admin'} fallback={<AppShell />}>
+      <Admin />
+    </Show>
+  );
+}
+
+function AppShell(): JSX.Element {
   const audio = useAppBootstrap();
   useAutoSave();
 
@@ -205,6 +254,9 @@ export function App(): JSX.Element {
       <TabBar />
       <ConsoleButton />
       <ConsoleSheet />
+      <a class="wc-debug-link" href="#/admin" aria-label="Open debug inspector">
+        → /admin
+      </a>
     </main>
   );
 }
