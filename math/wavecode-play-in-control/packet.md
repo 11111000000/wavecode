@@ -99,8 +99,11 @@ witness:
   commit: 74fb853f2c3a63e7240c47ea37b1620140adae2f
   supersedes: null
   notes: |
-    SHA + applied_at заполнены subagent'ом после имплементации и
-    зелёных тестов. vitest 448/448 pass (вкл. 7 новых кейсов в
+    Implementation commit: 74fb853f2c3a63e7240c47ea37b1620140adae2f
+    Docs follow-up commit:   03640004143553f17efd1bd4ca004584593b189c
+    (self-referential packet metadata update; not the `commit` SHA).
+
+    vitest 448/448 pass (вкл. 7 новых кейсов в
     TransportPanel.test.tsx — 6 из packet'а + 1 extra: «default
     props = noop»). tsc --noEmit pass. lint:no-console pass.
     Playwright e2e (tests/e2e/play-control.spec.ts) pass через
