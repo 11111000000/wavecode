@@ -356,16 +356,18 @@ export const closeKindSheet = (kind: NonNullable<SheetKind>): void => {
 export const setTab = (tab: TabId): void => {
   setActiveTab(tab);
   if (tab === 'chat') {
-    openKindSheet('ai', 'full');
+    // wavecode-editor-max-sheet-half: open at half (50vh) so editor
+    // остаётся виден. Раньше был 'full' — sheet 65vh, editor 105px.
+    openKindSheet('ai', 'half');
   } else if (tab === 'mixer') {
-    openKindSheet('mixer', 'full');
+    openKindSheet('mixer', 'half');
   } else if (tab === 'status') {
     // Status — отдельный kind со своим BottomSheet, рендерит HelloPanel.
-    openKindSheet('status', 'full');
+    openKindSheet('status', 'half');
   } else if (tab === 'step') {
-    openKindSheet('step', 'full');
+    openKindSheet('step', 'half');
   } else if (tab === 'piano') {
-    openKindSheet('piano', 'full');
+    openKindSheet('piano', 'half');
   } else if (tab === 'score') {
     closeAllSheets();
   }
