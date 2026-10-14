@@ -5,8 +5,11 @@ import {
   toggleCell,
   gridToScore,
   isGridEmpty,
+  gridsEqual,
+  countGridDiff,
   GRID_ROWS,
   GRID_COLS,
+  GRID_MODES,
 } from './gridTypes';
 
 describe('gridTypes', () => {
@@ -66,5 +69,39 @@ describe('gridTypes', () => {
   it('gridToScore throws on wrong row count', () => {
     expect(() => gridToScore([[true, false, true, false, true, false, true, false]]))
       .toThrow();
+  });
+
+  it('gridsEqual: true on identical grids, false on any cell diff', () => {
+    const a = emptyGrid();
+    const b = emptyGrid();
+    expect(gridsEqual(a, b)).toBe(true);
+    const c = setCell(a, 0, 0, true);
+    expect(gridsEqual(a, c)).toBe(false);
+    expect(gridsEqual(c, c)).toBe(true);
+  });
+
+  it('gridsEqual: false on different row counts', () => {
+    expect(gridsEqual(emptyGrid(), [emptyGrid()[0]!])).toBe(false);
+  });
+
+  it('countGridDiff: 0 on identical, N on N diffs', () => {
+    const a = emptyGrid();
+    expect(countGridDiff(a, a)).toBe(0);
+    expect(countGridDiff(a, setCell(a, 0, 0, true))).toBe(1);
+    let b = a;
+    for (let c = 0; c < GRID_COLS; c += 1) b = setCell(b, 1, c, true);
+    expect(countGridDiff(a, b)).toBe(GRID_COLS);
+    // 4×8 = 32 cells max
+    const all = (() => {
+      let g = emptyGrid();
+      for (let r = 0; r < GRID_ROWS.length; r += 1)
+        for (let c = 0; c < GRID_COLS; c += 1) g = setCell(g, r, c, true);
+      return g;
+    })();
+    expect(countGridDiff(a, all)).toBe(32);
+  });
+
+  it('GRID_MODES lists view/sketch/edit in that order', () => {
+    expect(GRID_MODES).toEqual(['view', 'sketch', 'edit']);
   });
 });

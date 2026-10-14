@@ -31,6 +31,55 @@ let mixTimer: ReturnType<typeof setTimeout> | null = null;
 let mixPending: ReadonlyArray<LayerMix> | null = null;
 
 /**
+ * Debounce window for grid edit-mode hot-swap. Same value as
+ * `MIX_DEBOUNCE_MS` — both are fast UI feedback paths and
+ * benefit from the same coalescing window. Smaller = snappier
+ * tap feel, more parse cycles during fast taps. Larger = less
+ * CPU but audible lag between tap and scheduler update.
+ *
+ * See `math/wavecode-mixer-live-update` and
+ * `math/wavecode-step-grid-modes` packets for trade-off.
+ */
+export const GRID_EDIT_DEBOUNCE_MS = 50;
+
+let gridEditTimer: ReturnType<typeof setTimeout> | null = null;
+let gridEditPendingScore: string | null = null;
+let gridEditPendingLayerMix: ReadonlyArray<LayerMix> | null = null;
+
+/**
+ * Schedule a debounced grid edit-mode hot-swap. Coalesces fast
+ * cell taps in StepGrid edit-mode into a single
+ * `AudioEngine.setScore` call after 50ms of silence. Always
+ * pushes the LATEST snapshot — taps mid-debounce overwrite
+ * earlier captures.
+ *
+ * Mirrors `scheduleMixLive` exactly. Used by `<StepGrid />` edit
+ * mode per-tap.
+ */
+export const scheduleGridEdit = (
+  score: string,
+  layerMix: ReadonlyArray<LayerMix>,
+): void => {
+  gridEditPendingScore = score;
+  gridEditPendingLayerMix = layerMix;
+  if (gridEditTimer !== null) clearTimeout(gridEditTimer);
+  gridEditTimer = setTimeout(() => {
+    gridEditTimer = null;
+    const pendingScore = gridEditPendingScore;
+    const pendingLayerMix = gridEditPendingLayerMix;
+    gridEditPendingScore = null;
+    gridEditPendingLayerMix = null;
+    if (pendingScore === null || pendingLayerMix === null) return;
+    void Effect.runPromise(
+      Effect.gen(function* () {
+        const audio = yield* AudioEngine;
+        yield* audio.setScore(pendingScore, pendingLayerMix);
+      }).pipe(Effect.provide(AppLayer)),
+    );
+  }, GRID_EDIT_DEBOUNCE_MS);
+};
+
+/**
  * Schedule a debounced live mix push. Coalesces fast slider/mute/solo
  * edits into a single `AudioEngine.setLayerMix` call after 50ms of
  * silence. Always pushes the LATEST snapshot — layers mutated mid-debounce

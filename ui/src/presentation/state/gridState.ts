@@ -6,34 +6,195 @@ import {
   gridToScore,
   isGridEmpty,
   type Grid,
+  type GridMode,
   GRID_ROWS,
   GRID_COLS,
+  gridsEqual,
+  countGridDiff,
 } from '~/domain/music/gridTypes';
+import { canEditGridLayer, editGridLayer as editGridLayerUseCase } from '~/application/useCases/editGridLayer';
 
 /**
- * Step Grid reactive state.
+ * Step Grid reactive state — MODE-AWARE.
  *
- * Holds the current 4×8 drum-pad layout. `gridToScore(grid)` synthesizes
- * a Strudel `stack(...)` snippet. Used by <StepGrid /> UI; loaded back
- * into the main score via `loadToScore()` dispatch.
+ * Three signals form the full state:
+ *   - `mode()` — current interaction mode (view | sketch | edit).
+ *   - `draftGrid()` — what the UI renders. In view mode this mirrors
+ *     the score. In sketch mode it's the user's draft (may differ
+ *     from lastCommitted). In edit mode it's always equal to
+ *     lastCommitted (every tap is a commit).
+ *   - `lastCommittedGrid()` — grid at the moment of the last
+ *     commit/parse. Used to compute `dirtyCellCount()`.
+ *
+ * Back-compat: `getGrid` is an alias for `getDraftGrid`; old
+ * callers still work without modification. New callers should
+ * use `getMode` and `getDirtyCellCount` to render mode-aware UI.
+ *
+ * See `math/wavecode-step-grid-modes` packet for the design.
  */
 
-const [grid, setGrid] = createSignal<Grid>(emptyGrid());
+// --- Mode signal -------------------------------------------------------------
 
-export const getGrid = (): Grid => grid();
-export const setGridDirect = (g: Grid): void => {
-  setGrid(g);
+const [mode, setMode] = createSignal<GridMode>('view');
+
+export const getMode = (): GridMode => mode();
+export const setModeDirect = (m: GridMode): void => {
+  setMode(m);
 };
 
-export const toggleCellState = (row: number, col: number): Grid => {
-  const next = toggleCell(grid(), row, col);
-  setGrid(next);
+// --- Grid signals ------------------------------------------------------------
+
+const [draftGrid, setDraftGridSignal] = createSignal<Grid>(emptyGrid());
+const [lastCommittedGrid, setLastCommittedGridSignal] = createSignal<Grid>(emptyGrid());
+
+/** Current visible grid (what `<StepGrid />` renders). */
+export const getDraftGrid = (): Grid => draftGrid();
+/** Back-compat alias. */
+export const getGrid = (): Grid => draftGrid();
+
+/** Grid at the moment of the last commit/parse. */
+export const getLastCommittedGrid = (): Grid => lastCommittedGrid();
+
+/** Direct setter for the lastCommitted signal (used by IDB restore). */
+export const setLastCommittedGrid = (g: Grid): void => {
+  setLastCommittedGridSignal(g);
+};
+
+/** Number of cells that differ between draft and lastCommitted (0..32). */
+export const dirtyCellCount = (): number =>
+  countGridDiff(draftGrid(), lastCommittedGrid());
+
+const setDraftGrid = (g: Grid): void => {
+  setDraftGridSignal(g);
+};
+
+/** Replace the draft without touching lastCommitted (use sparingly). */
+export const setGridDirect = (g: Grid): void => {
+  setDraftGrid(g);
+};
+
+// --- Cell toggles (draft-only) ----------------------------------------------
+
+/** Toggle a cell in the draft. Caller is responsible for triggering
+ * the right side effect per mode (preview / commit / hot-swap).
+ * Returns the new draft. */
+export const toggleCellInDraft = (row: number, col: number): Grid => {
+  const next = toggleCell(draftGrid(), row, col);
+  setDraftGrid(next);
   return next;
 };
 
-export const clearGridState = (): void => {
-  setGrid(emptyGrid());
+/** Back-compat alias for older callers (StepGrid legacy). */
+export const toggleCellState = (row: number, col: number): Grid =>
+  toggleCellInDraft(row, col);
+
+/** Clear the draft (and lastCommitted in sketch mode so the next
+ * view-mode read is consistent). */
+export const clearDraft = (): void => {
+  const empty = emptyGrid();
+  setDraftGridSignal(empty);
+  setLastCommittedGridSignal(empty);
 };
+
+/** Back-compat alias. */
+export const clearGridState = (): void => clearDraft();
+
+// --- Mode transitions --------------------------------------------------------
+
+/**
+ * Enter view mode. The grid is parsed from the score and both
+ * draft and lastCommitted are set to the same value (so dirty
+ * count is 0).
+ */
+export const enterView = (score: string): void => {
+  const parsed = loadFromScoreInternal(score);
+  setDraftGridSignal(parsed);
+  setLastCommittedGridSignal(parsed);
+  setMode('view');
+};
+
+/**
+ * Enter sketch mode. The draft is kept if it's non-empty (the
+ * user is mid-draft), otherwise parsed from the score. This
+ * matches the existing "draft is sacred once started" contract.
+ */
+export const enterSketch = (score: string): void => {
+  const current = draftGrid();
+  if (isGridEmpty(current)) {
+    const parsed = loadFromScoreInternal(score);
+    setDraftGridSignal(parsed);
+    setLastCommittedGridSignal(parsed);
+  }
+  setMode('sketch');
+};
+
+/**
+ * Enter edit mode. Requires a parseable score (4 s-layers in a
+ * top-level stack). Returns `{ ok: true }` on success, or
+ * `{ ok: false, reason }` on failure (caller should disable
+ * the mode button and show a tooltip).
+ */
+export const enterEdit = (score: string): { readonly ok: boolean; readonly reason?: string } => {
+  if (!canEditGridLayer(score)) {
+    return {
+      ok: false,
+      reason:
+        'Edit mode requires a top-level stack(...) with exactly 4 s("…") rows. Switch to Sketch to add a drum layer.',
+    };
+  }
+  const parsed = loadFromScoreInternal(score);
+  setDraftGridSignal(parsed);
+  setLastCommittedGridSignal(parsed);
+  setMode('edit');
+  return { ok: true };
+};
+
+// --- Commit / apply ----------------------------------------------------------
+
+/**
+ * Sketch mode ↑ commit. Returns the new score (so the caller can
+ * dispatch `replaceScore`) and advances lastCommitted = draft.
+ * Pure on the score string; pure on the grid (advances the
+ * lastCommitted snapshot). Returns the new score, or null if
+ * the draft is empty (nothing to commit).
+ */
+export const commitDraft = (currentScore: string): string | null => {
+  const draft = draftGrid();
+  if (isGridEmpty(draft)) return null;
+  const newScore = appendGridToScore(currentScore, draft);
+  setLastCommittedGridSignal(draft);
+  return newScore;
+};
+
+/**
+ * Edit-mode per-tap. Splices the current draft into the score
+ * via `editGridLayer` (in-place 4-row replacement) and returns
+ * the new score. Falls back to `appendGridToScore` semantics if
+ * the score is no longer parseable (user edited outside the
+ * grid between taps). Returns null only if BOTH paths fail
+ * (e.g. score is empty).
+ */
+export const applyEditToLayer = (currentScore: string): string | null => {
+  const draft = draftGrid();
+  const inPlace = editGridLayerUseCase(currentScore, draft);
+  if (inPlace !== null) {
+    setLastCommittedGridSignal(draft);
+    return inPlace;
+  }
+  // Fallback: score no longer matches the 4-s-layer shape (user
+  // edited outside the grid). Use the sketch-merge path.
+  if (isGridEmpty(draft)) return null;
+  const fallback = appendGridToScore(currentScore, draft);
+  setLastCommittedGridSignal(draft);
+  return fallback;
+};
+
+// --- Internal helpers --------------------------------------------------------
+
+/** Best-effort parse of a score into a grid (uses `loadFromScore` below). */
+const loadFromScoreInternal = (score: string): Grid => loadFromScore(score);
+
+// --- Score parsing (preserved from before; back-compat) ---------------------
 
 /** Load a Strudel snippet back into grid (best-effort: parses `s("...")` rows). */
 export const loadFromScore = (snippet: string): Grid => {
@@ -45,20 +206,22 @@ export const loadFromScore = (snippet: string): Grid => {
     for (let c = 0; c < GRID_COLS && c < tokens.length; c += 1) {
       const tok = tokens[c]!.toLowerCase();
       const isRest = tok === '~' || tok === '.';
-      // setCell is immutable — re-assign next each iteration. Bug
-      // history: prior code discarded the return value, leaving
-      // grid empty for every score. (Discovered when
-      // wavecode-step-grid-autoload-and-sync exposed the silent
-      // no-op via auto-load-on-sheet-open.)
       if (!isRest) next = setCell(next, r, c, true);
     }
   }
-  setGrid(next);
+  setDraftGridSignal(next);
   return next;
 };
 
-export const isGridEmptyState = (): boolean => isGridEmpty(grid());
-export const gridAsScore = (): string => gridToScore(grid());
+export const isGridEmptyState = (): boolean => isGridEmpty(draftGrid());
+
+/** Render the current draft as a Strudel stack snippet. */
+export const gridAsScore = (): string => gridToScore(draftGrid());
+
+/** Same, using a passed-in grid (pure; does not touch signals). */
+export const draftAsScore = (g: Grid): string => gridToScore(g);
+
+// --- Score merging (preserved from before; back-compat) ---------------------
 
 /**
  * Skip whitespace AND line-comments starting at index `i`. Returns the
@@ -95,11 +258,8 @@ const findTopLevelStackAt = (src: string): number => {
   const i = skipWhitespaceAndComments(src, 0);
   if (src.slice(i, i + 5) !== 'stack') return -1;
   let j = i + 5;
-  // Allow `stack ( … )` (rare, but legal in Strudel).
   j = skipWhitespaceAndComments(src, j);
   if (src[j] !== '(') return -1;
-  // Confirm this is "stack(" not "stackStartOfSomethingElse(...)" — by
-  // requiring that what follows the `(` is whitespace, comment, or close-paren.
   const peek = src[j + 1];
   if (peek !== undefined && peek !== ' ' && peek !== '\t' && peek !== '\n' && peek !== '\r' && peek !== '/' && peek !== ')') {
     return -1;
@@ -139,10 +299,7 @@ const findStackClose = (src: string, afterOpenParen: number): number => {
   return -1;
 };
 
-/**
- * True iff `raw` has `stack(` as its first executable token at the top
- * level (a leading comment block doesn't disqualify it).
- */
+/** True iff `raw` has `stack(` as its first executable token at the top level. */
 export const hasTopLevelStack = (raw: string): boolean =>
   findTopLevelStackAt(raw) !== -1;
 
@@ -162,21 +319,13 @@ const stripStackWrapper = (snippet: string): string =>
  *   1. empty editor → grid snippet (just `stack(s("…"), …)`) standalone.
  *   2. editor already has top-level `stack(...)` → append grid snippet as
  *      an additional comma-separated layer INSIDE the existing call.
- *      Mixer indexes top-level layers; the existing layers stay first,
- *      then the new grid layers are concatenated (consistent with
- *      wavecode-track-mixer's setLayerCount pathway).
  *   3. editor has a non-stack score → wrap both in a new `stack(...)`.
- *
- * Pure: takes `currentScore` as a string, returns a new string.
- * Paren-aware split operates directly on the original text so user
- * comments BEFORE the splice are preserved verbatim.
  */
 export const appendGridToScore = (currentScore: string, grid: Grid): string => {
   if (currentScore.trim() === '') return gridToScore(grid);
 
   const stackStart = findTopLevelStackAt(currentScore);
   if (stackStart !== -1) {
-    // Locate the opening `(` after `stack`
     let i = stackStart + 5;
     i = skipWhitespaceAndComments(currentScore, i);
     const openParen = i;
@@ -193,7 +342,6 @@ export const appendGridToScore = (currentScore: string, grid: Grid): string => {
     }
   }
 
-  // Case 3: non-stack score — wrap both in a new stack.
   const gridBody = stripStackWrapper(gridToScore(grid))
     .split('\n')
     .map((l) => '  ' + l)
@@ -201,3 +349,8 @@ export const appendGridToScore = (currentScore: string, grid: Grid): string => {
   const trimmedCurrent = currentScore.trim();
   return `stack(\n${trimmedCurrent},\n${gridBody}\n)`;
 };
+
+// --- Re-exports for back-compat ----------------------------------------------
+
+/** Back-compat: true iff the draft and lastCommitted are equal. */
+export const isDraftClean = (): boolean => gridsEqual(draftGrid(), lastCommittedGrid());
