@@ -1,0 +1,19 @@
+{
+  "schema": "math-coding/attestation-3.0-alpha",
+  "kind": "attestation",
+  "subject": {
+    "decision": "wavecode-play-in-control",
+    "obligation": "wavecode-play-in-control-witness-from-v1",
+    "candidate_tree": "HEAD",
+    "materials_digest": ""
+  },
+  "kind_": "observation",
+  "producer": {
+    "identity": "human:v1-migration"
+  },
+  "environment_class_level": 2,
+  "environment_class_label": "dev",
+  "result": "inconclusive",
+  "issued_at": "1970-01-01T00:00:00Z",
+  "id": "sha256:ad42d2c12866c41b1ea18481ec1de0833719e0a07089cd97dd0ef6430339738a"
+}

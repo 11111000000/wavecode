@@ -1,0 +1,174 @@
+---
+schema: math-coding/3.3
+id: wavecode-debug-console
+revision: 1
+state: active
+body_sha: "sha256:2670d0c5a1053f85f7c42419b8469de4b637a8572ffe3bfe6f07e8361dd14b60"
+yaml_sha: "sha256:2670d0c5a1053f85f7c42419b8469de4b637a8572ffe3bfe6f07e8361dd14b60"
+
+intent:|
+  Three observable UI surfaces share one log backend (`logger` from
+  `math/wavecode-log-pipeline`):
+
+  1. **Toast** — non-modal popovers for `level: 'error'` and
+  `level: 'critical'` only. `warn` / `log` / `info` entries
+  do NOT show a toast (they sit in the ring buffer until the
+  user opens the console). Decision (chat with author, 2026-10-12):
+  > «console button at bottom, glows red on errors, doesn't
+  > auto-popup, critical errors as popovers» — i.e. only
+  `critical` is popover-priority; `error` is button-glow +
+  badge. Toast auto-dismisses after 5s, manual swipe-up to
+  dismiss earlier. Stack vertically with newest at bottom
+  (max 3 visible; older FIFO-queue out of view until user
+  opens ConsoleSheet).
+
+  2. **ConsoleButton** — always-visible bottom-right FAB. Two
+  states:
+  - **idle / empty**: small monochrome `>_` glyph, 36px circle.
+  - **idle / has entries**: same glyph + numeric badge top-right.
+  - **error-active**: glyph + filled red badge + `@keyframes
+  error-pulse` (3-cycle 1s ease-in-out). Clears on click
+  (does NOT clear the ring buffer — just resets the
+  unread counter).
+  Hover/focus: tooltip "Консоль (N)".
+
+  3. **ConsoleSheet** — bottom sheet (slides up, snap-points
+  `peek` (40vh) / `full` (90vh) / `closed`). Tabs: **Errors**
+  (default, the `level === 'error' || level === 'critical'`
+  subset), **All** (chronological), **By source** (grouped by
+  `source` enum). Per-entry: timestamp, level icon, source tag,
+  `args` joined via `formatLogEntry(args)` (delegates to
+  `cleanLogArgs` first). Actions:
+  - `Copy` (the entry as a single string, multiline;
+  success toast on copy).
+  - `Clear` (with confirm — `window.confirm` "Очистить
+  консоль? Действие необратимо."; resets ring buffer).
+  - `Filter` (text input, substring match against
+  formatted args).
+
+  4. **consoleStore** — Solid store wrapping the ring buffer.
+  Exports `useConsoleStore()` hook → `{ open, unread,
+  entries, recent(n), bySource(s), open(), close(),
+  toggle(), clear(), markAllRead() }`. Open state is a
+  `createSignal(false)`, unread counter is a
+  `createSignal(0)`. Entries are read through a computed
+  memo `entriesDisplay = createMemo(() => ringBuffer.
+  all())` so the consumer re-renders only when the buffer
+  mutates.
+
+  5. **consoleGlobals** — installs `window.onerror` and
+  `window.onunhandledrejection` listeners at boot. Pushes
+  caught exceptions into the ring buffer as
+  `{ level: 'critical', source: 'app', args: [event.message,
+  event.error?.stack ?? ''] }`. Listener is installed
+  exactly once (idempotent); teardown returns the unlisten
+  function. Called from `App.tsx onMount`; spec says
+  cleanup happens in `onCleanup` so HMR doesn't double-bind.
+
+  6. **Removed** — the previous `presentation/panels/
+  DebugPanel.tsx` (its job is now split between
+  ConsoleButton + ConsoleSheet) and its
+  `ui/src/debug.css` (CSS for the DebugPanel was moved to
+  `components.css` under the `.wc-console-*` class prefix).
+commitment: |
+  Console UX replaces the old DebugPanel. Three composable
+  surfaces (Toast / ConsoleButton / ConsoleSheet) backed by
+  one Solid store `consoleStore`. Source of truth:
+  ring buffer from `math/wavecode-log-pipeline`. Errors
+  route to glow + badge; criticals route to toast as well.
+counterexample: |
+  The strongest objection to this decision is captured in the `antithesis` field above: (1) «Show all errors as toasts automatically» — обсуждалось
+antithesis: |
+  (1) «Show all errors as toasts automatically» — обсуждалось
+  с автором, было отклонено: слишком навязчиво для live-coding
+  сессии, где ошибки частые. Console glow + badge = сигнал
+  без шума. Critical (unhandled rejection / необработанный
+  throw из effect-runtime) — отдельный канал, поднимается
+  даже если кнопка не видна. (2) «Use a single-tab console
+  instead of Errors / All / By source». Возражение: Errors
+  tab — дефолт, поскольку 95% запросов "что сломалось?"
+  сводятся к последней ошибке. All — для полного транскрипта;
+  By source — для дебага Strudel-канала (где каждый slap
+  Strudel пишет в `[webaudio]`). (3) «Let the user dismiss
+  the sheet but keep it open across navigation». Возражение:
+  SPA навигации нет (нет вкладок / страниц), есть только
+  bottom-sheets и modals; ConsoleButton всегда возвращает
+  к последнему состоянию через `markAllRead()`. (4) «Persist
+  the log buffer to IDB». Отклонено: см. `wavecode-log-pipeline`
+  antithesis #5. (5) «Reuse the existing DebugPanel as the
+  ConsoleSheet». Возражение: DebugPanel — это dev-tooling
+  panel с unmount-семантикой; converting его в bottom sheet
+  сломает его существующих потребителей (тесты `DebugPanel.
+  test.tsx`, в dev-режиме `STRUDEL_DEBUG=1`). Чистая
+  замена чище. (6) «Custom `confirm()` для Clear —
+  нативный `window.confirm` ugly». Возражение: нативный
+  confirm согласован со всем UX (везде одни стили confirm);
+  custom modal — scope creep, отдельный пакет.
+  Console UX replaces the old DebugPanel. Three composable
+  surfaces (Toast / ConsoleButton / ConsoleSheet) backed by
+  one Solid store `consoleStore`. Source of truth:
+  ring buffer from `math/wavecode-log-pipeline`. Errors
+  route to glow + badge; criticals route to toast as well.
+counterexample: |
+  The strongest objection to this decision is captured in the `antithesis` field above: (1) «Show all errors as toasts automatically» — обсуждалось
+antithesis: |
+  (1) «Show all errors as toasts automatically» — обсуждалось
+  с автором, было отклонено: слишком навязчиво для live-coding
+  сессии, где ошибки частые. Console glow + badge = сигнал
+  без шума. Critical (unhandled rejection / необработанный
+  throw из effect-runtime) — отдельный канал, поднимается
+  даже если кнопка не видна. (2) «Use a single-tab console
+  instead of Errors / All / By source». Возражение: Errors
+  tab — дефолт, поскольку 95% запросов "что сломалось?"
+  сводятся к последней ошибке. All — для полного транскрипта;
+  By source — для дебага Strudel-канала (где каждый slap
+  Strudel пишет в `[webaudio]`). (3) «Let the user dismiss
+  the sheet but keep it open across navigation». Возражение:
+  SPA навигации нет (нет вкладок / страниц), есть только
+  bottom-sheets и modals; ConsoleButton всегда возвращает
+  к последнему состоянию через `markAllRead()`. (4) «Persist
+  the log buffer to IDB». Отклонено: см. `wavecode-log-pipeline`
+  antithesis #5. (5) «Reuse the existing DebugPanel as the
+  ConsoleSheet». Возражение: DebugPanel — это dev-tooling
+  panel с unmount-семантикой; converting его в bottom sheet
+  сломает его существующих потребителей (тесты `DebugPanel.
+  test.tsx`, в dev-режиме `STRUDEL_DEBUG=1`). Чистая
+  замена чище. (6) «Custom `confirm()` для Clear —
+  нативный `window.confirm` ugly». Возражение: нативный
+  confirm согласован со всем UX (везде одни стили confirm);
+  custom modal — scope creep, отдельный пакет.
+axiom_link:
+  - A4
+scope:
+  paths: []
+outcomes:
+  - id: wavecode-debug-console-outcome
+    statement: |
+      Three observable UI surfaces share one log backend (`logger` from
+      `math/wavecode-log-pipeline`):
+
+      1.
+obligations:
+  - id: wavecode-debug-console-kernel-validates
+    claim: |
+      The migrated decision file is structurally valid under the math-coding 3.3 schema; `mathc validate` exits 0 for `decisions/<id>.yaml` at HEAD.
+    acceptance:
+      all:
+        - verifier: "mathc validate"
+          result: pass
+  - id: wavecode-debug-console-witness-from-v1
+    claim: |
+      The original v1.0 packet applied on the recorded date in its `witness` file; this migration preserves that evidence as an `attestations/<id>-evidence.json` file.
+    acceptance:
+      all:
+        - verifier: "attestation-store-has-subject"
+          result: pass
+assumptions: []
+risk:
+  declared_triggers:
+    - v1-to-v3-migration-loss
+  owner: human:operator
+relations:
+  addresses:
+    - wavecode-bootstrap-math-coding-3.3@1
+---

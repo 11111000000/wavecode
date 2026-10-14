@@ -1,0 +1,120 @@
+---
+schema: math-coding/3.3
+id: wavecode-redesign-repl-phosphor
+revision: 1
+state: retired
+body_sha: "sha256:4cce1262b44f4bb14e59a47c23737e2c2396859d748ef22587c664181460a56d"
+yaml_sha: "sha256:4cce1262b44f4bb14e59a47c23737e2c2396859d748ef22587c664181460a56d"
+
+intent:|
+  Визуальный язык wavecode — «REPL Phosphor»: моноширинный интерфейс в
+  духе DEC VT220 / SGI IRIX с phosphor-amber палитрой на тёплом чёрном
+  фоне, ASCII-волной как логотипом, block-cursor, двойными линиями
+  рамок, glow-эффектом на активных контролах и едва заметными CRT
+  scanlines. Никаких emoji как иконок — только inline SVG. Палитра,
+  шрифты, spacing, motion вынесены в `ui/src/styles/tokens.css` как
+  единый источник правды; `index.css` переписан с нуля (~200 строк
+  вместо 1819) и импортируется из слоёв `base.css` + `components.css`.
+commitment: |
+  Phosphor — это не ретро-копия, а функциональный vocabulary: amber =
+  primary action, dim-amber = inactive, green-amber = running,
+  orange-red = error, brown-amber border = frame. Минимум украшений:
+  scanlines фоном, glow только на active, ASCII-волна один раз в title
+  bar. Реализация: новый `src/styles/{tokens,base,components}.css` +
+  переписать `index.css` как orchestrator (~250 строк вместо 1819);
+  classes `wc-btn`, `wc-panel`, `wc-status`, `wc-input` с CSS
+  variables из tokens; legacy-classes получают `/* deprecated */` и
+  pointer-events passthrough. Никаких зависимостей: ни Lucide, ни
+  Phosphor-icons — 14 inline SVG иконок в одном файле
+  `presentation/icons/index.tsx` через `<Icon name="play" />`.
+counterexample: |
+  The strongest objection to this decision is captured in the `antithesis` field above: (1) «Эстетика VT220 устарела, выглядит как из 80-х». Возражение:
+antithesis: |
+  (1) «Эстетика VT220 устарела, выглядит как из 80-х». Возражение:
+  phosphor-amber не ретро-декорация, а семиотический выбор: «это
+  REPL/терминал/инструмент разработчика» — palette bias читается за
+  200мс, в отличие от generic dark editor. (2) «Моноширинный UI
+  уменьшает плотность информации, заголовки и labels нужно делать
+  sans». Возражение: моноширинный UI усиливает «это программа», а
+  данные (cps, bpm, swing, score) уже моно — единый шрифт убирает
+  шум. (3) «Scanlines утомляют глаза и плохо читаются». Решение:
+  scanlines — `repeating-linear-gradient` с opacity 0.025 (1px через
+  3px) — фоновая фактура, не блокирует контраст. (4) «Glow на
+  контролах — китч, в больших дозах». Ограничение: text-shadow 6-8px
+  только на `[data-active]`, не на всём. (5) «SVG-иконки вместо
+  emoji — больше работы». Возражение: SVG-инлайн = те же байты, что
+  emoji-glyph, но одинаковый рендеринг на Linux/macOS/Windows и
+  контроль над color через `currentColor`. (6) «1819 строк CSS
+  заменять рискованно — сломаются непокрытые классы». Решение:
+  новые классы используют BEM-style `wc-*` префикс; legacy-классы
+  остаются в shim-слое с пометкой `/* deprecated */` и pointer-events
+  pass-through, но новые компоненты их не используют.
+  Phosphor — это не ретро-копия, а функциональный vocabulary: amber =
+  primary action, dim-amber = inactive, green-amber = running,
+  orange-red = error, brown-amber border = frame. Минимум украшений:
+  scanlines фоном, glow только на active, ASCII-волна один раз в title
+  bar. Реализация: новый `src/styles/{tokens,base,components}.css` +
+  переписать `index.css` как orchestrator (~250 строк вместо 1819);
+  classes `wc-btn`, `wc-panel`, `wc-status`, `wc-input` с CSS
+  variables из tokens; legacy-classes получают `/* deprecated */` и
+  pointer-events passthrough. Никаких зависимостей: ни Lucide, ни
+  Phosphor-icons — 14 inline SVG иконок в одном файле
+  `presentation/icons/index.tsx` через `<Icon name="play" />`.
+counterexample: |
+  The strongest objection to this decision is captured in the `antithesis` field above: (1) «Эстетика VT220 устарела, выглядит как из 80-х». Возражение:
+antithesis: |
+  (1) «Эстетика VT220 устарела, выглядит как из 80-х». Возражение:
+  phosphor-amber не ретро-декорация, а семиотический выбор: «это
+  REPL/терминал/инструмент разработчика» — palette bias читается за
+  200мс, в отличие от generic dark editor. (2) «Моноширинный UI
+  уменьшает плотность информации, заголовки и labels нужно делать
+  sans». Возражение: моноширинный UI усиливает «это программа», а
+  данные (cps, bpm, swing, score) уже моно — единый шрифт убирает
+  шум. (3) «Scanlines утомляют глаза и плохо читаются». Решение:
+  scanlines — `repeating-linear-gradient` с opacity 0.025 (1px через
+  3px) — фоновая фактура, не блокирует контраст. (4) «Glow на
+  контролах — китч, в больших дозах». Ограничение: text-shadow 6-8px
+  только на `[data-active]`, не на всём. (5) «SVG-иконки вместо
+  emoji — больше работы». Возражение: SVG-инлайн = те же байты, что
+  emoji-glyph, но одинаковый рендеринг на Linux/macOS/Windows и
+  контроль над color через `currentColor`. (6) «1819 строк CSS
+  заменять рискованно — сломаются непокрытые классы». Решение:
+  новые классы используют BEM-style `wc-*` префикс; legacy-классы
+  остаются в shim-слое с пометкой `/* deprecated */` и pointer-events
+  pass-through, но новые компоненты их не используют.
+axiom_link:
+  - A4
+scope:
+  paths: []
+outcomes:
+  - id: wavecode-redesign-repl-phosphor-outcome
+    statement: |
+      Визуальный язык wavecode — «REPL Phosphor»: моноширинный интерфейс в
+      духе DEC VT220 / SGI IRIX с phosphor-amber палитрой на тёплом чёрном
+      фоне, ASCII-волной как логотипом, block-cursor, двойными линиями
+      рамок, glow-эффектом на активных контролах и едва заметными CRT
+      scanlines.
+obligations:
+  - id: wavecode-redesign-repl-phosphor-kernel-validates
+    claim: |
+      The migrated decision file is structurally valid under the math-coding 3.3 schema; `mathc validate` exits 0 for `decisions/<id>.yaml` at HEAD.
+    acceptance:
+      all:
+        - verifier: "mathc validate"
+          result: pass
+  - id: wavecode-redesign-repl-phosphor-witness-from-v1
+    claim: |
+      The original v1.0 packet applied on the recorded date in its `witness` file; this migration preserves that evidence as an `attestations/<id>-evidence.json` file.
+    acceptance:
+      all:
+        - verifier: "attestation-store-has-subject"
+          result: pass
+assumptions: []
+risk:
+  declared_triggers:
+    - v1-to-v3-migration-loss
+  owner: human:operator
+relations:
+  addresses:
+    - wavecode-bootstrap-math-coding-3.3@1
+---

@@ -1,0 +1,153 @@
+---
+schema: math-coding/3.3
+id: wavecode-track-mixer
+revision: 1
+state: active
+body_sha: "sha256:ad23245b2b4a798cf95f75e4d8240e393ea477c7b0f02aca36c7a50e3126331e"
+yaml_sha: "sha256:ad23245b2b4a798cf95f75e4d8240e393ea477c7b0f02aca36c7a50e3126331e"
+
+intent:|
+  В Score-панели под редактором — collapsible `<details>` «🎛 Mixer»
+  со списком слоёв партитуры. Каждый слой — строка `[M] [S] ──── ○ ── 0.5`
+  (mute / solo / gain slider 0..1.5). Mixer side-state хранится в
+  `appStore.layerMix: LayerMix[]` (отдельно от score, чтобы ИИ-edit
+  не задевал mixer), при `audio.eval` слои прокидываются через
+  preprocessor `application/useCases/injectMix.ts` (pure): парсит
+  score в `stack(l1, l2, ...)` через `@strudel/transpiler.transpiler`,
+  заменяет каждый `.gain(X)` → `.gain(layerMix[i].gain ?? X)`, к
+  muted добавляет `.mul(0)`, soloed-only-passes через
+  `.set pattern value with mask`.
+commitment: |
+  Mixer side-state живёт параллельно score. На каждый `audio.eval` мы
+  (1) parse snippet AST → top-level layer count, (2) reconcile
+  `layerMix.length` (add empty entries / drop extras), (3) inject
+  per-layer `.gain()` и mute logic. Муте/соло — runtime effect,
+  не меняют score, ИИ-edit игнорируют mixer. UI рисует актуальный
+  state, с номерами слоёв 0..N. На iPhone — vertical scroll,
+  большой слайдер (44px tall), tap target M/S квадрат 36px.
+  Snapshot учится sync'ить `cps`-slider (через
+  transportState/Swing — пакет transport-panel).
+counterexample: |
+  The strongest objection to this decision is captured in the `antithesis` field above: (1) Парсинг `stack(l1, l2, ...)` через transpiler — нет гарантии
+antithesis: |
+  (1) Парсинг `stack(l1, l2, ...)` через transpiler — нет гарантии
+  что score это ровно stack. Альтернатива: regex split на `,\n`
+  наивный — ломает вложенные `stack`, вложенные скобки.
+  Решение: транспилер.parse (из `@strudel/transpiler`), затем
+  walk AST. (2) Mixer state меняет score каждый раз → tripит
+  `replaceScore`, blow up history undo. Решение: mixer state
+  ОТДЕЛЬНО от score (вне reducer), `replaceScore` срабатывает
+  только от manual edit / ИИ / preset (mixer-side-effect в
+  audio.eval wrapper). (3) `.mul(0)` vs `.gain(0)` — `gain` → amplitude
+  scalar in pattern value, `mul` — global pattern mask.
+  Для mute: правильнее `.gain(0)` чтобы не ломать downstream
+  chain (e.g. `.mul(0)` убивает envelope). (4) Solo нескольких
+  треков одновременно — должно mute'ить все остальные. Решение:
+  `gain = soloed ? gain : 0` для каждого слоя. Solo of NONE →
+  bypass. (5) Layer indexing: один stack с 6 слоями — 6 строк
+  mixer; но юзер добавляет новый layer — mixer должен
+  auto-resize. Решение: на каждый `audio.eval` парсер обновляет
+  `layerMix.length` через reducer event `setLayerCount`.
+  Mixer side-state живёт параллельно score. На каждый `audio.eval` мы
+  (1) parse snippet AST → top-level layer count, (2) reconcile
+  `layerMix.length` (add empty entries / drop extras), (3) inject
+  per-layer `.gain()` и mute logic. Муте/соло — runtime effect,
+  не меняют score, ИИ-edit игнорируют mixer. UI рисует актуальный
+  state, с номерами слоёв 0..N. На iPhone — vertical scroll,
+  большой слайдер (44px tall), tap target M/S квадрат 36px.
+  Snapshot учится sync'ить `cps`-slider (через
+  transportState/Swing — пакет transport-panel).
+counterexample: |
+  The strongest objection to this decision is captured in the `antithesis` field above: (1) Парсинг `stack(l1, l2, ...)` через transpiler — нет гарантии
+antithesis: |
+  (1) Парсинг `stack(l1, l2, ...)` через transpiler — нет гарантии
+  что score это ровно stack. Альтернатива: regex split на `,\n`
+  наивный — ломает вложенные `stack`, вложенные скобки.
+  Решение: транспилер.parse (из `@strudel/transpiler`), затем
+  walk AST. (2) Mixer state меняет score каждый раз → tripит
+  `replaceScore`, blow up history undo. Решение: mixer state
+  ОТДЕЛЬНО от score (вне reducer), `replaceScore` срабатывает
+  только от manual edit / ИИ / preset (mixer-side-effect в
+  audio.eval wrapper). (3) `.mul(0)` vs `.gain(0)` — `gain` → amplitude
+  scalar in pattern value, `mul` — global pattern mask.
+  Для mute: правильнее `.gain(0)` чтобы не ломать downstream
+  chain (e.g. `.mul(0)` убивает envelope). (4) Solo нескольких
+  треков одновременно — должно mute'ить все остальные. Решение:
+  `gain = soloed ? gain : 0` для каждого слоя. Solo of NONE →
+  bypass. (5) Layer indexing: один stack с 6 слоями — 6 строк
+  mixer; но юзер добавляет новый layer — mixer должен
+  auto-resize. Решение: на каждый `audio.eval` парсер обновляет
+  `layerMix.length` через reducer event `setLayerCount`.
+axiom_link:
+  - A1
+scope:
+  paths: []
+outcomes:
+  - id: wavecode-track-mixer-outcome
+    statement: |
+      В Score-панели под редактором — collapsible `<details>` «🎛 Mixer»
+      со списком слоёв партитуры.
+obligations:
+  - id: wavecode-track-mixer-kernel-validates
+    claim: |
+      The migrated decision file is structurally valid under the math-coding 3.3 schema; `mathc validate` exits 0 for `decisions/<id>.yaml` at HEAD.
+    acceptance:
+      all:
+        - verifier: "mathc validate"
+          result: pass
+  - id: wavecode-track-mixer-witness-from-v1
+    claim: |
+      The original v1.0 packet applied on the recorded date in its `witness` file; this migration preserves that evidence as an `attestations/<id>-evidence.json` file.
+    acceptance:
+      all:
+        - verifier: "attestation-store-has-subject"
+          result: pass
+assumptions:
+  - id: wavecode-track-mixer-assumption-1
+    state: proven
+    statement: |
+      "Strudel `.gain()` chain operator — accepts scalar or Evidence: "Strudel Pattern docs — `.gain(value)` — multiplicative
+    owner: human:operator
+  - id: wavecode-track-mixer-assumption-2
+    state: assumed
+    statement: |
+      "`@strudel/transpiler.transpiler()` парсит строку → Evidence: "midi-io package (sha 2745586) уже зовёт
+    owner: human:operator
+  - id: wavecode-track-mixer-assumption-3
+    state: proven
+    statement: |
+      "Mixer меняет runtime audio НЕ score — undo-history Evidence: "App.tsx:80-92 createEffect на appStore.score — mixer
+    owner: human:operator
+  - id: wavecode-track-mixer-assumption-4
+    state: assumed
+    statement: |
+      "Layer names auto-detected по first token: `note(...)` Evidence: "практика DAW-mixers (Logic, Reaper) — auto-name по
+    owner: human:operator
+  - id: wavecode-track-mixer-assumption-5
+    state: proven
+    statement: |
+      "Solo group semantics: if any soloed, only soloed Evidence: "Logic Pro, Ableton, ProTools — solo = exclusive mute
+    owner: human:operator
+  - id: wavecode-track-mixer-assumption-6
+    state: proven
+    statement: |
+      "iOS Safari `<input type=range>` thumb 30px+ для Evidence: "Apple HIG — tap targets ≥44pt; CSS slider-thumb size
+    owner: human:operator
+  - id: wavecode-track-mixer-assumption-7
+    state: proven
+    statement: |
+      "Stack с вложенными `stack()` (layer 2 = sub-stack Evidence: "Strudel mini-notation упрощает вложенность — встречается
+    owner: human:operator
+  - id: wavecode-track-mixer-assumption-8
+    state: proven
+    statement: |
+      "Mixer UI layout: row = [M] [S] [name] [─────○────] Evidence: "стандартное desktop mixer layout; mobile — vertical
+    owner: human:operator
+risk:
+  declared_triggers:
+    - v1-to-v3-migration-loss
+  owner: human:operator
+relations:
+  addresses:
+    - wavecode-bootstrap-math-coding-3.3@1
+---

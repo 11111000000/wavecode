@@ -46,18 +46,51 @@ this section, but defer to the source of truth above.
 ---
 
 Этот репозиторий использует методологию
-[math-coding v1.0](../math-coding/AGENTS.md) для документирования решений.
+[math-coding 3.3](../math-coding/AGENTS.md) для документирования решений.
 
-Каждое не-тривиальное решение фиксируется пакетом в `math/<name>/packet.md`.
-Перед началом работы обязательно прочитать:
+Каждое не-тривиальное решение фиксируется YAML-файлом в
+`decisions/<id>.yaml` со схемой `math-coding/3.3`. Каждый файл
+валидируется ядром (`mathc validate`) и участвует в gate-gate
+(`mathc self-check`). Перед началом работы обязательно прочитать:
 
-1. [math-coding/AGENTS.md](../math-coding/AGENTS.md) — методология
-2. [math-coding/docs/axioms.md](../math-coding/docs/axioms.md) — семь аксиом
-3. `math/<latest-packet>/packet.md` — последнее решение
+1. [math-coding/AGENTS.md](../math-coding/AGENTS.md) — методология 3.3
+2. [math-coding/docs/axioms.md](../math-coding/docs/axioms.md) — пять аксиом
+3. [`decisions/decision.yaml`](decisions/decision.yaml) — active policy
+   (что входит в scope, какие paths закрыты)
+4. [schemas/decision.json](schemas/decision.json) — JSON-schema,
+   валидируемая ядром
 
-CLI `math-coding` сломан в системе (бинарь ссылается на удалённый glibc);
-пакеты создаются вручную по схеме. Lifecycle (draft / applied / retired)
-определяется по наличию файла `witness` в `math/<name>/`.
+### Установка `mathc`
+
+```bash
+curl -fsSL https://github.com/11111000000/math-coding/releases/download/edge/install.sh \
+  | sh -s --
+export PATH="$HOME/.local/bin:$PATH"
+mathc version  # должен вернуть "math-coding 3.3.0-alpha: bootstrap"
+```
+
+Edge release бинарь работает на NixOS angara-1 (glibc 2.40 совместим).
+Старая заметка "CLI сломан" — устарела (относится к pre-2026-10 setup,
+когда бинарь линковался на удалённый glibc).
+
+### Создание нового решения
+
+```bash
+mathc new-decision <id>          # печатает scaffold (id в kebab-case)
+# отредактировать decisions/<id>.yaml: intent, commitment, scope,
+# obligations[].acceptance.all[].verifier, outcomes, antithesis, counterexample
+mathc validate decisions/<id>.yaml
+mathc self-check                  # exit 0 = ok, 1 = reject, 3 = unknown
+```
+
+### Legacy `math/<name>/packet.md`
+
+Каталог `math/` содержит **мигрированные** пакеты v1.0 (87 штук,
+commits до 2026-10-14). Они отображены в `decisions/<id>.yaml`
+через скрипт `scripts/migrate-v1-packets.py` и могут быть удалены
+после merge этой ветки (см. commit `chore: drop math/ legacy packets`).
+Старые пакеты — historical record, **не редактируются**; новые
+решения пишутся только в `decisions/`.
 
 ## Kanban (agent-kanban) — ОБЯЗАТЕЛЬНО для всех AI-агентов
 
@@ -123,12 +156,16 @@ Paseo daemon получает `KANBAN_BEARER` из systemd
 ## Структура репозитория
 
 ```
-README.md       короткое описание
-AGENTS.md       этот файл
-.gitignore      стандартный для Node-проекта
-.gitverse/      GitVerse Actions workflows (deploy)
-math/<name>/    пакеты решений (math-coding)
-ui/             браузерный SPA (TypeScript + Effect-TS + Solid.js)
+README.md         короткое описание
+AGENTS.md         этот файл
+.gitignore        стандартный для Node-проекта
+.gitverse/        GitVerse Actions workflows (deploy, math-coding gate)
+math/<name>/      legacy пакеты решений math-coding v1.0 (будут удалены)
+decisions/        решения math-coding 3.3 (active source of truth)
+attestations/     attestation store (kernel evidence для `mathc self-check`)
+schemas/          JSON-schema reference (math-coding 3.3 kernel input)
+scripts/          утилиты (миграция v1→v3.3, проверка)
+ui/               браузерный SPA (TypeScript + Effect-TS + Solid.js)
 ```
 
 Composer (`~/Projects/Composer/`) — **отдельный backend-проект в другом треде

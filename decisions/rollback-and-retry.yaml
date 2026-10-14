@@ -1,0 +1,143 @@
+---
+schema: math-coding/3.3
+id: rollback-and-retry
+revision: 1
+state: active
+body_sha: "sha256:c3c72f308aec3dce2785a91e5b90f227ef54ad0cdb09001063534d9c4493e553"
+yaml_sha: "sha256:c3c72f308aec3dce2785a91e5b90f227ef54ad0cdb09001063534d9c4493e553"
+
+intent:|
+  В wavecode есть две новые кнопки:
+  (1) «↶ Откатить» в шапке — возвращает предыдущую версию партитуры
+  (то, что было до последней замены через LLM / пресет / ручной ввод);
+  (2) «Попробовать исправить» в AI-панели, рядом со строкой статуса —
+  появляется при любой ошибке LLM-цикла (LLM вернул пустой ответ,
+  audio eval упал на синтаксисе, LLM API error) и повторяет тот же
+  запрос с теми же параметрами (instruction text, model, thinking).
+commitment: |
+  Score-prev = одностолбцовый snapshot: replaceScore сохраняет текущий
+  score в scorePrev перед заменой. Один уровень. Этого достаточно для
+  сценария «плохой LLM-edit → откат». Multi-level undo — отдельный
+  пакет, не нужен пока не попросят.
+  Retry = простой re-call submit() с закешированным
+  { text, settings } при ошибке. Не трогаем reducer — local signal
+  в AIEditPanel. Перед retry НЕ откатываем score: LLM увидит свой
+  предыдущий (плохой) score в history и попробует исправить; юзер
+  также имеет явный «Откатить» если не хочет ретрая.
+  Layout:
+  ┌── шапка ────────────────────────────────────────────────┐
+  │ [Встроенные ▾] [↶ Откатить] [✦ Новая] [💾] [🗑] [🧹]    │
+  └────────────────────────────────────────────────────────┘
+  Кнопка «↶ Откатить» disabled когда scorePrev === ''. Без confirm
+  — откат безопасен и обратим (юзер может нажать redo = новый
+  LLM-edit, и scorePrev снова будет).
+  В AI-панели под footer (или в status-зоне) — при err:
+  `ИИ вернул пустой ответ ...   [Попробовать исправить]`
+  Retry = повторный submit() с lastFailedRequest. При успехе —
+  lastFailedRequest = null, кнопка исчезает. При повторной ошибке —
+  lastFailedRequest обновляется, кнопка остаётся.
+  History контекст НЕ теряется: appStore.messages хранит все пары
+  user/assistant, и каждая новая попытка добавляет ещё одну пару
+  (failed user → failed assistant). LLM видит всю историю и в
+  следующий раз сделает лучше.
+counterexample: |
+  The strongest objection to this decision is captured in the `antithesis` field above: (1) Кнопка «Откатить» — альтернативы: (a) git-style undo stack с N
+antithesis: |
+  (1) Кнопка «Откатить» — альтернативы: (a) git-style undo stack с N
+  уровнями и Ctrl+Z; (b) «восстановить из IDB» — не покрывает случай
+  «только что применил плохой LLM-edit, а до этого было хорошо»;
+  (c) кнопка «Откатить» внутри AI-панели рядом с «Применить», а не
+  в шапке — но юзер явно сказал «в шапке» (рядом с «Новая»).
+  (2) Кнопка «Попробовать исправить» — альтернативы: (a) автоматический
+  retry с backoff без UI — скрывает проблему от юзера, и часто
+  воспроизводит ту же ошибку (LLM non-deterministic, но обычно
+  промахивается системно); (b) кнопка «Открыть чат» — перенаправляет
+  юзера писать новый запрос, но это противоречит интуиции «в чате
+  retry последнего сообщения»; (c) inline-кнопка в самом сообщении
+  ассистента (как в Slack) — но тогда на пузыре assistant-message
+  надо навешивать action, что ломает текущий chat-bubble layout.
+  Тонкий момент: «Откатить» не должен откатывать смену пресета
+  (если юзер выбрал Creep, а потом нажал «Откатить» — он вернётся
+  к прошлой партитуре, не к прошлому пресету). Это правильно: undo
+  работает на уровне score, не на уровне preset-selection.
+  Score-prev = одностолбцовый snapshot: replaceScore сохраняет текущий
+  score в scorePrev перед заменой. Один уровень. Этого достаточно для
+  сценария «плохой LLM-edit → откат». Multi-level undo — отдельный
+  пакет, не нужен пока не попросят.
+  Retry = простой re-call submit() с закешированным
+  { text, settings } при ошибке. Не трогаем reducer — local signal
+  в AIEditPanel. Перед retry НЕ откатываем score: LLM увидит свой
+  предыдущий (плохой) score в history и попробует исправить; юзер
+  также имеет явный «Откатить» если не хочет ретрая.
+  Layout:
+  ┌── шапка ────────────────────────────────────────────────┐
+  │ [Встроенные ▾] [↶ Откатить] [✦ Новая] [💾] [🗑] [🧹]    │
+  └────────────────────────────────────────────────────────┘
+  Кнопка «↶ Откатить» disabled когда scorePrev === ''. Без confirm
+  — откат безопасен и обратим (юзер может нажать redo = новый
+  LLM-edit, и scorePrev снова будет).
+  В AI-панели под footer (или в status-зоне) — при err:
+  `ИИ вернул пустой ответ ...   [Попробовать исправить]`
+  Retry = повторный submit() с lastFailedRequest. При успехе —
+  lastFailedRequest = null, кнопка исчезает. При повторной ошибке —
+  lastFailedRequest обновляется, кнопка остаётся.
+  History контекст НЕ теряется: appStore.messages хранит все пары
+  user/assistant, и каждая новая попытка добавляет ещё одну пару
+  (failed user → failed assistant). LLM видит всю историю и в
+  следующий раз сделает лучше.
+counterexample: |
+  The strongest objection to this decision is captured in the `antithesis` field above: (1) Кнопка «Откатить» — альтернативы: (a) git-style undo stack с N
+antithesis: |
+  (1) Кнопка «Откатить» — альтернативы: (a) git-style undo stack с N
+  уровнями и Ctrl+Z; (b) «восстановить из IDB» — не покрывает случай
+  «только что применил плохой LLM-edit, а до этого было хорошо»;
+  (c) кнопка «Откатить» внутри AI-панели рядом с «Применить», а не
+  в шапке — но юзер явно сказал «в шапке» (рядом с «Новая»).
+  (2) Кнопка «Попробовать исправить» — альтернативы: (a) автоматический
+  retry с backoff без UI — скрывает проблему от юзера, и часто
+  воспроизводит ту же ошибку (LLM non-deterministic, но обычно
+  промахивается системно); (b) кнопка «Открыть чат» — перенаправляет
+  юзера писать новый запрос, но это противоречит интуиции «в чате
+  retry последнего сообщения»; (c) inline-кнопка в самом сообщении
+  ассистента (как в Slack) — но тогда на пузыре assistant-message
+  надо навешивать action, что ломает текущий chat-bubble layout.
+  Тонкий момент: «Откатить» не должен откатывать смену пресета
+  (если юзер выбрал Creep, а потом нажал «Откатить» — он вернётся
+  к прошлой партитуре, не к прошлому пресету). Это правильно: undo
+  работает на уровне score, не на уровне preset-selection.
+axiom_link:
+  - A4
+scope:
+  paths: []
+outcomes:
+  - id: rollback-and-retry-outcome
+    statement: |
+      В wavecode есть две новые кнопки:
+      (1) «↶ Откатить» в шапке — возвращает предыдущую версию партитуры
+      (то, что было до последней замены через LLM / пресет / ручной ввод);
+      (2) «Попробовать исправить» в AI-панели, рядом со строкой статуса —
+      появляется при любой ошибке LLM-цикла (LLM 
+obligations:
+  - id: rollback-and-retry-kernel-validates
+    claim: |
+      The migrated decision file is structurally valid under the math-coding 3.3 schema; `mathc validate` exits 0 for `decisions/<id>.yaml` at HEAD.
+    acceptance:
+      all:
+        - verifier: "mathc validate"
+          result: pass
+  - id: rollback-and-retry-witness-from-v1
+    claim: |
+      The original v1.0 packet applied on the recorded date in its `witness` file; this migration preserves that evidence as an `attestations/<id>-evidence.json` file.
+    acceptance:
+      all:
+        - verifier: "attestation-store-has-subject"
+          result: pass
+assumptions: []
+risk:
+  declared_triggers:
+    - v1-to-v3-migration-loss
+  owner: human:operator
+relations:
+  addresses:
+    - wavecode-bootstrap-math-coding-3.3@1
+---

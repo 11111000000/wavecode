@@ -1,0 +1,83 @@
+---
+schema: math-coding/3.3
+id: wavecode-codemirror-6
+revision: 1
+state: draft
+body_sha: "sha256:db75fe978d2ff8c49b8aef8f3ea03710cb2c76b0367f703fc000aeef98825fdf"
+yaml_sha: "sha256:db75fe978d2ff8c49b8aef8f3ea03710cb2c76b0367f703fc000aeef98825fdf"
+
+intent:|
+  Редактор score в wavecode — CodeMirror 6 с кастомным расширением для
+  Strudel mini-notation (highlight + completions).
+commitment: |
+  CodeMirror 6 (~200KB gzip) легче Monaco (~2MB), интегрируется через
+  vanilla API в любой фреймворк (Solid, Svelte, vanilla). Tree-sitter
+  grammar для JS уже встроена; mini-notation overlay реализуется через
+  StateField + Decoration (~100 строк). Completions — статический JSON из
+  ~200 Strudel-функций. Monaco избыточен: IntelliSense нам не нужен
+  (score-файл редактирует и LLM-агент, и человек; LLM не использует
+  IntelliSense; human-валидация через Lint diagnostics).
+counterexample: |
+  The strongest objection to this decision is captured in the `antithesis` field above: Monaco Editor (VS Code engine) даёт IntelliSense, готовый JS-парсер и
+antithesis: |
+  Monaco Editor (VS Code engine) даёт IntelliSense, готовый JS-парсер и
+  inline error markers — больше готовых фич «из коробки». Альтернатива —
+  textarea без подсветки (минимум зависимостей, но плохой DX). CodeMirror 6
+  требует писать свои extensions для mini-notation.
+  CodeMirror 6 (~200KB gzip) легче Monaco (~2MB), интегрируется через
+  vanilla API в любой фреймворк (Solid, Svelte, vanilla). Tree-sitter
+  grammar для JS уже встроена; mini-notation overlay реализуется через
+  StateField + Decoration (~100 строк). Completions — статический JSON из
+  ~200 Strudel-функций. Monaco избыточен: IntelliSense нам не нужен
+  (score-файл редактирует и LLM-агент, и человек; LLM не использует
+  IntelliSense; human-валидация через Lint diagnostics).
+counterexample: |
+  The strongest objection to this decision is captured in the `antithesis` field above: Monaco Editor (VS Code engine) даёт IntelliSense, готовый JS-парсер и
+antithesis: |
+  Monaco Editor (VS Code engine) даёт IntelliSense, готовый JS-парсер и
+  inline error markers — больше готовых фич «из коробки». Альтернатива —
+  textarea без подсветки (минимум зависимостей, но плохой DX). CodeMirror 6
+  требует писать свои extensions для mini-notation.
+axiom_link:
+  - A3
+scope:
+  paths: []
+outcomes:
+  - id: wavecode-codemirror-6-outcome
+    statement: |
+      Редактор score в wavecode — CodeMirror 6 с кастомным расширением для
+      Strudel mini-notation (highlight + completions).
+obligations:
+  - id: wavecode-codemirror-6-kernel-validates
+    claim: |
+      The migrated decision file is structurally valid under the math-coding 3.3 schema; `mathc validate` exits 0 for `decisions/<id>.yaml` at HEAD.
+    acceptance:
+      all:
+        - verifier: "mathc validate"
+          result: pass
+  - id: wavecode-codemirror-6-witness-from-v1
+    claim: |
+      The original v1.0 packet applied on the recorded date in its `witness` file; this migration preserves that evidence as an `attestations/<id>-evidence.json` file.
+    acceptance:
+      all:
+        - verifier: "attestation-store-has-subject"
+          result: pass
+assumptions:
+  - id: wavecode-codemirror-6-assumption-1
+    state: assumed
+    statement: |
+      "CodeMirror 6 ~200KB gzip vs Monaco ~2MB"
+    owner: human:operator
+  - id: wavecode-codemirror-6-assumption-2
+    state: assumed
+    statement: |
+      "Monaco React-биндинги (@uiw/react-codemirror) не нужны — vanilla API"
+    owner: human:operator
+risk:
+  declared_triggers:
+    - v1-to-v3-migration-loss
+  owner: human:operator
+relations:
+  addresses:
+    - wavecode-bootstrap-math-coding-3.3@1
+---

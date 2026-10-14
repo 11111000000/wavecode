@@ -1,0 +1,124 @@
+---
+schema: math-coding/3.3
+id: wavecode-mobile-single-panel
+revision: 1
+state: active
+body_sha: "sha256:0b9da0660a08d466cc3cd9a7d012f22a01d811cef7e38237cff285f4a5d62985"
+yaml_sha: "sha256:0b9da0660a08d466cc3cd9a7d012f22a01d811cef7e38237cff285f4a5d62985"
+
+intent:|
+  На экранах ≤720px (`window.matchMedia('(max-width: 720px)').matches`)
+  при первой загрузке (no localStorage entry) — `scoreOpen=true,
+  aiOpen=false, statusOpen=false`. Score-панель занимает весь
+  viewport-height (flex: 1). AI и Status свернуты — доступ через tap
+  на collapsible header. На десктопе (>720px) — текущее поведение
+  `scoreOpen=true, aiOpen=true, statusOpen=true`. Выбор сохраняется
+  в `localStorage[wavecode-mobile-default: 'compact' | 'full']` —
+  юзер может явно переопределить toggle-button'ом («📱 mobile-режим»
+  toggle в header, pin).
+commitment: |
+  Auto-detect viewport ≤720px на load + сохранять pref в localStorage
+  для explicitness. По умолчанию `auto`. Юзер может переопределить
+  через «📱 mobile-режим» toggle. AI и Status collapsed на mobile,
+  Score занимает 100% доступной высоты. CSS уже имеет @media для
+  mobile, расширяется на .app-body layout.
+counterexample: |
+  The strongest objection to this decision is captured in the `antithesis` field above: (1) auto-detection делает странное для iPad landscape (1180pt,
+antithesis: |
+  (1) auto-detection делает странное для iPad landscape (1180pt,
+  >720) — там пользователь видит все 3 панели и не страдает.
+  Решение: breakpoint 720 — landscape iPad остаётся full-panel.
+  (2) Юзер в mobile хочет иногда AI-панель открыть → tap на
+  toggleable header. Не нужен desktop-style horizontal layout.
+  (3) Если localStorage говорит «full», а breakpoint — mobile,
+  что важнее? — Решение: explicit user pref (`wavecode-mobile-
+  default: 'auto'|'compact'|'full'`) побеждает auto-detection.
+  Default = 'auto'. (4) single-panel layout на iPhone SE
+  (320×568, 16-year-old device) = 568 - 50 toolbar - 26 header
+  = 492pt editor height — приемлемо для typing.
+  Auto-detect viewport ≤720px на load + сохранять pref в localStorage
+  для explicitness. По умолчанию `auto`. Юзер может переопределить
+  через «📱 mobile-режим» toggle. AI и Status collapsed на mobile,
+  Score занимает 100% доступной высоты. CSS уже имеет @media для
+  mobile, расширяется на .app-body layout.
+counterexample: |
+  The strongest objection to this decision is captured in the `antithesis` field above: (1) auto-detection делает странное для iPad landscape (1180pt,
+antithesis: |
+  (1) auto-detection делает странное для iPad landscape (1180pt,
+  >720) — там пользователь видит все 3 панели и не страдает.
+  Решение: breakpoint 720 — landscape iPad остаётся full-panel.
+  (2) Юзер в mobile хочет иногда AI-панель открыть → tap на
+  toggleable header. Не нужен desktop-style horizontal layout.
+  (3) Если localStorage говорит «full», а breakpoint — mobile,
+  что важнее? — Решение: explicit user pref (`wavecode-mobile-
+  default: 'auto'|'compact'|'full'`) побеждает auto-detection.
+  Default = 'auto'. (4) single-panel layout на iPhone SE
+  (320×568, 16-year-old device) = 568 - 50 toolbar - 26 header
+  = 492pt editor height — приемлемо для typing.
+axiom_link:
+  - A1
+scope:
+  paths: []
+outcomes:
+  - id: wavecode-mobile-single-panel-outcome
+    statement: |
+      На экранах ≤720px (`window.
+obligations:
+  - id: wavecode-mobile-single-panel-kernel-validates
+    claim: |
+      The migrated decision file is structurally valid under the math-coding 3.3 schema; `mathc validate` exits 0 for `decisions/<id>.yaml` at HEAD.
+    acceptance:
+      all:
+        - verifier: "mathc validate"
+          result: pass
+  - id: wavecode-mobile-single-panel-witness-from-v1
+    claim: |
+      The original v1.0 packet applied on the recorded date in its `witness` file; this migration preserves that evidence as an `attestations/<id>-evidence.json` file.
+    acceptance:
+      all:
+        - verifier: "attestation-store-has-subject"
+          result: pass
+assumptions:
+  - id: wavecode-mobile-single-panel-assumption-1
+    state: proven
+    statement: |
+      "iPhone SE 3rd gen = 375×667pt CSS; 1st gen = 320×568 Evidence: "Apple device specs — iPhone SE landscape = 667×
+    owner: human:operator
+  - id: wavecode-mobile-single-panel-assumption-2
+    state: proven
+    statement: |
+      "Default wavecode UI bootstrap = score+ai+status Evidence: "presentation/state/uiState.ts:11-15 defaultState =
+    owner: human:operator
+  - id: wavecode-mobile-single-panel-assumption-3
+    state: proven
+    statement: |
+      "`window.matchMedia('(max-width: 720px)')` работает Evidence: "MDN `matchMedia` — synchronous, returns
+    owner: human:operator
+  - id: wavecode-mobile-single-panel-assumption-4
+    state: proven
+    statement: |
+      "Localstorage `wavecode-mobile-default` сохранённая Evidence: "стандартная UI pattern — explicit override побеждает
+    owner: human:operator
+  - id: wavecode-mobile-single-panel-assumption-5
+    state: proven
+    statement: |
+      "Collapsible header click уже handling of toggleState Evidence: "App.tsx:32-39 CollapsibleHeader `onToggle` → toggle
+    owner: human:operator
+  - id: wavecode-mobile-single-panel-assumption-6
+    state: proven
+    statement: |
+      "Min-height score panel на mobile = remainder of Evidence: "iPhone SE 568pt - 76pt (header+panel-header+preset
+    owner: human:operator
+  - id: wavecode-mobile-single-panel-assumption-7
+    state: proven
+    statement: |
+      "На mobile AI-panel default closed — но юзер может Evidence: "AI panel имеет свой collapsible, toggle через
+    owner: human:operator
+risk:
+  declared_triggers:
+    - v1-to-v3-migration-loss
+  owner: human:operator
+relations:
+  addresses:
+    - wavecode-bootstrap-math-coding-3.3@1
+---

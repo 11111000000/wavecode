@@ -1,0 +1,247 @@
+---
+schema: math-coding/3.3
+id: wavecode-mobile-transport-bar
+revision: 1
+state: draft
+body_sha: "sha256:b9d0dde165fcc9346c49e338cbc16d9a172ccfb396a61f4b8b65ad906331c3ee"
+yaml_sha: "sha256:b9d0dde165fcc9346c49e338cbc16d9a172ccfb396a61f4b8b65ad906331c3ee"
+
+intent:|
+  Объединить `.app-preset-row` (выбор композиции) и `.app-controls-row`
+  (Play/Stop + cps/swing/bpm) в ОДИН collapsible `.app-transport-bar`.
+  На mobile (≤720px) default collapsed → 49px chrome (только strip с
+  Play + BPM + toggle). Expanded → 102-108px (полная панель).
+  Toggle-кнопка с persistent state в localStorage
+  `wavecode-mobile-transport-expanded-v1`. Desktop layout сохранён
+  как было (always expanded), но toggle тоже работает (bar collapses
+  до 45px если пользователь явно свернул).
+
+  Мотивация — пользовательский фидбек:
+  «выбор композиции можно разместить на одной панели вместе с Play
+  и скорость bpm. Ну можно вообще разворачивать их с какой-нибудь
+  кнопочки. Ну чтобы оно не занимало место непрерывно потому что
+  где ему не нужно редактировать постоянно будет такой же кнопочкой
+  попытаться разместить на одной панели кнопку Play и кнопочку
+  для открытия bpm»
+
+  На mobile 412×900 при sheet closed:
+  - master: 49+108 = 157px fixed-chrome, cm-host = 638px (было)
+  - new: 49 collapsed / 102 expanded (cm-host 683 / 623px)
+  - gain в collapsed: +60px (10% extra vertical space для editor)
+
+  Toggle architecture:
+  - Strip (always visible): Play/Stop + BPM indicator + spacer + toggle button
+  - Body (visible when expanded): preset <select> + (save bar if shown) +
+  transport-panel (cps slider, swing, cps-presets, playhead-track)
+  - data-collapsed атрибут на .app-transport-bar — source of truth для
+  CSS (включая inline index.html un-layered rule)
+  - createEffect в TransportBar мирорит data-collapsed →
+  data-transport-collapsed на .app-body (чтобы CSS @media (max-width:
+  720px) переключал padding-top 48 ↔ 108)
+commitment: |
+  Один коммит + пакет + witness. Один новый компонент TransportBar.tsx,
+  один новый тест-файл TransportBar.test.tsx. CSS-изменения: новые
+  rules в components.css (TransportBar block + mobile @media),
+  обновлены токены в tokens.css, обновлена inline копия в index.html.
+counterexample: |
+  The strongest objection to this decision is captured in the `antithesis` field above: (1) «Оставить два отдельных row, просто скрывать один на mobile
+antithesis: |
+  (1) «Оставить два отдельных row, просто скрывать один на mobile
+  когда collapsed». Возражение: это создаёт два stacked fixed
+  containers (top: 56, top: 100). Когда один hidden, его top
+  не двигается — останется пустое место или overlap. Один
+  контейнер с collapse-body решает оба случая чисто.
+  (2) «Сделать collapse через CSS-only :focus-within / :hover на
+  bar, без JS state». Возражение: hover-to-expand плох для
+  touch (юзер хочет explicitly tap чтобы раскрыть). Focus-
+  within теряет focus когда user тапает мимо bar. JS state
+  с localStorage persistence — единственный UX-acceptable
+  вариант для mobile.
+  (3) «Использовать sibling combinator `.app-transport-bar ~ .app-body`
+  в CSS вместо data-attribute mirroring». Возражение: sibling
+  combinator fragile — если между ними вставить ещё один
+  элемент (например, error banner, toast container) — selector
+  ломается. data-attribute + JS effect — robust pattern,
+  не зависит от DOM-структуры. Цена: одна extra write на
+  каждый toggle (~1ms) — приемлемо.
+  (4) «Скрыть toggle на desktop (зачем collapse если много места)».
+  Возражение: юзер явно попросил «чтобы оно не занимало место
+  непрерывно потому что где ему не нужно редактировать постоянно»
+  — это applies to both mobile и desktop. Desktop editor maximized
+  state полезен (больше space для score). Toggle остаётся видимым
+  и на desktop.
+  (5) «Не persistить в localStorage, считать session-only». Возражение:
+  mobile юзер каждый раз при reload будет видеть expanded state
+  (default mobile = collapsed не сработает если юзер явно
+  выбрал expanded раньше в session). Persistence — expected
+  behavior, юзер не хочет re-toggle каждую session.
+  (6) «CSS-Layers gotcha: inline .app-preset-row в index.html нужно
+  удалить чтобы избежать dead rules». Возражение: inline
+  `<style>` — не @layer, бьёт все @layer rules в bundled CSS.
+  Я обновил inline копию на .app-transport-bar (включая collapse
+  rule) — это consistent с wavecode-mobile-compact / preset-row-
+  and-toast-z / mobile-fixed-h (все они обновляли inline copy
+  синхронно). Удалять inline копию рискованно — если Vite
+  miniфицирует не так, как ожидаем, можно сломать CSS ordering.
+  (7) «Mobile expanded body height 53px не вмещает swing/cps-presets/
+  playhead — регрессия vs original». Возражение: original
+  (master) mobile controls-row уже 59px и показывал только
+  cps slider (swing/cps-presets/playhead height 0) — pre-existing
+  поведение. НЕ регрессия, preserved. Body content = тот же cps
+  slider + preset select (новое).
+  (8) «1px overlap cmHost.top (104) < bar.bottom (105) на mobile
+  collapsed». Возражение: bar = strip 48 + border-top 1 = 49.
+  appBody padding-top 48 = ровно strip. cmHost стартует на
+  padding-top edge. Border-top bar'а лежит на 1px выше cmHost
+  (визуально невидимо — bar background rgba(10,10,14,0.92)
+  почти совпадает с cmHost bg). Buffer 0 intentional — mobile
+  editor получает каждый доступный пиксель.
+  Один коммит + пакет + witness. Один новый компонент TransportBar.tsx,
+  один новый тест-файл TransportBar.test.tsx. CSS-изменения: новые
+  rules в components.css (TransportBar block + mobile @media),
+  обновлены токены в tokens.css, обновлена inline копия в index.html.
+counterexample: |
+  The strongest objection to this decision is captured in the `antithesis` field above: (1) «Оставить два отдельных row, просто скрывать один на mobile
+antithesis: |
+  (1) «Оставить два отдельных row, просто скрывать один на mobile
+  когда collapsed». Возражение: это создаёт два stacked fixed
+  containers (top: 56, top: 100). Когда один hidden, его top
+  не двигается — останется пустое место или overlap. Один
+  контейнер с collapse-body решает оба случая чисто.
+  (2) «Сделать collapse через CSS-only :focus-within / :hover на
+  bar, без JS state». Возражение: hover-to-expand плох для
+  touch (юзер хочет explicitly tap чтобы раскрыть). Focus-
+  within теряет focus когда user тапает мимо bar. JS state
+  с localStorage persistence — единственный UX-acceptable
+  вариант для mobile.
+  (3) «Использовать sibling combinator `.app-transport-bar ~ .app-body`
+  в CSS вместо data-attribute mirroring». Возражение: sibling
+  combinator fragile — если между ними вставить ещё один
+  элемент (например, error banner, toast container) — selector
+  ломается. data-attribute + JS effect — robust pattern,
+  не зависит от DOM-структуры. Цена: одна extra write на
+  каждый toggle (~1ms) — приемлемо.
+  (4) «Скрыть toggle на desktop (зачем collapse если много места)».
+  Возражение: юзер явно попросил «чтобы оно не занимало место
+  непрерывно потому что где ему не нужно редактировать постоянно»
+  — это applies to both mobile и desktop. Desktop editor maximized
+  state полезен (больше space для score). Toggle остаётся видимым
+  и на desktop.
+  (5) «Не persistить в localStorage, считать session-only». Возражение:
+  mobile юзер каждый раз при reload будет видеть expanded state
+  (default mobile = collapsed не сработает если юзер явно
+  выбрал expanded раньше в session). Persistence — expected
+  behavior, юзер не хочет re-toggle каждую session.
+  (6) «CSS-Layers gotcha: inline .app-preset-row в index.html нужно
+  удалить чтобы избежать dead rules». Возражение: inline
+  `<style>` — не @layer, бьёт все @layer rules в bundled CSS.
+  Я обновил inline копию на .app-transport-bar (включая collapse
+  rule) — это consistent с wavecode-mobile-compact / preset-row-
+  and-toast-z / mobile-fixed-h (все они обновляли inline copy
+  синхронно). Удалять inline копию рискованно — если Vite
+  miniфицирует не так, как ожидаем, можно сломать CSS ordering.
+  (7) «Mobile expanded body height 53px не вмещает swing/cps-presets/
+  playhead — регрессия vs original». Возражение: original
+  (master) mobile controls-row уже 59px и показывал только
+  cps slider (swing/cps-presets/playhead height 0) — pre-existing
+  поведение. НЕ регрессия, preserved. Body content = тот же cps
+  slider + preset select (новое).
+  (8) «1px overlap cmHost.top (104) < bar.bottom (105) на mobile
+  collapsed». Возражение: bar = strip 48 + border-top 1 = 49.
+  appBody padding-top 48 = ровно strip. cmHost стартует на
+  padding-top edge. Border-top bar'а лежит на 1px выше cmHost
+  (визуально невидимо — bar background rgba(10,10,14,0.92)
+  почти совпадает с cmHost bg). Buffer 0 intentional — mobile
+  editor получает каждый доступный пиксель.
+axiom_link:
+  - A5
+scope:
+  paths: []
+outcomes:
+  - id: wavecode-mobile-transport-bar-outcome
+    statement: |
+      Объединить `.
+obligations:
+  - id: wavecode-mobile-transport-bar-kernel-validates
+    claim: |
+      The migrated decision file is structurally valid under the math-coding 3.3 schema; `mathc validate` exits 0 for `decisions/<id>.yaml` at HEAD.
+    acceptance:
+      all:
+        - verifier: "mathc validate"
+          result: pass
+  - id: wavecode-mobile-transport-bar-witness-from-v1
+    claim: |
+      The original v1.0 packet applied on the recorded date in its `witness` file; this migration preserves that evidence as an `attestations/<id>-evidence.json` file.
+    acceptance:
+      all:
+        - verifier: "attestation-store-has-subject"
+          result: pass
+assumptions:
+  - id: wavecode-mobile-transport-bar-assumption-1
+    state: proven
+    statement: |
+      "Mobile collapsed bar занимает 49px (strip 48 + border 1)" Evidence: "playwright_browser_evaluate getBoundingClientRect на 412×900
+    owner: human:operator
+  - id: wavecode-mobile-transport-bar-assumption-2
+    state: proven
+    statement: |
+      "Mobile expanded bar занимает 102px (strip 49 + body 53 + 1)" Evidence: "playwright_browser_evaluate после click toggle (storage='true'):
+    owner: human:operator
+  - id: wavecode-mobile-transport-bar-assumption-3
+    state: proven
+    statement: |
+      "appBody padding-top синхронно с bar state" Evidence: "data-transport-collapsed='true' → appBody paddingTop='48px'.
+    owner: human:operator
+  - id: wavecode-mobile-transport-bar-assumption-4
+    state: proven
+    statement: |
+      "Default state на mobile — collapsed (49px), default на Evidence: "Clear localStorage + hard reload: на 412×900 matchMedia=true
+    owner: human:operator
+  - id: wavecode-mobile-transport-bar-assumption-5
+    state: proven
+    statement: |
+      "Storage key wavecode-mobile-transport-expanded-v1: 'true'/ Evidence: "vitest test 'toggle persists to localStorage on every click'
+    owner: human:operator
+  - id: wavecode-mobile-transport-bar-assumption-6
+    state: proven
+    statement: |
+      "TransportPanel inline-flex с flex-wrap:wrap не вмещает Evidence: "playwright evaluate на master (до моих изменений, после
+    owner: human:operator
+  - id: wavecode-mobile-transport-bar-assumption-7
+    state: proven
+    statement: |
+      "Bar z-index 52 (sheet+12) выше sheet z-index 41 — Play Evidence: "playwright evaluate на mobile с AI sheet open: bar
+    owner: human:operator
+  - id: wavecode-mobile-transport-bar-assumption-8
+    state: assumed
+    statement: |
+      "Inline index.html CSS-Layers gotcha — un-layered .app- Evidence: "index.html строка 215-232 (inline `<style>`) имеет
+    owner: human:operator
+  - id: wavecode-mobile-transport-bar-assumption-9
+    state: proven
+    statement: |
+      "Удаление PresetRow.tsx безопасно — единственный Evidence: "grep -rn 'from.*PresetRow' ui/src/ — единственный
+    owner: human:operator
+  - id: wavecode-mobile-transport-bar-assumption-10
+    state: proven
+    statement: |
+      "Toggle button виден на desktop + работает (collapse до 45px)" Evidence: "playwright на 1280×800, click toggle → bar.collapsed='true',
+    owner: human:operator
+  - id: wavecode-mobile-transport-bar-assumption-11
+    state: assumed
+    statement: |
+      "1px overlap cmHost.top (104) vs bar.bottom (105) на mobile Evidence: "Bar height = 48 (strip min-height) + 1 (border-top) = 49.
+    owner: human:operator
+  - id: wavecode-mobile-transport-bar-assumption-12
+    state: proven
+    statement: |
+      "11 новых vitest тестов, 5 pre-existing failures (не мои)" Evidence: "npx vitest run: 5 failed, 735 passed. Failure list: 5
+    owner: human:operator
+risk:
+  declared_triggers:
+    - v1-to-v3-migration-loss
+  owner: human:operator
+relations:
+  addresses:
+    - wavecode-bootstrap-math-coding-3.3@1
+---

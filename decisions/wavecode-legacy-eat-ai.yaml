@@ -1,0 +1,96 @@
+---
+schema: math-coding/3.3
+id: wavecode-legacy-eat-ai
+revision: 1
+state: active
+body_sha: "sha256:09282bf6ebf0e8f72aa9fca7fbce5b0f81eb0076f97b1109ae9811a75030aa5f"
+yaml_sha: "sha256:09282bf6ebf0e8f72aa9fca7fbce5b0f81eb0076f97b1109ae9811a75030aa5f"
+
+intent:|
+  Второй пакет legacy.css eating — **AI chat panel + collapsible
+  panels** (lines 195-322, 324-496). Это ~300 строк legacy.css.
+
+  Секции:
+  - COLLAPSIBLE PANELS (lines 195-322):
+  .app-body, .collapsible, .score-panel, .score-panel-inner,
+  .ai-panel, .status-panel, .panel-header, .collapse-toggle,
+  .caret, .panel-hint
+  - CHAT (lines 324-496):
+  .ai-edit-panel-inner, .ai-messages, .ai-messages-empty,
+  .ai-message[-user|-assistant|-system], .ai-message-meta,
+  .ai-message-body, .ai-footer, .ai-textarea, .ai-controls-row1,
+  .ai-apply-btn, .ai-status, .ai-status-row, .ai-retry-btn,
+  .ai-status-ok, .ai-status-err
+
+  ~30 классов. Все живые (PanelsLayout.tsx, AIEditPanel.tsx,
+  ScorePanel.tsx). Причина отдельного пакета от
+  `wavecode-legacy-eat-transport` — chat panel доминирует на
+  экране при открытии AI-вкладки; визуальная регрессия тут
+  наиболее заметна юзеру.
+commitment: |
+  Один коммит (`refactor(ui): migrate AI + panels to components.css`):
+counterexample: |
+  The strongest objection to this decision is captured in the `antithesis` field above: (1) «ScorePanel / .app-body не AI-specific, не должны быть
+antithesis: |
+  (1) «ScorePanel / .app-body не AI-specific, не должны быть
+  в этом пакете». Возражение: они делят общий COLLAPSIBLE PANELS
+  section с .ai-panel в legacy.css. Распилить на 3 пакета =
+  3 коммита с одинаковой cascade-логикой и 3 review. Один
+  пакет — один ритуал, single source of truth для панельной
+  геометрии.
+  (2) «Migrate ScorePanel отдельно потом, чтобы не смешивать
+  AI-стили с score». Возражение: visual independence не страдает
+  — пакет — mechanical move без рефакторинга. Cascade layers
+  по-прежнему разделяют. Review-чисто.
+  (3) «Что если .app-body в components.css уже определён?».
+  Возражение: проверено `grep -nE "^\.app-body" components.css`
+  — нет, определение только в legacy. Без конфликта.
+  Один коммит (`refactor(ui): migrate AI + panels to components.css`):
+counterexample: |
+  The strongest objection to this decision is captured in the `antithesis` field above: (1) «ScorePanel / .app-body не AI-specific, не должны быть
+antithesis: |
+  (1) «ScorePanel / .app-body не AI-specific, не должны быть
+  в этом пакете». Возражение: они делят общий COLLAPSIBLE PANELS
+  section с .ai-panel в legacy.css. Распилить на 3 пакета =
+  3 коммита с одинаковой cascade-логикой и 3 review. Один
+  пакет — один ритуал, single source of truth для панельной
+  геометрии.
+  (2) «Migrate ScorePanel отдельно потом, чтобы не смешивать
+  AI-стили с score». Возражение: visual independence не страдает
+  — пакет — mechanical move без рефакторинга. Cascade layers
+  по-прежнему разделяют. Review-чисто.
+  (3) «Что если .app-body в components.css уже определён?».
+  Возражение: проверено `grep -nE "^\.app-body" components.css`
+  — нет, определение только в legacy. Без конфликта.
+axiom_link:
+  - A3
+scope:
+  paths: []
+outcomes:
+  - id: wavecode-legacy-eat-ai-outcome
+    statement: |
+      Второй пакет legacy.
+obligations:
+  - id: wavecode-legacy-eat-ai-kernel-validates
+    claim: |
+      The migrated decision file is structurally valid under the math-coding 3.3 schema; `mathc validate` exits 0 for `decisions/<id>.yaml` at HEAD.
+    acceptance:
+      all:
+        - verifier: "mathc validate"
+          result: pass
+  - id: wavecode-legacy-eat-ai-witness-from-v1
+    claim: |
+      The original v1.0 packet applied on the recorded date in its `witness` file; this migration preserves that evidence as an `attestations/<id>-evidence.json` file.
+    acceptance:
+      all:
+        - verifier: "attestation-store-has-subject"
+          result: pass
+assumptions: []
+risk:
+  declared_triggers:
+    - v1-to-v3-migration-loss
+  owner: human:operator
+relations:
+  addresses:
+    - wavecode-bootstrap-math-coding-3.3@1
+---

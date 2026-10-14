@@ -1,0 +1,108 @@
+---
+schema: math-coding/3.3
+id: wavecode-ui-ru-and-new-composition
+revision: 1
+state: active
+body_sha: "sha256:66e2520e81903521dee408dbe460740931550e4469ce40842a6adf98f96fb9bc"
+yaml_sha: "sha256:66e2520e81903521dee408dbe460740931550e4469ce40842a6adf98f96fb9bc"
+
+intent:|
+  Весь видимый текст UI wavecode — на русском (панели, кнопки, хинты, плейсхолдеры,
+  лейблы полей статуса); в шапке есть явная кнопка «Новая композиция», которая
+  сбрасывает score на пустой шаблон-комментарий и очищает историю диалога;
+  в AI-панели история сообщений видна всегда (как в мессенджере), а поле
+  ввода с кнопкой «Применить» приклеено к нижнему краю панели — chat-style.
+commitment: |
+  Один русский язык = плоские строки прямо в JSX (`<h2>Партитура</h2>`), без
+  рантайм-локализации. Никаких новых зависимостей, никакого bundle-bloat,
+  каждый перевод grepp'ается в исходниках — ревью видит, что именно видит
+  пользователь. Кнопка «Новая композиция» = новый `AppEvent::clearMessages`
+  + `replaceScore` с шаблоном-комментарием `// Начни новую композицию
+  здесь\n` (score сбрасывается в IDB через существующий createEffect —
+  никакого нового кода persistence); локальный signal `history` в AIEditPanel
+  тоже сбрасывается (иначе новые user/assistant-пары не попадут в глобальный
+  store). Чат-стиль в AI-панели = flex-layout с фиксированным footer'ом
+  (textarea + кнопка), а контейнер сообщений — `flex: 1; overflow-y: auto`
+  с auto-scroll вниз при новом сообщении. Кнопка «Очистить» убрана —
+  пользователь явно сказал «наверное вообще убрать», и в чат-стиле она
+  лишняя: пользователь может стереть текст в textarea вручную или нажать
+  «Новая композиция» для сброса всего.
+counterexample: |
+  The strongest objection to this decision is captured in the `antithesis` field above: (1) Полная i18n-библиотека (i18next, react-intl) — overkill для одного языка,
+antithesis: |
+  (1) Полная i18n-библиотека (i18next, react-intl) — overkill для одного языка,
+  плюс затягивает стек и bundle; (2) оставить английский в коде, переводить
+  только через CSS `content` — хрупко и не покрывает aria-label; (3) хранить
+  «Новая композиция» как preset в `BUILTIN_PRESETS` — мусорный пресет
+  среди настоящих; (4) чат-стиль только визуально (textarea всё ещё сверху,
+  история ниже) — нет, тогда теряется сам смысл messenger-интуиции;
+  (5) перенести ввод вниз, но оставить кнопку «Очистить» — она конфликтует
+  с новой кнопкой «Новая композиция» и дублирует её частично (оба
+  обнуляют работу), плюс в мессенджерах нет кнопки «очистить поле».
+  Тонкая замена — переименовать «Очистить» в «Отменить ввод» (только ввод,
+  не всю работу) оставить можно, но пользователь явно сказал «наверное
+  убрать», и кнопка «Новая» эту роль закрывает на уровне приложения.
+  Один русский язык = плоские строки прямо в JSX (`<h2>Партитура</h2>`), без
+  рантайм-локализации. Никаких новых зависимостей, никакого bundle-bloat,
+  каждый перевод grepp'ается в исходниках — ревью видит, что именно видит
+  пользователь. Кнопка «Новая композиция» = новый `AppEvent::clearMessages`
+  + `replaceScore` с шаблоном-комментарием `// Начни новую композицию
+  здесь\n` (score сбрасывается в IDB через существующий createEffect —
+  никакого нового кода persistence); локальный signal `history` в AIEditPanel
+  тоже сбрасывается (иначе новые user/assistant-пары не попадут в глобальный
+  store). Чат-стиль в AI-панели = flex-layout с фиксированным footer'ом
+  (textarea + кнопка), а контейнер сообщений — `flex: 1; overflow-y: auto`
+  с auto-scroll вниз при новом сообщении. Кнопка «Очистить» убрана —
+  пользователь явно сказал «наверное вообще убрать», и в чат-стиле она
+  лишняя: пользователь может стереть текст в textarea вручную или нажать
+  «Новая композиция» для сброса всего.
+counterexample: |
+  The strongest objection to this decision is captured in the `antithesis` field above: (1) Полная i18n-библиотека (i18next, react-intl) — overkill для одного языка,
+antithesis: |
+  (1) Полная i18n-библиотека (i18next, react-intl) — overkill для одного языка,
+  плюс затягивает стек и bundle; (2) оставить английский в коде, переводить
+  только через CSS `content` — хрупко и не покрывает aria-label; (3) хранить
+  «Новая композиция» как preset в `BUILTIN_PRESETS` — мусорный пресет
+  среди настоящих; (4) чат-стиль только визуально (textarea всё ещё сверху,
+  история ниже) — нет, тогда теряется сам смысл messenger-интуиции;
+  (5) перенести ввод вниз, но оставить кнопку «Очистить» — она конфликтует
+  с новой кнопкой «Новая композиция» и дублирует её частично (оба
+  обнуляют работу), плюс в мессенджерах нет кнопки «очистить поле».
+  Тонкая замена — переименовать «Очистить» в «Отменить ввод» (только ввод,
+  не всю работу) оставить можно, но пользователь явно сказал «наверное
+  убрать», и кнопка «Новая» эту роль закрывает на уровне приложения.
+axiom_link:
+  - A4
+scope:
+  paths: []
+outcomes:
+  - id: wavecode-ui-ru-and-new-composition-outcome
+    statement: |
+      Весь видимый текст UI wavecode — на русском (панели, кнопки, хинты, плейсхолдеры,
+      лейблы полей статуса); в шапке есть явная кнопка «Новая композиция», которая
+      сбрасывает score на пустой шаблон-комментарий и очищает историю диалога;
+      в AI-панели история сообщений видна всегда (как 
+obligations:
+  - id: wavecode-ui-ru-and-new-composition-kernel-validates
+    claim: |
+      The migrated decision file is structurally valid under the math-coding 3.3 schema; `mathc validate` exits 0 for `decisions/<id>.yaml` at HEAD.
+    acceptance:
+      all:
+        - verifier: "mathc validate"
+          result: pass
+  - id: wavecode-ui-ru-and-new-composition-witness-from-v1
+    claim: |
+      The original v1.0 packet applied on the recorded date in its `witness` file; this migration preserves that evidence as an `attestations/<id>-evidence.json` file.
+    acceptance:
+      all:
+        - verifier: "attestation-store-has-subject"
+          result: pass
+assumptions: []
+risk:
+  declared_triggers:
+    - v1-to-v3-migration-loss
+  owner: human:operator
+relations:
+  addresses:
+    - wavecode-bootstrap-math-coding-3.3@1
+---

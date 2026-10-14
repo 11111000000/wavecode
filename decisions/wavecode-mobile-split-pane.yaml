@@ -1,0 +1,183 @@
+---
+schema: math-coding/3.3
+id: wavecode-mobile-split-pane
+revision: 1
+state: active
+body_sha: "sha256:fcf4f7b3e9bba5d0384577ba6b5e7630bc74ea26bcf58377abb1bb77afcf2afb"
+yaml_sha: "sha256:fcf4f7b3e9bba5d0384577ba6b5e7630bc74ea26bcf58377abb1bb77afcf2afb"
+
+intent:|
+  На mobile (≤720px) BottomSheet (Mixer/AI/Status/Step/Piano) — это
+  `position:fixed` overlay с z-sheet поверх ScorePanel, который при
+  snap='full' закрывает ~90vh экрана, а при snap='half' физически
+  перекрывает нижнюю половину редактора (редактор остаётся
+  подложкой, не сжат). Юзер не может одновременно видеть код и
+  инструмент, не может редактировать score пока открыт Mixer.
+
+  Решение — split-pane на mobile (split-pane vs overlay):
+
+  (1) **In-flow sheet**. BottomSheet на mobile становится flex-child
+  `.app-body` (column flex), а не position:fixed overlay.
+  ScorePanel получает `flex: 1 1 auto; min-height: 200px;
+  max-height: calc(viewport - header - sheet-h - tabbar)`.
+  Sheet получает `flex: 0 0 var(--sheet-h, 50vh); height: var(--sheet-h)`.
+  snap→ height: closed=0, peek=35vh, half=50vh, full=70vh.
+  ScorePanel и Sheet живут одновременно, оба interactive.
+
+  (2) **Drag-handle divider** в верхней части sheet (replace
+  bottom-handle-area). Pointer drag → setSheetHeightPx (clamp
+  240..560px). При drag-вниз до < 240px → snap closed;
+  drag-вверх до > 60vh → snap full. Persisted в localStorage
+  `wavecode-mobile-sheet-h-v1`.
+
+  (3) **Internal sheet tabs** в header — `[Mixer | AI | Status | Step | Piano]`.
+  Переключение между инструментами не закрывает sheet, а меняет
+  контент. setTab() внутри уже single-active, так что тап
+  переключает. Tab "Score" в BottomNav закрывает sheet полностью
+  (Score tab = closeAllSheets).
+
+  (4) **FAB shift**. `wc-fab` (FAB кнопка) на mobile при открытом
+  sheet смещается вверх на `--sheet-h` чтобы не закрывать
+  активный контрол. CSS var transition 240ms.
+
+  (5) **Desktop unchanged**. На desktop-правый wrapper: `.wc-sheet`
+  = right-side drawer 480/720px как сейчас, drag-handle → snap
+  transitions (closed/peek/half/full). split-pane overrides
+  действуют только в `@media (max-width: 720px)`.
+
+  (6) **ScorePanel-collapse affordance**. Когда sheet открыт на
+  'full' (70vh), ScorePanel остаётся с min-height: 200px
+  (~30vh на iPhone 412×900). ScorePanel содержит:
+  `[editor ~210px]` + `[debug/status pills ~30px]` +
+  `[mini-toolbar ~40px]`. Юзер может читать и скроллить
+  редактор даже когда sheet full; для активного редактирования
+  sheet переключают на half или close.
+
+  (7) **Drag-handle visuals**:
+  - 4px-wide pill (cyan, opacity 0.6 → 1 on hover).
+  - Hit-area: 16px-high invisible drag-target.
+  - Cursor: `ns-resize` on hover; `grabbing` during drag.
+  - 4-dot row на pill чтобы визуально отличать от bottom-handle.
+commitment: |
+  Шесть компонентов:
+counterexample: |
+  The strongest objection to this decision is captured in the `antithesis` field above: (1) «In-flow sheet ломает desktop UX».
+antithesis: |
+  (1) «In-flow sheet ломает desktop UX».
+  Возражение: изменения изолированы в `@media (max-width: 720px)`.
+  На desktop (≥1024px) media query не срабатывает; transform-based
+  right-side drawer работает как сейчас. Verify:
+  `matchMedia('(min-width: 1024px)')` selectors в CSS.
+
+  (2) «ScorePanel 200px слишком тесно для редактирования».
+  Возражение: 200px — это min-height для 'full' snap (70vh sheet).
+  По дефолту sheet = 'half' (50vh), ScorePanel = ~50vh. При 412×900
+  viewport ScorePanel = ~400px, sheet = ~430px. Оба удобны для
+  чтения. Для полноэкранного редактирования юзер тапает "Score"
+  в BottomNav → sheet закрывается, ScorePanel full height.
+  Альтернатива 'full' snap существует для тех, кому нужно больше
+  sheet — но это осознанный trade-off.
+
+  (3) «Drag-handle конфликтует с touch scroll».
+  Возражение: drag-handle = `touch-action: none` на handle-area;
+  touch-action остального sheet = normal. iOS Safari чётко
+  разделяет касания по тач-таргетам.
+
+  (4) «Internal tabs дублируют BottomNav».
+  Возражение: BottomNav — primary navigation между "Score vs
+  tools". Internal tabs — secondary navigation между tools (когда
+  sheet открыт). В GarageBand такая двухуровневая навигация
+  стандарт. Когда sheet закрыт — internal tabs не видны, нет
+  визуального шума.
+
+  (5) «FAB перемещается на mobile — может перекрыть sheet».
+  Возражение: FAB смещается ВЫШЕ sheet (между sheet и tabbar).
+  Когда sheet открыт, FAB сидит в зоне между sheet и tabbar —
+  юзер видит и кликает. Когда sheet closed, FAB на своём
+  обычном месте поверх tabbar.
+
+  (6) «localStorage persisted height — может быть неправильный
+  размер для landscape».
+  Возражение: clamped 240..560px в portrait даёт разумные размеры.
+  В landscape (height ~ 400px) clamp автоматически подрежет
+  до 240px (нижний bound). Можно добавить resize listener —
+  но это polish для v2, не блокер.
+  Шесть компонентов:
+counterexample: |
+  The strongest objection to this decision is captured in the `antithesis` field above: (1) «In-flow sheet ломает desktop UX».
+antithesis: |
+  (1) «In-flow sheet ломает desktop UX».
+  Возражение: изменения изолированы в `@media (max-width: 720px)`.
+  На desktop (≥1024px) media query не срабатывает; transform-based
+  right-side drawer работает как сейчас. Verify:
+  `matchMedia('(min-width: 1024px)')` selectors в CSS.
+
+  (2) «ScorePanel 200px слишком тесно для редактирования».
+  Возражение: 200px — это min-height для 'full' snap (70vh sheet).
+  По дефолту sheet = 'half' (50vh), ScorePanel = ~50vh. При 412×900
+  viewport ScorePanel = ~400px, sheet = ~430px. Оба удобны для
+  чтения. Для полноэкранного редактирования юзер тапает "Score"
+  в BottomNav → sheet закрывается, ScorePanel full height.
+  Альтернатива 'full' snap существует для тех, кому нужно больше
+  sheet — но это осознанный trade-off.
+
+  (3) «Drag-handle конфликтует с touch scroll».
+  Возражение: drag-handle = `touch-action: none` на handle-area;
+  touch-action остального sheet = normal. iOS Safari чётко
+  разделяет касания по тач-таргетам.
+
+  (4) «Internal tabs дублируют BottomNav».
+  Возражение: BottomNav — primary navigation между "Score vs
+  tools". Internal tabs — secondary navigation между tools (когда
+  sheet открыт). В GarageBand такая двухуровневая навигация
+  стандарт. Когда sheet закрыт — internal tabs не видны, нет
+  визуального шума.
+
+  (5) «FAB перемещается на mobile — может перекрыть sheet».
+  Возражение: FAB смещается ВЫШЕ sheet (между sheet и tabbar).
+  Когда sheet открыт, FAB сидит в зоне между sheet и tabbar —
+  юзер видит и кликает. Когда sheet closed, FAB на своём
+  обычном месте поверх tabbar.
+
+  (6) «localStorage persisted height — может быть неправильный
+  размер для landscape».
+  Возражение: clamped 240..560px в portrait даёт разумные размеры.
+  В landscape (height ~ 400px) clamp автоматически подрежет
+  до 240px (нижний bound). Можно добавить resize listener —
+  но это polish для v2, не блокер.
+axiom_link:
+  - A3
+scope:
+  paths: []
+outcomes:
+  - id: wavecode-mobile-split-pane-outcome
+    statement: |
+      На mobile (≤720px) BottomSheet (Mixer/AI/Status/Step/Piano) — это
+      `position:fixed` overlay с z-sheet поверх ScorePanel, который при
+      snap='full' закрывает ~90vh экрана, а при snap='half' физически
+      перекрывает нижнюю половину редактора (редактор остаётся
+      подложкой, не сжат).
+obligations:
+  - id: wavecode-mobile-split-pane-kernel-validates
+    claim: |
+      The migrated decision file is structurally valid under the math-coding 3.3 schema; `mathc validate` exits 0 for `decisions/<id>.yaml` at HEAD.
+    acceptance:
+      all:
+        - verifier: "mathc validate"
+          result: pass
+  - id: wavecode-mobile-split-pane-witness-from-v1
+    claim: |
+      The original v1.0 packet applied on the recorded date in its `witness` file; this migration preserves that evidence as an `attestations/<id>-evidence.json` file.
+    acceptance:
+      all:
+        - verifier: "attestation-store-has-subject"
+          result: pass
+assumptions: []
+risk:
+  declared_triggers:
+    - v1-to-v3-migration-loss
+  owner: human:operator
+relations:
+  addresses:
+    - wavecode-bootstrap-math-coding-3.3@1
+---

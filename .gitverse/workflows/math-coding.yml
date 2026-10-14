@@ -1,0 +1,106 @@
+# GitVerse Actions — math-coding 3.3 gate (warn-only transition step).
+#
+# Триггеры:
+#   - push в master           → проверка live tree (warn)
+#   - pull_request            → проверка PR-diff (warn)
+#   - workflow_dispatch       → ручной запуск
+#
+# Что делает:
+#   1. Скачивает `mathc` из edge release math-coding (kernel 3.3).
+#   2. `mathc validate decisions/*.yaml` — структурная валидность.
+#      Если хоть одна decision имеет MC-* reject, step fails.
+#   3. `mathc self-check` — kernel gate verdict (pass / unknown / fail).
+#      В переходный период step выставлен в `continue-on-error: true`,
+#      потому что obligations на свеже-мигрированных решениях не имеют
+#      свежих attestations (legacy пакеты v1.0 → unknown). Promotion
+#      в fail-режим — отдельное решение (см. AGENTS.md).
+#   4. Артефакт: self-check-verdict.json (для отладки).
+#
+# Promotion из warn в fail:
+#   Требует решения decisions/promote-math-coding-gate-to-fail.yaml со
+#   свидетельством того, что все obligations в live tree имеют
+#   `pass`-attestation. До тех пор этот workflow — observability,
+#   не enforcement.
+
+name: math-coding
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: wavecode-math-coding-gate
+  cancel-in-progress: true
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install mathc
+        env:
+          MC_VERSION: "edge"
+        run: |
+          set -eu
+          # math-coding install.sh verifies SHA-256 of the downloaded
+          # binary against SHA256SUMS on the same release.
+          curl -fsSL \
+            "https://github.com/11111000000/math-coding/releases/download/${MC_VERSION}/install.sh" \
+            | sh -s -- --version="${MC_VERSION}"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          mathc version
+
+      - name: Validate every decision file
+        run: |
+          set -eu
+          pass=0
+          fail=0
+          for f in decisions/*.yaml; do
+            [ "$f" = "decisions/decision.yaml" ] && continue
+            if mathc validate "$f" --format=json 2>&1 | grep -q '"verdict":"accept"'; then
+              pass=$((pass + 1))
+            else
+              echo "REJECT: $f"
+              mathc validate "$f" --format=text 2>&1
+              fail=$((fail + 1))
+            fi
+          done
+          echo "validated $((pass + fail)) decision files: $pass pass, $fail fail"
+          if [ "$fail" -gt 0 ]; then
+            echo "ERROR: $fail decisions rejected by mathc validate"
+            exit 1
+          fi
+
+      - name: Self-check (warn-only during transition)
+        id: self-check
+        continue-on-error: true
+        run: |
+          set -eu
+          mkdir -p artifacts
+          mathc self-check > artifacts/self-check-verdict.json 2>&1 || true
+          # Extract top-level verdict for the workflow log.
+          verdict=$(python3 -c "
+import json
+with open('artifacts/self-check-verdict.json') as f:
+    d = json.load(f)
+print(d.get('verdict', 'unknown'))
+" 2>/dev/null || echo unknown)
+          echo "self-check verdict: $verdict"
+          if [ "$verdict" = "fail" ]; then
+            echo "::warning::mathc self-check returned verdict=fail (transition: not blocking yet)"
+          elif [ "$verdict" = "unknown" ]; then
+            echo "::notice::mathc self-check returned verdict=unknown (expected during transition; no attestations yet for migrated v1.0 obligations)"
+          fi
+
+      - name: Upload verdict artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: math-coding-verdict
+          path: artifacts/self-check-verdict.json
+          retention-days: 30

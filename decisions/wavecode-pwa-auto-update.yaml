@@ -1,0 +1,121 @@
+---
+schema: math-coding/3.3
+id: wavecode-pwa-auto-update
+revision: 1
+state: active
+body_sha: "sha256:e8ddabb8d128ead91e4d4b5652cda8c5d74d6ce3043053437d5cc4426de700bb"
+yaml_sha: "sha256:e8ddabb8d128ead91e4d4b5652cda8c5d74d6ce3043053437d5cc4426de700bb"
+
+intent:|
+  После deploy пользователи продолжали работать на старом
+  JS-бандле, пока не сделают hard reload (Ctrl+Shift+R) вручную.
+  Симптом — 2026-10-13: LLM-фикс с правильным `sk-litellm-` префиксом
+  был задеплоен, но в браузере юзера всё ещё крутился старый chunk
+  с неверным ключом → 401 "Malformed API Key". После `bin/deploy.sh`
+  Service Worker обновлялся (`skipWaiting: true` + `clientsClaim: true`
+  ставились vite-plugin-pwa автоматически, см. `sw.js` текущего
+  деплоя), но **страница не перезагружалась** — потому что
+  inject'нутый `dist/registerSW.js` был наивной заглушкой:
+
+  if('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+  navigator.serviceWorker.register('/sw.js', { scope: '/' })
+  })
+  }
+
+  Здесь нет `Workbox` import, нет `addEventListener('activated')`,
+  нет `location.reload()`. Регистрация есть, обновления есть, но
+  auto-reload отсутствует.
+
+  Решение: `useRegisterSW` из `virtual:pwa-register/solid` в
+  `ui/src/main.tsx` — обёртка вокруг Workbox с auto-reload
+  на `activated` event. Toasts через `consoleStore.pushToast` для
+  `onNeedRefresh` / `onOfflineReady`.
+commitment: |
+  Шесть точечных правок:
+counterexample: |
+  The strongest objection to this decision is captured in the `antithesis` field above: (1) «Можно просто добавить `workbox.skipWaiting: true,
+antithesis: |
+  (1) «Можно просто добавить `workbox.skipWaiting: true,
+  clientsClaim: true` явно — этого хватит». Возражение: эти
+  флаги уже ставились `vite-plugin-pwa` автоматически при
+  `registerType === "autoUpdate"` (см. node_modules
+  `vite-plugin-pwa/dist/index.js:1003-1006`). SW обновлялся,
+  но **страница не перезагружалась** — нет кода который бы
+  это делал. Без `useRegisterSW`/`Workbox` в `registerSW.js`
+  auto-reload невозможен.
+  (2) «Hard reload хватает, не нужно auto». Возражение:
+  юзер не знает когда был deploy. Юзер не помнит про hard reload.
+  Юзер звонит и спрашивает "почему опять ошибка?". Auto-reload —
+  единственный способ гарантировать что юзер видит свежее.
+  (3) «Use `injectRegister: 'inline'` и напиши свой auto-reload
+  скрипт». Возражение: Workbox уже написан, проверен
+  сообществом, edge cases (Safari quirks, dev-mode handoff)
+  учтены. Свой велосипед — заведомо хуже.
+  (4) «Show a toast "Update available — click to reload"».
+  Возражение: `registerType: 'autoUpdate'` означает
+  бесшовное обновление без UI. Toasting создаёт
+  modal dialog UX, который противоречит выбранной модели.
+  Можно добавить toast *перед* reload (мой вариант) —
+  короткий info "Новая версия загружается…" — но reload
+  не должен требовать click.
+  Шесть точечных правок:
+counterexample: |
+  The strongest objection to this decision is captured in the `antithesis` field above: (1) «Можно просто добавить `workbox.skipWaiting: true,
+antithesis: |
+  (1) «Можно просто добавить `workbox.skipWaiting: true,
+  clientsClaim: true` явно — этого хватит». Возражение: эти
+  флаги уже ставились `vite-plugin-pwa` автоматически при
+  `registerType === "autoUpdate"` (см. node_modules
+  `vite-plugin-pwa/dist/index.js:1003-1006`). SW обновлялся,
+  но **страница не перезагружалась** — нет кода который бы
+  это делал. Без `useRegisterSW`/`Workbox` в `registerSW.js`
+  auto-reload невозможен.
+  (2) «Hard reload хватает, не нужно auto». Возражение:
+  юзер не знает когда был deploy. Юзер не помнит про hard reload.
+  Юзер звонит и спрашивает "почему опять ошибка?". Auto-reload —
+  единственный способ гарантировать что юзер видит свежее.
+  (3) «Use `injectRegister: 'inline'` и напиши свой auto-reload
+  скрипт». Возражение: Workbox уже написан, проверен
+  сообществом, edge cases (Safari quirks, dev-mode handoff)
+  учтены. Свой велосипед — заведомо хуже.
+  (4) «Show a toast "Update available — click to reload"».
+  Возражение: `registerType: 'autoUpdate'` означает
+  бесшовное обновление без UI. Toasting создаёт
+  modal dialog UX, который противоречит выбранной модели.
+  Можно добавить toast *перед* reload (мой вариант) —
+  короткий info "Новая версия загружается…" — но reload
+  не должен требовать click.
+axiom_link:
+  - A3
+scope:
+  paths: []
+outcomes:
+  - id: wavecode-pwa-auto-update-outcome
+    statement: |
+      После deploy пользователи продолжали работать на старом
+      JS-бандле, пока не сделают hard reload (Ctrl+Shift+R) вручную.
+obligations:
+  - id: wavecode-pwa-auto-update-kernel-validates
+    claim: |
+      The migrated decision file is structurally valid under the math-coding 3.3 schema; `mathc validate` exits 0 for `decisions/<id>.yaml` at HEAD.
+    acceptance:
+      all:
+        - verifier: "mathc validate"
+          result: pass
+  - id: wavecode-pwa-auto-update-witness-from-v1
+    claim: |
+      The original v1.0 packet applied on the recorded date in its `witness` file; this migration preserves that evidence as an `attestations/<id>-evidence.json` file.
+    acceptance:
+      all:
+        - verifier: "attestation-store-has-subject"
+          result: pass
+assumptions: []
+risk:
+  declared_triggers:
+    - v1-to-v3-migration-loss
+  owner: human:operator
+relations:
+  addresses:
+    - wavecode-bootstrap-math-coding-3.3@1
+---

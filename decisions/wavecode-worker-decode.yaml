@@ -1,0 +1,218 @@
+---
+schema: math-coding/3.3
+id: wavecode-worker-decode
+revision: 1
+state: active
+body_sha: "sha256:930feae26918ab9bb6e60d4d17b0acffb5dcd8a276cb2317382fbb0319b1a9c9"
+yaml_sha: "sha256:930feae26918ab9bb6e60d4d17b0acffb5dcd8a276cb2317382fbb0319b1a9c9"
+
+intent:|
+  Phase-3 root cause for the audio race that Phase 1 (withConcurrency)
+  and Phase 2 (SW-cache pre-check) only partially addressed: every
+  preload currently does `fetch().arrayBuffer().decodeAudioData()`
+  on the MAIN THREAD. For ~36 MP3s across three banks, that's
+  ~500ms of main-thread blocking during app boot — plus
+  parallel-decode serialization the browser does internally to
+  avoid `EncodingError`. The first haps of every preset still
+  race the audio scheduler (Phase-1 packet:
+
+  `superdough/dist/index.mjs:989 — if (u.currentTime > e) { return; }`,
+  drops the hap).
+
+  Resolution: a dedicated Web Worker holds the decoder (an
+  `OfflineAudioContext(1, 1, sr)`, allowed in Workers). Main
+  thread stays free; first haps now reach the scheduler before
+  the user clicks anything.
+
+  Phase 1 of 2 (this commit):
+
+  - `infrastructure/audio/decodeWorker.ts` (new, 214 lines):
+  Worker source. Exports both the Worker entry-point binding
+  (for Vite's `?worker` chunk) AND a pure `handleDecode(req,
+  deps)` function for unit testing without a real Worker
+  thread (Vitest + JSDOM cannot run Worker bodies).
+  - `SampleLoader.preloadAllBuffers` no longer calls
+  `superdough.loadBuffer` on the main thread. Instead it
+  dispatches `{type: 'decode', id, url, sampleRate}` to the
+  Worker and awaits `{type: 'decode:ok', id, buffer: ArrayBuffer,
+  sampleRate, numberOfChannels, duration}` (or `decode:err`).
+  The Worker holds ONE `OfflineAudioContext` across all
+  requests; if the sampleRate changes (different live ctx),
+  a fresh ctx is allocated.
+  - The decoded `AudioBuffer` is reconstructed on the main
+  thread (`ac.createBuffer` + `copyToChannel`, sub-ms for any
+  we have) and stashed in a module-level `warmCache` keyed by
+  URL. `warmCache` is NOT consumed by any production code path
+  in this commit — it exists so Phase 2 (wrapping
+  `superdough.loadBuffer`) can short-circuit the runtime race
+  without re-fetching.
+
+  Phase 2 (separate commit, owned by Subagent in this phase's
+  follow-up slot):
+
+  - Wrap `superdough.loadBuffer` so the runtime path consults
+  `warmCache` first. Currently the runtime path re-fetches +
+  re-decodes independently of the preload. Wrapping removes
+  the redundant fetch + decode, closing the first-hap race
+  against the scheduler.
+
+  Trade-offs made explicit:
+
+  - Runtime decode is unchanged — superdough's `tt[url]` is
+  private, not reachable from outside. Phase 1 frees the main
+  thread during PRELOAD only. The first haps after Play still
+  race the scheduler until Phase 2 lands.
+  - Sample 2-bisected at module level. Singleton Worker. Inflight
+  request id correlation via a single `Map<id, {resolve, reject}>`.
+  - AudioBuffer reconstruction cost: channels × samples (Float32
+  copy on each `copyToChannel`). For 1ch × ~20k samples
+  (200ms @ 44.1kHz), ~80 µs — measurable but sub-frame.
+  - `safeReply` swallows any throw from `postMessage` (mirrors
+  `superdough.mjs:984`'s "Worker can't crash" invariant).
+
+  Why a module-state ctx cache (passed into handleDecode as a
+  `CtxCache` parameter rather than module-level `let`):
+
+  - Testability: each `handleDecode` test gets a fresh
+  `CtxCache`, isolating the Worker-side state across tests.
+  - Future-proofing: a single Worker now keeps ONE ctx forever,
+  so future per-sampleRate migrations just mutate the same
+  cache. If/when we fan out to multiple workers (one per
+  core), `CtxCache` would become one-per-worker — same API.
+commitment: |
+  Worker entry-point + module-level plumbing in SampleLoader.
+counterexample: |
+  The strongest objection to this decision is captured in the `antithesis` field above: (1) «Skip the Worker; keep `loadBuffer` but make it async-friendly
+antithesis: |
+  (1) «Skip the Worker; keep `loadBuffer` but make it async-friendly
+  so the main thread yields more often». Возражение: yield/`await`
+  doesn't move decode OFF the main thread — it just interleaves
+  decode with UI work. The decode itself is a synchronous CPU
+  operation inside `decodeAudioData`; the call occupies the main
+  thread for ~80-160ms per file regardless of yielding. Worker
+  is the only place where `decodeAudioData` runs in a separate
+  thread.
+
+  (2) «Just `await Promise.resolve()` between decode calls on the
+  main thread». Same as (1) — microtask yields don't move CPU
+  work off-thread. The browser's audio-thread + main-thread
+  scheduling still starves the UI under sustained decode.
+
+  (3) «Move audio playback to an AudioWorkletNode so decoding
+  happens there». Возражение: AudioWorklet has its own thread
+  but can't decode — `decodeAudioData` is `AudioContext`
+  surface, not WorkletNode surface. The Worklet would need
+  to receive raw PCM (post-decode) which means the decode
+  still has to happen somewhere, and the cleanest somewhere
+  is a Worker. AudioWorklet is the right answer for
+  RENDERING, not decoding.
+
+  (4) «Skip the Worker, ship a blob URL of pre-decoded PCM via
+  a server-side build step». Возражение: requires a server
+  (wavecode is a pure-frontend SPA per AGENTS.md), defeats
+  the lazy-load model (every sample URL must be pre-decoded
+  on the server), and bloats the SPA bundle by ~30MB.
+
+  (5) «Use only one Worker per app session regardless of which
+  bank is decoding». Rejected — see (6) — we ALREADY do this
+  (singleton Worker). But the antithesis of (5) was: «Multiple
+  Workers, one per bank, to parallelize the OfflineAudioContext
+  decode across cores». Rejected: decoding is single-context
+  stateful work; parallel contexts don't help on Chromium
+  (~4× parallel decodes is the empirical ceiling, see
+  `wavecode-preset-decode-race` packet). One Worker suffices.
+
+  (6) «Make `warmCache` exported and consumed by a separate
+  superdough wrapper». Deferred to Phase 2 (out of scope for
+  this commit per Subagent's spec). Phase 1 ships a populated
+  but unused `warmCache` so Phase 2 has data to consume
+  without re-decoding.
+
+  (7) «Use `OffscreenCanvas` to decode via `<video>` element».
+  Rejected: `decodeAudioData` exists precisely for this —
+  no need to wrap a video decoder for audio files.
+  Worker entry-point + module-level plumbing in SampleLoader.
+counterexample: |
+  The strongest objection to this decision is captured in the `antithesis` field above: (1) «Skip the Worker; keep `loadBuffer` but make it async-friendly
+antithesis: |
+  (1) «Skip the Worker; keep `loadBuffer` but make it async-friendly
+  so the main thread yields more often». Возражение: yield/`await`
+  doesn't move decode OFF the main thread — it just interleaves
+  decode with UI work. The decode itself is a synchronous CPU
+  operation inside `decodeAudioData`; the call occupies the main
+  thread for ~80-160ms per file regardless of yielding. Worker
+  is the only place where `decodeAudioData` runs in a separate
+  thread.
+
+  (2) «Just `await Promise.resolve()` between decode calls on the
+  main thread». Same as (1) — microtask yields don't move CPU
+  work off-thread. The browser's audio-thread + main-thread
+  scheduling still starves the UI under sustained decode.
+
+  (3) «Move audio playback to an AudioWorkletNode so decoding
+  happens there». Возражение: AudioWorklet has its own thread
+  but can't decode — `decodeAudioData` is `AudioContext`
+  surface, not WorkletNode surface. The Worklet would need
+  to receive raw PCM (post-decode) which means the decode
+  still has to happen somewhere, and the cleanest somewhere
+  is a Worker. AudioWorklet is the right answer for
+  RENDERING, not decoding.
+
+  (4) «Skip the Worker, ship a blob URL of pre-decoded PCM via
+  a server-side build step». Возражение: requires a server
+  (wavecode is a pure-frontend SPA per AGENTS.md), defeats
+  the lazy-load model (every sample URL must be pre-decoded
+  on the server), and bloats the SPA bundle by ~30MB.
+
+  (5) «Use only one Worker per app session regardless of which
+  bank is decoding». Rejected — see (6) — we ALREADY do this
+  (singleton Worker). But the antithesis of (5) was: «Multiple
+  Workers, one per bank, to parallelize the OfflineAudioContext
+  decode across cores». Rejected: decoding is single-context
+  stateful work; parallel contexts don't help on Chromium
+  (~4× parallel decodes is the empirical ceiling, see
+  `wavecode-preset-decode-race` packet). One Worker suffices.
+
+  (6) «Make `warmCache` exported and consumed by a separate
+  superdough wrapper». Deferred to Phase 2 (out of scope for
+  this commit per Subagent's spec). Phase 1 ships a populated
+  but unused `warmCache` so Phase 2 has data to consume
+  without re-decoding.
+
+  (7) «Use `OffscreenCanvas` to decode via `<video>` element».
+  Rejected: `decodeAudioData` exists precisely for this —
+  no need to wrap a video decoder for audio files.
+axiom_link:
+  - A1
+scope:
+  paths: []
+outcomes:
+  - id: wavecode-worker-decode-outcome
+    statement: |
+      Phase-3 root cause for the audio race that Phase 1 (withConcurrency)
+      and Phase 2 (SW-cache pre-check) only partially addressed: every
+      preload currently does `fetch().
+obligations:
+  - id: wavecode-worker-decode-kernel-validates
+    claim: |
+      The migrated decision file is structurally valid under the math-coding 3.3 schema; `mathc validate` exits 0 for `decisions/<id>.yaml` at HEAD.
+    acceptance:
+      all:
+        - verifier: "mathc validate"
+          result: pass
+  - id: wavecode-worker-decode-witness-from-v1
+    claim: |
+      The original v1.0 packet applied on the recorded date in its `witness` file; this migration preserves that evidence as an `attestations/<id>-evidence.json` file.
+    acceptance:
+      all:
+        - verifier: "attestation-store-has-subject"
+          result: pass
+assumptions: []
+risk:
+  declared_triggers:
+    - v1-to-v3-migration-loss
+  owner: human:operator
+relations:
+  addresses:
+    - wavecode-bootstrap-math-coding-3.3@1
+---
