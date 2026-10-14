@@ -231,6 +231,32 @@ describe('pianoRecStore — commitSnippet (wavecode-piano-modes-and-gain)', () =
       expect(out).toContain(`.s("${inst}")`);
     }
   });
+
+  it('wavecode-piano-sample-picker: emits s("<sample>") for sample literals', async () => {
+    const s = await importStore();
+    for (const sample of ['piano', 'casio', 'guitar', 'synth'] as const) {
+      const out = s.commitSnippet(
+        [{ midi: 60, startMs: 0, endMs: 100 }],
+        sample,
+      );
+      expect(out).toBe(
+        `note("c4").s("${sample}").attack(0.005).decay(0.4).sustain(0.1).gain(0.3)`,
+      );
+    }
+  });
+
+  it('wavecode-piano-sample-picker: commitSnippet → applyToScore writes sample name in score', async () => {
+    const s = await importStore();
+    s.setInstrument('piano');
+    dispatch({ type: 'replaceScore', text: '' });
+    s.appendNote(60, 0, 100);
+    s.appendNote(64, 100, 200);
+    s.applyToScore();
+    const after = appStore.score;
+    expect(after).toContain('.s("piano")');
+    // No stack wrap on empty score — just two newlines.
+    expect(after.split('\n').filter((l) => l.includes('s("piano")'))).toHaveLength(2);
+  });
 });
 
 describe('pianoRecStore — stackAppend (wavecode-piano-modes-and-gain)', () => {

@@ -81,7 +81,32 @@ export type PianoToolbarProps = {
   midiSource?: string | undefined;
 };
 
-const INSTRUMENTS: ReadonlyArray<PianoInstrument> = ['triangle', 'sine', 'sawtooth', 'square'];
+const INSTRUMENTS: ReadonlyArray<PianoInstrument> = [
+  'piano', 'casio', 'guitar', 'synth',
+  'triangle', 'sine', 'sawtooth', 'square',
+];
+
+const INSTRUMENT_LABEL: Record<PianoInstrument, string> = {
+  piano:    'Piano',
+  casio:    'Casio',
+  guitar:   'Guitar',
+  synth:    'Synth',
+  triangle: '△',
+  sine:     '∿',
+  sawtooth: '⊿',
+  square:   '⊓',
+};
+
+const INSTRUMENT_TITLE: Record<PianoInstrument, string> = {
+  piano:    'Piano (Strudel sample — REC пишет s("piano"))',
+  casio:    'Casio (Strudel sample — REC пишет s("casio"))',
+  guitar:   'Guitar (Strudel sample — REC пишет s("guitar"))',
+  synth:    'Synth (Strudel sample — REC пишет s("synth"))',
+  triangle: 'Triangle oscillator (REC пишет s("triangle"))',
+  sine:     'Sine oscillator (REC пишет s("sine"))',
+  sawtooth: 'Sawtooth oscillator (REC пишет s("sawtooth"))',
+  square:   'Square oscillator (REC пишет s("square"))',
+};
 
 const SLOTS: ReadonlyArray<{
   readonly id: PianoSlot;
@@ -109,15 +134,7 @@ const SLOTS: ReadonlyArray<{
   },
 ];
 
-const instrumentGlyph = (inst: PianoInstrument): string => {
-  switch (inst) {
-    case 'triangle': return '△';
-    case 'sine': return '∿';
-    case 'sawtooth': return '⊿';
-    case 'square': return '⊓';
-    default: return inst;
-  }
-};
+const instrumentGlyph = (inst: PianoInstrument): string => INSTRUMENT_LABEL[inst];
 
 /** Duration of the "✓ Применено" pill flash after a successful apply. */
 const APPLY_FLASH_MS = 1500;
@@ -260,16 +277,17 @@ export const PianoToolbar = (props: PianoToolbarProps): JSX.Element => {
           </span>
         </Show>
       </Show>
-      <div class="piano-instrument-selector" role="group" aria-label="Инструмент">
+      <div class="piano-instrument-selector" role="group" aria-label="Инструмент пианино">
         <For each={INSTRUMENTS}>
           {(inst) => (
             <button
               type="button"
               class="piano-inst-btn"
               data-active={instrument() === inst ? 'true' : 'false'}
+              data-instrument={inst}
               onClick={() => setInstrument(inst)}
-              title={inst}
-              aria-label={`Инструмент: ${inst}`}
+              title={INSTRUMENT_TITLE[inst]}
+              aria-label={`Инструмент: ${INSTRUMENT_LABEL[inst]}`}
             >
               {instrumentGlyph(inst)}
             </button>
