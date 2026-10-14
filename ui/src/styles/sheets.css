@@ -359,22 +359,14 @@
     border-color: var(--cyan);
   }
 
-   /* ScorePanel: flex child that takes the remainder of .app-body
-    * above the sheet. min-height 200px so the editor stays readable
-    * even when the sheet is full (65vh after wavecode-mobile-compact).
-    *
-    * wavecode-mobile-compact: max-height formula uses 100dvh напрямую
-    * (не зависит от .app-body padding-top:76px), но поскольку flex
-    * distribution внутри .app-body уже даёт score-panel столько,
-    * сколько осталось, max-height фактически не ограничивает.
-    * Оставлен как safety-ceiling. */
+   /* ScorePanel: flex child that takes the remainder of .app-body.
+    * min-height 200px so the editor stays readable even when the
+    * sheet is full (65vh). max-height removed (was limiting growth
+    * to ~50vh-104px when sheet is closed) — flex:1 distributes
+    * correctly without an artificial ceiling. */
   .score-panel {
     flex: 1 1 auto;
     min-height: 200px;
-    max-height: calc(
-      100dvh - var(--header-h, 48px) - var(--tabbar-h, 56px)
-      - var(--safe-bottom, 0px) - var(--sheet-h, 50vh)
-    );
     overflow: hidden;
   }
   .score-panel-inner { min-height: 0; }
