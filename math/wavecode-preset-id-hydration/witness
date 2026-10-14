@@ -1,7 +1,8 @@
 applied_at: 2026-10-14
 branch: fix/preset-id-hydration
 commits:
-  - 9061205 fix(ui): persist selected preset across reloads
+  - 2b63296 fix(ui): persist selected preset across reloads
+  - 0d5b814 docs(math): witness for wavecode-preset-id-hydration — applied
 supersedes: null
 notes: |
   Пресет-селектор в TransportBar после reload'а всегда показывал
