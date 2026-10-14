@@ -276,6 +276,20 @@ export const TabPianoIcon = (p: Props): JSX.Element => (
   </svg>
 );
 
+/** Visualize — bar-graph + sinewave combo, the universal "audio
+ *  spectrum" pictogram. Five vertical bars of varying heights with a
+ *  flowing line overlay, sized to the tab-bar (18px). */
+export const TabVisualizeIcon = (p: Props): JSX.Element => (
+  <svg {...base(p.size ?? 18)} class={`wc-icon ${p.class ?? ''}`}>
+    <line x1="2" y1="12" x2="14" y2="12" />
+    <rect x="2" y="9" width="1.6" height="3" fill="currentColor" stroke="none" />
+    <rect x="4.6" y="6" width="1.6" height="6" fill="currentColor" stroke="none" />
+    <rect x="7.2" y="3" width="1.6" height="9" fill="currentColor" stroke="none" />
+    <rect x="9.8" y="7" width="1.6" height="5" fill="currentColor" stroke="none" />
+    <rect x="12.4" y="5" width="1.6" height="7" fill="currentColor" stroke="none" />
+  </svg>
+);
+
 export const DragHandleIcon = (p: Props): JSX.Element => (
   <svg {...base(p.size ?? 24)} class={`wc-icon ${p.class ?? ''}`}>
     <line x1="8" y1="5" x2="8" y2="5.01" />

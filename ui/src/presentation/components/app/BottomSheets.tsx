@@ -5,6 +5,7 @@ import { StepGrid } from '~/presentation/components/StepGrid';
 import { PianoKeyboard } from '~/presentation/components/PianoKeyboard';
 import { HelloPanel } from '~/presentation/panels/HelloPanel';
 import { AIEditPanel } from '~/presentation/panels/AIEditPanel';
+import { VisualizerPanel } from '~/presentation/panels/VisualizerPanel';
 
 export type BottomSheetsProps = Record<string, never>;
 
@@ -50,6 +51,18 @@ export function BottomSheets(_: BottomSheetsProps): JSX.Element {
         <div class="step-sheet-body">
           <StepGrid />
         </div>
+      </BottomSheet>
+
+      {/* wavecode-visualizer-tab: full-snap by default (see uiState.setTab)
+          so the spectrum canvas doesn't get squashed to 50px on small
+          phones. BottomSheet still respects the same drag-to-resize
+          affordances as the other sheets. */}
+      <BottomSheet
+        kind="visualize"
+        title="Визуализация"
+        subtitle="карта цикла + эквалайзер"
+      >
+        <VisualizerPanel />
       </BottomSheet>
 
       <Show when={!isDesktopViewport()}>
