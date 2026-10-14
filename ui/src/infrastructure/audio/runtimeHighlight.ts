@@ -36,24 +36,40 @@ export type CharRange = readonly [from: number, to: number];
 export type LayerRange = readonly [from: number, to: number];
 
 /**
- * Per-cycle highlight. `color` is a palette index (0..PALETTE_SIZE-1).
- * `beat` distinguishes the first half of a cycle (`down`, brighter,
- * with glow) from the second half (`off`, dimmer, no glow). The actual
- * color and intensity are owned by CSS
- * (`.cm-mini-active c${color} ${beat}`).
+ * Visual state of a currently-sounding hap:
+ * - `on`        — the hap has just started (first ~15% of its duration).
+ *                Bright + outer glow. This is the "attack" of the
+ *                visual highlight, telling the eye "a new sound just
+ *                began here".
+ * - `sustain`   — the hap is mid-flight (rest of its duration). Dim
+ *                with just an inset border, no glow. Tells the eye
+ *                "this sound is still playing".
  *
- * 4 colors × 2 beats = 8 distinct visual lanes, enough to read a
- * typical `<a b c d>` stack at a glance: every step pulses through
- * one of 4 colors on a bright downbeat, then a slightly dimmer
- * offbeat — the eye immediately tracks which parallel part is in
- * motion.
+ * Haps that have finished (nowCycle ≥ end) are dropped, so the mark
+ * disappears at the same moment the sound ends. The user sees:
+ *   1) bright flash on onset
+ *   2) dim mark for the rest of the duration
+ *   3) no mark
  */
-export type Beat = 'down' | 'off';
+export type HapState = 'on' | 'sustain';
+
+/**
+ * Per-cycle highlight. `color` is a palette index (0..PALETTE_SIZE-1).
+ * `state` distinguishes the attack of a sound from its sustain. The
+ * actual color and intensity are owned by CSS
+ * (`.cm-mini-active c${color} ${state}`).
+ *
+ * 4 colors × 2 states (on/sustain) = 8 visual lanes. Every currently-
+ * sounding token in the source is highlighted; the eye immediately
+ * tracks which parallel part of the pattern is sounding, and the
+ * bright→dim envelope reads like an ADSR (attack visible as flash,
+ * sustain as steady glow, release as the mark disappears).
+ */
 export type ColoredRange = {
   readonly from: number;
   readonly to: number;
   readonly color: number;
-  readonly beat: Beat;
+  readonly state: HapState;
 };
 
 /**
@@ -205,24 +221,24 @@ type HapLike = {
 };
 
 /**
- * Map a cycle position to a `Beat` discriminator. The first half of
- * a cycle (`phase` in [0, 0.5)) is the downbeat — bright with outer
- * glow. The second half is the offbeat — dimmer, no glow. The visual
- * contrast between the two is what gives the eye a sense of
- * "where in the cycle we are".
- *
- * The discriminator is computed from the *current* cycle position,
- * not from each hap's individual `begin` — all currently-sounding
- * haps share the same down/off phase of the global clock, so they
- * all pulse together within a layer.
+ * Compute the `state` (attack / sustain) of a hap based on its position
+ * within its own arc. The first 15% of a hap's duration is the
+ * `on` (attack) state — bright with outer glow; the rest is
+ * `sustain` — dim, no glow. This gives every currently-sounding
+ * note a flash of bright light on onset, then a steady-but-quieter
+ * presence for the rest of the sound. Haps with very short durations
+ * (< 1/30 s) stay in `on` the whole time, which is the right
+ * intuition for clicks and ticks.
  */
-const beatForCycle = (nowCycle: number): Beat => {
-  if (!Number.isFinite(nowCycle)) return 'down';
-  const phase = nowCycle - Math.floor(nowCycle); // 0..1, robust to negative
-  // Inclusive on the down side: phase=0.5 is the peak of the downbeat.
-  // Splitting at 0.5 (half-open) gives exactly half the cycle bright
-  // and half dim — visually even on 4-on-the-floor patterns.
-  return phase < 0.5 ? 'down' : 'off';
+const stateForHap = (
+  nowCycle: number,
+  beginNum: number,
+  endNum: number,
+): HapState => {
+  const dur = endNum - beginNum;
+  if (!Number.isFinite(dur) || dur <= 0) return 'sustain';
+  const fraction = (nowCycle - beginNum) / dur;
+  return fraction < 0.15 ? 'on' : 'sustain';
 };
 
 const layerColorFor = (pos: number, layerRanges: ReadonlyArray<LayerRange>): number => {
@@ -253,20 +269,19 @@ const extractFromHaps = (
 ): ColoredRange[] => {
   const seen = new Set<string>();
   const out: ColoredRange[] = [];
-  const beat = beatForCycle(nowCycle);
   for (const raw of haps) {
     if (!raw || typeof raw !== 'object') continue;
     const h = raw as HapLike;
 
-    // Filter to currently-sounding haps only.
+    // Filter to currently-sounding haps only — both onsets and
+    // continuations. Continuations are Strudel's "this note is still
+    // playing" haps, and they MUST stay highlighted for the duration
+    // of the sound, otherwise the user perceives the highlight as
+    // "vanishing when the sound starts" (since we only see the brief
+    // onset without the sustain). The `on`/`sustain` state discriminator
+    // is applied per-hap via the `state` field below.
     const whole = h.whole;
     if (!whole) continue;
-    // Skip continuation haps — only the "first trigger" of a sounded
-    // event gets highlighted. `hasOnset()` is true for onsets and false
-    // for haps that just carry the previous value forward (Strudel
-    // emits one continuation hap per step after the onset so the
-    // scheduler can keep the value alive; we want only onsets).
-    if (typeof h.hasOnset === 'function' && !h.hasOnset()) continue;
     const begin = (whole.begin as number | { valueOf?: () => number } | undefined);
     const end = (whole.end as number | { valueOf?: () => number } | undefined);
     const beginNum =
@@ -283,6 +298,7 @@ const extractFromHaps = (
           : 0;
     if (!Number.isFinite(beginNum) || !Number.isFinite(endNum)) continue;
     if (nowCycle < beginNum || nowCycle >= endNum) continue;
+    const state = stateForHap(nowCycle, beginNum, endNum);
 
     const locs = h.context?.locations;
     if (!Array.isArray(locs)) continue;
@@ -300,10 +316,10 @@ const extractFromHaps = (
       const t = Number(rawEnd);
       if (!Number.isFinite(f) || !Number.isFinite(t) || t <= f) continue;
       const color = layerColorFor(f, layerRanges);
-      const key = `${f}|${t}|${color}|${beat}`;
+      const key = `${f}|${t}|${color}|${state}`;
       if (seen.has(key)) continue;
       seen.add(key);
-      out.push({ from: f, to: t, color, beat });
+      out.push({ from: f, to: t, color, state });
     }
   }
   out.sort((a, b) => a.from - b.from || a.to - b.to);
@@ -425,7 +441,7 @@ if (typeof window !== 'undefined') publishDiag();
 /* ------------------------------------------------------------------ */
 
 const rangesKey = (ranges: ReadonlyArray<ColoredRange>): string =>
-  ranges.map((r) => `${r.from}|${r.to}|${r.color}|${r.beat}`).join(',');
+  ranges.map((r) => `${r.from}|${r.to}|${r.color}|${r.state}`).join(',');
 
 const loop = (): void => {
   rafHandle = rafFn(loop);

@@ -61,9 +61,9 @@ const activeRangesField = StateField.define<ReadonlyArray<ColoredRange>>({
 
 /**
  * Build a DecorationSet from active ranges, clipped to `docLength`.
- * Each range carries a `color` (palette index 0..3) and a `beat`
- * (`down` | `off`) — combined into the class
- * `cm-mini-active c{color} {beat}` so CSS can give each combination
+ * Each range carries a `color` (palette index 0..3) and a `state`
+ * (`on` | `sustain`) — combined into the class
+ * `cm-mini-active c{color} {state}` so CSS can give each combination
  * a distinct intensity. Out-of-bounds or zero-length ranges are
  * skipped — they would render as `0 × 0px` rectangles or trigger
  * CodeMirror assertions on position > docLength.
@@ -79,7 +79,7 @@ const buildDecorationSet = (
     const from = Math.max(0, Math.min(r.from, docLength));
     const to = Math.max(0, Math.min(r.to, docLength));
     if (to - from <= 0) continue;
-    const cls = `cm-mini-active c${r.color} ${r.beat}`;
+    const cls = `cm-mini-active c${r.color} ${r.state}`;
     marks.push(Decoration.mark({ class: cls }).range(from, to));
   }
   if (marks.length === 0) return Decoration.none;

@@ -66,8 +66,8 @@ const tickOnce = (): void => {
   next();
 };
 
-const toRanges = (arr: ReadonlyArray<ColoredRange>): Array<{ from: number; to: number; color: number; beat: string }> =>
-  arr.map((r) => ({ from: r.from, to: r.to, color: r.color, beat: r.beat }));
+const toRanges = (arr: ReadonlyArray<ColoredRange>): Array<{ from: number; to: number; color: number; state: string }> =>
+  arr.map((r) => ({ from: r.from, to: r.to, color: r.color, state: r.state }));
 
 describe('parseLayerRanges — top-level comma split', () => {
   it('flat comma-separated snippet splits on top-level commas', () => {
@@ -175,7 +175,7 @@ describe('computeRanges — pure projection', () => {
     // Hap [0, 1) contains 0.6; phase=0.6 → 'off'.
     const hap: FakeHap = { whole: { begin: 0, end: 1 }, context: { locations: [{ from: 10, to: 20 }] } };
     const state: ActiveState = { pattern: makePattern([hap]), ctx: makeCtx(1.6), anchor: 1.0, cps: 1, layerRanges: NO_LAYERS };
-    expect(toRanges(computeRanges(state))).toEqual([{ from: 10, to: 20, color: 0, beat: 'off' }]);
+    expect(toRanges(computeRanges(state))).toEqual([{ from: 10, to: 20, color: 0, state: 'sustain' }]);
   });
 
   it('skips haps that finished before nowCycle (no "ghost" of the previous step)', () => {
@@ -192,15 +192,21 @@ describe('computeRanges — pure projection', () => {
     expect(computeRanges(state)).toEqual([]);
   });
 
-  it('skips continuation haps (hasOnset() === false) — only the "fresh" trigger lights up', () => {
-    // In Strudel, after a step's onset a continuation hap is emitted
-    // that spans the same arc but with hasOnset() === false. We want
-    // to highlight only the first trigger, otherwise every step lights
-    // up N times where N is the number of layers above it.
+  it('shows BOTH onset and continuation haps (mark stays lit for the whole sound)', () => {
+    // Continuations must NOT be skipped — they are Strudel's "this note
+    // is still playing" haps, and skipping them would make the
+    // highlight vanish mid-sound, which is the opposite of what we
+    // want. Both onset (on) and continuation (sustain) haps are
+    // included; CSS distinguishes them via .on vs .sustain classes.
     const onset: FakeHap = { whole: { begin: 0, end: 1 }, hasOnset: () => true, context: { locations: [{ from: 10, to: 20 }] } };
     const continuation: FakeHap = { whole: { begin: 0, end: 1 }, hasOnset: () => false, context: { locations: [{ from: 30, to: 40 }] } };
     const state: ActiveState = { pattern: makePattern([onset, continuation]), ctx: makeCtx(1.6), anchor: 1.0, cps: 1, layerRanges: NO_LAYERS };
-    expect(toRanges(computeRanges(state))).toEqual([{ from: 10, to: 20, color: 0, beat: 'off' }]);
+    // Both ranges appear; both at 'sustain' since nowCycle=0.6 is past
+    // the 15% attack threshold for a 1-cycle-long hap.
+    expect(toRanges(computeRanges(state))).toEqual([
+      { from: 10, to: 20, color: 0, state: 'sustain' },
+      { from: 30, to: 40, color: 0, state: 'sustain' },
+    ]);
   });
 
   it('shows exactly one location per active hap (no neighbors in ±0.5 window)', () => {
@@ -215,17 +221,26 @@ describe('computeRanges — pure projection', () => {
       ctx: makeCtx(1.6),  // nowCycle = 0.5 → stepC is sounding
       anchor: 1.0, cps: 1, layerRanges: NO_LAYERS,
     };
-    expect(toRanges(computeRanges(state))).toEqual([{ from: 7, to: 9, color: 0, beat: 'off' }]);
+    expect(toRanges(computeRanges(state))).toEqual([{ from: 7, to: 9, color: 0, state: 'sustain' }]);
   });
 
-  it('beat comes from nowCycle, not from each hap', () => {
-    // At nowCycle=0.3 (first half) → 'down'; at nowCycle=0.8 (second half) → 'off'.
-    // Two long haps covering both halves are sounding in both cases.
-    const longHap: FakeHap = { whole: { begin: 0, end: 1.0 }, context: { locations: [{ from: 5, to: 9 }] } };
-    const stateDown: ActiveState = { pattern: makePattern([longHap]), ctx: makeCtx(1.3), anchor: 1.0, cps: 1, layerRanges: NO_LAYERS };
-    expect(toRanges(computeRanges(stateDown))).toEqual([{ from: 5, to: 9, color: 0, beat: 'down' }]);
-    const stateOff: ActiveState = { pattern: makePattern([longHap]), ctx: makeCtx(1.8), anchor: 1.0, cps: 1, layerRanges: NO_LAYERS };
-    expect(toRanges(computeRanges(stateOff))).toEqual([{ from: 5, to: 9, color: 0, beat: 'off' }]);
+  it('state comes from the hap\'s own fraction, not from a global clock', () => {
+    // Each hap\'s state is computed from its own position within its
+    // own arc. Early fraction (< 0.15) is `on` (attack); later is
+    // `sustain`. The hap\'s duration also affects where the boundary
+    // is, so two haps of different lengths at the same nowCycle
+    // can be in different states.
+    const shortHap: FakeHap = { whole: { begin: 0, end: 0.5 }, context: { locations: [{ from: 5, to: 9 }] } };
+    const longHap: FakeHap = { whole: { begin: 0, end: 1.0 }, context: { locations: [{ from: 10, to: 14 }] } };
+    // At nowCycle=0.6 (anchor=1.0, ctx=1.6), shortHap has fraction 1.2
+    // (past end → not sounding). longHap fraction = 0.6 → sustain.
+    const state: ActiveState = { pattern: makePattern([shortHap, longHap]), ctx: makeCtx(1.6), anchor: 1.0, cps: 1, layerRanges: NO_LAYERS };
+    expect(toRanges(computeRanges(state))).toEqual([{ from: 10, to: 14, color: 0, state: 'sustain' }]);
+
+    // At nowCycle=1.05 (just after start of cycle 1), longHap has
+    // fraction 0.05 → 'on' (attack), bright.
+    const stateEarly: ActiveState = { pattern: makePattern([longHap]), ctx: makeCtx(1.05), anchor: 1.0, cps: 1, layerRanges: NO_LAYERS };
+    expect(toRanges(computeRanges(stateEarly))).toEqual([{ from: 10, to: 14, color: 0, state: 'on' }]);
   });
 
   it('assigns color per layer — first layer c0, second layer c1, etc', () => {
@@ -240,8 +255,8 @@ describe('computeRanges — pure projection', () => {
     ];
     const state: ActiveState = { pattern: makePattern(haps), ctx: makeCtx(1.6), anchor: 1.0, cps: 1, layerRanges: layers };
     expect(toRanges(computeRanges(state))).toEqual([
-      { from: 10, to: 20, color: 0, beat: 'off' },
-      { from: 60, to: 80, color: 1, beat: 'off' },
+      { from: 10, to: 20, color: 0, state: 'sustain' },
+      { from: 60, to: 80, color: 1, state: 'sustain' },
     ]);
   });
 
@@ -270,7 +285,7 @@ describe('computeRanges — pure projection', () => {
       { whole: { begin: 0, end: 1 }, context: { locations: [{ from: 50, to: 60 }] } },
     ];
     const state: ActiveState = { pattern: makePattern(haps), ctx: makeCtx(1.6), anchor: 1.0, cps: 1, layerRanges: layers };
-    expect(toRanges(computeRanges(state))).toEqual([{ from: 50, to: 60, color: 0, beat: 'off' }]);
+    expect(toRanges(computeRanges(state))).toEqual([{ from: 50, to: 60, color: 0, state: 'sustain' }]);
   });
 
   it('deduplicates identical (from,to,color,beat) across haps', () => {
@@ -287,7 +302,7 @@ describe('computeRanges — pure projection', () => {
       { whole: { begin: 0, end: 1 }, context: { locations: [{ from: Number.NaN, to: 10 }, { from: 5, to: 5 }, { from: 1, to: -1 }, { from: 0, to: 4 }] } },
     ];
     const state: ActiveState = { pattern: makePattern(haps), ctx: makeCtx(1.6), anchor: 1.0, cps: 1, layerRanges: NO_LAYERS };
-    expect(toRanges(computeRanges(state))).toEqual([{ from: 0, to: 4, color: 0, beat: 'off' }]);
+    expect(toRanges(computeRanges(state))).toEqual([{ from: 0, to: 4, color: 0, state: 'sustain' }]);
   });
 
   it('swallows queryArc exceptions, returns empty', () => {
@@ -325,8 +340,8 @@ describe('computeRanges — pure projection', () => {
     ];
     const state: ActiveState = { pattern: makePattern(haps), ctx: makeCtx(1.6), anchor: 1.0, cps: 1, layerRanges: NO_LAYERS };
     expect(toRanges(computeRanges(state))).toEqual([
-      { from: 30, to: 35, color: 0, beat: 'off' },
-      { from: 40, to: 50, color: 0, beat: 'off' },
+      { from: 30, to: 35, color: 0, state: 'sustain' },
+      { from: 40, to: 50, color: 0, state: 'sustain' },
     ]);
   });
 
@@ -335,15 +350,15 @@ describe('computeRanges — pure projection', () => {
       { whole: { begin: { valueOf: () => 0 }, end: { valueOf: () => 1 } }, context: { locations: [{ from: 5, to: 7 }] } },
     ];
     const state: ActiveState = { pattern: makePattern(haps), ctx: makeCtx(1.6), anchor: 1.0, cps: 1, layerRanges: NO_LAYERS };
-    expect(toRanges(computeRanges(state))).toEqual([{ from: 5, to: 7, color: 0, beat: 'off' }]);
+    expect(toRanges(computeRanges(state))).toEqual([{ from: 5, to: 7, color: 0, state: 'sustain' }]);
   });
 
   it('captures long haps (e.g. slow(2)) thanks to the ±1 cycle query window', () => {
-    // Hap spans 2 cycles. nowCycle=1.0 (anchor=1.0, ctx=2.0, cps=0.5 → elapsed=1.0 → nowCycle=0.5).
-    // Hmm — with cps=0.5 the cycle is 2s, so nowCycle=0.5 at elapsed=1.0. Hap [0, 2) contains 0.5.
+    // Hap spans 2 cycles. cps=0.5 → elapsed=1.0 → nowCycle=0.5. Hap [0, 2)
+    // contains 0.5. fraction = 0.5/2 = 0.25 > 0.15 → 'sustain'.
     const longHap: FakeHap = { whole: { begin: 0, end: 2 }, context: { locations: [{ from: 5, to: 9 }] } };
     const state: ActiveState = { pattern: makePattern([longHap]), ctx: makeCtx(1.6), anchor: 1.0, cps: 0.5, layerRanges: NO_LAYERS };
-    expect(toRanges(computeRanges(state))).toEqual([{ from: 5, to: 9, color: 0, beat: 'down' }]);
+    expect(toRanges(computeRanges(state))).toEqual([{ from: 5, to: 9, color: 0, state: 'sustain' }]);
   });
 });
 
@@ -392,7 +407,7 @@ describe('subscribe + setActive — throttled notification', () => {
     nowValue = 1300;
     tickOnce();
     expect(cb).toHaveBeenCalledTimes(2);
-    expect(cb.mock.calls[1]![0]).toEqual([{ from: 3, to: 7, color: 0, beat: 'off' }]);
+    expect(cb.mock.calls[1]![0]).toEqual([{ from: 3, to: 7, color: 0, state: 'sustain' }]);
   });
 
   it('emits again when color changes (different layer → different palette index)', () => {
@@ -405,14 +420,14 @@ describe('subscribe + setActive — throttled notification', () => {
     tickOnce();
     expect(cb).toHaveBeenCalledTimes(1);
     // Hap [0, 1) contains nowCycle=0.6 (off), location [10,12) is in layer 0.
-    expect(cb.mock.calls[0]![0]).toEqual([{ from: 10, to: 12, color: 0, beat: 'off' }]);
+    expect(cb.mock.calls[0]![0]).toEqual([{ from: 10, to: 12, color: 0, state: 'sustain' }]);
 
     // Move the hap's location to the second layer (color 1) → emit.
     pat.setHaps([{ whole: { begin: 0, end: 1 }, context: { locations: [{ from: 60, to: 80 }] } }]);
     nowValue = 1200;
     tickOnce();
     expect(cb).toHaveBeenCalledTimes(2);
-    expect(cb.mock.calls[1]![0]).toEqual([{ from: 60, to: 80, color: 1, beat: 'off' }]);
+    expect(cb.mock.calls[1]![0]).toEqual([{ from: 60, to: 80, color: 1, state: 'sustain' }]);
   });
 
   it('emits again when the active hap changes (different from/to in the same [begin, end))', () => {
@@ -430,14 +445,14 @@ describe('subscribe + setActive — throttled notification', () => {
     nowValue = 1050;
     tickOnce();
     expect(cb).toHaveBeenCalledTimes(1);
-    expect(cb.mock.calls[0]![0]).toEqual([{ from: 5, to: 7, color: 0, beat: 'off' }]);
+    expect(cb.mock.calls[0]![0]).toEqual([{ from: 5, to: 7, color: 0, state: 'sustain' }]);
 
     // Swap to stepB (different from/to, same time interval) → emit.
     pat.setHaps([stepB]);
     nowValue = 1300;
     tickOnce();
     expect(cb).toHaveBeenCalledTimes(2);
-    expect(cb.mock.calls[1]![0]).toEqual([{ from: 8, to: 10, color: 0, beat: 'off' }]);
+    expect(cb.mock.calls[1]![0]).toEqual([{ from: 8, to: 10, color: 0, state: 'sustain' }]);
   });
 
   it('stops emitting after clearActive', () => {

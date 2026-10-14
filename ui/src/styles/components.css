@@ -3826,52 +3826,50 @@ textarea.ai-textarea:focus-visible {
     box-shadow 80ms ease;
 }
 /* c0 — cyan (default layer) */
-.cm-mini-active.c0.down {
-  background-color: rgba(94, 234, 212, 0.55);
+.cm-mini-active.c0.on {
+  background-color: rgba(94, 234, 212, 0.65);
   box-shadow:
-    0 0 0 1px rgba(94, 234, 212, 0.85) inset,
-    0 0 8px rgba(94, 234, 212, 0.35);
+    0 0 0 1px rgba(94, 234, 212, 0.95) inset,
+    0 0 10px rgba(94, 234, 212, 0.5);
 }
-.cm-mini-active.c0.off {
-  background-color: rgba(94, 234, 212, 0.18);
-  box-shadow: 0 0 0 1px rgba(94, 234, 212, 0.45) inset;
+.cm-mini-active.c0.sustain {
+  background-color: rgba(94, 234, 212, 0.22);
+  box-shadow: 0 0 0 1px rgba(94, 234, 212, 0.55) inset;
 }
 /* c1 — amber */
-.cm-mini-active.c1.down {
-  background-color: rgba(255, 170, 59, 0.55);
+.cm-mini-active.c1.on {
+  background-color: rgba(255, 170, 59, 0.65);
   box-shadow:
-    0 0 0 1px rgba(255, 170, 59, 0.85) inset,
-    0 0 8px rgba(255, 170, 59, 0.35);
+    0 0 0 1px rgba(255, 170, 59, 0.95) inset,
+    0 0 10px rgba(255, 170, 59, 0.5);
 }
-.cm-mini-active.c1.off {
-  background-color: rgba(255, 170, 59, 0.18);
-  box-shadow: 0 0 0 1px rgba(255, 170, 59, 0.45) inset;
+.cm-mini-active.c1.sustain {
+  background-color: rgba(255, 170, 59, 0.22);
+  box-shadow: 0 0 0 1px rgba(255, 170, 59, 0.55) inset;
 }
 /* c2 — magenta */
-.cm-mini-active.c2.down {
-  background-color: rgba(244, 114, 182, 0.55);
+.cm-mini-active.c2.on {
+  background-color: rgba(244, 114, 182, 0.65);
   box-shadow:
-    0 0 0 1px rgba(244, 114, 182, 0.85) inset,
-    0 0 8px rgba(244, 114, 182, 0.35);
+    0 0 0 1px rgba(244, 114, 182, 0.95) inset,
+    0 0 10px rgba(244, 114, 182, 0.5);
 }
-.cm-mini-active.c2.off {
-  background-color: rgba(244, 114, 182, 0.18);
-  box-shadow: 0 0 0 1px rgba(244, 114, 182, 0.45) inset;
+.cm-mini-active.c2.sustain {
+  background-color: rgba(244, 114, 182, 0.22);
+  box-shadow: 0 0 0 1px rgba(244, 114, 182, 0.55) inset;
 }
 /* c3 — ok (green) */
-.cm-mini-active.c3.down {
-  background-color: rgba(74, 222, 128, 0.55);
+.cm-mini-active.c3.on {
+  background-color: rgba(74, 222, 128, 0.65);
   box-shadow:
-    0 0 0 1px rgba(74, 222, 128, 0.85) inset,
-    0 0 8px rgba(74, 222, 128, 0.35);
+    0 0 0 1px rgba(74, 222, 128, 0.95) inset,
+    0 0 10px rgba(74, 222, 128, 0.5);
 }
-.cm-mini-active.c3.off {
-  background-color: rgba(74, 222, 128, 0.18);
-  box-shadow: 0 0 0 1px rgba(74, 222, 128, 0.45) inset;
+.cm-mini-active.c3.sustain {
+  background-color: rgba(74, 222, 128, 0.22);
+  box-shadow: 0 0 0 1px rgba(74, 222, 128, 0.55) inset;
 }
 @media (prefers-reduced-motion: reduce) {
-  /* No animation here by design — beat position is the contrast.
-     Keep the rule so future motion-attached properties can opt out. */
   .cm-mini-active { transition: none; }
 }
 
