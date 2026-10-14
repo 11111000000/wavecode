@@ -1,30 +1,47 @@
 applied_at: 2026-10-14
 branch: master
 commits:
+  - 1d51ee6 fix(ui): tab → sheet opens at half (50vh), not full (65vh)
+  - b8e8193 fix(ui): remove .score-panel max-height — flex:1 distributes correctly
+  - 6e4b28c docs(math): witness for wavecode-editor-max-sheet-half — applied
   - 335d312 fix(ui): sheet ≥ 50vh on mobile, editor maximized when sheet closed
 supersedes: null
 notes: |
-  Two-part fix, found during browser verification of
-  wavecode-mobile-compact production deploy.
+  Three commits + 1 docs, found during iterative browser verification
+  of mobile split-pane layout.
 
-  1. CSS comment bug in components.css:2603 — stray `*/` without
-     matching `/*`. Vite minifier kept it in bundled output, browser
-     parser treated rest of file as unclosed comment. .app-body
-     `flex: 1 1 auto` was invisible. One-line fix (delete one line).
+  1. **CSS comment bug** (335d312): stray `*/` without matching `/*`
+     in components.css:2603. Vite minifier kept it in bundled output,
+     browser parser treated ~60% of CSS as comment. .app-body
+     `flex: 1 1 auto` was invisible. One-line fix.
 
-  2. Sheet snap heights on mobile: peek/half 30/40→50vh, full stays
+  2. **Sheet ≥ 50vh** (335d312): peek/half 30/40→50vh, full stays
      65vh, default --sheet-h 40→50vh, min-height: 50vh on .wc-sheet
      (CSS hard floor). SHEET_HEIGHT_MIN_PX 240→360.
 
+  3. **Remove .score-panel max-height** (b8e8193): The formula
+     `calc(100dvh - 48 - 56 - 50vh)` was a "safety ceiling" but
+     actually capped score-panel at ~346px on 900vh, leaving 374px
+     of empty space. flex:1 + min-height:200 distributes correctly
+     without the artificial ceiling. Result: sheet closed cm-host
+     655px (50+ lines, was 281px before this fix).
+
+  4. **Tab → sheet at half** (1d51ee6): setTab('piano'|'ai'|'mixer'|
+     'step'|'status') was calling openKindSheet(kind, 'full') — sheet
+     65vh, editor 105px. Changed all to 'half' — sheet 50vh,
+     editor 240px (~18 lines). User can still drag to 'full' if
+     they need more sheet space.
+
   Effect on 412×900 mobile:
-  - sheet closed: cm-host 686px, 50+ lines visible.
-  - sheet open half (50vh): cm-host 238px, ~18 lines.
+  - sheet closed: cm-host 655px, 50+ lines visible.
+  - sheet open half (50vh): cm-host 240px, ~18 lines.
   - sheet open full (65vh): cm-host 105px, ~8 lines.
   - drag-to-resize physically can't go below 50vh (CSS min-height).
+  - tab → sheet opens at half by default.
 
   Verification:
   - tsc --noEmit: clean
-  - vitest: 729/729 pass (CSS-only + 1 numeric constant)
+  - vitest: 729/729 pass (no JS logic changes, CSS-only + 1 snap param)
   - vite build: success, 9s
   - production deploy via bin/deploy.sh: confirmed on
     https://wavecode.kosov.online — see browser screenshots.
