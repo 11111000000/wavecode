@@ -206,28 +206,37 @@
       }
       .wc-icon-btn[data-active='true'] { color: var(--amber); }
 
-      /* ===== CRITICAL: preset-row + chips (сразу под topbar) =====
+      /* ===== CRITICAL: transport-bar + chips (сразу под topbar) =====
        *
-       * wavecode-mobile-compact: inline rule обновлён под новый
-       * layered CSS. Un-layered inline имеет приоритет над
-       * @layer components в bundled CSS, поэтому эту копию
-       * нужно держать в синхроне с src/styles/components.css. */
-      .app-preset-row {
-        display: flex;
-        gap: var(--space-xs);
-        align-items: center;
-        flex-wrap: wrap;
+       * wavecode-mobile-transport-bar: .app-preset-row + .app-controls-row
+       * слиты в один .app-transport-bar (collapsible). Un-layered inline
+       * имеет приоритет над @layer components в bundled CSS, поэтому
+       * эту копию нужно держать в синхроне с src/styles/components.css. */
+      .app-transport-bar {
         position: fixed;
         top: var(--header-h);
         left: 0;
         right: 0;
-        z-index: calc(var(--z-sheet) + 13);
-        padding: var(--space-2xs) var(--space-md);
+        z-index: calc(var(--z-sheet) + 12);
+        display: flex;
+        flex-direction: column;
+        background: rgba(10, 10, 14, 0.92);
+        backdrop-filter: blur(12px) saturate(160%);
+        -webkit-backdrop-filter: blur(12px) saturate(160%);
+        border-top: 1px solid var(--border);
+      }
+      .app-transport-bar[data-collapsed='true'] .app-transport-bar__body {
+        display: none;
       }
       @media (max-width: 720px) {
-        .app-preset-row {
-          padding: 2px var(--space-sm);
-          min-height: 32px;
+        .app-transport-bar__toggle-label {
+          display: none;
+        }
+        .app-body[data-transport-collapsed='true'] {
+          padding-top: var(--app-transport-h-collapsed) !important;
+        }
+        .app-body[data-transport-collapsed='false'] {
+          padding-top: var(--app-transport-h-expanded) !important;
         }
       }
       .preset-select {

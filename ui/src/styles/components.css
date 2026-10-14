@@ -2617,9 +2617,18 @@ button:not([disabled]):not(.no-shrink):active {
    *
    * wavecode-preset-row-and-toast-z: добавлен --preset-row-h —
    * теперь оба fixed-ряда (preset + transport) занимают суммарно
-   * --preset-row-h + --controls-h пикселей сверху. */
+   * --preset-row-h + --controls-h пикселей сверху.
+   *
+   * wavecode-mobile-transport-bar: TransportBar sets
+   * [data-transport-collapsed] on .app-body; this rule (default
+   * expanded) keeps the legacy 96px on desktop. Mobile @media below
+   * raises to 108px (--app-top-fixed-h-mobile) and adds the collapsed
+   * override (48px). */
   padding-top: calc(var(--preset-row-h) + var(--controls-h));
   padding-bottom: var(--tabbar-h);
+}
+.app-body[data-transport-collapsed='true'] {
+  padding-top: var(--app-transport-h-collapsed);
 }
 
 .collapsible {
@@ -2957,6 +2966,109 @@ textarea.ai-textarea:focus-visible {
   justify-content: space-between;
   gap: var(--space-md);
 }
+/* =========================================================================
+ *  TRANSPORT BAR — single collapsible row replacing .app-preset-row +
+ *  .app-controls-row. math/wavecode-mobile-transport-bar.
+ *
+ *  Desktop (≥1024px) renders the strip + body side-by-side as the
+ *  familiar two-row command panel (~96px tall). Mobile (≤720px)
+ *  collapses to a 48px strip (Play + BPM + toggle) when not needed,
+ *  expanding to ~108px (full panel) on demand. Default on mobile is
+ *  collapsed; default on desktop is expanded.
+ * ========================================================================= */
+.app-transport-bar {
+  position: fixed;
+  top: var(--header-h);
+  left: 0;
+  right: 0;
+  z-index: calc(var(--z-sheet) + 12);
+  display: flex;
+  flex-direction: column;
+  background: rgba(10, 10, 14, 0.92);
+  backdrop-filter: blur(12px) saturate(160%);
+  -webkit-backdrop-filter: blur(12px) saturate(160%);
+  border-top: 1px solid var(--border);
+  color: var(--fg);
+  font-family: var(--font-sans);
+}
+
+.app-transport-bar__strip {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-2xs) var(--space-md);
+  min-height: 44px;
+  flex-shrink: 0;
+}
+
+.app-transport-bar__spacer {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.app-transport-bar__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2xs);
+  padding: 6px 10px;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  color: var(--fg-dim);
+  font-size: var(--fs-xs);
+  font-family: var(--font-sans);
+  cursor: pointer;
+  flex-shrink: 0;
+  min-height: 32px;
+  transition: background var(--dur-2xs) var(--ease),
+    color var(--dur-2xs) var(--ease),
+    border-color var(--dur-2xs) var(--ease);
+}
+
+.app-transport-bar__toggle:hover {
+  background: var(--surface-1);
+  color: var(--fg);
+  border-color: var(--amber);
+}
+
+.app-transport-bar__toggle:active { transform: scale(0.97); }
+
+.app-transport-bar__toggle-icon {
+  font-size: 10px;
+  line-height: 1;
+  color: var(--amber);
+  font-weight: var(--fw-bold);
+}
+
+.app-transport-bar__toggle-label {
+  white-space: nowrap;
+  font-weight: var(--fw-medium);
+}
+
+.app-transport-bar__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  padding: 0 var(--space-md) var(--space-xs) var(--space-md);
+  flex-shrink: 0;
+  border-top: 1px solid var(--border);
+  padding-top: var(--space-xs);
+  background: rgba(0, 0, 0, 0.18);
+}
+
+.app-transport-bar__preset {
+  display: flex;
+  gap: var(--space-xs);
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.app-transport-bar__preset .preset-select {
+  flex: 1 1 200px;
+  min-width: 0;
+}
+
+/* Back-compat: legacy class names (kept for any straggler refs). */
 .app-preset-row {
   display: flex;
   gap: var(--space-xs);
@@ -3013,23 +3125,56 @@ textarea.ai-textarea:focus-visible {
    * tokens.css) — 159 - 56 + buffer = 108. Раньше первые ~27px
    * редактора были закрыты controlsRow'ом (cm-host начинался на
    * y=132, controlsRow.bottom = 159 → первые 2 строки // Creep,
-   * stack() были под fixed-row'ом). */
-  .app-preset-row {
-    padding: 2px var(--space-sm);
-    min-height: 32px;
+   * stack() были под fixed-row'ом).
+   *
+   * wavecode-mobile-transport-bar: preset-row и controls-row слиты в
+   * один .app-transport-bar (collapsible). На mobile collapsed —
+   * только strip 48px (Play + BPM + toggle); expanded — полная панель
+   * ~108px. .app-body padding-top следует за состоянием: collapsed
+   * 48px (1 буфер), expanded 108px. Дефолт на mobile — collapsed. */
+  .app-transport-bar__strip {
+    min-height: 48px;
+    padding: var(--space-2xs) var(--space-sm);
   }
-  .app-controls-row {
-    padding: 4px var(--space-sm);
-    min-height: 44px;
+  .app-transport-bar__toggle-label {
+    display: none;
+  }
+  .app-transport-bar__toggle {
+    padding: 6px 12px;
+    font-size: 14px;
+  }
+  .app-transport-bar__body {
+    padding: var(--space-xs) var(--space-sm);
+    gap: var(--space-xs);
   }
   /* .app-body padding-top: 76px → 108px. Формула для расчёта
-   * (от верха viewport): header 56 + presetRow 36 + gap 8 + 
+   * (от верха viewport): header 56 + presetRow 36 + gap 8 +
    * controlsRow 59 = 159. .app-body начинается на y=56, поэтому
-   * padding-top ≥ 159-56+buffer = 108. */
+   * padding-top ≥ 159-56+buffer = 108.
+   *
+   * wavecode-mobile-transport-bar: padding-top теперь следует за
+   * .app-transport-bar[data-collapsed]. Collapsed = 48px (одна
+   * высота strip + buffer 4px), expanded = 108px. Default в JS
+   * — collapsed на mobile. */
   .app-body {
     padding-top: var(--app-top-fixed-h-mobile) !important;
   }
+  .app-body[data-transport-collapsed='true'] {
+    padding-top: var(--app-transport-h-collapsed) !important;
+  }
+  .app-body[data-transport-collapsed='false'] {
+    padding-top: var(--app-transport-h-expanded) !important;
+  }
 }
+/* Universal collapse rule (NOT scoped to mobile @media) so the
+ * toggle works on desktop too. math/wavecode-mobile-transport-bar:
+ * the .app-transport-bar[collapsed] controls body visibility on
+ * both desktop and mobile. */
+.app-transport-bar[data-collapsed='true'] .app-transport-bar__body {
+  display: none;
+}
+/* (legacy .app-controls-row class — kept as no-op for any straggler refs,
+ * math/wavecode-mobile-transport-bar moved it inside .app-transport-bar.) */
 .app-controls-row {
   /* wavecode-transport-always-visible: pinned below TopBar so Play
    * remains clickable when any bottom-sheet (AI/Step/Piano/Mixer/

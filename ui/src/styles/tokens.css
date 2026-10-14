@@ -144,8 +144,18 @@
    * .app-body padding-top должен быть ≥ 159-56 = 103, плюс buffer.
    * Используется ТОЛЬКО на mobile (см. media-query в components.css);
    * на desktop продолжает работать desktop-формула
-   * calc(var(--preset-row-h) + var(--controls-h)) = 96px. */
+   * calc(var(--preset-row-h) + var(--controls-h)) = 96px.
+   *
+   * wavecode-mobile-transport-bar: preset-row + controls-row слиты в
+   * .app-transport-bar (collapsible). --app-top-fixed-h-mobile остаётся
+   * как default (= expanded state, 108px). Реальный padding-top на
+   * mobile выбирается через .app-body[data-transport-collapsed]:
+   *   collapsed → 48px  (только strip 48px; +0 buffer т.к. strip top
+   *                     совпадает с header bottom)
+   *   expanded  → 108px (strip 48 + body ~56 + 4 buffer) */
   --app-top-fixed-h-mobile: 108px;
+  --app-transport-h-collapsed: 48px;
+  --app-transport-h-expanded:  108px;
   --fab-size:        56px;
   --fab-size-mini:   40px;
   --gutter:          16px;
