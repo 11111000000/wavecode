@@ -17,6 +17,9 @@ import { isGridEmptyState, loadFromScore } from './presentation/state/gridState'
 import {
   getPreset, saveCustomPreset, deleteCustomPreset, resetAllBrowserData,
 } from './presentation/state/presetsStore';
+import {
+  getSelectedPresetId, setSelectedPresetPersist, resetSelectedPreset,
+} from './presentation/state/selectedPreset';
 import { AppLayer } from '~/infrastructure/composition';
 import { Repo } from '~/domain/services';
 import { useAppBootstrap } from './presentation/state/useAppBootstrap';
@@ -40,6 +43,7 @@ const confirmReset = (): boolean => window.confirm(
 const onResetAll = (): void => {
   if (!confirmReset()) return;
   resetAllBrowserData();
+  resetSelectedPreset();
   void Effect.runPromise(
     Effect.gen(function* () {
       const repo = yield* Repo;
@@ -116,7 +120,7 @@ function AppShell(): JSX.Element {
   const audio = useAppBootstrap();
   useAutoSave();
 
-  const [presetId, setPresetId] = createSignal('creep');
+  const presetId = getSelectedPresetId;
   const [showSavePreset, setShowSavePreset] = createSignal(false);
   const [audioStarting, setAudioStarting] = createSignal(false);
   const [mobileMode, setMobileModeSignal] = createSignal<MobileMode>(getMobileMode());
@@ -202,13 +206,13 @@ function AppShell(): JSX.Element {
           void stopAudio();
           dispatch({ type: 'replaceScore', text: NEW_COMPOSITION_TEMPLATE });
           dispatch({ type: 'clearMessages' });
-          setPresetId('creep');
+          setSelectedPresetPersist('creep');
         }}
         onDeletePreset={() => {
           const id = presetId();
           if (!id.startsWith('custom-')) return;
           deleteCustomPreset(id);
-          setPresetId('creep');
+          setSelectedPresetPersist('creep');
           const fallback = getPreset('creep');
           if (fallback) dispatch({ type: 'replaceScore', text: fallback.score });
         }}
@@ -228,7 +232,7 @@ function AppShell(): JSX.Element {
         onLoadPreset={(id) => {
           const preset = getPreset(id);
           if (!preset) return;
-          setPresetId(id);
+          setSelectedPresetPersist(id);
           dispatch({ type: 'replaceScore', text: preset.score });
           void evalScore();
         }}
@@ -238,7 +242,7 @@ function AppShell(): JSX.Element {
           const name = newPresetName().trim();
           if (!name) return;
           const preset = saveCustomPreset(name, appStore.score);
-          setPresetId(preset.id);
+          setSelectedPresetPersist(preset.id);
           setShowSavePreset(false);
           setNewPresetName('');
         }}
