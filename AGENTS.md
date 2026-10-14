@@ -24,9 +24,16 @@ of truth wins.
 2. **Auto-commit** - after each meaningful edit:
    `git add <files> && git commit -m "..."`. Conventional Commits,
    English, <=72-char subject. Never `git add -A` blindly.
-3. **Propose merge, do not auto-merge** - when the branch's work is
-   complete, tell the user what to merge and into which target. Wait
-   for explicit "merge it" / "влей".
+3. **Auto-merge if no problems; ask only on real issues** - when the branch's
+   work is complete, run `git merge --no-ff <branch>` into the target
+   **automatically**, UNLESS one of these is true: merge conflict in
+   the diff, failing pre-merge checks (lint/typecheck/test/secret grep),
+   secrets or sensitive content in the diff, target moved ahead (needs
+   rebase), force-push required (always ask), change touches external
+   paths in `AngaraConfig/AGENTS.md` §8, or user explicitly said
+   "ask first". If any hold: **stop and ask the user with a specific
+   question and proposed fix**. Otherwise: merge, report (branch →
+   target, SHA, summary), then **propose** push (still gated).
 4. **Never push without being asked** - push is public + irreversible.
    Wait for "push" / "запушь" / "open PR" / "publish". Same rule for
    `gh pr create` and force-push.
