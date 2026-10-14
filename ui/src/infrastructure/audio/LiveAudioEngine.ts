@@ -686,6 +686,9 @@ await repl.evaluate(snippet);
           // evaluated. `injectMix` works on the SOURCE form (lisp or js);
           // the live repl is keyed by the same mode.
           const lastMode = debugState.lastEvaluatedMode;
+          // Mixer hot-swap is JS-only in phase 1 — injectMix appends
+          // `.gain()` and would break s-expressions. No-op for Lisp.
+          if (lastMode === 'lisp') return;
           const audioCtx = unlockAudioContext();
           const repl = await ensureRepl(audioCtx, lastMode);
           const newSnippet = injectMix(lastSnippet, layerMix);
