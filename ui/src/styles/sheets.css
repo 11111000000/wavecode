@@ -317,49 +317,7 @@
     100% { transform: translate(-50%, 16px); opacity: 1; }
   }
 
-  /* Internal sheet tabs — Mixer/AI/Status/Step/Piano */
-  .wc-sheet__tabs {
-    display: inline-flex;
-    align-items: center;
-    gap: 2px;
-    padding: 2px;
-    background: var(--surface-2);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-pill);
-    margin-left: var(--space-sm);
-  }
-  .wc-sheet__tab {
-    height: 26px;
-    min-width: 44px;
-    padding: 0 var(--space-xs);
-    background: transparent;
-    color: var(--fg-dim);
-    border: 1px solid transparent;
-    border-radius: var(--radius-pill);
-    cursor: pointer;
-    font-family: var(--font-mono);
-    font-size: var(--fs-2xs);
-    font-weight: var(--fw-medium);
-    letter-spacing: 0;
-    text-transform: none;
-    transition:
-      color var(--dur-xs) var(--ease),
-      background var(--dur-xs) var(--ease),
-      border-color var(--dur-xs) var(--ease);
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: var(--space-2xs);
-    -webkit-tap-highlight-color: transparent;
-  }
-  .wc-sheet__tab:hover { color: var(--fg); }
-  .wc-sheet__tab[data-active='true'] {
-    color: var(--fg-inverse);
-    background: var(--cyan);
-    border-color: var(--cyan);
-  }
-
-   /* ScorePanel: flex child that takes the remainder of .app-body.
+  /* ScorePanel: flex child that takes the remainder of .app-body.
     * min-height 200px so the editor stays readable even when the
     * sheet is full (65vh). max-height removed (was limiting growth
     * to ~50vh-104px when sheet is closed) — flex:1 distributes
@@ -374,7 +332,8 @@
   /* Sheet body fade-in on content change (tab switch). 200ms ease.
    *  Keyed on data-content-key attribute set by BottomSheet when
    *  the active tab changes — provides a smooth fade when
-   *  SheetTabs toggles between Mixer/AI/Status. */
+   *  the user switches between Mixer/AI/Status via the bottom
+   *  TabBar while a sheet is open. */
   .wc-sheet__body[data-content-key] {
     animation: wc-sheet-fade var(--dur-xs) var(--ease) both;
   }
