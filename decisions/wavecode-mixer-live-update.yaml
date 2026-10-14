@@ -1,0 +1,187 @@
+---
+schema: math-coding/3.3
+id: wavecode-mixer-live-update
+revision: 1
+state: draft
+body_sha: "sha256:6a5dffb2bce802ecef299cde42234eeb4dab1670f90697a03d2b1961575ac1ab"
+yaml_sha: "sha256:6a5dffb2bce802ecef299cde42234eeb4dab1670f90697a03d2b1961575ac1ab"
+
+intent:|
+  Mixer changes (gain / mute / solo) пушатся в живой Strudel-паттерн
+  без ручного рестарта. На каждый `setLayerGain/toggleLayerMute/
+  toggleLayerSolo` UI дёргает `AudioEngine.setLayerMix(layerMix)`,
+  который пересобирает snippet через `injectMix`, парсит его
+  в Pattern и зовёт `repl.setPattern(parsedPattern, autostart=false)`
+  — scheduler подхватывает новый паттерн на ближайшем lookahead-окне,
+  уже звучащая нота не обрывается, evaluate-цикл side-effects
+  (sample-init, beforeEval/afterEval, state-reset) не дёргаются.
+  Без пакета — слайдер должен ждать ручного ▶ Play; с пакетом —
+  реакция слышна через ~50 ms (один lookahead), как в DAW.
+commitment: |
+  AudioEngine получает capability `setLayerMix(layerMix: LayerMix[])`,
+  симметричную существующему `setCps`. MixerPanel на каждый
+  dispatch вызывает (debounce 50 ms) `audio.setLayerMix(layerMix)`.
+  Под капотом: кеш последнего snippet (`audioActions.evalScore`
+  сохраняет его в `debugState.lastEvaluatedSnippet`, уже там),
+  `injectMix(snippet, layerMix)` → строка → `repl.setPattern(
+  parseOnly(newSnippet), autostart=false)`. Layer-mix state
+  остаётся в `appStore.layerMix`, как раньше — single source of
+  truth. Ручной ▶ Play перестаёт быть обязательным, но остаётся
+  валидным (для случая «юзер хочет форсировать full re-init
+  после preset-load, который и так зовёт evalScore сейчас»).
+  Effect-architecture не ломается: capability пишется в domain/
+  interface, реализуется в infrastructure/audio/, MixerPanel +
+  audioActions зовут её через DI AppLayer. Тесты: новый unit на
+  AudioEngine.setLayerMix с mock repl (verify setPattern called
+  с autos tart=false), новый e2e «drag slider → audio changes
+  без ▶ Play» в tests/e2e/.
+counterexample: |
+  The strongest objection to this decision is captured in the `antithesis` field above: (1) "Push gain напрямую в Pattern" — Strudel Pattern API не
+antithesis: |
+  (1) "Push gain напрямую в Pattern" — Strudel Pattern API не
+  предоставляет мутабельного `.setGain(i, g)`. Patterns immutable.
+  Самый дешёвый hot-swap — `setPattern(newPat, false)`, но
+  `newPat` всё равно требует перепарсинга (а Pattern мы из
+  `stack(...)` целиком не разбираем обратно по слоям — Stack
+  использует internal lazy-query contract, нет `.layers`).
+  Решение: пересобрать snippet через `injectMix` (он у нас уже
+  есть в application/useCases/) → `transpiler.evaluate` → pattern.
+  Полностью skip нельзя; skip можно ТОЛЬКО post-eval side-effects
+  (`repl.evaluate` внутри делает: parse → evalScope →
+  `beforeEval` → `setPattern(autostart=true)` → register runtime
+  hooks — мы вызываем `setPattern` напрямую и пропускаем всё
+  остальное). (2) Solo/mute cascade через `.gain(0)` vs `.mul(0)`
+  — proposition остаётся той же что и в wavecode-track-mixer,
+  injectMix не меняется. (3) Race на быстрый drag слайдера —
+  60Hz mousemove = 60 setLayerMix вызовов/сек. Без дебаунса
+  каждый тянет парсинг snippet (~30 ms на 6 layers на iPhone SE).
+  Решение: 50 ms debounce в presentation-слое, НЕ в AudioEngine
+  (engine остаётся idempotent и synchronous-safe). (4) Конфликт
+  с уже идущим `setCps` (debounce 100 ms в
+  useTransportAudioSync). Если оба debounce'ятся одновременно
+  в одном тике — Strudel scheduler ставит `this.pattern = newPat`
+  атомарно, не теряем состояния. Confirmed через
+  `@strudel/core/cyclist.mjs:3171-3173`. (5) A11y / откат при
+  ошибке парсинга — если перепарсинг фейлится (юзер сохранил
+  кривой snippet через undo между eval и mix), старый pattern
+  всё ещё в `repl.scheduler.pattern`, мы его НЕ трогаем. Failure
+  mode — silent retry на следующем изменении миксера, юзер слышит
+  что ничего не меняется (degraded, но не crash). (6) Зависимость
+  от внутреннего API — `repl.setPattern` экспортирован публично
+  в `@strudel/core/repl.mjs:105-110`, через `@strudel/webaudio`
+  d.ts-обёртку уже доступен. Никакого хака внутренних модулей.
+  AudioEngine получает capability `setLayerMix(layerMix: LayerMix[])`,
+  симметричную существующему `setCps`. MixerPanel на каждый
+  dispatch вызывает (debounce 50 ms) `audio.setLayerMix(layerMix)`.
+  Под капотом: кеш последнего snippet (`audioActions.evalScore`
+  сохраняет его в `debugState.lastEvaluatedSnippet`, уже там),
+  `injectMix(snippet, layerMix)` → строка → `repl.setPattern(
+  parseOnly(newSnippet), autostart=false)`. Layer-mix state
+  остаётся в `appStore.layerMix`, как раньше — single source of
+  truth. Ручной ▶ Play перестаёт быть обязательным, но остаётся
+  валидным (для случая «юзер хочет форсировать full re-init
+  после preset-load, который и так зовёт evalScore сейчас»).
+  Effect-architecture не ломается: capability пишется в domain/
+  interface, реализуется в infrastructure/audio/, MixerPanel +
+  audioActions зовут её через DI AppLayer. Тесты: новый unit на
+  AudioEngine.setLayerMix с mock repl (verify setPattern called
+  с autos tart=false), новый e2e «drag slider → audio changes
+  без ▶ Play» в tests/e2e/.
+counterexample: |
+  The strongest objection to this decision is captured in the `antithesis` field above: (1) "Push gain напрямую в Pattern" — Strudel Pattern API не
+antithesis: |
+  (1) "Push gain напрямую в Pattern" — Strudel Pattern API не
+  предоставляет мутабельного `.setGain(i, g)`. Patterns immutable.
+  Самый дешёвый hot-swap — `setPattern(newPat, false)`, но
+  `newPat` всё равно требует перепарсинга (а Pattern мы из
+  `stack(...)` целиком не разбираем обратно по слоям — Stack
+  использует internal lazy-query contract, нет `.layers`).
+  Решение: пересобрать snippet через `injectMix` (он у нас уже
+  есть в application/useCases/) → `transpiler.evaluate` → pattern.
+  Полностью skip нельзя; skip можно ТОЛЬКО post-eval side-effects
+  (`repl.evaluate` внутри делает: parse → evalScope →
+  `beforeEval` → `setPattern(autostart=true)` → register runtime
+  hooks — мы вызываем `setPattern` напрямую и пропускаем всё
+  остальное). (2) Solo/mute cascade через `.gain(0)` vs `.mul(0)`
+  — proposition остаётся той же что и в wavecode-track-mixer,
+  injectMix не меняется. (3) Race на быстрый drag слайдера —
+  60Hz mousemove = 60 setLayerMix вызовов/сек. Без дебаунса
+  каждый тянет парсинг snippet (~30 ms на 6 layers на iPhone SE).
+  Решение: 50 ms debounce в presentation-слое, НЕ в AudioEngine
+  (engine остаётся idempotent и synchronous-safe). (4) Конфликт
+  с уже идущим `setCps` (debounce 100 ms в
+  useTransportAudioSync). Если оба debounce'ятся одновременно
+  в одном тике — Strudel scheduler ставит `this.pattern = newPat`
+  атомарно, не теряем состояния. Confirmed через
+  `@strudel/core/cyclist.mjs:3171-3173`. (5) A11y / откат при
+  ошибке парсинга — если перепарсинг фейлится (юзер сохранил
+  кривой snippet через undo между eval и mix), старый pattern
+  всё ещё в `repl.scheduler.pattern`, мы его НЕ трогаем. Failure
+  mode — silent retry на следующем изменении миксера, юзер слышит
+  что ничего не меняется (degraded, но не crash). (6) Зависимость
+  от внутреннего API — `repl.setPattern` экспортирован публично
+  в `@strudel/core/repl.mjs:105-110`, через `@strudel/webaudio`
+  d.ts-обёртку уже доступен. Никакого хака внутренних модулей.
+axiom_link:
+  - A1
+scope:
+  paths: []
+outcomes:
+  - id: wavecode-mixer-live-update-outcome
+    statement: |
+      Mixer changes (gain / mute / solo) пушатся в живой Strudel-паттерн
+      без ручного рестарта.
+obligations:
+  - id: wavecode-mixer-live-update-kernel-validates
+    claim: |
+      The migrated decision file is structurally valid under the math-coding 3.3 schema; `mathc validate` exits 0 for `decisions/<id>.yaml` at HEAD.
+    acceptance:
+      all:
+        - verifier: "mathc validate"
+          result: pass
+  - id: wavecode-mixer-live-update-witness-from-v1
+    claim: |
+      The original v1.0 packet applied on the recorded date in its `witness` file; this migration preserves that evidence as an `attestations/<id>-evidence.json` file.
+    acceptance:
+      all:
+        - verifier: "attestation-store-has-subject"
+          result: pass
+assumptions:
+  - id: wavecode-mixer-live-update-assumption-1
+    state: proven
+    statement: |
+      "Strudel `repl.setPattern(pattern, autostart=false)` Evidence: "@strudel/core/repl.mjs:105-110 + cyclist.mjs:3171-3173
+    owner: human:operator
+  - id: wavecode-mixer-live-update-assumption-2
+    state: assumed
+    statement: |
+      "Парсинг snippet → Pattern без side-effects возможен Evidence: "нет публичного `repl.parse(code, transpiler)` в
+    owner: human:operator
+  - id: wavecode-mixer-live-update-assumption-3
+    state: assumed
+    statement: |
+      "Debounce 50 ms на setLayerMix — компромисс между Evidence: "эмпирический trade-off без жёстких данных;
+    owner: human:operator
+  - id: wavecode-mixer-live-update-assumption-4
+    state: proven
+    statement: |
+      "При ошибке парсинга setter молча роллбэкает Evidence: "Strudel repl.evaluate throws при синтаксической
+    owner: human:operator
+  - id: wavecode-mixer-live-update-assumption-5
+    state: proven
+    statement: |
+      "Mixer edits остаются в `appStore.layerMix` — Evidence: "прецедент setCps в useTransportAudioSync.ts:35-43 —
+    owner: human:operator
+  - id: wavecode-mixer-live-update-assumption-6
+    state: assumed
+    statement: |
+      "Sound changes слышны через ~1 lookahead cycle Evidence: "Strudel docs по scheduler lookbehind/lookahead,
+    owner: human:operator
+risk:
+  declared_triggers:
+    - v1-to-v3-migration-loss
+  owner: human:operator
+relations:
+  addresses:
+    - wavecode-bootstrap-math-coding-3.3@1
+---

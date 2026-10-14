@@ -1,0 +1,76 @@
+---
+schema: math-coding/3.3
+id: wavecode-ai-primary-layout
+revision: 1
+state: draft
+body_sha: "sha256:4acdfc0978a3a40f1c8b370f1343c4e1b76d225cd956cb0a87e0b5cb277b4e5f"
+yaml_sha: "sha256:4acdfc0978a3a40f1c8b370f1343c4e1b76d225cd956cb0a87e0b5cb277b4e5f"
+
+intent:|
+  AI-primary layout wavecode: на desktop (≥1024px) AI-чат занимает
+  доминирующую площадь viewport (≥60% высоты, ≥320px min),
+  ScorePanel уходит в 360px collapsed drawer справа. На mobile —
+  без изменений (BottomSheet-ы уже инвертированы: Score виден по
+  умолчанию, AI по табу). Toggle в TopBar переключает
+  code-primary ↔ ai-primary, persisted в localStorage.
+commitment: |
+  3 компонента + 1 сигнал:
+counterexample: |
+  The strongest objection to this decision is captured in the `antithesis` field above: (1) «AI как главный — спорно, юзер привык кода». Возражение:
+antithesis: |
+  (1) «AI как главный — спорно, юзер привык кода». Возражение:
+  юзер сам сказал «AI должен быть на самом видном месте».
+  Toggle в TopBar = reversal за 1 клик, cost ≈ 0.
+  (2) «Drawer 360px — тесно для кода». Возражение: drawer = scrollable,
+  код-редактор имеет свой внутренний scroll. Юзер видит свой код,
+  но доминирует AI (по запросу).
+  (3) «min-height 320px — magic number». Возражение: 320px = footer
+  (textarea + 3 controls) + 256px messages-list минимум. Magic
+  justified by content audit.
+  3 компонента + 1 сигнал:
+counterexample: |
+  The strongest objection to this decision is captured in the `antithesis` field above: (1) «AI как главный — спорно, юзер привык кода». Возражение:
+antithesis: |
+  (1) «AI как главный — спорно, юзер привык кода». Возражение:
+  юзер сам сказал «AI должен быть на самом видном месте».
+  Toggle в TopBar = reversal за 1 клик, cost ≈ 0.
+  (2) «Drawer 360px — тесно для кода». Возражение: drawer = scrollable,
+  код-редактор имеет свой внутренний scroll. Юзер видит свой код,
+  но доминирует AI (по запросу).
+  (3) «min-height 320px — magic number». Возражение: 320px = footer
+  (textarea + 3 controls) + 256px messages-list минимум. Magic
+  justified by content audit.
+axiom_link:
+  - A1
+scope:
+  paths: []
+outcomes:
+  - id: wavecode-ai-primary-layout-outcome
+    statement: |
+      AI-primary layout wavecode: на desktop (≥1024px) AI-чат занимает
+      доминирующую площадь viewport (≥60% высоты, ≥320px min),
+      ScorePanel уходит в 360px collapsed drawer справа.
+obligations:
+  - id: wavecode-ai-primary-layout-kernel-validates
+    claim: |
+      The migrated decision file is structurally valid under the math-coding 3.3 schema; `mathc validate` exits 0 for `decisions/<id>.yaml` at HEAD.
+    acceptance:
+      all:
+        - verifier: "mathc validate"
+          result: pass
+  - id: wavecode-ai-primary-layout-witness-from-v1
+    claim: |
+      The original v1.0 packet applied on the recorded date in its `witness` file; this migration preserves that evidence as an `attestations/<id>-evidence.json` file.
+    acceptance:
+      all:
+        - verifier: "attestation-store-has-subject"
+          result: pass
+assumptions: []
+risk:
+  declared_triggers:
+    - v1-to-v3-migration-loss
+  owner: human:operator
+relations:
+  addresses:
+    - wavecode-bootstrap-math-coding-3.3@1
+---

@@ -1,0 +1,193 @@
+---
+schema: math-coding/3.3
+id: wavecode-ios-codemirror-input
+revision: 1
+state: draft
+body_sha: "sha256:0df4533d9ec17ba55f3a173487aceaef48d21462673797a8d0fcb7b60de8bf2a"
+yaml_sha: "sha256:0df4533d9ec17ba55f3a173487aceaef48d21462673797a8d0fcb7b60de8bf2a"
+
+intent:|
+  CodeMirror 6 в `presentation/components/CodeMirrorEditor.tsx` корректно
+  принимает ввод с экранной клавиатуры и вставку из буфера на iOS Safari
+  (iPhone / iPad), Android Chrome и desktop — для этого хост-`<div>` получает
+  CSS `touch-action: manipulation` + `-webkit-user-select: text` +
+  `-webkit-touch-callout: default` на `.cm-content`, `touch-action: pan-y` +
+  `-webkit-overflow-scrolling: touch` на `.cm-scroller`, `min-height: 220px`
+  в mobile-блоке (вместо 160), а сам EditorView получает
+  `EditorView.contentAttributes.of({autocorrect:'off', autocapitalize:'off',
+  spellcheck:'false', inputmode:'text'})`.
+commitment: |
+  Три причины одновременно ломают ввод/пасту на iOS: (a) `touch-action` не
+  задан → первый тап уходит в scroll-resolution; (b) `-webkit-touch-callout`
+  не задан → iOS подавляет long-press callout (нет меню «Вставить»);
+  (c) iOS-автокоррекция/автокэп включены по умолчанию → первый символ
+  предложения превращается в заглавную букву, фрагменты кода с «aa/Ab/bb»
+  портятся. Четвёртая — опциональная — минор: при появлении vkb редактор
+  может схлопнуться до 0 высоты (flex + `min-height: 0`), лечится
+  `min-height: 220` на mobile.
+  Минимальный набор правок: 4 правила в `index.css` + 1 CodeMirror-extension
+  в `CodeMirrorEditor.tsx`. Никаких JS-handler'ов, никаких новых
+  зависимостей, никаких изменений в reducer / audio / state. Desktop
+  поведение не меняется (новые CSS-свойства `touch-action`/`-webkit-*` —
+  no-op на не-touch устройствах, `EditorView.contentAttributes` тоже
+  no-op на desktop, где атрибуты `autocorrect`/`autocapitalize` не
+  интерпретируются).
+  Verification — ручная на iPhone в Safari (автор бага). При неуспехе
+  добавляется JS-fallback в `domEventHandlers` (см. Open questions).
+counterexample: |
+  The strongest objection to this decision is captured in the `antithesis` field above: (1) Не фиксить — «юзеры на десктопе, мобайл не основной кейс». Возражение:
+antithesis: |
+  (1) Не фиксить — «юзеры на десктопе, мобайл не основной кейс». Возражение:
+  wavecode открывается в Telegram/Discord-превью, PWA-install на iPhone
+  даёт fullscreen без Safari-chrome, и авторы читают сниппеты с телефона.
+  «Основной кейс» не отменяет того, что текущий код на iOS **сломан**, а
+  не «неоптимален».
+  (2) Заменить CodeMirror на `<textarea>` — потеряем mini-notation
+  highlight и completions. Это регресс на desktop и iPad.
+  (3) Использовать `EditorView.theme({...})` для iOS-CSS вместо
+  `index.css` — оба подхода работают (CM6 не использует shadow DOM);
+  `index.css` проще ревьюить, имеет sibling-блок `@media (max-width:720px)`
+  и матчит существующий стиль. Theme оставлен как fallback-вариант, если
+  в будущем scope изменится.
+  (4) Полный набор фиксов через JS-обёртку (`touchstart` → `view.focus()`,
+  `paste` event handler с `navigator.clipboard.readText`) — это риск
+  overengineering. CSS + contentAttributes покрывают root cause;
+  JS-fallback оставлен на случай, если CSS-only не сработает на
+  конкретном устройстве (см. «What this is NOT»).
+  (5) Тестировать только добавлением `webkit` проекта в `playwright.config.ts`
+  — запрещено политикой проекта (общий Chromium в `/run/current-system/`,
+  без локального `npx playwright install`). WebKit-регрессия
+  документируется как manual verification, не автоматизируется.
+  Три причины одновременно ломают ввод/пасту на iOS: (a) `touch-action` не
+  задан → первый тап уходит в scroll-resolution; (b) `-webkit-touch-callout`
+  не задан → iOS подавляет long-press callout (нет меню «Вставить»);
+  (c) iOS-автокоррекция/автокэп включены по умолчанию → первый символ
+  предложения превращается в заглавную букву, фрагменты кода с «aa/Ab/bb»
+  портятся. Четвёртая — опциональная — минор: при появлении vkb редактор
+  может схлопнуться до 0 высоты (flex + `min-height: 0`), лечится
+  `min-height: 220` на mobile.
+  Минимальный набор правок: 4 правила в `index.css` + 1 CodeMirror-extension
+  в `CodeMirrorEditor.tsx`. Никаких JS-handler'ов, никаких новых
+  зависимостей, никаких изменений в reducer / audio / state. Desktop
+  поведение не меняется (новые CSS-свойства `touch-action`/`-webkit-*` —
+  no-op на не-touch устройствах, `EditorView.contentAttributes` тоже
+  no-op на desktop, где атрибуты `autocorrect`/`autocapitalize` не
+  интерпретируются).
+  Verification — ручная на iPhone в Safari (автор бага). При неуспехе
+  добавляется JS-fallback в `domEventHandlers` (см. Open questions).
+counterexample: |
+  The strongest objection to this decision is captured in the `antithesis` field above: (1) Не фиксить — «юзеры на десктопе, мобайл не основной кейс». Возражение:
+antithesis: |
+  (1) Не фиксить — «юзеры на десктопе, мобайл не основной кейс». Возражение:
+  wavecode открывается в Telegram/Discord-превью, PWA-install на iPhone
+  даёт fullscreen без Safari-chrome, и авторы читают сниппеты с телефона.
+  «Основной кейс» не отменяет того, что текущий код на iOS **сломан**, а
+  не «неоптимален».
+  (2) Заменить CodeMirror на `<textarea>` — потеряем mini-notation
+  highlight и completions. Это регресс на desktop и iPad.
+  (3) Использовать `EditorView.theme({...})` для iOS-CSS вместо
+  `index.css` — оба подхода работают (CM6 не использует shadow DOM);
+  `index.css` проще ревьюить, имеет sibling-блок `@media (max-width:720px)`
+  и матчит существующий стиль. Theme оставлен как fallback-вариант, если
+  в будущем scope изменится.
+  (4) Полный набор фиксов через JS-обёртку (`touchstart` → `view.focus()`,
+  `paste` event handler с `navigator.clipboard.readText`) — это риск
+  overengineering. CSS + contentAttributes покрывают root cause;
+  JS-fallback оставлен на случай, если CSS-only не сработает на
+  конкретном устройстве (см. «What this is NOT»).
+  (5) Тестировать только добавлением `webkit` проекта в `playwright.config.ts`
+  — запрещено политикой проекта (общий Chromium в `/run/current-system/`,
+  без локального `npx playwright install`). WebKit-регрессия
+  документируется как manual verification, не автоматизируется.
+axiom_link:
+  - A1
+scope:
+  paths: []
+outcomes:
+  - id: wavecode-ios-codemirror-input-outcome
+    statement: |
+      CodeMirror 6 в `presentation/components/CodeMirrorEditor.
+obligations:
+  - id: wavecode-ios-codemirror-input-kernel-validates
+    claim: |
+      The migrated decision file is structurally valid under the math-coding 3.3 schema; `mathc validate` exits 0 for `decisions/<id>.yaml` at HEAD.
+    acceptance:
+      all:
+        - verifier: "mathc validate"
+          result: pass
+  - id: wavecode-ios-codemirror-input-witness-from-v1
+    claim: |
+      The original v1.0 packet applied on the recorded date in its `witness` file; this migration preserves that evidence as an `attestations/<id>-evidence.json` file.
+    acceptance:
+      all:
+        - verifier: "attestation-store-has-subject"
+          result: pass
+assumptions:
+  - id: wavecode-ios-codemirror-input-assumption-1
+    state: proven
+    statement: |
+      "iOS Safari требует `touch-action: manipulation` на Evidence: "WebKit Blog «Making Touched Elements Responsive» +
+    owner: human:operator
+  - id: wavecode-ios-codemirror-input-assumption-2
+    state: proven
+    statement: |
+      "iOS Safari подавляет long-press callout, если Evidence: "WebKit CSS Reference: `-webkit-touch-callout` —
+    owner: human:operator
+  - id: wavecode-ios-codemirror-input-assumption-3
+    state: proven
+    statement: |
+      "iOS Safari на `<div contenteditable>` по умолчанию Evidence: "Apple Safari HTML Authoring Guide + WebKit-«Auto Correction
+    owner: human:operator
+  - id: wavecode-ios-codemirror-input-assumption-4
+    state: proven
+    statement: |
+      "CodeMirror 6 НЕ выставляет `touch-action` / `-webkit-*` Evidence: "node_modules/codemirror/dist/index.js — `basicSetup`
+    owner: human:operator
+  - id: wavecode-ios-codemirror-input-assumption-5
+    state: proven
+    statement: |
+      "iOS Safari при появлении vkb ресайзит visual viewport; Evidence: "WebKit blog «The iOS Keyboard and the Visual Viewport»;
+    owner: human:operator
+  - id: wavecode-ios-codemirror-input-assumption-6
+    state: proven
+    statement: |
+      "`autocapitalize=off` в contenteditable работает Evidence: "HTML Standard `autocapitalize` attribute, iOS поддерживает
+    owner: human:operator
+  - id: wavecode-ios-codemirror-input-assumption-7
+    state: proven
+    statement: |
+      "`EditorView.contentAttributes` — канонический CM6 Evidence: "@codemirror/view docs: `EditorView.contentAttributes` —
+    owner: human:operator
+  - id: wavecode-ios-codemirror-input-assumption-8
+    state: proven
+    statement: |
+      "В wavecode нет mobile-specific CSS (grep по Evidence: "`rg -n 'touch-action|user-select|touch-callout|webkit'
+    owner: human:operator
+  - id: wavecode-ios-codemirror-input-assumption-9
+    state: proven
+    statement: |
+      "iOS Safari вызывает `beforeinput` с Evidence: "@codemirror/view/src/input.ts — handler
+    owner: human:operator
+  - id: wavecode-ios-codemirror-input-assumption-10
+    state: proven
+    statement: |
+      "`navigator.clipboard.readText()` требует secure Evidence: "MDN `Clipboard.readText()`: «Available only in secure
+    owner: human:operator
+  - id: wavecode-ios-codemirror-input-assumption-11
+    state: assumed
+    statement: |
+      "iOS 17+ и iPadOS 17+ в Safari уважают `-webkit-touch-callout` Evidence: "отсутствие репортов о поломке в ProseMirror / Tiptap
+    owner: human:operator
+  - id: wavecode-ios-codemirror-input-assumption-12
+    state: proven
+    statement: |
+      "Bug-репорт автора: «не вставляется у меня, и вообще Evidence: "чат с автором 2026-10-08 (этот же тред)"
+    owner: human:operator
+risk:
+  declared_triggers:
+    - v1-to-v3-migration-loss
+  owner: human:operator
+relations:
+  addresses:
+    - wavecode-bootstrap-math-coding-3.3@1
+---

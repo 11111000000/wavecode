@@ -1,0 +1,154 @@
+---
+schema: math-coding/3.3
+id: wavecode-pwa-mobile
+revision: 1
+state: active
+body_sha: "sha256:46ba04ceb1abb038c32edef30db0caacd4faa4b54c206000707cfdaf48c79ca7"
+yaml_sha: "sha256:46ba04ceb1abb038c32edef30db0caacd4faa4b54c206000707cfdaf48c79ca7"
+
+intent:|
+  wavecode — installable PWA. `vite-plugin-pwa` включён в
+  `vite.config.ts` с `registerType: 'autoUpdate'`, прекэш initial
+  bundle (HTML, JS, CSS, fonts), runtime-кэш Strudel vendor-chunks
+  (`@strudel/core`, `@strudel/webaudio`, etc.) и `llm.kosov.online`
+  responses — через Workbox `precacheAndRoute`. `public/manifest.webmanifest`
+  со ссылками на `icon-192.png`, `icon-512.png`, `apple-touch-icon-
+  180.png`. В `ui/index.html` — 4 meta-тега: `apple-mobile-web-app-capable
+  = "yes"`, `mobile-web-app-capable = "yes"`, `theme-color = "#0a0a0a"`
+  (уже есть), `viewport-fit = "cover"` (safe area iPhone notch).
+  На iPhone Safari «Add to Home Screen» даёт fullscreen application
+  без Safari chrome и без history-back (то, чего хотят профи в metro).
+commitment: |
+  `vite-plugin-pwa` + Workbox precache + manual `public/manifest.webmanifest`
+  + 4 meta-теги + 3 PNG-иконки. Никакого custom service worker — Workbox
+  defaults хватает. Иконки простые, `wavecode` mono-accent text
+  generator на first commit (SVG, потом Sharp PNG). `viewport-fit=cover`
+  на iOS Safari 14+ работает, на старых — `padding: env(safe-area-inset)`
+  в `.app` селекторе.
+counterexample: |
+  The strongest objection to this decision is captured in the `antithesis` field above: (1) `vite-plugin-pwa` тянет Workbox ~30KB minified + complexity;
+antithesis: |
+  (1) `vite-plugin-pwa` тянет Workbox ~30KB minified + complexity;
+  Strudel vendor-chunks прекэшируются (~676KB precache) — первая
+  install у юзера долгая. Решение: precache только critical path
+  (HTML/JS entry, fonts), остальное `runtime caching` Strudel-
+  chunks on-demand. (2) Service worker stale-while-revalidate —
+  юзер hard-reload может не получить latest UI если SW застрял.
+  Решение: `autoUpdate` + cache-bust query-string на каждую новую
+  deployment (vite делает hash-bundles автоматически). (3) iOS
+  Safari < 17 имеет баги в `apple-mobile-web-app-capable` с
+  viewport-fit=cover — status bar overlap; hybrid: опциональный
+  `<meta name="apple-mobile-web-app-status-bar-style" content="black-
+  translucent">`. (4) Push notifications НЕ нужны (мы не пушим
+  UI), не добавляем — diminishing returns. (5) Service worker
+  offline-mode score-read OK; но `repo.saveScore` IDB-write без
+  аудио context не нужен, всё равно OK. Strudel init — единственный
+  эффект, который ВСЁ ЕЩЁ блокирует UI; SW не влияет. (6)
+  icon-192/512 — генерация PNG placeholders; без дизайнера берём
+  простой SVG-style «wavecode» monogram. (7) SW регистрация через
+  `vite-plugin-pwa` `registerType: 'autoUpdate'` автоматически.
+  `vite-plugin-pwa` + Workbox precache + manual `public/manifest.webmanifest`
+  + 4 meta-теги + 3 PNG-иконки. Никакого custom service worker — Workbox
+  defaults хватает. Иконки простые, `wavecode` mono-accent text
+  generator на first commit (SVG, потом Sharp PNG). `viewport-fit=cover`
+  на iOS Safari 14+ работает, на старых — `padding: env(safe-area-inset)`
+  в `.app` селекторе.
+counterexample: |
+  The strongest objection to this decision is captured in the `antithesis` field above: (1) `vite-plugin-pwa` тянет Workbox ~30KB minified + complexity;
+antithesis: |
+  (1) `vite-plugin-pwa` тянет Workbox ~30KB minified + complexity;
+  Strudel vendor-chunks прекэшируются (~676KB precache) — первая
+  install у юзера долгая. Решение: precache только critical path
+  (HTML/JS entry, fonts), остальное `runtime caching` Strudel-
+  chunks on-demand. (2) Service worker stale-while-revalidate —
+  юзер hard-reload может не получить latest UI если SW застрял.
+  Решение: `autoUpdate` + cache-bust query-string на каждую новую
+  deployment (vite делает hash-bundles автоматически). (3) iOS
+  Safari < 17 имеет баги в `apple-mobile-web-app-capable` с
+  viewport-fit=cover — status bar overlap; hybrid: опциональный
+  `<meta name="apple-mobile-web-app-status-bar-style" content="black-
+  translucent">`. (4) Push notifications НЕ нужны (мы не пушим
+  UI), не добавляем — diminishing returns. (5) Service worker
+  offline-mode score-read OK; но `repo.saveScore` IDB-write без
+  аудио context не нужен, всё равно OK. Strudel init — единственный
+  эффект, который ВСЁ ЕЩЁ блокирует UI; SW не влияет. (6)
+  icon-192/512 — генерация PNG placeholders; без дизайнера берём
+  простой SVG-style «wavecode» monogram. (7) SW регистрация через
+  `vite-plugin-pwa` `registerType: 'autoUpdate'` автоматически.
+axiom_link:
+  - A1
+scope:
+  paths: []
+outcomes:
+  - id: wavecode-pwa-mobile-outcome
+    statement: |
+      wavecode — installable PWA.
+obligations:
+  - id: wavecode-pwa-mobile-kernel-validates
+    claim: |
+      The migrated decision file is structurally valid under the math-coding 3.3 schema; `mathc validate` exits 0 for `decisions/<id>.yaml` at HEAD.
+    acceptance:
+      all:
+        - verifier: "mathc validate"
+          result: pass
+  - id: wavecode-pwa-mobile-witness-from-v1
+    claim: |
+      The original v1.0 packet applied on the recorded date in its `witness` file; this migration preserves that evidence as an `attestations/<id>-evidence.json` file.
+    acceptance:
+      all:
+        - verifier: "attestation-store-has-subject"
+          result: pass
+assumptions:
+  - id: wavecode-pwa-mobile-assumption-1
+    state: proven
+    statement: |
+      "vite-plugin-pwa совместимо с Vite 5 (project use Evidence: "vite-plugin-pwa docs — Vite 5 поддержка, registerType
+    owner: human:operator
+  - id: wavecode-pwa-mobile-assumption-2
+    state: proven
+    statement: |
+      "Workbox precache limit по manifest size — каждый Evidence: "Workbox defaults — `maximumFileSizeToCacheInBytes =
+    owner: human:operator
+  - id: wavecode-pwa-mobile-assumption-3
+    state: proven
+    statement: |
+      "Apple-touch-icon-180 PNG требуется iOS чтобы Evidence: "Apple WebKit docs `apple-touch-icon` — image/png
+    owner: human:operator
+  - id: wavecode-pwa-mobile-assumption-4
+    state: proven
+    statement: |
+      "iOS Safari ≥14 уважает `viewport-fit=cover` + Evidence: "Safari 14 release notes — поддержка PWA-features
+    owner: human:operator
+  - id: wavecode-pwa-mobile-assumption-5
+    state: assumed
+    statement: |
+      "Strudel vendor-chunks @strudel/*~676KB — НЕ в Evidence: "vite-plugin-pwa docs — separate precache (own routes)
+    owner: human:operator
+  - id: wavecode-pwa-mobile-assumption-6
+    state: proven
+    statement: |
+      "manifest.webmanifest требует HTTPS в production Evidence: "W3C Web App Manifest spec — браузеры требуют HTTPS
+    owner: human:operator
+  - id: wavecode-pwa-mobile-assumption-7
+    state: proven
+    statement: |
+      "PWA install через WebKit iOS требует explicit Evidence: "Apple WebKit docs — PWA install на iOS manual через
+    owner: human:operator
+  - id: wavecode-pwa-mobile-assumption-8
+    state: proven
+    statement: |
+      "Service worker регистрация безопасна на Vite dev Evidence: "vite-plugin-pwa docs — dev-mode без SW по умолчанию"
+    owner: human:operator
+  - id: wavecode-pwa-mobile-assumption-9
+    state: assumed
+    statement: |
+      "Иконки wavecode monogram — design system зависит; Evidence: "PWA icon best practice — should reflect brand; если
+    owner: human:operator
+risk:
+  declared_triggers:
+    - v1-to-v3-migration-loss
+  owner: human:operator
+relations:
+  addresses:
+    - wavecode-bootstrap-math-coding-3.3@1
+---

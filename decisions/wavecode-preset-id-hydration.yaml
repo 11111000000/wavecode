@@ -1,0 +1,242 @@
+---
+schema: math-coding/3.3
+id: wavecode-preset-id-hydration
+revision: 1
+state: active
+body_sha: "sha256:c0545153830a8c32f574d464efa88f17a6d1b6a6fb3285d9feecab5d4d9ea7b9"
+yaml_sha: "sha256:c0545153830a8c32f574d464efa88f17a6d1b6a6fb3285d9feecab5d4d9ea7b9"
+
+intent:|
+  Пресет-селектор в TransportBar показывает `'creep'` независимо от
+  того, какая композиция реально восстанавливается из IDB. Юзер
+  грузит пресет X, нажимает Play, перезагружает вкладку — играет X,
+  но в дропдауне `Creep · Radiohead` (всегда первая опция).
+
+  Корень: `App.tsx:119` объявляет
+  `const [presetId, setPresetId] = createSignal('creep')` — локальный
+  сигнал компонента, без какой-либо гидрации. Параллельно
+  `useAppBootstrap.ts:18-42` восстанавливает только `appStore.score`
+  из IDBRepo. После релоада получаем
+  `appStore.score = X.code` (восстановлен), `presetId() = 'creep'`
+  (дефолт) — два источника истины расходятся.
+
+  Дополнительная регрессия из старого `App.tsx:207-214`: при удалении
+  кастомного пресета пока идёт аудиосессия, `setPresetId('creep')`
+  ставится без валидации. Если в этот же момент юзер перезагрузился —
+  селектор сначала мигнёт на «creep», потом useAppBootstrap вызовет
+  `replaceScore(X.code)` → evalScore поднимет ту же X. Селектор
+  солжёт ещё до того, как юзер успел моргнуть.
+
+  Решение — перситенция `selectedPresetId` (новый ключ
+  `wavecode-selected-preset-v1` в localStorage), гидрация обоих
+  полей атомарно в `useAppBootstrap` с явным фолбэком при
+  рассинхроне.
+
+  **Семантика «последний загруженный»:** сигнал отражает последний
+  пресет, который юзер явно открыл из селектора. Правки score НЕ
+  сбрасывают сигнал в null — это естественная DAW-семантика
+  (Ableton Live, FL Studio, Bitwig — все сохраняют имя пресета даже
+  когда юзер начал его модифицировать). Если юзер редактировал и
+  перезагрузил — он увидит имя того пресета, который последний раз
+  открывал. Score в IDB уже сохранён useAutoSave, селектор всё
+  ещё указывает на X. Если X всё ещё существует и его
+  `preset.score === saved score` — выбор валиден, восстанавливаем.
+  Если X удалён — fallback на `'creep'` + persist (юзер больше не
+  сможет случайно восстановить несуществующий id). Score↔preset
+  drift (юзер редактировал) — НЕ фолбэк, потому что «правленый X»
+  остаётся легитимным представлением «последний выбор был X».
+
+  **Что НЕ входит в этот пакет (явно):**
+  (a) «Custom» placeholder в `<select>` — отсутствие такого состояния
+  не блокирует основной фикс. Пока score отличается от пресета
+  — селектор показывает имя пресета (последний загруженный).
+  Это документированное поведение, не баг.
+  (b) Авто-чистка `selectedPresetId` на каждое изменение score —
+  избыточно. Юзер должен явно выбрать пресет через селектор
+  чтобы сигнал сменился. См. antithesis (3).
+  (c) UI-сигнал «сейчас score отличается от пресета» (badge `*`).
+  Может быть добавлен позже отдельным пакетом.
+commitment: |
+  Три коммита в одной серии на ветке `fix/preset-id-hydration`:
+counterexample: |
+  The strongest objection to this decision is captured in the `antithesis` field above: (1) «Можно вместо нового стора переиспользовать uiState — он
+antithesis: |
+  (1) «Можно вместо нового стора переиспользовать uiState — он
+  уже хранит state в localStorage». Возражение: uiState — это
+  layout/mobile state (презентационный), не composition state.
+  selectedPresetId привязан к партитуре и AudioEngine через
+  `replaceScore`. Смешивать с layout state — нарушение
+  single-responsibility, затрудняет будущий split-pack
+  (composition state может стать частью `compositionState.ts`,
+  а layout останется отдельно).
+  (2) «Можно хранить selectedPresetId в IDB вместе со score как
+  один объект `{score, presetId}`. Атомарность!». Возражение:
+  атомарность не нужна — score пишется через useAutoSave (500ms
+  debounce), presetId пишется в момент явного выбора. Между
+  ними в худшем случае ~500ms окно где они не вполне
+  синхронны, но обе записи всё равно случатся до релоада
+  (юзер не успеет перезагрузить вкладку за 500ms после выбора
+  пресета без сохранения score). Два ключа проще мигрировать
+  (если завтра score переедет на localStorage, обратное
+  разделение будет болезненным). IDB для milestone-строки —
+  overkill (4-12 chars), localStorage — норма.
+  (3) «При редактировании score надо сбрасывать selectedPresetId
+  в null — иначе это "ложь"». Возражение: это не ложь, а
+  documented DAW-семантика. Ableton, FL Studio, Bitwig, Logic
+  Pro — все показывают имя пресета даже когда юзер начал его
+  модифицировать. Это даёт юзеру mental hook "это модификация
+  X" вместо "это новый пустой трек". Дополнительный бонус:
+  если юзер откроет другой пресет и вернётся, селектор
+  покажет тот же X. Авто-сброс создал бы «фантомные» null
+  состояния в дропдауне — а их сейчас нет (select требует
+  value, нет placeholder).
+  (4) «Можно просто хардкодить `'creep'` дефолт и не вводить
+  `setSelectedPresetPersist` API». Возражение: тогда
+  `useAppBootstrap` после restore вынужден лезть в
+  localStorage напрямую + дублировать запись. Выделение в
+  store скрывает детали персистенции, тестируется отдельно,
+  единый entry-point для всех mutations (включая `onNew`,
+  `onDeletePreset`, `onResetAll`).
+  (5) «Просто читай selectedPreset из IDBRepo, не плоди новый
+  ключ**. Возражение: IDBRepo уже перегружен (score,
+  messages, share). selectedPreset — презентационный сигнал,
+  не доменное поле AppState. localStorage — правильный
+  уровень для мелких UI prefs (mobile mode, sheet height,
+  custom presets — все там). См. precedent:
+  `wavecode-ui-state-v1`, `wavecode-mobile-transport-expanded-v1`,
+  `wavecode-custom-presets-v1`.
+  (6) «Не нужен пакет, trivial fix». Возражение: precedent в
+  репо — каждый layout/state-fix с побочными эффектами
+  сопровождается packet (см. math/wavecode-mobile-transport-bar,
+  math/wavecode-preset-row-and-toast-z, math/wavecode-ui-state).
+  Семантика «последний загруженный» — non-obvious choice,
+  документирование обязательно чтобы следующий агент не
+  «починил» это в обратную сторону.
+  Три коммита в одной серии на ветке `fix/preset-id-hydration`:
+counterexample: |
+  The strongest objection to this decision is captured in the `antithesis` field above: (1) «Можно вместо нового стора переиспользовать uiState — он
+antithesis: |
+  (1) «Можно вместо нового стора переиспользовать uiState — он
+  уже хранит state в localStorage». Возражение: uiState — это
+  layout/mobile state (презентационный), не composition state.
+  selectedPresetId привязан к партитуре и AudioEngine через
+  `replaceScore`. Смешивать с layout state — нарушение
+  single-responsibility, затрудняет будущий split-pack
+  (composition state может стать частью `compositionState.ts`,
+  а layout останется отдельно).
+  (2) «Можно хранить selectedPresetId в IDB вместе со score как
+  один объект `{score, presetId}`. Атомарность!». Возражение:
+  атомарность не нужна — score пишется через useAutoSave (500ms
+  debounce), presetId пишется в момент явного выбора. Между
+  ними в худшем случае ~500ms окно где они не вполне
+  синхронны, но обе записи всё равно случатся до релоада
+  (юзер не успеет перезагрузить вкладку за 500ms после выбора
+  пресета без сохранения score). Два ключа проще мигрировать
+  (если завтра score переедет на localStorage, обратное
+  разделение будет болезненным). IDB для milestone-строки —
+  overkill (4-12 chars), localStorage — норма.
+  (3) «При редактировании score надо сбрасывать selectedPresetId
+  в null — иначе это "ложь"». Возражение: это не ложь, а
+  documented DAW-семантика. Ableton, FL Studio, Bitwig, Logic
+  Pro — все показывают имя пресета даже когда юзер начал его
+  модифицировать. Это даёт юзеру mental hook "это модификация
+  X" вместо "это новый пустой трек". Дополнительный бонус:
+  если юзер откроет другой пресет и вернётся, селектор
+  покажет тот же X. Авто-сброс создал бы «фантомные» null
+  состояния в дропдауне — а их сейчас нет (select требует
+  value, нет placeholder).
+  (4) «Можно просто хардкодить `'creep'` дефолт и не вводить
+  `setSelectedPresetPersist` API». Возражение: тогда
+  `useAppBootstrap` после restore вынужден лезть в
+  localStorage напрямую + дублировать запись. Выделение в
+  store скрывает детали персистенции, тестируется отдельно,
+  единый entry-point для всех mutations (включая `onNew`,
+  `onDeletePreset`, `onResetAll`).
+  (5) «Просто читай selectedPreset из IDBRepo, не плоди новый
+  ключ**. Возражение: IDBRepo уже перегружен (score,
+  messages, share). selectedPreset — презентационный сигнал,
+  не доменное поле AppState. localStorage — правильный
+  уровень для мелких UI prefs (mobile mode, sheet height,
+  custom presets — все там). См. precedent:
+  `wavecode-ui-state-v1`, `wavecode-mobile-transport-expanded-v1`,
+  `wavecode-custom-presets-v1`.
+  (6) «Не нужен пакет, trivial fix». Возражение: precedent в
+  репо — каждый layout/state-fix с побочными эффектами
+  сопровождается packet (см. math/wavecode-mobile-transport-bar,
+  math/wavecode-preset-row-and-toast-z, math/wavecode-ui-state).
+  Семантика «последний загруженный» — non-obvious choice,
+  документирование обязательно чтобы следующий агент не
+  «починил» это в обратную сторону.
+axiom_link:
+  - A5
+scope:
+  paths: []
+outcomes:
+  - id: wavecode-preset-id-hydration-outcome
+    statement: |
+      Пресет-селектор в TransportBar показывает `'creep'` независимо от
+      того, какая композиция реально восстанавливается из IDB.
+obligations:
+  - id: wavecode-preset-id-hydration-kernel-validates
+    claim: |
+      The migrated decision file is structurally valid under the math-coding 3.3 schema; `mathc validate` exits 0 for `decisions/<id>.yaml` at HEAD.
+    acceptance:
+      all:
+        - verifier: "mathc validate"
+          result: pass
+  - id: wavecode-preset-id-hydration-witness-from-v1
+    claim: |
+      The original v1.0 packet applied on the recorded date in its `witness` file; this migration preserves that evidence as an `attestations/<id>-evidence.json` file.
+    acceptance:
+      all:
+        - verifier: "attestation-store-has-subject"
+          result: pass
+assumptions:
+  - id: wavecode-preset-id-hydration-assumption-1
+    state: proven
+    statement: |
+      "App.tsx инициализирует presetId signal = 'creep' при каждом mount, без гидрации" Evidence: "ui/src/App.tsx:119 — `const [presetId, setPresetId] = createSignal('creep');`"
+    owner: human:operator
+  - id: wavecode-preset-id-hydration-assumption-2
+    state: proven
+    statement: |
+      "useAppBootstrap гидрирует только score, не presetId" Evidence: "ui/src/presentation/state/useAppBootstrap.ts:18-42 — `repo.loadScore()` → `dispatch({type:'replaceScore', text})`. Никаких обращений к preset-related storage."
+    owner: human:operator
+  - id: wavecode-preset-id-hydration-assumption-3
+    state: proven
+    statement: |
+      "score и messages разделяют IDBRepo; selectedPreset будет в localStorage (другая категория)" Evidence: "ui/src/infrastructure/repo/IDBRepo.ts:12-13 — KEY_SCORE / KEY_MESSAGES в idb-keyval. precedent: `wavecode-ui-state-v1`, `wavecode-mobile-transport-expanded-v1`, `wavecode-custom-presets-v1` все в localStorage."
+    owner: human:operator
+  - id: wavecode-preset-id-hydration-assumption-4
+    state: assumed
+    statement: |
+      "Все DAW (Ableton, FL Studio, Bitwig, Logic Pro) сохраняют имя пресета при модификации score" Evidence: "axiom A5 (surface the model): «show user what they last loaded» важнее eсли-«score сейчас equals». Пользователь редактирует X → его mental model «это модификация X», не «это новый трек»."
+    owner: human:operator
+  - id: wavecode-preset-id-hydration-assumption-5
+    state: proven
+    statement: |
+      "score авто-сохраняется useAutoSave каждые 500ms; selectedPreset пишется сразу (no debounce) — оба гарантированно до следующего reload" Evidence: "ui/src/presentation/state/useAutoSave.ts:14-26 (500ms debounce на score). selectedPreset пишется в момент `onLoadPreset`/`onNew`/`onDeletePreset`/`onResetAll` — synchronous localStorage.setItem."
+    owner: human:operator
+  - id: wavecode-preset-id-hydration-assumption-6
+    state: proven
+    statement: |
+      "AppShell re-mount в dev (StrictMode) не сбрасывает сигнал — он module-level" Evidence: "createSignal в top-level модуле (не внутри компонента) живёт пока живёт JS realm. StrictMode unmount/remount компонентов не уничтожает module-level сигналы."
+    owner: human:operator
+  - id: wavecode-preset-id-hydration-assumption-7
+    state: proven
+    statement: |
+      "presetId используется в 3 местах: <TopBar> prop, <TransportBar> prop, onDeletePreset проверка `startsWith('custom-')`" Evidence: "grep presetId ui/src → 18 hits в App.tsx:119,190,208,223; TopBar.tsx:17,127; TransportBar.tsx:90,217. Все read-only кроме setPresetId в App.tsx:205,211,231,241."
+    owner: human:operator
+  - id: wavecode-preset-id-hydration-assumption-8
+    state: proven
+    statement: |
+      "Reset all должен чистить ВСЁ включая selectedPreset" Evidence: "ui/src/App.tsx:37-50 — `Сбросить ВСЕ настройки и очистить локальное хранилище? (localStorage + IDB score/messages)`. Уже чистит ui-state-v1, llm-settings-v1, custom-presets-v1. selectedPreset-v1 логически в той же категории."
+    owner: human:operator
+risk:
+  declared_triggers:
+    - v1-to-v3-migration-loss
+  owner: human:operator
+relations:
+  addresses:
+    - wavecode-bootstrap-math-coding-3.3@1
+---

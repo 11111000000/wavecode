@@ -33,3 +33,11 @@ playwright/.cache/
 # Local agent worktrees (parallel work)
 .worktrees/
 .paseo-worktrees/
+
+# Python (math-coding v1→v3.3 migration script)
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# mathc cache (per-session evaluation cache)
+.local/

@@ -1,0 +1,191 @@
+---
+schema: math-coding/3.3
+id: wavecode-bootstrap-math-coding-3.3
+revision: 1
+state: active
+body_sha: "sha256:7df8ea6235143b6c30e4513858b88b37011c2f830d9a855fa5356c8dc6034c63"
+yaml_sha: "sha256:7df8ea6235143b6c30e4513858b88b37011c2f830d9a855fa5356c8dc6034c63"
+
+intent: |
+  Upgrade wavecode's decision-tracking surface from the homegrown
+  `math-coding v1.0` (per-package `math/<name>/packet.md` +
+  `witness` files, lifecycle computed from git) to math-coding
+  3.3 (per-decision `decisions/<id>.yaml` + JSON attestations
+  under `attestations/`, lifecycle explicit via `state` field,
+  obligations/acceptance enforced by the kernel).
+
+  This decision is the active policy that defines what the
+  wavecode math-coding 3.3 instance covers. Until this revision,
+  all 88 historical packets in `math/` are the per-project source
+  of truth; from rev 1 of this decision onward, every new
+  architectural commitment MUST be recorded as a new file in
+  `decisions/` per the math-coding 3.3 schema (see `schemas/
+  decision.json`), and 88 historical packets are migrated to
+  per-decision YAMLs in subsequent commits of this same branch.
+
+axiom_link:
+  - A0
+  - A3
+
+commitment: |
+  1. Every new architectural commitment lands as a YAML file
+     under `decisions/` whose `schema` field equals
+     `math-coding/3.3` and whose `state` is one of
+     `draft`/`retired`/`superseded` (active is the default).
+  2. `decisions/<id>.yaml` is the only authoring surface for
+     decision-class artefacts in wavecode. `math/<name>/`
+     is reserved for historical v1.0 packets and is removed
+     once migration closes.
+  3. `mathc validate decisions/*.yaml` returns exit 0 against
+     the live tree (no `MC-*` reject diagnostics on any
+     committed decision file).
+  4. `mathc self-check` is invoked by CI in `warn` mode during
+     the transition period (one release cycle from this
+     commit). Promotion to `fail` mode is gated on a separate
+     decision that requires attestation-store fill to reach
+     `total >= decisions.length` per the math-coding 3.3
+     algebra-3.2 §22 gate semantics.
+  5. The scope of this wavecode math-coding instance excludes
+     infrastructure owned elsewhere: `~/Projects/AngaraConfig/`,
+     `~/Projects/Composer/`, the shared `chromium` at
+     `/run/current-system/sw/bin/chromium`, and the GitVerse
+     runner VM that hosts CI. Decisions that affect those
+     surfaces must be filed in their respective math-coding
+     instances, not here.
+
+scope:
+  paths:
+    - "ui/**"
+    - "bin/**"
+    - "decisions/**"
+    - "attestations/**"
+    - "schemas/**"
+    - "scripts/**"
+    - "docs/**"
+    - "AGENTS.md"
+    - "README.md"
+    - ".gitverse/**"
+    - "package.json"
+  exclusions:
+    - "ui/node_modules/**"
+    - "ui/dist/**"
+    - "dist.prev.*/**"
+    - ".worktrees/**"
+    - "test-results/**"
+    - ".playwright-mcp/**"
+
+outcomes:
+  - id: schema-bumped-to-3-3
+    statement: |
+      Every committed decision file under `decisions/` declares
+      `schema: math-coding/3.3` (the legacy `3.0-alpha` and
+      `3.2` strings are absent from the live tree).
+  - id: kernel-validates-clean
+    statement: |
+      `mathc validate decisions/*.yaml` returns exit 0
+      (zero rejects) for every decision file in the live
+      tree at HEAD.
+  - id: ci-warn-stage-active
+    statement: |
+      `.gitverse/workflows/math-coding.yml` (or equivalent
+      gate step) runs `mathc self-check` on every push and
+      PR; non-zero exit is recorded as a workflow warning,
+      not a failure, until the promotion decision closes.
+  - id: historical-packets-archived
+    statement: |
+      Every v1.0 packet under `math/<name>/packet.md` has
+      a corresponding `decisions/<id>.yaml` (same semantic
+      commitment) emitted by the migration script, plus at
+      least one `attestations/<id>-*.json` derived from the
+      original `witness` file.
+
+obligations:
+  - id: all-decisions-validate
+    claim: |
+      `mathc validate decisions/*.yaml` exits 0 with zero
+      `MC-*` rejects across all committed decisions at HEAD.
+    acceptance:
+      all:
+        - verifier: mathc validate
+          result: pass
+  - id: self-check-warn-stage
+    claim: |
+      `.gitverse/workflows/math-coding.yml` contains a step
+      that invokes `mathc self-check` with `continue-on-error:
+      true` (or equivalent warn-only semantics) and uploads
+      the JSON verdict as a workflow artifact.
+    acceptance:
+      all:
+        - verifier: text-scan-self-check-step
+          result: pass
+  - id: schemas-folder-pinned
+    claim: |
+      `schemas/decision.json`, `schemas/common.json`,
+      `schemas/attestation.json`, `schemas/obligation.json`,
+      `schemas/policy.json`, `schemas/waiver.json` exist in
+      the live tree at HEAD with `$id` URLs pointing to
+      `https://math-coding.org/schema/3.3/<name>.json`.
+    acceptance:
+      all:
+        - verifier: text-scan-schemas-3-3-id
+          result: pass
+
+risk:
+  declared_triggers:
+    - kernel-version-drift
+    - attestation-store-empty
+    - migration-script-loss
+    - ci-fail-mode-premature-promotion
+  owner: human:operator
+
+reversal:
+  - signal: kernel-rejects-live-decisions
+    action: revert
+  - signal: ci-self-check-blocks-deployment-without-attestations
+    action: halt
+  - signal: schema-id-mismatch-with-installed-binary
+    action: halt
+
+counterexample: |
+  "wavecode's v1.0 packet format has been working fine; the
+  schema-string bump to 3.3 is cosmetic and the migration
+  cost is unjustified." Counterargument: per the v3.3
+  schema-string-bump decision
+  (`decisions/schema-string-bump-3.0-alpha-to-3.3-2026-10`
+  in the math-coding repo), `mathc validate` consults the
+  enum when the input is JSON form; even in YAML form,
+  out-of-enum `schema:` values are rejected. The v1.0
+  packets never had a `schema:` field — they were markdown
+  with implicit conventions, not kernel-readable decisions.
+  The migration is not cosmetic; it is the only way to make
+  the 88 historical commitments machine-checkable.
+
+  "One bulk PR for all 88 packets makes review impossible
+  and risks a hard-to-revert mistake." Counterargument:
+  the per-domain commit structure inside this single PR
+  keeps each domain reviewable in isolation; the merge
+  itself is atomic per AGENTS.md §3 auto-merge policy.
+  Operators retain the ability to halt any commit before
+  the merge.
+
+antithesis: |
+  "Stay on math-coding v1.0 indefinitely. The v1.0 format
+  is sufficient for a single-operator solo project; the
+  kernel's enforcement of obligations/attestations is
+  overkill and slows iteration."
+
+  Rejected because: v1.0 has no enforcement; the 88 packets
+  are passive documentation that drifts silently. Three
+  pre-existing failures (wavecode-llm-public-auth-key-mismatch,
+  wavecode-piano-toolbar-fix, wavecode-css-consolidate) were
+  recorded as packet commits but the propositions required
+  multi-commit fixes to actually land — v1.0 could not
+  detect this drift. math-coding 3.3's `mathc self-check`
+  is the only mechanism that turns silent drift into a
+  surfaced diagnostic. The transition cost is one PR; the
+  ongoing maintenance cost is roughly the same.
+
+relations:
+  addresses:
+    - bootstrap-v3@3
+    - schema-string-bump-3.0-alpha-to-3.3-2026-10@1

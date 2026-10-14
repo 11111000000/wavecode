@@ -1,0 +1,111 @@
+---
+schema: math-coding/3.3
+id: wavecode-piano-parallel-rec-instrument
+revision: 1
+state: active
+body_sha: "sha256:0ca8daad46b842a972c4932e111fcf4000577a63a2200786c9fb4a49e30520df"
+yaml_sha: "sha256:0ca8daad46b842a972c4932e111fcf4000577a63a2200786c9fb4a49e30520df"
+
+intent:|
+  Piano-клавиатура играет ЧЕРЕЗ ОТДЕЛЬНЫЙ Web Audio synth
+  (oscillator + gain + ADSR на каждую ноту) — НЕ через
+  `AudioEngine.eval()`. Это гарантирует: (a) piano не
+  прерывает main score (Strudel scheduler не
+  перезапускается); (b) noise/click при rapid press
+  устранён (нет рестарта scheduler каждые 30ms);
+  (c) piano играет ПАРАЛЛЕЛЬНО с любой композицией.
+  Дополнительно: Rec-toggle → ноты пишутся в буфер и
+  при release dispatчатcя в `replaceScore` через
+  `stack(existingScore, noteSeq)`. Instrument selector:
+  triangle / sine / sawtooth / square.
+commitment: |
+  Шесть компонентов:
+counterexample: |
+  The strongest objection to this decision is captured in the `antithesis` field above: (1) «Почему не `stack(currentScore, pianoSnippet)` через
+antithesis: |
+  (1) «Почему не `stack(currentScore, pianoSnippet)` через
+  eval?». Возражение: каждый tap/release дёргает eval →
+  `repl.stop()` + `repl.evaluate()` → audible click и
+  потеря master scheduler continuity. Это и есть текущий
+  баг ("прерывает основной трек"). Прямой Web Audio
+  bypass эту проблему. (2) «Два audio sources — out of
+  sync, drift». Возражение: Piano — percussive
+  (envelope 0.4s decay), Strudel scheduler — long-form
+  loops. У них разные time-scales; даже если piano
+  стартует на 5ms позже, юзер не слышит (ADSR attack
+  5ms уже в самом pianoVoice). (4) «Web Audio synth
+  беднее чем Strudel voices». Возражение: Piano — это
+  простой synth (triangle/sine/saw/square); пользователь
+  хочет минимум (как в garage band), а не full Strudel
+  chain. Routing через Strudel бы требовал `note(...).s(
+  'triangle')` для каждой ноты, что мы и делали — но
+  тот же restart-bug. (5) «Rec-mode: сложно
+  синхронизировать ноты с Strudel clock». Возражение:
+  rec-mode пишет MIDI-семни (number), конвертит в
+  Strudel `note("c4")`-tokены. Rec это per-note ON/OFF,
+  не per-cycle. UX — 100-я нормальный. (6) «Instrument
+  selector — feature creep». Возражение: пользователь
+  явно попросил («можно выбрать инструмент пианино
+  должно быть»). Selector — 4 опции, не feature bloat.
+  Шесть компонентов:
+counterexample: |
+  The strongest objection to this decision is captured in the `antithesis` field above: (1) «Почему не `stack(currentScore, pianoSnippet)` через
+antithesis: |
+  (1) «Почему не `stack(currentScore, pianoSnippet)` через
+  eval?». Возражение: каждый tap/release дёргает eval →
+  `repl.stop()` + `repl.evaluate()` → audible click и
+  потеря master scheduler continuity. Это и есть текущий
+  баг ("прерывает основной трек"). Прямой Web Audio
+  bypass эту проблему. (2) «Два audio sources — out of
+  sync, drift». Возражение: Piano — percussive
+  (envelope 0.4s decay), Strudel scheduler — long-form
+  loops. У них разные time-scales; даже если piano
+  стартует на 5ms позже, юзер не слышит (ADSR attack
+  5ms уже в самом pianoVoice). (4) «Web Audio synth
+  беднее чем Strudel voices». Возражение: Piano — это
+  простой synth (triangle/sine/saw/square); пользователь
+  хочет минимум (как в garage band), а не full Strudel
+  chain. Routing через Strudel бы требовал `note(...).s(
+  'triangle')` для каждой ноты, что мы и делали — но
+  тот же restart-bug. (5) «Rec-mode: сложно
+  синхронизировать ноты с Strudel clock». Возражение:
+  rec-mode пишет MIDI-семни (number), конвертит в
+  Strudel `note("c4")`-tokены. Rec это per-note ON/OFF,
+  не per-cycle. UX — 100-я нормальный. (6) «Instrument
+  selector — feature creep». Возражение: пользователь
+  явно попросил («можно выбрать инструмент пианино
+  должно быть»). Selector — 4 опции, не feature bloat.
+axiom_link:
+  - A3
+scope:
+  paths: []
+outcomes:
+  - id: wavecode-piano-parallel-rec-instrument-outcome
+    statement: |
+      Piano-клавиатура играет ЧЕРЕЗ ОТДЕЛЬНЫЙ Web Audio synth
+      (oscillator + gain + ADSR на каждую ноту) — НЕ через
+      `AudioEngine.
+obligations:
+  - id: wavecode-piano-parallel-rec-instrument-kernel-validates
+    claim: |
+      The migrated decision file is structurally valid under the math-coding 3.3 schema; `mathc validate` exits 0 for `decisions/<id>.yaml` at HEAD.
+    acceptance:
+      all:
+        - verifier: "mathc validate"
+          result: pass
+  - id: wavecode-piano-parallel-rec-instrument-witness-from-v1
+    claim: |
+      The original v1.0 packet applied on the recorded date in its `witness` file; this migration preserves that evidence as an `attestations/<id>-evidence.json` file.
+    acceptance:
+      all:
+        - verifier: "attestation-store-has-subject"
+          result: pass
+assumptions: []
+risk:
+  declared_triggers:
+    - v1-to-v3-migration-loss
+  owner: human:operator
+relations:
+  addresses:
+    - wavecode-bootstrap-math-coding-3.3@1
+---

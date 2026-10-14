@@ -1,0 +1,107 @@
+---
+schema: math-coding/3.3
+id: wavecode-legacy-eat-transport
+revision: 1
+state: active
+body_sha: "sha256:40e3bcd76f5e864a599064aeec753c6c0dba5b80112ec8c3b5a6da4a2d35deb2"
+yaml_sha: "sha256:40e3bcd76f5e864a599064aeec753c6c0dba5b80112ec8c3b5a6da4a2d35deb2"
+
+intent:|
+  После `math/wavecode-css-consolidate` (cascade layers) cascade
+  декларативен: components > legacy. Но ~120 классов всё ещё
+  определены ТОЛЬКО в `legacy.css` — они живут в нижнем
+  приоритетном слое, без cascade-конфликтов, но в файле,
+  который архитектурно «на вылет».
+
+  Этот пакет переносит первую секцию — **TransportPanel +
+  Playhead + preset/llm-select** — из `legacy.css` в
+  `components.css` под существующий `@layer components`. После
+  переноса определения остаются теми же (cascade не меняется,
+  т.к. внутри одного layer'а побеждает source-order — а
+  перенесённые правила попадают в конец components.css, что
+  сохраняет их силу).
+
+  Объём переноса:
+  - `.preset-select, .llm-select` (lines 87-120)
+  - `.transport-panel, .transport-controls` (lines 233-251)
+  - `.cps-control, .cps-label, .cps-readout` (lines 253-323)
+  - `.cps-presets, .cps-preset-btn` (lines 325-345)
+  - `.bpm-indicator, .bpm-suffix` (lines 347-372)
+  - `.swing-btn, .swing-btn-on, .swing-control, .swing-label,
+  .swing-slider, .swing-readout, .swing-divisor` (lines 374-436)
+  - `@media (max-width: 720px) { … }` mobile-override (lines 438-462)
+  - `.playhead-track, .playhead` (lines 468-488)
+
+  Итого: ~260 строк legacy.css → components.css. Один коммит.
+commitment: |
+  Два коммита:
+counterexample: |
+  The strongest objection to this decision is captured in the `antithesis` field above: (1) «Перенос в конец components.css — теперь они выигрывают
+antithesis: |
+  (1) «Перенос в конец components.css — теперь они выигрывают
+  у ВСЕХ остальных компонентов через source-order». Возражение:
+  правила в components.css уже работают по cascade — source-order
+  внутри слоя. Перенесённые правила попадают в конец слоя,
+  поэтому побеждают старые components-правила с тем же
+  specificity. Это и было поведение в legacy (тоже конец).
+  Никакого semantic shift.
+  (2) «Надо сначала проверить что классы ещё живы — может
+  быть dead code». Возражение: все перечисленные классы
+  используются в TransportPanel.tsx, PresetRow.tsx, и других
+  hot-path компонентах. Smoke test (playwright) подтвердит.
+  (3) «Почему не весь legacy.css за раз?». Возражение:
+  безопаснее по секциям — если что-то ломается, revert =
+  один коммит вместо 1000-строчного squash. После всех миграций
+  legacy.css удаляется отдельным пакетом.
+  Два коммита:
+counterexample: |
+  The strongest objection to this decision is captured in the `antithesis` field above: (1) «Перенос в конец components.css — теперь они выигрывают
+antithesis: |
+  (1) «Перенос в конец components.css — теперь они выигрывают
+  у ВСЕХ остальных компонентов через source-order». Возражение:
+  правила в components.css уже работают по cascade — source-order
+  внутри слоя. Перенесённые правила попадают в конец слоя,
+  поэтому побеждают старые components-правила с тем же
+  specificity. Это и было поведение в legacy (тоже конец).
+  Никакого semantic shift.
+  (2) «Надо сначала проверить что классы ещё живы — может
+  быть dead code». Возражение: все перечисленные классы
+  используются в TransportPanel.tsx, PresetRow.tsx, и других
+  hot-path компонентах. Smoke test (playwright) подтвердит.
+  (3) «Почему не весь legacy.css за раз?». Возражение:
+  безопаснее по секциям — если что-то ломается, revert =
+  один коммит вместо 1000-строчного squash. После всех миграций
+  legacy.css удаляется отдельным пакетом.
+axiom_link:
+  - A3
+scope:
+  paths: []
+outcomes:
+  - id: wavecode-legacy-eat-transport-outcome
+    statement: |
+      После `math/wavecode-css-consolidate` (cascade layers) cascade
+      декларативен: components > legacy.
+obligations:
+  - id: wavecode-legacy-eat-transport-kernel-validates
+    claim: |
+      The migrated decision file is structurally valid under the math-coding 3.3 schema; `mathc validate` exits 0 for `decisions/<id>.yaml` at HEAD.
+    acceptance:
+      all:
+        - verifier: "mathc validate"
+          result: pass
+  - id: wavecode-legacy-eat-transport-witness-from-v1
+    claim: |
+      The original v1.0 packet applied on the recorded date in its `witness` file; this migration preserves that evidence as an `attestations/<id>-evidence.json` file.
+    acceptance:
+      all:
+        - verifier: "attestation-store-has-subject"
+          result: pass
+assumptions: []
+risk:
+  declared_triggers:
+    - v1-to-v3-migration-loss
+  owner: human:operator
+relations:
+  addresses:
+    - wavecode-bootstrap-math-coding-3.3@1
+---

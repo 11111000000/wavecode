@@ -1,0 +1,146 @@
+---
+schema: math-coding/3.3
+id: wavecode-mobile-tabbed-sheet-routing
+revision: 1
+state: active
+body_sha: "sha256:c23ee5e2f65f6bfd6b231ee29c43b584e5c8db9a1e7762796e857c1927947897"
+yaml_sha: "sha256:c23ee5e2f65f6bfd6b231ee29c43b584e5c8db9a1e7762796e857c1927947897"
+
+intent:|
+  Bottom-sheet router wavecode: единый источник истины — `snapsByKind`
+  (per-kind sheet state). Tab-bar табы mixer/ai/status/score и шапочные
+  toggle Step/Piano — все управляются через per-kind API
+  (`openKindSheet/closeKindSheet/closeAllSheets`), и BottomSheet рендерится
+  исключительно по `getKindSnap(kind)`. Single-active semantics: открытие
+  нового sheet закрывает все предыдущие, никаких «призрачных» sheet'ов
+  одновременно на translateY(0). TabBar z-index > sheet z-index, sheet
+  позиционируется выше tab-bar (bottom: tabbar-h), чтобы табы всегда
+  кликабельны даже при открытом sheet. Status — отдельный kind с
+  HelloPanel внутри (раньше сетил `openSheet('ai', 'full')` что было
+  просто неверно).
+commitment: |
+  1. Расширили SheetKind union: добавлен `'status'`, initial
+  `snapsByKind.status` в наборе. SheetHeader для status
+  ("Состояние run-time telemetry").
+  2. `openSheet`/`closeSheet` переписаны как тонкие обёртки над
+  `openKindSheet/closeAllSheets`, которые синхронизируют оба:
+  per-kind record + global activeSheet/sheetSnap. Гарантирует, что
+  BottomSheet (читает getKindSnap) и любой global consumer
+  (TopBar/FAB actions) видят одно и то же.
+  3. `snapTo(snap)` в BottomSheet drag-handler теперь синхронизирует
+  snapsByKind для активного kind — раньше после drag'а
+  переоткрытие забывало snap.
+  4. `openKindSheet` стал single-active: сбрасывает ВСЕ snapsByKind
+  на 'closed' перед открытием нового. BottomSheet-ы-конкуренты
+  уходят в `data-snap='closed'` → CSS translateY(100%).
+  5. `setTab(status)` → `openKindSheet('status', 'full')` (раньше
+  открывал AI — баг семантики).
+  6. App.tsx: добавлен `<BottomSheet kind="status" ...><HelloPanel />`
+  (раньше status panel показывался только при getActiveTab() ===
+  'score', что на mobile делало таб «мёртвым»).
+  7. App.tsx: убраны `<Show when={showStepGrid()}>` и
+  `<Show when={showPiano()}>` ВНЕ BottomSheet — visibility теперь
+  полностью на стороне snapsByKind, родительские signal-ы
+  используются только для chip active-state.
+  8. CSS — sheet bottom: calc(tabbar-h + safe-bottom), max-height =
+  calc(100vh - tabbar - safe-areas), чтобы sheet не перекрывал
+  TabBar. TabBar z-index = z-sheet + 10 (выше sheet) →
+  pointer-events всегда работают.
+  9. BottomSheet: использует `closeAllSheets()` (не closeKindSheet,
+  которого больше нет в публичном API).
+counterexample: |
+  The strongest objection to this decision is captured in the `antithesis` field above: (1) «Per-kind state раздувает API — лучше иметь один signal». Возражение:
+antithesis: |
+  (1) «Per-kind state раздувает API — лучше иметь один signal». Возражение:
+  drag-handler в BottomSheet уже передаёт свой `kind` в замыкании через
+  `props.kind` → единый путь — везде snap записывается в запись с этим
+  ключом. Один signal не нужен — 4 sheet'а с независимыми snap'ами.
+  (2) «closeAllSheets + single-active openKindSheet — over-engineering».
+  Возражение: на mobile один sheet = single focus; multi-sheet
+  одновременно не используется ни одним flow. Сложность close-on-open
+  = 5 строк в `openKindSheet`, выгода — нет «наложения» двух
+  translateY(0), стабильная видимость одного sheet за раз.
+  (3) «BottomSheet top-bar (`header-h`) для mobile? Не переусложнение?».
+  Возражение: на mobile sheet занимает bottom + height =
+  calc(100vh - tabbar - safe-areas). На desktop остаётся
+  height = calc(100vh - header-h). Один CSS-rule для двух медиа —
+  никакого дублирования.
+  1. Расширили SheetKind union: добавлен `'status'`, initial
+  `snapsByKind.status` в наборе. SheetHeader для status
+  ("Состояние run-time telemetry").
+  2. `openSheet`/`closeSheet` переписаны как тонкие обёртки над
+  `openKindSheet/closeAllSheets`, которые синхронизируют оба:
+  per-kind record + global activeSheet/sheetSnap. Гарантирует, что
+  BottomSheet (читает getKindSnap) и любой global consumer
+  (TopBar/FAB actions) видят одно и то же.
+  3. `snapTo(snap)` в BottomSheet drag-handler теперь синхронизирует
+  snapsByKind для активного kind — раньше после drag'а
+  переоткрытие забывало snap.
+  4. `openKindSheet` стал single-active: сбрасывает ВСЕ snapsByKind
+  на 'closed' перед открытием нового. BottomSheet-ы-конкуренты
+  уходят в `data-snap='closed'` → CSS translateY(100%).
+  5. `setTab(status)` → `openKindSheet('status', 'full')` (раньше
+  открывал AI — баг семантики).
+  6. App.tsx: добавлен `<BottomSheet kind="status" ...><HelloPanel />`
+  (раньше status panel показывался только при getActiveTab() ===
+  'score', что на mobile делало таб «мёртвым»).
+  7. App.tsx: убраны `<Show when={showStepGrid()}>` и
+  `<Show when={showPiano()}>` ВНЕ BottomSheet — visibility теперь
+  полностью на стороне snapsByKind, родительские signal-ы
+  используются только для chip active-state.
+  8. CSS — sheet bottom: calc(tabbar-h + safe-bottom), max-height =
+  calc(100vh - tabbar - safe-areas), чтобы sheet не перекрывал
+  TabBar. TabBar z-index = z-sheet + 10 (выше sheet) →
+  pointer-events всегда работают.
+  9. BottomSheet: использует `closeAllSheets()` (не closeKindSheet,
+  которого больше нет в публичном API).
+counterexample: |
+  The strongest objection to this decision is captured in the `antithesis` field above: (1) «Per-kind state раздувает API — лучше иметь один signal». Возражение:
+antithesis: |
+  (1) «Per-kind state раздувает API — лучше иметь один signal». Возражение:
+  drag-handler в BottomSheet уже передаёт свой `kind` в замыкании через
+  `props.kind` → единый путь — везде snap записывается в запись с этим
+  ключом. Один signal не нужен — 4 sheet'а с независимыми snap'ами.
+  (2) «closeAllSheets + single-active openKindSheet — over-engineering».
+  Возражение: на mobile один sheet = single focus; multi-sheet
+  одновременно не используется ни одним flow. Сложность close-on-open
+  = 5 строк в `openKindSheet`, выгода — нет «наложения» двух
+  translateY(0), стабильная видимость одного sheet за раз.
+  (3) «BottomSheet top-bar (`header-h`) для mobile? Не переусложнение?».
+  Возражение: на mobile sheet занимает bottom + height =
+  calc(100vh - tabbar - safe-areas). На desktop остаётся
+  height = calc(100vh - header-h). Один CSS-rule для двух медиа —
+  никакого дублирования.
+axiom_link:
+  - A3
+scope:
+  paths: []
+outcomes:
+  - id: wavecode-mobile-tabbed-sheet-routing-outcome
+    statement: |
+      Bottom-sheet router wavecode: единый источник истины — `snapsByKind`
+      (per-kind sheet state).
+obligations:
+  - id: wavecode-mobile-tabbed-sheet-routing-kernel-validates
+    claim: |
+      The migrated decision file is structurally valid under the math-coding 3.3 schema; `mathc validate` exits 0 for `decisions/<id>.yaml` at HEAD.
+    acceptance:
+      all:
+        - verifier: "mathc validate"
+          result: pass
+  - id: wavecode-mobile-tabbed-sheet-routing-witness-from-v1
+    claim: |
+      The original v1.0 packet applied on the recorded date in its `witness` file; this migration preserves that evidence as an `attestations/<id>-evidence.json` file.
+    acceptance:
+      all:
+        - verifier: "attestation-store-has-subject"
+          result: pass
+assumptions: []
+risk:
+  declared_triggers:
+    - v1-to-v3-migration-loss
+  owner: human:operator
+relations:
+  addresses:
+    - wavecode-bootstrap-math-coding-3.3@1
+---

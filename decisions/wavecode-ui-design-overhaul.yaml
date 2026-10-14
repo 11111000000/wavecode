@@ -1,0 +1,93 @@
+---
+schema: math-coding/3.3
+id: wavecode-ui-design-overhaul
+revision: 1
+state: draft
+body_sha: "sha256:8fba40ccc60d92693a0442cc15ce71c9c7ba9cdd36a1ca4b5035343823dc5025"
+yaml_sha: "sha256:8fba40ccc60d92693a0442cc15ce71c9c7ba9cdd36a1ca4b5035343823dc5025"
+
+intent:|
+  UI-design overhaul wavecode: устранить рассогласование legacy.css с
+  components.css (чёрные клавиши выпадают из piano), починить неработающие
+  кнопки MiniNotationToolbar (editorApi — не-signal), вытащить toolbar из-под
+  bottom-sheet (sticky к score-panel), перевернуть приоритет видимости
+  (AI-чат как главный экран, код как вторичная панель), и провести единый
+  визуальный pass (inline-styles → CSS, dedup legacy, унификация spacing).
+  Делается в 4 инкрементальных фазах, каждая — отдельный коммит + пакет.
+commitment: |
+  4 фазы, каждая ≤200 строк diff, каждая рендерибельна независимо:
+counterexample: |
+  The strongest objection to this decision is captured in the `antithesis` field above: (1) «CSS-conflict в piano — минор, можно просто удалить 3 строки из
+antithesis: |
+  (1) «CSS-conflict в piano — минор, можно просто удалить 3 строки из
+  legacy.css». Возражение: удаление сломает другие классы, которые
+  legacy.css ещё держит (.ai-panel, .status-panel, .app-preset-row и
+  т.д.). Правильный путь — точечно отключить ТОЛЬКО .piano-key.black,
+  через @layer / specificity bump, не снося файл целиком.
+  (2) «Toolbar editorApi — пусть ScorePanel передаёт сигнал, и точка».
+  Возражение: Solid-правильный путь — accessor `editor={() => api}`,
+  который перевычисляется при mount. Это лечит и текущий, и любой
+  будущий сценарий где editor пересоздаётся (preset load).
+  (3) «AI как главный экран — спорное UX-решение, юзер привык кода».
+  Возражение: юзер сам сказал «AI должен быть на самом видном месте».
+  Делаем по запросу; если потом передумает — toggle в TopBar даёт
+  flip в одно нажатие. Стоимость = 0.
+  (4) «Inline styles — это нормально, не over-engineering убирать».
+  Возражение: inline-style в JSX ломает hot-reload diff (Vite не может
+  инкрементально обновить), мешает темизации (--space-md в style-string
+  не реактивен на prefers-color-scheme), и при рефакторе spacing-rules
+  разъезжаются с токенами. Перенос в CSS = чистый выигрыш.
+  4 фазы, каждая ≤200 строк diff, каждая рендерибельна независимо:
+counterexample: |
+  The strongest objection to this decision is captured in the `antithesis` field above: (1) «CSS-conflict в piano — минор, можно просто удалить 3 строки из
+antithesis: |
+  (1) «CSS-conflict в piano — минор, можно просто удалить 3 строки из
+  legacy.css». Возражение: удаление сломает другие классы, которые
+  legacy.css ещё держит (.ai-panel, .status-panel, .app-preset-row и
+  т.д.). Правильный путь — точечно отключить ТОЛЬКО .piano-key.black,
+  через @layer / specificity bump, не снося файл целиком.
+  (2) «Toolbar editorApi — пусть ScorePanel передаёт сигнал, и точка».
+  Возражение: Solid-правильный путь — accessor `editor={() => api}`,
+  который перевычисляется при mount. Это лечит и текущий, и любой
+  будущий сценарий где editor пересоздаётся (preset load).
+  (3) «AI как главный экран — спорное UX-решение, юзер привык кода».
+  Возражение: юзер сам сказал «AI должен быть на самом видном месте».
+  Делаем по запросу; если потом передумает — toggle в TopBar даёт
+  flip в одно нажатие. Стоимость = 0.
+  (4) «Inline styles — это нормально, не over-engineering убирать».
+  Возражение: inline-style в JSX ломает hot-reload diff (Vite не может
+  инкрементально обновить), мешает темизации (--space-md в style-string
+  не реактивен на prefers-color-scheme), и при рефакторе spacing-rules
+  разъезжаются с токенами. Перенос в CSS = чистый выигрыш.
+axiom_link:
+  - A1
+scope:
+  paths: []
+outcomes:
+  - id: wavecode-ui-design-overhaul-outcome
+    statement: |
+      UI-design overhaul wavecode: устранить рассогласование legacy.
+obligations:
+  - id: wavecode-ui-design-overhaul-kernel-validates
+    claim: |
+      The migrated decision file is structurally valid under the math-coding 3.3 schema; `mathc validate` exits 0 for `decisions/<id>.yaml` at HEAD.
+    acceptance:
+      all:
+        - verifier: "mathc validate"
+          result: pass
+  - id: wavecode-ui-design-overhaul-witness-from-v1
+    claim: |
+      The original v1.0 packet applied on the recorded date in its `witness` file; this migration preserves that evidence as an `attestations/<id>-evidence.json` file.
+    acceptance:
+      all:
+        - verifier: "attestation-store-has-subject"
+          result: pass
+assumptions: []
+risk:
+  declared_triggers:
+    - v1-to-v3-migration-loss
+  owner: human:operator
+relations:
+  addresses:
+    - wavecode-bootstrap-math-coding-3.3@1
+---

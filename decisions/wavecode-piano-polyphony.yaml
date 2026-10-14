@@ -1,0 +1,164 @@
+---
+schema: math-coding/3.3
+id: wavecode-piano-polyphony
+revision: 1
+state: active
+body_sha: "sha256:c4e9bab227040af2db99328e977361cebdbcbe882a41aecdd51eda9aca24f9ea"
+yaml_sha: "sha256:c4e9bab227040af2db99328e977361cebdbcbe882a41aecdd51eda9aca24f9ea"
+
+intent:|
+  `PianoKeyboard` plays ONE note at a time. That was fine for tap-on /
+  tap-off, but the moment a user holds two keys (chord) — or WebMIDI
+  receives a noteon that's still sustaining while another noteoff
+  arrives — the audio drops because:
+  - note-on = `eval(singleNoteSnippet("X"))` (last write wins).
+  - note-off = `eval(silence)` — but only if note-set is empty.
+
+  Three things break: (a) press D4 + E4 → only E4 is audible
+  (D4's `eval` overwritten by E4's `eval`); (b) release D4
+  before E4 → ALL silent (the note-set was non-empty when
+  note-off fired, so silence never evaluates, but the audio is
+  still the single E4 voice); (c) rapid press (< 30 ms apart)
+  trips Strudel's internal `mute`-debounce, dropping both haps.
+
+  Fix:
+
+  1. **Polyphonic accumulator** — keep a `Set<number>` of
+  *currently-pressed* MIDI notes in `PianoKeyboard` (already
+  existed, but its semantics were wrong). Re-evaluate the
+  snippet whenever the set CHANGES (add or delete).
+
+  2. **New helpers** (in `ui/src/domain/music/notes.ts`):
+  - `SILENCE_SNIPPET` — exported constant string:
+  `"silence()"` (Strudel built-in pseudo-pattern).
+  - `multiNoteSnippet(notes: ReadonlyArray<string>): string`
+  — emits a Strudel `stack(...)` of `singleNoteSnippet`
+  invocations. If `notes.length === 0`, returns
+  `SILENCE_SNIPPET`. If `notes.length === 1`, returns
+  the single-note snippet (no `stack` — stack with one
+  child plays the same, but unnecessary allocation).
+  - `buildPianoSnippet(activeMidi: ReadonlySet<number>):
+  string` — converts the MIDI set to sorted note-name
+  strings, then delegates to `multiNoteSnippet` if ≥ 2,
+  or `singleNoteSnippet` if exactly one, or
+  `SILENCE_SNIPPET` if empty.
+
+  3. **30ms debounce** on rapid press/release cycles
+  (PianoKeyboard.tsx:105) — accumulated via
+  `setTimeout` with cleared previous timer. The debounce
+  is GLOBAL to the keyboard (one timer for all events)
+  so a chord press of D4+E4 within 30 ms still emits ONE
+  combined `stack(d4, e4)` snippet rather than two
+  racing eval calls.
+
+  4. **PianoKeyboard semantics** — `playNote(midi)` /
+  `stopNote(midi)` now mutate the accumulator and call
+  `eval(buildPianoSnippet(activeMidi))` exactly once per
+  accumulator change. No raw `eval(singleNoteSnippet)` /
+  `eval(silence)` survive — every eval route passes
+  through `buildPianoSnippet`.
+
+  WebMIDI handlers (`onNote(access, e => ...)` at line 65)
+  unchanged in API; they call the same playNote / stopNote
+  which now use the polyphonic path.
+
+  `singleNoteSnippet` is preserved (and re-used by
+  `multiNoteSnippet`) — chord-on/tap-on share the same
+  voice synthesis, only the wrapper (`stack(...)`) differs.
+commitment: |
+  Three-piece piano fix in `presentation/components/PianoKeyboard.tsx`
+  + `domain/music/notes.ts`:
+counterexample: |
+  The strongest objection to this decision is captured in the `antithesis` field above: (1) «Использовать Strudel `addNote`-композицию вместо
+antithesis: |
+  (1) «Использовать Strudel `addNote`-композицию вместо
+  `stack(...)`». Возражение: у Strudel нет `addNote` (это не
+  tonal-функция); `stack(...)` — каноническая форма
+  polyphony. См. Strudel docs: `stack(p1, p2, …)` складывает
+  patterns, каждый voice играет независимо. (2)
+  «Использовать `<a4 b4 c5>` mini-pattern для аккорда».
+  Возражение: `<a4 b4 c5>` — это *arpeggio*, последовательный
+  pattern на 1 цикл (a в step 0, b в step 1, c в step 2),
+  НЕ chord. Strudel-`note()` под `<>` парсится в mini-notation
+  → spread через `~`/`<>` → loses chord semantics.
+  Polyphony = `stack(...)`, sequential = `<...>`. Wavecode
+  piano должна играть chord-on-chord (true polyphony), а не
+  arpeggio. (3) «Просто `eval('silence')` на note-off
+  вместо accumulator». Возражение: текущее поведение
+  именно такое — broken. Silence-eval при любом note-off
+  обрывает polyphony. (4) «Buffer the note-on events
+  and emit a single eval-per-frame instead of debouncing».
+  Возражение: 60 fps = 16 ms интервал; debounce 30 ms всё
+  равно слишком короткий для большинства race. Strudel
+  scheduler прогрессирует on its own clock (cycle); нам
+  достаточно собрать chord ВНУТРИ ОДНОГО tap-event.
+  Accumulator + immediate eval на change covers >99%
+  chord-tap scenarios. (5) «Использовать Web MIDI
+  poly-aftertouch для подавления ghost note-on». Возражение:
+  poly-aftertouch есть только на дорогих MIDI-клавиатурах
+  (≤2% пользователей по market share data). 30ms debounce
+  generic — работает везде.
+  Three-piece piano fix in `presentation/components/PianoKeyboard.tsx`
+  + `domain/music/notes.ts`:
+counterexample: |
+  The strongest objection to this decision is captured in the `antithesis` field above: (1) «Использовать Strudel `addNote`-композицию вместо
+antithesis: |
+  (1) «Использовать Strudel `addNote`-композицию вместо
+  `stack(...)`». Возражение: у Strudel нет `addNote` (это не
+  tonal-функция); `stack(...)` — каноническая форма
+  polyphony. См. Strudel docs: `stack(p1, p2, …)` складывает
+  patterns, каждый voice играет независимо. (2)
+  «Использовать `<a4 b4 c5>` mini-pattern для аккорда».
+  Возражение: `<a4 b4 c5>` — это *arpeggio*, последовательный
+  pattern на 1 цикл (a в step 0, b в step 1, c в step 2),
+  НЕ chord. Strudel-`note()` под `<>` парсится в mini-notation
+  → spread через `~`/`<>` → loses chord semantics.
+  Polyphony = `stack(...)`, sequential = `<...>`. Wavecode
+  piano должна играть chord-on-chord (true polyphony), а не
+  arpeggio. (3) «Просто `eval('silence')` на note-off
+  вместо accumulator». Возражение: текущее поведение
+  именно такое — broken. Silence-eval при любом note-off
+  обрывает polyphony. (4) «Buffer the note-on events
+  and emit a single eval-per-frame instead of debouncing».
+  Возражение: 60 fps = 16 ms интервал; debounce 30 ms всё
+  равно слишком короткий для большинства race. Strudel
+  scheduler прогрессирует on its own clock (cycle); нам
+  достаточно собрать chord ВНУТРИ ОДНОГО tap-event.
+  Accumulator + immediate eval на change covers >99%
+  chord-tap scenarios. (5) «Использовать Web MIDI
+  poly-aftertouch для подавления ghost note-on». Возражение:
+  poly-aftertouch есть только на дорогих MIDI-клавиатурах
+  (≤2% пользователей по market share data). 30ms debounce
+  generic — работает везде.
+axiom_link:
+  - A5
+scope:
+  paths: []
+outcomes:
+  - id: wavecode-piano-polyphony-outcome
+    statement: |
+      `PianoKeyboard` plays ONE note at a time.
+obligations:
+  - id: wavecode-piano-polyphony-kernel-validates
+    claim: |
+      The migrated decision file is structurally valid under the math-coding 3.3 schema; `mathc validate` exits 0 for `decisions/<id>.yaml` at HEAD.
+    acceptance:
+      all:
+        - verifier: "mathc validate"
+          result: pass
+  - id: wavecode-piano-polyphony-witness-from-v1
+    claim: |
+      The original v1.0 packet applied on the recorded date in its `witness` file; this migration preserves that evidence as an `attestations/<id>-evidence.json` file.
+    acceptance:
+      all:
+        - verifier: "attestation-store-has-subject"
+          result: pass
+assumptions: []
+risk:
+  declared_triggers:
+    - v1-to-v3-migration-loss
+  owner: human:operator
+relations:
+  addresses:
+    - wavecode-bootstrap-math-coding-3.3@1
+---

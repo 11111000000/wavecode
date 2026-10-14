@@ -1,0 +1,106 @@
+---
+schema: math-coding/3.3
+id: wavecode-piano-input
+revision: 1
+state: active
+body_sha: "sha256:16864ee7f4a210e97e440c56d3b762044e2d3e1b0dd133efa3cb06cfdab28626"
+yaml_sha: "sha256:16864ee7f4a210e97e440c56d3b762044e2d3e1b0dd133efa3cb06cfdab28626"
+
+intent:|
+  В `.app-controls-row` появляется кнопка `🎹 Piano`. В on — над
+  `<CodeMirrorEditor>` в `ScorePanel` рендерится `<PianoKeyboard />` —
+  2-октавная on-screen клавиатура (24 клавиши: C3..B4), белая + чёрная
+  раскладка. Tap/click = note-on (synth стаккато через `eval` single-note
+  snippet), release = note-off (eval `silence`). Touch-friendly
+  (whites 60×180px mobile, 80×220px desktop). При наличии WebMIDI
+  (Chrome/Edge desktop, Android — НЕ iOS Safari) — auto-bind `navigator.
+  requestMIDIAccess({sysex:false})` и входящие note-on/off с любого
+  устройства отражаются на визуальной клавиатуре. iOS-юзеры получают
+  только on-screen.
+commitment: |
+  Two-octave piano (24 keys) в ScorePanel:
+  - Tap = note-on через `audio.eval(s('reverb/casio:note-X'))` — single
+  note; release = `audio.eval('silence')` (встроенный Strudel
+  pseudo-pattern).
+  - Big whites (60×180 mobile / 80×220 desktop) + 16 black keys
+  overlaid via absolute positioning.
+  - WebMIDI: auto-detect, populate `inputs[]`, listen `midimessage`.
+  On note-on: mark key active + trigger same audio.eval. On note-off:
+  silence. iOS: WebMIDI returns undefined → UI silently hides MIDI
+  status, only on-screen works.
+  - Tests: pure fn `noteNumberToName(midiNum)` (C3..B4), pure
+  `midiNoteToSampleName(num)` → 'a4'..'c5' for Strudel.
+  - UI integration: App.tsx toggle, ScorePanel conditional render.
+counterexample: |
+  The strongest objection to this decision is captured in the `antithesis` field above: (1) «24-клавишная клавиатура перегружает UI». Возражение: 2 октавы
+antithesis: |
+  (1) «24-клавишная клавиатура перегружает UI». Возражение: 2 октавы
+  = 24 клавиши, ~720px ширина. В ScorePanel`е есть место над
+  editor'ом. (2) «Зачем WebMIDI если у юзера нет клавиатуры?».
+  Возражение: iOS-юзеры получают on-screen, desktop-юзеры с MIDI
+  клавиатурой получают hardware. (3) `eval` на каждый tap = много
+  overhead. Решение: `eval` только на note-on (включая repeat через
+  holding), на note-off `eval` тишины. (4) WebMIDI permissions могут
+  зависнуть в `pending`. Решение: 1-секундный таймаут, fallback
+  на on-screen. (5) Чёрные клавиши < 44px на мобиле. Решение:
+  позиционируем absolute поверх whites на нужной x-позиции;
+  hit-target увеличиваем через padding, не через размер.
+  Two-octave piano (24 keys) в ScorePanel:
+  - Tap = note-on через `audio.eval(s('reverb/casio:note-X'))` — single
+  note; release = `audio.eval('silence')` (встроенный Strudel
+  pseudo-pattern).
+  - Big whites (60×180 mobile / 80×220 desktop) + 16 black keys
+  overlaid via absolute positioning.
+  - WebMIDI: auto-detect, populate `inputs[]`, listen `midimessage`.
+  On note-on: mark key active + trigger same audio.eval. On note-off:
+  silence. iOS: WebMIDI returns undefined → UI silently hides MIDI
+  status, only on-screen works.
+  - Tests: pure fn `noteNumberToName(midiNum)` (C3..B4), pure
+  `midiNoteToSampleName(num)` → 'a4'..'c5' for Strudel.
+  - UI integration: App.tsx toggle, ScorePanel conditional render.
+counterexample: |
+  The strongest objection to this decision is captured in the `antithesis` field above: (1) «24-клавишная клавиатура перегружает UI». Возражение: 2 октавы
+antithesis: |
+  (1) «24-клавишная клавиатура перегружает UI». Возражение: 2 октавы
+  = 24 клавиши, ~720px ширина. В ScorePanel`е есть место над
+  editor'ом. (2) «Зачем WebMIDI если у юзера нет клавиатуры?».
+  Возражение: iOS-юзеры получают on-screen, desktop-юзеры с MIDI
+  клавиатурой получают hardware. (3) `eval` на каждый tap = много
+  overhead. Решение: `eval` только на note-on (включая repeat через
+  holding), на note-off `eval` тишины. (4) WebMIDI permissions могут
+  зависнуть в `pending`. Решение: 1-секундный таймаут, fallback
+  на on-screen. (5) Чёрные клавиши < 44px на мобиле. Решение:
+  позиционируем absolute поверх whites на нужной x-позиции;
+  hit-target увеличиваем через padding, не через размер.
+axiom_link:
+  - A1
+scope:
+  paths: []
+outcomes:
+  - id: wavecode-piano-input-outcome
+    statement: |
+      В `.
+obligations:
+  - id: wavecode-piano-input-kernel-validates
+    claim: |
+      The migrated decision file is structurally valid under the math-coding 3.3 schema; `mathc validate` exits 0 for `decisions/<id>.yaml` at HEAD.
+    acceptance:
+      all:
+        - verifier: "mathc validate"
+          result: pass
+  - id: wavecode-piano-input-witness-from-v1
+    claim: |
+      The original v1.0 packet applied on the recorded date in its `witness` file; this migration preserves that evidence as an `attestations/<id>-evidence.json` file.
+    acceptance:
+      all:
+        - verifier: "attestation-store-has-subject"
+          result: pass
+assumptions: []
+risk:
+  declared_triggers:
+    - v1-to-v3-migration-loss
+  owner: human:operator
+relations:
+  addresses:
+    - wavecode-bootstrap-math-coding-3.3@1
+---

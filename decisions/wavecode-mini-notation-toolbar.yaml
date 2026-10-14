@@ -1,0 +1,141 @@
+---
+schema: math-coding/3.3
+id: wavecode-mini-notation-toolbar
+revision: 1
+state: active
+body_sha: "sha256:10aba0c94c92276b4d545f87adbf78ccce5be99e4f3236cac5565e5e07862eb2"
+yaml_sha: "sha256:10aba0c94c92276b4d545f87adbf78ccce5be99e4f3236cac5565e5e07862eb2"
+
+intent:|
+  В Score-панели между `.cm-host` и редактором — sticky toolbar
+  `<div class="mini-toolbar">` с 14 крупными кнопок (button min 44×36px,
+  font 16px monospace): `note(`, `s(`, `stack(`, `n(`, `<`, `>`,
+  `[`, `]`, `*`, `?`, `.gain(`, `.lpf(`, `,`, ` ` (space). Tap =
+  view.dispatch с insert snippet в cursor position, focus
+  возвращается в editor. Toolbar позиционируется через
+  `visualViewport` API — listening resize, ставит `bottom` так,
+  чтобы toolbar был над vkb. На desktop toolbar НЕ показывается
+  (window.innerWidth ≥ 720 OR визуальная vkb скрыта).
+commitment: |
+  Sticky strip ВЫШЕ vkb на mobile, tabbed показатель OFF по
+  breakpoint. Используем `visualViewport.offsetTop + .height` для
+  desktop-like bottom-positioning; pure CSS `@media (max-width:720px)`
+  для show/hide. Каждая кнопка = маленькая команда из 4-7 chars,
+  соответствует ровно одной вставке в cursor. Selection replace
+  если есть selected range; insert в cursor иначе. Это replacement
+  для vkb-typing боли при написании Strudel mini-notation на iPhone.
+counterexample: |
+  The strongest objection to this decision is captured in the `antithesis` field above: (1) iOS Safari иногда меняет visual viewport async, toolbar
+antithesis: |
+  (1) iOS Safari иногда меняет visual viewport async, toolbar
+  «прыгает». Решение: debounce 100ms на resize listener +
+  use `visualViewport.offsetTop` (стабильно). (2) Custom keyboards
+  нельзя сделать (Apple блокирует). Toolbar не custom keyboard
+  — это strip поверх native vkb, что Apple разрешает. (3) На
+  desktop toolbar полезен (mouse-snipping), но window space
+  критичен. Решение: только mobile breakpoint OR `inputmode=vkb`
+  when editor focused. (4) Редактор keyboard shortcut (Tab) для
+  autocomplete конфликтует с toolbar buttons. Решение: toolbar
+  buttons живут ВНЕ editor focus context, не conflict. (5)
+  `view.dispatch` от вставки toolbar теряет undo history
+  отдельно от typing. — нет: dispatch проходит через тот же
+  updateListener, undo path стандартный. (6) На multi-line
+  editor cursor должен быть visible ПОСЛЕ insert — view.scrollIntoView
+  необходим если cursor вне viewport.
+  Sticky strip ВЫШЕ vkb на mobile, tabbed показатель OFF по
+  breakpoint. Используем `visualViewport.offsetTop + .height` для
+  desktop-like bottom-positioning; pure CSS `@media (max-width:720px)`
+  для show/hide. Каждая кнопка = маленькая команда из 4-7 chars,
+  соответствует ровно одной вставке в cursor. Selection replace
+  если есть selected range; insert в cursor иначе. Это replacement
+  для vkb-typing боли при написании Strudel mini-notation на iPhone.
+counterexample: |
+  The strongest objection to this decision is captured in the `antithesis` field above: (1) iOS Safari иногда меняет visual viewport async, toolbar
+antithesis: |
+  (1) iOS Safari иногда меняет visual viewport async, toolbar
+  «прыгает». Решение: debounce 100ms на resize listener +
+  use `visualViewport.offsetTop` (стабильно). (2) Custom keyboards
+  нельзя сделать (Apple блокирует). Toolbar не custom keyboard
+  — это strip поверх native vkb, что Apple разрешает. (3) На
+  desktop toolbar полезен (mouse-snipping), но window space
+  критичен. Решение: только mobile breakpoint OR `inputmode=vkb`
+  when editor focused. (4) Редактор keyboard shortcut (Tab) для
+  autocomplete конфликтует с toolbar buttons. Решение: toolbar
+  buttons живут ВНЕ editor focus context, не conflict. (5)
+  `view.dispatch` от вставки toolbar теряет undo history
+  отдельно от typing. — нет: dispatch проходит через тот же
+  updateListener, undo path стандартный. (6) На multi-line
+  editor cursor должен быть visible ПОСЛЕ insert — view.scrollIntoView
+  необходим если cursor вне viewport.
+axiom_link:
+  - A1
+scope:
+  paths: []
+outcomes:
+  - id: wavecode-mini-notation-toolbar-outcome
+    statement: |
+      В Score-панели между `.
+obligations:
+  - id: wavecode-mini-notation-toolbar-kernel-validates
+    claim: |
+      The migrated decision file is structurally valid under the math-coding 3.3 schema; `mathc validate` exits 0 for `decisions/<id>.yaml` at HEAD.
+    acceptance:
+      all:
+        - verifier: "mathc validate"
+          result: pass
+  - id: wavecode-mini-notation-toolbar-witness-from-v1
+    claim: |
+      The original v1.0 packet applied on the recorded date in its `witness` file; this migration preserves that evidence as an `attestations/<id>-evidence.json` file.
+    acceptance:
+      all:
+        - verifier: "attestation-store-has-subject"
+          result: pass
+assumptions:
+  - id: wavecode-mini-notation-toolbar-assumption-1
+    state: proven
+    statement: |
+      "iOS Safari `visualViewport` API поддерживается Evidence: "Apple WebKit docs — `VisualViewport` API;
+    owner: human:operator
+  - id: wavecode-mini-notation-toolbar-assumption-2
+    state: proven
+    statement: |
+      "Toolbar height ≈ 50px, 14 buttons в 2-3 rows; Evidence: "iPhone 14 device-pixel = 390×844; portrait
+    owner: human:operator
+  - id: wavecode-mini-notation-toolbar-assumption-3
+    state: proven
+    statement: |
+      "CodeMirror 6 `view.dispatch({changes: ...})` — Evidence: "@codemirror/view docs — `EditorView.dispatch`
+    owner: human:operator
+  - id: wavecode-mini-notation-toolbar-assumption-4
+    state: proven
+    statement: |
+      "Custom keyboards (Apple `inputViewController`) Evidence: "Apple WebKit docs — стандартные vkb input modes
+    owner: human:operator
+  - id: wavecode-mini-notation-toolbar-assumption-5
+    state: proven
+    statement: |
+      "14 buttons маленькие — каждая вставляет ≤7 chars; Evidence: "Strudel docs — mini-notation operators `<>[]*?`
+    owner: human:operator
+  - id: wavecode-mini-notation-toolbar-assumption-6
+    state: proven
+    statement: |
+      "На desktop toolbar НЕ нужен: физическая клавиатура Evidence: "iPad Air portrait = 820pt = above 720; iPhone
+    owner: human:operator
+  - id: wavecode-mini-notation-toolbar-assumption-7
+    state: proven
+    statement: |
+      "vscode.dev / replit.com mobile UI — тоже использует Evidence: "github.dev mobile views — code-strip below editor,
+    owner: human:operator
+  - id: wavecode-mini-notation-toolbar-assumption-8
+    state: proven
+    statement: |
+      "CodeMirror dispatch через toolbar buttons проходит Evidence: "CodeMirrorEditor.tsx:44-46 — `EditorView.updateListener.
+    owner: human:operator
+risk:
+  declared_triggers:
+    - v1-to-v3-migration-loss
+  owner: human:operator
+relations:
+  addresses:
+    - wavecode-bootstrap-math-coding-3.3@1
+---

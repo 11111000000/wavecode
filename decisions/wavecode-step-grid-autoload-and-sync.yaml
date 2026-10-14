@@ -1,0 +1,196 @@
+---
+schema: math-coding/3.3
+id: wavecode-step-grid-autoload-and-sync
+revision: 1
+state: draft
+body_sha: "sha256:6187f6f284141977365be1818e6abf61fc524daae1c601419215d4f52bbc074b"
+yaml_sha: "sha256:6187f6f284141977365be1818e6abf61fc524daae1c601419215d4f52bbc074b"
+
+intent:|
+  StepGrid открывается пустым даже когда в editor-score уже есть
+  `s("bd …")`-ряды, и его playhead залипает на колонке 0 при
+  первом eval, пока пользователь не дёрнет cps-слайдер.
+
+  Два сцепленных дефекта:
+
+  (1) `<StepGrid />` инициализирует `grid()` пустым 4×8 и
+  держит его в таком виде, пока пользователь не нажмёт
+  `↓ read score`. UX-ожидание юзера (открыл sheet — увидел
+  текущий паттерн) нарушено. Это A4-care: кнопка-скрытый
+  триггер между editor'ом и grid'ом — пользователь не
+  должен знать, что «read score» нужно тыкать после
+  каждого открытия.
+
+  (2) `AudioEngine.getCycleProgress()` использует `evalCps`,
+  которое `LiveAudioEngine.evaluate` захватывает из
+  `debugState.cps` ПОСЛЕ успешного `repl.evaluate`. Но
+  `debugState.cps` обновляется только внутри внутреннего
+  `repl.setCps` (closure внутри `ensureRepl`). Внешний
+  `service.setCps` проверяет `if (!cachedRepl) return` —
+  silent no-op, если repl ещё не создан. Race:
+
+  t=0   useAppBootstrap → installTransportAudioSync
+  createEffect runs (cps()=0.5), lastPushed=null,
+  setTimeout 100ms
+  t≈100 audio.setCps(0.5) — cachedRepl === null
+  → return. debugState.cps остаётся 0.
+  t=??? user clicks play → audio.eval(...) →
+  cachedRepl создан, scheduler.cps остаётся
+  дефолтным 0.5. После успеха:
+  setDebug({ lastEvalClock, evalCps: debugState.cps=0 })
+  → evalCps = 0. getCycleProgress возвращает 0.
+  playhead залипает на column 0.
+
+  В старом коде (commit 1c7d23c, до wavecode-step-append-sync)
+  playhead тикал независимо от audio через RAF с шагом 0.125s
+  (=cps=1.0) — это объясняет наблюдение «в два раза быстрее
+  звука» при scheduler-cps=0.5. Текущий код уже синхронизирован
+  с `getCycleProgress`, но из-за race evalCps=0 и playhead
+  залипает на колонке 0.
+
+  На staging-деплое пользователь видит «пустой грид» + «playhead
+  не едет» (или, до фикса от 8533451, «playhead едет в 2× быстрее
+  звука» — это была отдельная гипотеза, ныне покрыта).
+commitment: |
+  Три правки:
+counterexample: |
+  The strongest objection to this decision is captured in the `antithesis` field above: (1) «Grid должен быть независимым editor-таб для записи,
+antithesis: |
+  (1) «Grid должен быть независимым editor-таб для записи,
+  как в Ableton». Возражение: текущий UX-flow «пишешь score
+  → grid отражает его → tap'ы пишут в grid → load&play
+  фиксирует grid обратно» уже требует явной кнопки
+  `↓ read score` после каждого открытия. Это
+  скрытый-с-ног-головы двух-режим: «редактор vs секвенсер».
+  Пользователь, открывший sheet, ожидает увидеть то, что
+  в score — иначе зачем открывать. Auto-load когда grid
+  пуст = «открыл sheet, увидел текущий бит, теперь могу
+  поправить». Это и есть A1-feedback: то, что пользователь
+  видит, синхронизировано с тем, что он слышит.
+
+  (2) «Используй `appStore.transportState.cps` напрямую в
+  eval вместо `debugState.cps`». Возражение: связывает
+  LiveAudioEngine с reducer-store — нарушает A0-separation
+  (infrastructure не должен знать про presentation). Текущая
+  архитектура: `debugState.cps` — это «желаемая cps из
+  presentation», которое `setCps` пишет в audio engine.
+  Чиню gap: `setCps` всегда пишет в debug, даже когда
+  repl ещё не готов. После создания repl — repl.setCps
+  тоже пишет (идемпотентно). Race устранён без
+  cross-layer связи.
+
+  (3) «Сделай debug.cps мембером audio service, чтобы
+  service сам себя обновлял из slider через Effect».
+  Возражение: presentation-слой сейчас owns
+  installTransportAudioSync и не должен терять контроль.
+  Outer `setCps` — это и есть presentation-side entrypoint;
+  чиню только его.
+
+  (4) «Усложнять не надо, проще: пере-передать cps после
+  eval». Возражение: требует, чтобы eval знал про
+  `installTransportAudioSync`, и обратный dependency в нём.
+  Также нужно ре-resolve после каждой eval (re-eval
+  случается при каждом tap'е в Stack и ИИ-edit).
+  Три правки:
+counterexample: |
+  The strongest objection to this decision is captured in the `antithesis` field above: (1) «Grid должен быть независимым editor-таб для записи,
+antithesis: |
+  (1) «Grid должен быть независимым editor-таб для записи,
+  как в Ableton». Возражение: текущий UX-flow «пишешь score
+  → grid отражает его → tap'ы пишут в grid → load&play
+  фиксирует grid обратно» уже требует явной кнопки
+  `↓ read score` после каждого открытия. Это
+  скрытый-с-ног-головы двух-режим: «редактор vs секвенсер».
+  Пользователь, открывший sheet, ожидает увидеть то, что
+  в score — иначе зачем открывать. Auto-load когда grid
+  пуст = «открыл sheet, увидел текущий бит, теперь могу
+  поправить». Это и есть A1-feedback: то, что пользователь
+  видит, синхронизировано с тем, что он слышит.
+
+  (2) «Используй `appStore.transportState.cps` напрямую в
+  eval вместо `debugState.cps`». Возражение: связывает
+  LiveAudioEngine с reducer-store — нарушает A0-separation
+  (infrastructure не должен знать про presentation). Текущая
+  архитектура: `debugState.cps` — это «желаемая cps из
+  presentation», которое `setCps` пишет в audio engine.
+  Чиню gap: `setCps` всегда пишет в debug, даже когда
+  repl ещё не готов. После создания repl — repl.setCps
+  тоже пишет (идемпотентно). Race устранён без
+  cross-layer связи.
+
+  (3) «Сделай debug.cps мембером audio service, чтобы
+  service сам себя обновлял из slider через Effect».
+  Возражение: presentation-слой сейчас owns
+  installTransportAudioSync и не должен терять контроль.
+  Outer `setCps` — это и есть presentation-side entrypoint;
+  чиню только его.
+
+  (4) «Усложнять не надо, проще: пере-передать cps после
+  eval». Возражение: требует, чтобы eval знал про
+  `installTransportAudioSync`, и обратный dependency в нём.
+  Также нужно ре-resolve после каждой eval (re-eval
+  случается при каждом tap'е в Stack и ИИ-edit).
+axiom_link:
+  - A4
+scope:
+  paths: []
+outcomes:
+  - id: wavecode-step-grid-autoload-and-sync-outcome
+    statement: |
+      StepGrid открывается пустым даже когда в editor-score уже есть
+      `s("bd …")`-ряды, и его playhead залипает на колонке 0 при
+      первом eval, пока пользователь не дёрнет cps-слайдер.
+obligations:
+  - id: wavecode-step-grid-autoload-and-sync-kernel-validates
+    claim: |
+      The migrated decision file is structurally valid under the math-coding 3.3 schema; `mathc validate` exits 0 for `decisions/<id>.yaml` at HEAD.
+    acceptance:
+      all:
+        - verifier: "mathc validate"
+          result: pass
+  - id: wavecode-step-grid-autoload-and-sync-witness-from-v1
+    claim: |
+      The original v1.0 packet applied on the recorded date in its `witness` file; this migration preserves that evidence as an `attestations/<id>-evidence.json` file.
+    acceptance:
+      all:
+        - verifier: "attestation-store-has-subject"
+          result: pass
+assumptions:
+  - id: wavecode-step-grid-autoload-and-sync-assumption-1
+    state: proven
+    statement: |
+      "StepGrid рендерится всегда внутри BottomSheet, Evidence: "ui/src/presentation/state/gridState.ts:21 —
+    owner: human:operator
+  - id: wavecode-step-grid-autoload-and-sync-assumption-2
+    state: proven
+    statement: |
+      "audio.setCps service не пишет в debug.cps Evidence: "LiveAudioEngine.ts:272-279 (внутренний
+    owner: human:operator
+  - id: wavecode-step-grid-autoload-and-sync-assumption-3
+    state: proven
+    statement: |
+      "Race: installTransportAudioSync's createEffect Evidence: "useTransportAudioSync.ts:27-44 — createEffect
+    owner: human:operator
+  - id: wavecode-step-grid-autoload-and-sync-assumption-4
+    state: proven
+    statement: |
+      "В моей репродукции в браузере (worktree Evidence: "Playwright browser_evaluate:10 samples по 100ms,
+    owner: human:operator
+  - id: wavecode-step-grid-autoload-and-sync-assumption-5
+    state: proven
+    statement: |
+      "Старый код (commit 1c7d23c) тикал beat через Evidence: "git log -- ui/src/presentation/components/
+    owner: human:operator
+  - id: wavecode-step-grid-autoload-and-sync-assumption-6
+    state: proven
+    statement: |
+      "BottomSheet рендерит StepGrid всегда (не Evidence: "BottomSheets.tsx:27-31 — `<BottomSheet
+    owner: human:operator
+risk:
+  declared_triggers:
+    - v1-to-v3-migration-loss
+  owner: human:operator
+relations:
+  addresses:
+    - wavecode-bootstrap-math-coding-3.3@1
+---

@@ -1,0 +1,89 @@
+---
+schema: math-coding/3.3
+id: wavecode-static-spa-deployment
+revision: 1
+state: draft
+body_sha: "sha256:96e62f985136cce9167b683d348381abd06752db22588a198a728b46b10603dd"
+yaml_sha: "sha256:96e62f985136cce9167b683d348381abd06752db22588a198a728b46b10603dd"
+
+intent:|
+  wavecode деплоится как статический SPA: `pnpm build` → ui/dist/ → любой
+  static-host (Vercel, Cloudflare Pages, GitHub Pages, nginx). Без Nix-выходов,
+  без контейнеров, без серверного процесса.
+commitment: |
+  Live-coding — interactive tool для одного пользователя, SEO нерелевантен.
+  Initial render пустой экран 200-500ms приемлем (loading-state в
+  index.html). State в IndexedDB → приватный, persistent на стороне
+  клиента. Multi-user — out of scope (single-user use case). Vercel /
+  Cloudflare Pages дают бесплатный хостинг с автоматическим HTTPS.
+  Деплой = `git push` (если настроен CI/CD).
+counterexample: |
+  The strongest objection to this decision is captured in the `antithesis` field above: SSR (Next.js, Remix, SolidStart) даёт быстрый initial render и SEO.
+antithesis: |
+  SSR (Next.js, Remix, SolidStart) даёт быстрый initial render и SEO.
+  Backend с WS-сервером даёт приватное state и real-time multi-user.
+  NixOS-контейнер даёт воспроизводимый деплой. Никакая из этих фич
+  не нужна для live-coding в браузере, но отсутствие SSR означает
+  пустой экран до загрузки JS.
+  Live-coding — interactive tool для одного пользователя, SEO нерелевантен.
+  Initial render пустой экран 200-500ms приемлем (loading-state в
+  index.html). State в IndexedDB → приватный, persistent на стороне
+  клиента. Multi-user — out of scope (single-user use case). Vercel /
+  Cloudflare Pages дают бесплатный хостинг с автоматическим HTTPS.
+  Деплой = `git push` (если настроен CI/CD).
+counterexample: |
+  The strongest objection to this decision is captured in the `antithesis` field above: SSR (Next.js, Remix, SolidStart) даёт быстрый initial render и SEO.
+antithesis: |
+  SSR (Next.js, Remix, SolidStart) даёт быстрый initial render и SEO.
+  Backend с WS-сервером даёт приватное state и real-time multi-user.
+  NixOS-контейнер даёт воспроизводимый деплой. Никакая из этих фич
+  не нужна для live-coding в браузере, но отсутствие SSR означает
+  пустой экран до загрузки JS.
+axiom_link:
+  - A3
+scope:
+  paths: []
+outcomes:
+  - id: wavecode-static-spa-deployment-outcome
+    statement: |
+      wavecode деплоится как статический SPA: `pnpm build` → ui/dist/ → любой
+      static-host (Vercel, Cloudflare Pages, GitHub Pages, nginx).
+obligations:
+  - id: wavecode-static-spa-deployment-kernel-validates
+    claim: |
+      The migrated decision file is structurally valid under the math-coding 3.3 schema; `mathc validate` exits 0 for `decisions/<id>.yaml` at HEAD.
+    acceptance:
+      all:
+        - verifier: "mathc validate"
+          result: pass
+  - id: wavecode-static-spa-deployment-witness-from-v1
+    claim: |
+      The original v1.0 packet applied on the recorded date in its `witness` file; this migration preserves that evidence as an `attestations/<id>-evidence.json` file.
+    acceptance:
+      all:
+        - verifier: "attestation-store-has-subject"
+          result: pass
+assumptions:
+  - id: wavecode-static-spa-deployment-assumption-1
+    state: assumed
+    statement: |
+      "Live-coding SPA — interactive tool, SEO нерелевантен"
+    owner: human:operator
+  - id: wavecode-static-spa-deployment-assumption-2
+    state: assumed
+    statement: |
+      "Vite build даёт ~400KB initial bundle (Solid + Strudel + Effect + CM6)" Evidence: "примерная оценка, не измерено"
+    owner: human:operator
+  - id: wavecode-static-spa-deployment-assumption-3
+    state: proven
+    statement: |
+      "Cloudflare Pages бесплатен для статики с автоматическим HTTPS"
+    owner: human:operator
+risk:
+  declared_triggers:
+    - v1-to-v3-migration-loss
+  owner: human:operator
+relations:
+  addresses:
+    - wavecode-bootstrap-math-coding-3.3@1
+---

@@ -1,0 +1,163 @@
+---
+schema: math-coding/3.3
+id: console-ux-polish
+revision: 1
+state: active
+body_sha: "sha256:7fb1e35893d9f9eb7ff1262613f7654fb2735cfde8420b616adf3b985f48dcd3"
+yaml_sha: "sha256:7fb1e35893d9f9eb7ff1262613f7654fb2735cfde8420b616adf3b985f48dcd3"
+
+intent:|
+  Three additive polishes to the Phase-1 console UX
+  (`math/wavecode-debug-console`) land without restructuring it:
+
+  1. **`fatal` severity in `ToastSeverity`.** Subagent-6 adds `'fatal'`
+  to `LogLevel` (`ui/src/infrastructure/log/logger.ts`).
+  consoleStore treats `'fatal'` identically to `'critical'`:
+  sticky TTL (0), increments `unreadErrors`, clickable to open
+  the sheet. Contract added to `consoleStore.ts` so the
+  `logger.push({ severity: 'fatal', ... })` flow lands in the
+  toasts without Subagent-6 needing to touch consoleStore.
+
+  2. **Color-blind severity icons in `Toast.tsx`.** Each toast now
+  renders a leading SVG icon (`InfoIcon` / `WarnIcon` /
+  `ErrorIcon` / `CriticalIcon`) inside the existing `.toast-icon`
+  slot. Border color remains the primary visual cue, but the
+  icon is a SECOND independent channel — `red-green color
+  deficiency` users can now read severity by shape. Four new
+  icons added to `icons/index.tsx`, following the existing
+  `ConsoleIcon` / `PinIcon` pattern (16×16 viewBox, currentColor
+  stroke + fill). CriticalIcon uses an octagon (international
+  "stop / critical" shape); fatal reuses the same icon, since
+  consoleStore treats them as one channel — only stickiness +
+  color + icon distinguish them from the chromium cases.
+
+  3. **`Cmd/Ctrl+`` hotkey for the console toggle.** New pure
+  helper `consoleHotkey.ts: matchesHotkey(event, hotkey) →
+  boolean` encodes the cross-platform "metaKey || ctrlKey"
+  semantics in one place. `consoleGlobals.ts` registers a
+  `keydown` listener that toggles `consoleStore.consoleOpen`
+  when backtick is pressed with Cmd/Ctrl (no shift, no alt).
+  Listener is suppressed when focus is in `INPUT`,
+  `TEXTAREA`, or `contenteditable` so the hotkey doesn't
+  interfere with typing inside CodeMirror or any input.
+  Listener is also installed exactly once (idempotent via
+  `state.installed`), and an `uninstallConsoleGlobals()`
+  helper is exposed for tests / HMR. ConsoleButton's `title`
+  attribute shows the platform-aware hint
+  `"Console (Cmd+\`)"` (Mac) / `"Console (Ctrl+\`)"` (others)
+  using the modern `navigator.userAgentData?.platform` with a
+  graceful fallback to deprecated `navigator.platform`.
+
+  Scope discipline (Phase-2 parallel work):
+  - All edits stay inside the agent-7 surface (`consoleStore`,
+  `Toast`, `ConsoleButton`, `consoleGlobals`, `icons/index`).
+  - DO NOT touch `infrastructure/log/*` (Subagent-6), audio
+  (Subagent-8), domain (Subagent-9), bootstrap (Phase-1
+  shipped), or `package.json` (Subagent-10).
+  - styles/components.css gets ONE additive block: new selectors
+  for `.toast-item.toast-fatal` + `.toast-item.toast-fatal
+  .toast-icon`. No existing class tweaked.
+
+  Tests: 374/374 vitest pass (366 baseline + 6 hotkey + 2 toast =
+  +8 net). Typecheck clean. ESLint: 0 errors / 14 pre-existing
+  warnings (none from this work).
+commitment: |
+  Three additive pieces, all in scope:
+counterexample: |
+  The strongest objection to this decision is captured in the `antithesis` field above: (1) «Auto-dismiss fatal after 30s like a long critical». Возражение:
+antithesis: |
+  (1) «Auto-dismiss fatal after 30s like a long critical». Возражение:
+  fatal = необработанный throw в effect-runtime; пользователь
+  ДОЛЖЕН его увидеть, иначе теряется смысл severity. Sticky как у
+  critical — единственный сигнал "это важно". (2) «Использовать
+  эмодзи 🎉 / ⚡ / 🔥 для severity-иконок». Возражение: эмодзи
+  плохо масштабируются (разный glyph на Win / Mac / Android),
+  нарушают currentColor (тосты теряют severity-цвет), и не
+  accessible (screen-reader читает имя emoji). SVG-иконки в том
+  же visual language, что и ConsoleIcon/PinIcon. (3) «Вместо
+  pure helper хранить HOTKEYS прямо в consoleGlobals». Возражение:
+  тестируемость — `matchesHotkey(event, { key: 'd' })` это pure
+  function, тестируемая без window; в consoleGlobals она бы
+  смешивалась с DOM-listeners и editable-target check.
+  (4) «Использовать `Cmd+K` / Ctrl+K вместо Cmd+` ` — это
+  command-palette hotkey». Возражение: Cmd+K уже используется в
+  browser native (focus URL bar в некоторых браузерах) и в
+  GitHub-style command palettes; Cmd+` — DevTools-конвенция,
+  не конфликтует с native. (5) «Hotkey должен работать ВСЕГДА,
+  даже когда фокус в input». Возражение: пользователь печатает
+  код в CodeMirror — backtick там — legal character
+  (template literal); Cmd+` ` — там тоже легальный shortcut
+  (toggle блок-code в MD редакторе). Подавлять в editable —
+  самый предсказуемый дефолт; пользователь может закрыть
+  console кликом по button. (6) «Tooltip показывает hotkey всегда,
+  даже если не зарегистрирован». Возражение: tooltip == обещание;
+  если в выключенном состоянии hotkey не работает — диссонанс.
+  Мы регистрируем hotkey в consoleGlobals, который App.tsx
+  зовёт в onMount — обещание и реализация совпадают.
+  Three additive pieces, all in scope:
+counterexample: |
+  The strongest objection to this decision is captured in the `antithesis` field above: (1) «Auto-dismiss fatal after 30s like a long critical». Возражение:
+antithesis: |
+  (1) «Auto-dismiss fatal after 30s like a long critical». Возражение:
+  fatal = необработанный throw в effect-runtime; пользователь
+  ДОЛЖЕН его увидеть, иначе теряется смысл severity. Sticky как у
+  critical — единственный сигнал "это важно". (2) «Использовать
+  эмодзи 🎉 / ⚡ / 🔥 для severity-иконок». Возражение: эмодзи
+  плохо масштабируются (разный glyph на Win / Mac / Android),
+  нарушают currentColor (тосты теряют severity-цвет), и не
+  accessible (screen-reader читает имя emoji). SVG-иконки в том
+  же visual language, что и ConsoleIcon/PinIcon. (3) «Вместо
+  pure helper хранить HOTKEYS прямо в consoleGlobals». Возражение:
+  тестируемость — `matchesHotkey(event, { key: 'd' })` это pure
+  function, тестируемая без window; в consoleGlobals она бы
+  смешивалась с DOM-listeners и editable-target check.
+  (4) «Использовать `Cmd+K` / Ctrl+K вместо Cmd+` ` — это
+  command-palette hotkey». Возражение: Cmd+K уже используется в
+  browser native (focus URL bar в некоторых браузерах) и в
+  GitHub-style command palettes; Cmd+` — DevTools-конвенция,
+  не конфликтует с native. (5) «Hotkey должен работать ВСЕГДА,
+  даже когда фокус в input». Возражение: пользователь печатает
+  код в CodeMirror — backtick там — legal character
+  (template literal); Cmd+` ` — там тоже легальный shortcut
+  (toggle блок-code в MD редакторе). Подавлять в editable —
+  самый предсказуемый дефолт; пользователь может закрыть
+  console кликом по button. (6) «Tooltip показывает hotkey всегда,
+  даже если не зарегистрирован». Возражение: tooltip == обещание;
+  если в выключенном состоянии hotkey не работает — диссонанс.
+  Мы регистрируем hotkey в consoleGlobals, который App.tsx
+  зовёт в onMount — обещание и реализация совпадают.
+axiom_link:
+  - A4
+scope:
+  paths: []
+outcomes:
+  - id: console-ux-polish-outcome
+    statement: |
+      Three additive polishes to the Phase-1 console UX
+      (`math/wavecode-debug-console`) land without restructuring it:
+
+      1.
+obligations:
+  - id: console-ux-polish-kernel-validates
+    claim: |
+      The migrated decision file is structurally valid under the math-coding 3.3 schema; `mathc validate` exits 0 for `decisions/<id>.yaml` at HEAD.
+    acceptance:
+      all:
+        - verifier: "mathc validate"
+          result: pass
+  - id: console-ux-polish-witness-from-v1
+    claim: |
+      The original v1.0 packet applied on the recorded date in its `witness` file; this migration preserves that evidence as an `attestations/<id>-evidence.json` file.
+    acceptance:
+      all:
+        - verifier: "attestation-store-has-subject"
+          result: pass
+assumptions: []
+risk:
+  declared_triggers:
+    - v1-to-v3-migration-loss
+  owner: human:operator
+relations:
+  addresses:
+    - wavecode-bootstrap-math-coding-3.3@1
+---

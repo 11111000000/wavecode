@@ -1,0 +1,100 @@
+---
+schema: math-coding/3.3
+id: wavecode-strudel-in-browser
+revision: 1
+state: active
+body_sha: "sha256:4be1fa8ff9ce408fd26a990cde76791b638259bb52af0d01114e48db0ef9aaef"
+yaml_sha: "sha256:4be1fa8ff9ce408fd26a990cde76791b638259bb52af0d01114e48db0ef9aaef"
+
+intent:|
+  Аудио в wavecode рендерится в браузере через @strudel/core + @strudel/webaudio
+  (webaudioRepl + evaluate), без серверного TidalCycles+SuperDirt+Icecast и без
+  интеграции с ~/Projects/Composer/.
+commitment: |
+  Use case оператора — local live-coding в браузере, я сам себе слушатель.
+  Strudel покрывает 80% паттернов и эффектов; professional-grade звук и
+  Icecast-стрим не нужны. Если позже понадобится — добавляется отдельный
+  backend-сервис, не интеграция с существующим Composer. Web Audio API
+  даёт латентность 5-15ms (vs 30-80ms через ghci+OSC+SuperDirt), что
+  важнее для live-coding.
+counterexample: |
+  The strongest objection to this decision is captured in the `antithesis` field above: Tidal+SuperDirt даёт доступ к SC-UGen'ам (сотни синтезаторов), профессиональным
+antithesis: |
+  Tidal+SuperDirt даёт доступ к SC-UGen'ам (сотни синтезаторов), профессиональным
+  Dirt-Samples (~3 GB), публичному стриму через Icecast и persistent-режиму
+  (браузер закрыт — музыка играет). Strudel в браузере ограничен встроенными
+  сэмплами и Web Audio API. Для профессионального продакшена или публичного
+  стрима Strudel недостаточен.
+  Use case оператора — local live-coding в браузере, я сам себе слушатель.
+  Strudel покрывает 80% паттернов и эффектов; professional-grade звук и
+  Icecast-стрим не нужны. Если позже понадобится — добавляется отдельный
+  backend-сервис, не интеграция с существующим Composer. Web Audio API
+  даёт латентность 5-15ms (vs 30-80ms через ghci+OSC+SuperDirt), что
+  важнее для live-coding.
+counterexample: |
+  The strongest objection to this decision is captured in the `antithesis` field above: Tidal+SuperDirt даёт доступ к SC-UGen'ам (сотни синтезаторов), профессиональным
+antithesis: |
+  Tidal+SuperDirt даёт доступ к SC-UGen'ам (сотни синтезаторов), профессиональным
+  Dirt-Samples (~3 GB), публичному стриму через Icecast и persistent-режиму
+  (браузер закрыт — музыка играет). Strudel в браузере ограничен встроенными
+  сэмплами и Web Audio API. Для профессионального продакшена или публичного
+  стрима Strudel недостаточен.
+axiom_link:
+  - A3
+scope:
+  paths: []
+outcomes:
+  - id: wavecode-strudel-in-browser-outcome
+    statement: |
+      Аудио в wavecode рендерится в браузере через @strudel/core + @strudel/webaudio
+      (webaudioRepl + evaluate), без серверного TidalCycles+SuperDirt+Icecast и без
+      интеграции с ~/Projects/Composer/.
+obligations:
+  - id: wavecode-strudel-in-browser-kernel-validates
+    claim: |
+      The migrated decision file is structurally valid under the math-coding 3.3 schema; `mathc validate` exits 0 for `decisions/<id>.yaml` at HEAD.
+    acceptance:
+      all:
+        - verifier: "mathc validate"
+          result: pass
+  - id: wavecode-strudel-in-browser-witness-from-v1
+    claim: |
+      The original v1.0 packet applied on the recorded date in its `witness` file; this migration preserves that evidence as an `attestations/<id>-evidence.json` file.
+    acceptance:
+      all:
+        - verifier: "attestation-store-has-subject"
+          result: pass
+assumptions:
+  - id: wavecode-strudel-in-browser-assumption-1
+    state: assumed
+    statement: |
+      "Strudel в браузере покрывает 80% Tidal-паттернов"
+    owner: human:operator
+  - id: wavecode-strudel-in-browser-assumption-2
+    state: assumed
+    statement: |
+      "Web Audio latency 5-15ms vs server-side 30-80ms"
+    owner: human:operator
+  - id: wavecode-strudel-in-browser-assumption-3
+    state: assumed
+    statement: |
+      "use case — local live-coding, без публичного стрима" Evidence: "оператор 2026-09-23 в opencode-сессии"
+    owner: human:operator
+  - id: wavecode-strudel-in-browser-assumption-4
+    state: proven
+    statement: |
+      "Superdough createPeriodicWave падает на пустых partials" Evidence: "node_modules/superdough/synth.mjs:495 (createPeriodicWave(real, imag) где real.length может быть <2)"
+    owner: human:operator
+  - id: wavecode-strudel-in-browser-assumption-5
+    state: proven
+    statement: |
+      "webaudioRepl() — единственный корректный high-level API" Evidence: "node_modules/@strudel/webaudio/dist/index.mjs:302 (Fe function)"
+    owner: human:operator
+risk:
+  declared_triggers:
+    - v1-to-v3-migration-loss
+  owner: human:operator
+relations:
+  addresses:
+    - wavecode-bootstrap-math-coding-3.3@1
+---

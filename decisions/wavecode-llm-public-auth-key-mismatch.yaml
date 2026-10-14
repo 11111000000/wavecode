@@ -1,0 +1,133 @@
+---
+schema: math-coding/3.3
+id: wavecode-llm-public-auth-key-mismatch
+revision: 1
+state: active
+body_sha: "sha256:b21c2550880033f69b16d28f835b70b79ca49ca2aced1c7d63e8fe2ade6ef7eb"
+yaml_sha: "sha256:b21c2550880033f69b16d28f835b70b79ca49ca2aced1c7d63e8fe2ade6ef7eb"
+
+intent:|
+  В `ui/.env.local` лежит `VITE_LLM_PROXY_KEY` БЕЗ префикса `sk-litellm-`,
+  а `LITELLM_MASTER_KEY` на angara-1 — С префиксом. `compare_digest` в
+  `_user_api_key_auth_builder` (litellm 1.75.5) возвращает False →
+  upstream-код считает, что ключ НЕ мастер → пытается lookup virtual
+  key в Prisma DB → Prisma сознательно отключён
+  (`services/llm-proxy.nix:67-69`) → 400 `{"error":{"type":"no_db_connection",...}}`.
+  Тихо: bundle собирается и деплоится без ошибок, в UI каждый запрос
+  возвращает "LLM ошибка: LLM HTTP 400: ...No connected db...". Юзер
+  видит broken AI panel, при этом Playwright/curl с правильным
+  `sk-litellm-...` ключом возвращает 200 — т.е. это key-drift, не
+  реальный outage.
+commitment: |
+  Три слоя защиты — все должны быть на месте, любой по отдельности
+  недостаточен.
+counterexample: |
+  The strongest objection to this decision is captured in the `antithesis` field above: (1) «Подменить `.env.local` напрямую в этом сеансе» — починит
+antithesis: |
+  (1) «Подменить `.env.local` напрямую в этом сеансе» — починит
+  симптом сейчас, но `.env.local` gitignored, дрифт вернётся при
+  следующем `git clean -fdx -e ui/.env.local` (CI deploy делает
+  именно это) или при ручной перезаписи. Нужна защита от drift.
+
+  (2) «Сделать так, чтобы LiteLLM принимал ключ без префикса» —
+  upstream LiteLLM требует формат `sk-<…>` для virtual keys
+  (`_user_api_key_auth_builder:790` ассертит `api_key.startswith("sk-")`).
+  Менять upstream-код нельзя (Nix store, не наш пакет).
+
+  (3) «Поднять Prisma/SQLite для виртуальных ключей» — наш config
+  в `services/llm-proxy.nix:67-69` явно документирует, почему
+  Prisma не работает: `prisma generate` требует записи в
+  site-packages (read-only в Nix store), Prisma engine binary
+  не существует на Prisma CDN для linux-nixos. Починить — это
+  отдельный ADR-уровень refactor (Prisma → Postgres asyncpg, или
+  LiteLLM proxy → свой auth backend). Не blocking для текущей
+  проблемы.
+
+  (4) «Прятать 400 error в UI, retry с правильным ключом» — клиент
+  не знает, какой ключ "правильный". Это server-side config drift,
+  а не runtime-проблема клиента. Только deploy-time check может
+  гарантировать правильное значение.
+
+  (5) «Ничего не делать, пусть wavecode-сторона заметит» — мы
+  ЗАМЕТИЛИ: 400 каждые 30 секунд в логах юзера, но key
+  инфраструктура (AngaraConfig) — единственное место, где
+  canonical-значение master_key. Клиент (bundle) должен быть
+  читателем, не источником истины.
+
+  (6) «Поднять отдельный backend на angara-1, который держит
+  master_key и проксирует для wavecode» — правильный долгосрочный
+  фикс, но это новый сервис, новый flake-кусок, новый домен.
+  Не blocking для текущей проблемы (текущая security model
+  "master_key в bundle" уже принята в `math/wavecode-llm-litellm-proxy`).
+  Три слоя защиты — все должны быть на месте, любой по отдельности
+  недостаточен.
+counterexample: |
+  The strongest objection to this decision is captured in the `antithesis` field above: (1) «Подменить `.env.local` напрямую в этом сеансе» — починит
+antithesis: |
+  (1) «Подменить `.env.local` напрямую в этом сеансе» — починит
+  симптом сейчас, но `.env.local` gitignored, дрифт вернётся при
+  следующем `git clean -fdx -e ui/.env.local` (CI deploy делает
+  именно это) или при ручной перезаписи. Нужна защита от drift.
+
+  (2) «Сделать так, чтобы LiteLLM принимал ключ без префикса» —
+  upstream LiteLLM требует формат `sk-<…>` для virtual keys
+  (`_user_api_key_auth_builder:790` ассертит `api_key.startswith("sk-")`).
+  Менять upstream-код нельзя (Nix store, не наш пакет).
+
+  (3) «Поднять Prisma/SQLite для виртуальных ключей» — наш config
+  в `services/llm-proxy.nix:67-69` явно документирует, почему
+  Prisma не работает: `prisma generate` требует записи в
+  site-packages (read-only в Nix store), Prisma engine binary
+  не существует на Prisma CDN для linux-nixos. Починить — это
+  отдельный ADR-уровень refactor (Prisma → Postgres asyncpg, или
+  LiteLLM proxy → свой auth backend). Не blocking для текущей
+  проблемы.
+
+  (4) «Прятать 400 error в UI, retry с правильным ключом» — клиент
+  не знает, какой ключ "правильный". Это server-side config drift,
+  а не runtime-проблема клиента. Только deploy-time check может
+  гарантировать правильное значение.
+
+  (5) «Ничего не делать, пусть wavecode-сторона заметит» — мы
+  ЗАМЕТИЛИ: 400 каждые 30 секунд в логах юзера, но key
+  инфраструктура (AngaraConfig) — единственное место, где
+  canonical-значение master_key. Клиент (bundle) должен быть
+  читателем, не источником истины.
+
+  (6) «Поднять отдельный backend на angara-1, который держит
+  master_key и проксирует для wavecode» — правильный долгосрочный
+  фикс, но это новый сервис, новый flake-кусок, новый домен.
+  Не blocking для текущей проблемы (текущая security model
+  "master_key в bundle" уже принята в `math/wavecode-llm-litellm-proxy`).
+axiom_link:
+  - A3
+scope:
+  paths: []
+outcomes:
+  - id: wavecode-llm-public-auth-key-mismatch-outcome
+    statement: |
+      В `ui/.
+obligations:
+  - id: wavecode-llm-public-auth-key-mismatch-kernel-validates
+    claim: |
+      The migrated decision file is structurally valid under the math-coding 3.3 schema; `mathc validate` exits 0 for `decisions/<id>.yaml` at HEAD.
+    acceptance:
+      all:
+        - verifier: "mathc validate"
+          result: pass
+  - id: wavecode-llm-public-auth-key-mismatch-witness-from-v1
+    claim: |
+      The original v1.0 packet applied on the recorded date in its `witness` file; this migration preserves that evidence as an `attestations/<id>-evidence.json` file.
+    acceptance:
+      all:
+        - verifier: "attestation-store-has-subject"
+          result: pass
+assumptions: []
+risk:
+  declared_triggers:
+    - v1-to-v3-migration-loss
+  owner: human:operator
+relations:
+  addresses:
+    - wavecode-bootstrap-math-coding-3.3@1
+---

@@ -1,0 +1,73 @@
+---
+schema: math-coding/3.3
+id: wavecode-piano-toolbar-fix
+revision: 1
+state: draft
+body_sha: "sha256:30e6a3759015dbf0cf5e776f826d966d9b3b55811d386805b19f018424804054"
+yaml_sha: "sha256:30e6a3759015dbf0cf5e776f826d966d9b3b55811d386805b19f018424804054"
+
+intent:|
+  Piano CSS-scope + MiniNotationToolbar reactivity + toolbar visibility
+  fix (4 файла, ~50 LoC diff). Устраняет 3 user-visible бага одним
+  пакетом: чёрные клавиши выпадают из piano; toolbar-кнопки не
+  вставляют snippet; toolbar скрыт bottom-sheet-ом.
+commitment: |
+  4 минимальных правки, каждая в своём файле:
+counterexample: |
+  The strongest objection to this decision is captured in the `antithesis` field above: (1) «Rename селектора в legacy — достаточно». Возражение:
+antithesis: |
+  (1) «Rename селектора в legacy — достаточно». Возражение:
+  rename работает, но не страхует от случайного reorder-а
+  CSS imports. @layer — структурная гарантия.
+  (2) «Sticky на toolbar — стандартное решение». Возражение:
+  sticky не работает при `overflow: hidden` родителя.
+  `margin-top: auto` — пуленепробиваемый CSS-only.
+  (3) «Editor accessor в ScorePanel — overengineering». Возражение:
+  без accessor-а toolbar стартует с `editor=undefined` и
+  навсегда молчит (current bug). Это НЕ optional.
+  4 минимальных правки, каждая в своём файле:
+counterexample: |
+  The strongest objection to this decision is captured in the `antithesis` field above: (1) «Rename селектора в legacy — достаточно». Возражение:
+antithesis: |
+  (1) «Rename селектора в legacy — достаточно». Возражение:
+  rename работает, но не страхует от случайного reorder-а
+  CSS imports. @layer — структурная гарантия.
+  (2) «Sticky на toolbar — стандартное решение». Возражение:
+  sticky не работает при `overflow: hidden` родителя.
+  `margin-top: auto` — пуленепробиваемый CSS-only.
+  (3) «Editor accessor в ScorePanel — overengineering». Возражение:
+  без accessor-а toolbar стартует с `editor=undefined` и
+  навсегда молчит (current bug). Это НЕ optional.
+axiom_link:
+  - A1
+scope:
+  paths: []
+outcomes:
+  - id: wavecode-piano-toolbar-fix-outcome
+    statement: |
+      Piano CSS-scope + MiniNotationToolbar reactivity + toolbar visibility
+      fix (4 файла, ~50 LoC diff).
+obligations:
+  - id: wavecode-piano-toolbar-fix-kernel-validates
+    claim: |
+      The migrated decision file is structurally valid under the math-coding 3.3 schema; `mathc validate` exits 0 for `decisions/<id>.yaml` at HEAD.
+    acceptance:
+      all:
+        - verifier: "mathc validate"
+          result: pass
+  - id: wavecode-piano-toolbar-fix-witness-from-v1
+    claim: |
+      The original v1.0 packet applied on the recorded date in its `witness` file; this migration preserves that evidence as an `attestations/<id>-evidence.json` file.
+    acceptance:
+      all:
+        - verifier: "attestation-store-has-subject"
+          result: pass
+assumptions: []
+risk:
+  declared_triggers:
+    - v1-to-v3-migration-loss
+  owner: human:operator
+relations:
+  addresses:
+    - wavecode-bootstrap-math-coding-3.3@1
+---

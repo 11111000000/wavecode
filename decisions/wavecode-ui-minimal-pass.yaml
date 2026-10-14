@@ -1,0 +1,122 @@
+---
+schema: math-coding/3.3
+id: wavecode-ui-minimal-pass
+revision: 1
+state: active
+body_sha: "sha256:e4260782b32059b8fdf5e634176ed1ef5e31e51fd07d13dcd0b66bdcab5577d8"
+yaml_sha: "sha256:e4260782b32059b8fdf5e634176ed1ef5e31e51fd07d13dcd0b66bdcab5577d8"
+
+intent:|
+  Текущий `#/app` регрессировал по визуальному шуму относительно
+  мокапа лендинга (`ui/src/presentation/components/landing/sections/EditorMockup.tsx`):
+
+  - `TopBar.tsx:31` — 10 видимых иконок подряд (undo, redo, new,
+  save, share, layout-swap, mobile-menu, delete-preset, reset-all)
+  плюс LED-индикатор и два параллельных loading-индикатора
+  (`audio-loading-skeleton`, `audio-loading-pill`). Мокап показывает
+  4 иконки + 1 LED.
+  - `PresetRow.tsx:62-63` — debug-кнопки `beep(440)` и `beep(220)`
+  визуально неотличимы от пресет-chips (такой же `wc-chip`).
+  - `App.tsx:284-286` — ссылка `→ /admin` всегда торчит в углу как
+  dev-инструмент без контекста.
+  - `AIEditPanel.tsx:217-247` — два `<select>` (модель + thinking)
+  занимают целую строку над «Применить». После первой настройки
+  большинство юзеров их не трогает.
+  - `PresetRow.tsx:44-61` — Step/Piano/Mixer chips висят на верхней
+  панели рядом с пресет-select. Семантически это «инструменты»,
+  они должны жить в нижней зоне (рядом с AI в TabBar).
+  - `TransportPanel.tsx:31-35, :20-25` — cps-presets (60/120/240)
+  и swing-divisor select (1/4/1/8/1/16/1/3) добавляют плотности
+  без визуальной иерархии. На ширине 360-414px это горизонтальный
+  overflow.
+
+  Цель: привести `#/app` к визуальной чистоте мокапа **без регрессий**
+  для daily workflow. Сохранить power-user shortcuts, схлопнуть шум.
+commitment: |
+  Восемь правок в одной серии инкрементальных коммитов:
+counterexample: |
+  The strongest objection to this decision is captured in the `antithesis` field above: (1) «Схлопнуть всё под ⋯ — потеряем discoverability редких действий».
+antithesis: |
+  (1) «Схлопнуть всё под ⋯ — потеряем discoverability редких действий».
+  Возражение: «Сбросить всё», «Мобильный режим», «Сохранить пресет» —
+  это setup/cleanup, не daily workflow. Hide-once-discoverable —
+  нормальный паттерн (Linear, Figma). Для тех кто знает, остаётся
+  keyboard shortcut (`Ctrl+Shift+A` для админки).
+  (2) «Удалить cps-presets и swing-divisor — регрессия для power
+  users». Возражение: НЕ удаляем функционально, визуально принижаем
+  (smaller, outline-style) и скрываем cps-presets на `@media
+  (max-width: 639px)`. Функция остаётся, просто не визуально
+  равноправна play-кнопке.
+  (3) «AI ⚙-popover скроет выбор модели от новых юзеров».
+  Возражение: на кнопке показываем текущее значение (`⚙ M3 · high`),
+  плюс tooltip при первом hover. Discoverability ≠ visibility 24/7.
+  Эти настройки не «фичи продукта», а escape hatch.
+  (4) «Bottom-toolstrip vs Tools tab в TabBar — оба варианта рабочие».
+  Возражение: bottom-toolstrip = 1 тап на любое действие; Tools tab
+  = 2 тапа. Step/Piano открываются часто (поправь grid → послушай →
+  закрой → открой снова), friction ×2 заметен на длинной сессии.
+  (5) «Админка в ⋯ меню избыточна — есть keyboard shortcut».
+  Возражение: A+B+C — keyboard shortcut для тех кто знает, ⋯ меню
+  для тех кто не знает (но увидел «что-то ещё»), контекстный ⚠ бейдж
+  для тех у кого прямо сейчас ошибка. Три уровня покрывают все
+  user-state'ы без постоянного визуального шума.
+  Восемь правок в одной серии инкрементальных коммитов:
+counterexample: |
+  The strongest objection to this decision is captured in the `antithesis` field above: (1) «Схлопнуть всё под ⋯ — потеряем discoverability редких действий».
+antithesis: |
+  (1) «Схлопнуть всё под ⋯ — потеряем discoverability редких действий».
+  Возражение: «Сбросить всё», «Мобильный режим», «Сохранить пресет» —
+  это setup/cleanup, не daily workflow. Hide-once-discoverable —
+  нормальный паттерн (Linear, Figma). Для тех кто знает, остаётся
+  keyboard shortcut (`Ctrl+Shift+A` для админки).
+  (2) «Удалить cps-presets и swing-divisor — регрессия для power
+  users». Возражение: НЕ удаляем функционально, визуально принижаем
+  (smaller, outline-style) и скрываем cps-presets на `@media
+  (max-width: 639px)`. Функция остаётся, просто не визуально
+  равноправна play-кнопке.
+  (3) «AI ⚙-popover скроет выбор модели от новых юзеров».
+  Возражение: на кнопке показываем текущее значение (`⚙ M3 · high`),
+  плюс tooltip при первом hover. Discoverability ≠ visibility 24/7.
+  Эти настройки не «фичи продукта», а escape hatch.
+  (4) «Bottom-toolstrip vs Tools tab в TabBar — оба варианта рабочие».
+  Возражение: bottom-toolstrip = 1 тап на любое действие; Tools tab
+  = 2 тапа. Step/Piano открываются часто (поправь grid → послушай →
+  закрой → открой снова), friction ×2 заметен на длинной сессии.
+  (5) «Админка в ⋯ меню избыточна — есть keyboard shortcut».
+  Возражение: A+B+C — keyboard shortcut для тех кто знает, ⋯ меню
+  для тех кто не знает (но увидел «что-то ещё»), контекстный ⚠ бейдж
+  для тех у кого прямо сейчас ошибка. Три уровня покрывают все
+  user-state'ы без постоянного визуального шума.
+axiom_link:
+  - A3
+scope:
+  paths: []
+outcomes:
+  - id: wavecode-ui-minimal-pass-outcome
+    statement: |
+      Текущий `#/app` регрессировал по визуальному шуму относительно
+      мокапа лендинга (`ui/src/presentation/components/landing/sections/EditorMockup.
+obligations:
+  - id: wavecode-ui-minimal-pass-kernel-validates
+    claim: |
+      The migrated decision file is structurally valid under the math-coding 3.3 schema; `mathc validate` exits 0 for `decisions/<id>.yaml` at HEAD.
+    acceptance:
+      all:
+        - verifier: "mathc validate"
+          result: pass
+  - id: wavecode-ui-minimal-pass-witness-from-v1
+    claim: |
+      The original v1.0 packet applied on the recorded date in its `witness` file; this migration preserves that evidence as an `attestations/<id>-evidence.json` file.
+    acceptance:
+      all:
+        - verifier: "attestation-store-has-subject"
+          result: pass
+assumptions: []
+risk:
+  declared_triggers:
+    - v1-to-v3-migration-loss
+  owner: human:operator
+relations:
+  addresses:
+    - wavecode-bootstrap-math-coding-3.3@1
+---
