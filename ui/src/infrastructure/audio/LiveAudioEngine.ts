@@ -7,7 +7,7 @@ import type * as TranspilerModule from '@strudel/transpiler';
 import type * as WebaudioModule from '@strudel/webaudio';
 import * as superdough from 'superdough';
 import type { LanguageMode } from '~/domain/languageMode';
-import { lispTranspiler, type LispTranspilerResult } from '~/infrastructure/lisp/transpiler';
+import { lispTranspiler } from '~/infrastructure/lisp/transpiler';
 import type { LayerMix } from '~/domain/types';
 import type { NoteEvent } from '~/domain/midi/encoder';
 import { injectMix } from '~/application/useCases/injectMix';
@@ -231,29 +231,6 @@ const loadModules = (): Promise<StrudelModules> => {
   return modulesPromise;
 };
 
-/**
- * Compose the Lisp transpiler with `@strudel/transpiler.transpiler` so
- * mini-notation inside string literals is applied on the audio path.
- *
- * `lispTranspiler` (in infrastructure/lisp) is pure — it emits JS calls
- * but leaves strings untouched. Without this composition,
- * `note("a4 b4 c5")` reaches Strudel as a raw string and plays silence.
- *
- * Returns a `(code, opts) => { output, ... }` shim matching Strudel's
- * `evaluate` contract. On Lisp syntax error the source is passed through
- * with `errors` populated (Strudel then surfaces the error upstream).
- */
-const makeLispAudioTranspiler = (
-  strudelTranspiler: (code: string, opts?: unknown) => { output: string },
-): ((code: string, opts?: unknown) => LispTranspilerResult) => {
-  return (code, opts) => {
-    const lisp = lispTranspiler(code);
-    if (lisp.errors.length > 0) return lisp;
-    const mini = strudelTranspiler(lisp.output, opts);
-    return { output: mini.output, miniLocations: [], errors: [] };
-  };
-};
-
 export const unlockAudioContext = (): AudioContext => {
   patchCreatePeriodicWave();
   const win = window as unknown as {
@@ -372,9 +349,7 @@ const ensureRepl = (audioCtx: AudioContext, mode: LanguageMode): Promise<ReplHan
       const repl = modules.webaudio.webaudioRepl({
         audioContext: audioCtx,
         transpiler:
-          mode === 'lisp'
-            ? makeLispAudioTranspiler(modules.transpilerMod.transpiler)
-            : modules.transpilerMod.transpiler,
+          mode === 'lisp' ? lispTranspiler : modules.transpilerMod.transpiler,
       });
       console.log(`[wavecode] webaudioRepl created (mode=${mode})`);
 
@@ -474,10 +449,7 @@ const rawCompileAndQuery = async (
     transpiler?: unknown;
   };
   if (!transpilerMod.evaluate) throw new Error('transpilerMod.evaluate недоступен');
-  const transpiler =
-    mode === 'lisp'
-      ? makeLispAudioTranspiler(transpilerMod.transpiler as (c: string, o?: unknown) => { output: string })
-      : transpilerMod.transpiler;
+  const transpiler = mode === 'lisp' ? lispTranspiler : transpilerMod.transpiler;
   const result = await transpilerMod.evaluate(snippet, transpiler);
   const pattern = result.pattern as { queryArc?: (a: number, b: number) => unknown[] } | undefined;
   if (!pattern || typeof pattern.queryArc !== 'function') {
@@ -872,10 +844,7 @@ await repl.evaluate(snippet);
             transpiler?: unknown;
           };
           if (!transpilerMod.evaluate) throw new Error('transpilerMod.evaluate недоступен');
-          const transpiler =
-            mode === 'lisp'
-              ? makeLispAudioTranspiler(transpilerMod.transpiler as (c: string, o?: unknown) => { output: string })
-              : transpilerMod.transpiler;
+          const transpiler = mode === 'lisp' ? lispTranspiler : transpilerMod.transpiler;
           if (!transpiler) throw new Error('transpiler недоступен');
           const sdIdx = (await import('superdough')) as unknown as Record<string, unknown>;
           const sdOut = (await import(

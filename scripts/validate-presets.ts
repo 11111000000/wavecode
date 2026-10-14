@@ -51,12 +51,7 @@ type ValidatePresetResult = {
   readonly error?: string;
 };
 
-type Preset = {
-  readonly id: string;
-  readonly name: string;
-  readonly score: string;
-  readonly lang?: 'js' | 'lisp';
-};
+type Preset = { readonly id: string; readonly name: string; readonly score: string };
 
 type StrudelModule = {
   evaluate: (code: string, t: unknown) => Promise<{ pattern?: unknown }>;
@@ -144,65 +139,11 @@ function syntacticSmokeTest(score: string): { ok: boolean; error?: string } {
   }
 }
 
-/**
- * Lisp smoke test: balanced-parens check (skipping `;;`-comments and
- * `"..."` strings). We deliberately do NOT import the full Lisp
- * transpiler here — it uses extension-less relative imports
- * (`./lexer`) that Node's `--experimental-strip-types` cannot resolve,
- * unlike Vite's bundler.
- */
-function lispSmokeTest(score: string): { ok: boolean; error?: string } {
-  let depth = 0;
-  let inString = false;
-  let inLineComment = false;
-  for (let i = 0; i < score.length; i += 1) {
-    const c = score[i];
-    if (inLineComment) {
-      if (c === '\n') inLineComment = false;
-      continue;
-    }
-    if (inString) {
-      if (c === '"') inString = false;
-      continue;
-    }
-    if (c === ';' && score[i + 1] === ';') {
-      inLineComment = true;
-      i += 1;
-      continue;
-    }
-    if (c === '"') {
-      inString = true;
-      continue;
-    }
-    if (c === '(') depth += 1;
-    if (c === ')') {
-      depth -= 1;
-      if (depth < 0) return { ok: false, error: 'unbalanced ")"' };
-    }
-  }
-  if (depth !== 0) return { ok: false, error: `unbalanced parens (depth=${depth})` };
-  return { ok: true };
-}
-
 async function validateOne(
   preset: Preset,
   t: StrudelModule | null,
   injectedConsole: Pick<Console, 'warn' | 'error'>,
 ): Promise<ValidatePresetResult> {
-  if (preset.lang === 'lisp') {
-    const startedAt = performance.now();
-    const smoke = lispSmokeTest(preset.score);
-    const elapsedMs = performance.now() - startedAt;
-    if (!smoke.ok) {
-      return {
-        presetId: preset.id,
-        warnings: [],
-        elapsedMs,
-        error: smoke.error,
-      };
-    }
-    return { presetId: preset.id, warnings: [], elapsedMs };
-  }
   if (t) {
     const { validatePreset } = await loadPresetsModule();
     return validatePreset(preset, { transpiler: t, console: injectedConsole });

@@ -55,7 +55,7 @@ describe('lisp/goldenPairs — LispSyntaxError is still raised on actual bad inp
 
   it('lispTranspiler returns error result instead of throwing', async () => {
     const { lispTranspiler } = await import('./transpiler');
-    const result = lispTranspiler('(note "a4');
+    const result = lispTranspiler('(note "a4', null);
     expect(result.output).toBe('(note "a4'); // source as-is
     expect(result.errors).toHaveLength(1);
   });
