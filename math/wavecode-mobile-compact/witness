@@ -1,0 +1,60 @@
+applied_at: 2026-10-14
+branch: fix/mobile-compact
+commits:
+  - 3e528e6 fix(ui): mobile editor fit — smaller font, tighter fixed rows, smaller sheet defaults
+supersedes: null
+notes: |
+  Aggressive compaction on mobile (≤720px) to make the editor
+  genuinely usable — follow-up to wavecode-toast-overhead-and-
+  toolbar-toggle which left the editor at 14 visible lines
+  (was 1-2 before any fix). User still complained it was
+  squished.
+
+  Fixes (5 layered):
+  1. cm-content font 11px → 10px (--fs-2xs), line-height
+     1.4 → 1.3. cm-host ~216px shows 25 lines (was 14).
+  2. Sheet snap heights: peek 35→30vh, half 50→40vh,
+     full 70→65vh. Default --sheet-h 50→40vh. Saves 90px
+     (half) / 45px (full) on 900vh viewport.
+  3. Mobile fixed rows more compact: preset-row 44→32px,
+     controls-row 52→44px. .app-body padding-top 96→76px
+     on mobile.
+  4. .score-panel max-height formula updated to use new
+     --sheet-h default (40vh instead of 50vh).
+  5. **index.html critical-CSS sync** — found during
+     browser verification. Inline `<style>` in index.html
+     has un-layered `.app-preset-row { position: relative; ... }`
+     which has higher CSS-Layers priority than the
+     `@layer components` rule in bundled CSS. Without
+     this sync, computed style showed `position: relative`
+     despite components.css being correct. Updated inline
+     rule to match new layered CSS.
+
+  Counts:
+    - tokens.css: 0 changes (--preset-row-h / --controls-h
+      from prior packet stay)
+    - components.css: +33 / -8 (cm-content mobile font,
+      .app-preset-row mobile padding, .app-controls-row
+      mobile padding, .app-body mobile padding-top)
+    - sheets.css: +18 / -8 (wc-sheet --sheet-h default 50→40vh,
+      max-height 70→65vh, snap heights 35/50/70→30/40/65,
+      score-panel max-height formula update)
+    - index.html: +15 / -3 (critical inline .app-preset-row
+      update for CSS-Layers sync)
+    - packet.md: +258 (new math/wavecode-mobile-compact/packet.md)
+
+  Verification:
+    - typecheck (tsc --noEmit): clean
+    - vitest: 729/729 pass
+    - build (vite): success, 8.79s
+    - browser (412×900 mobile Chrome):
+      * TopBar (56) + preset-row «Creep» (32) + controls-row
+        Play/CPS/60bpm (44) + score-debug (22) + cm-host
+        (~340px) + AI/Status panels + tabbar (60).
+      * cm-host ~340px ÷ 13px/line = 25 строк видно.
+      * Все панели видны, preset-row видна, snippet-toggle
+        «✎ snippet» виден в score-debug.
+      * При sheet half (40vh) cm-host всё равно ~340px,
+        Score-полоса полностью видима над sheet'ом.
+      * Toasts появляются вверху viewport'а (z-toast=80,
+        выше modal и fixed-rows), не залезают под Play.
