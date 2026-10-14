@@ -208,9 +208,9 @@ eval даёт тот же Strudel-pattern что `pair.js`.
   integration в LiveAudioEngine. LLM НЕ на Lisp. **DONE** — коммиты
   `9b64d2d` (packet) + `f354602` (transpiler core) +
   `4a1d2d1` (audio) + `a260c45` (UI + e2e).
-- **Phase 2 (отдельный пакет):** LLM-system-prompt + golden-pair tests +
-  unit-tests на транспнляцию. **TODO** — следующий пакет
-  `wavecode-lisp-llm-prompt`.
+- **Phase 2 (отдельный пакет, `wavecode-lisp-llm-prompt`):** LISP_SYSTEM_PROMPT
+  + 30+ golden pairs + mode-aware applyEdit. **DONE** — коммит `8ff48d9`.
+  Статус applied в `math/wavecode-lisp-llm-prompt/witness`.
 
 ## Status
 
