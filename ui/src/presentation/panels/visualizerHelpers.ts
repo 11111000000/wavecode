@@ -152,3 +152,122 @@ export const defaultMidiBounds = (events: ReadonlyArray<NoteEvent>): {
   if (hi - lo < 12) hi = lo + 12; // ensure at least one octave of spread
   return { lo, hi };
 };
+
+// =========================================================================
+//  Audio-band analysis — bass / mid / treble from a Uint8Array of FFT bins.
+//  Used by the band meters, the bass-pulse, and the radial-mode "tail".
+// =========================================================================
+
+/** Convert a frequency in Hz to the corresponding FFT-bin index.
+ *  sampleRate is the AudioContext.sampleRate; fftSize the AnalyserNode.fftSize. */
+export const hzToBin = (hz: number, sampleRate: number, fftSize: number): number => {
+  if (sampleRate <= 0 || fftSize <= 0) return 0;
+  return Math.floor((hz * fftSize) / sampleRate);
+};
+
+/** Average magnitude in [0..1] of FFT bins in the [loHz..hiHz] range. */
+export const bandLevel = (
+  bins: Uint8Array,
+  loHz: number,
+  hiHz: number,
+  sampleRate: number,
+  fftSize: number,
+): number => {
+  if (bins.length === 0) return 0;
+  const lo = Math.max(0, hzToBin(loHz, sampleRate, fftSize));
+  const hi = Math.min(bins.length - 1, hzToBin(hiHz, sampleRate, fftSize));
+  if (hi <= lo) return 0;
+  let sum = 0;
+  let n = 0;
+  for (let i = lo; i <= hi; i++) {
+    const v = bins[i];
+    if (v === undefined) continue;
+    sum += v;
+    n++;
+  }
+  return n > 0 ? (sum / n) / 255 : 0;
+};
+
+/** Peak-hold decay: existing peaks fall toward the new value, but never
+ *  below it (instant attack, slow decay). Returns the updated peaks array. */
+export const updatePeakHold = (
+  peaks: Float32Array,
+  values: Float32Array,
+  decayPerFrame: number,
+): Float32Array => {
+  const n = Math.min(peaks.length, values.length);
+  const out = new Float32Array(n);
+  for (let i = 0; i < n; i++) {
+    const cur = values[i] ?? 0;
+    const prev = peaks[i] ?? 0;
+    out[i] = Math.max(cur, prev - decayPerFrame);
+  }
+  return out;
+};
+
+/** A small audio-level smoother (one-pole lowpass). 0 < alpha <= 1; higher
+ *  values follow the input faster, lower values smoother. */
+export const smooth = (prev: number, next: number, alpha: number): number => {
+  if (!Number.isFinite(prev)) return next;
+  if (!Number.isFinite(next)) return prev;
+  return prev + (next - prev) * Math.max(0, Math.min(1, alpha));
+};
+
+/** Map a normalized [0..1] position on a bar to the polar-coord endpoint
+ *  of a bar in the radial visualizer. Returns x/y in viewport pixels and
+ *  the inner radius (start of the bar) and outer (end). */
+export const radialBar = (
+  t: number,
+  level: number,
+  cx: number,
+  cy: number,
+  innerR: number,
+  outerR: number,
+): { x0: number; y0: number; x1: number; y1: number } => {
+  // 0..1 maps to angle. We start at -π/2 (top) and go clockwise.
+  const angle = -Math.PI / 2 + t * Math.PI * 2;
+  const cosA = Math.cos(angle);
+  const sinA = Math.sin(angle);
+  const r1 = innerR;
+  const r2 = innerR + Math.max(0, Math.min(1, level)) * (outerR - innerR);
+  return {
+    x0: cx + cosA * r1, y0: cy + sinA * r1,
+    x1: cx + cosA * r2, y1: cy + sinA * r2,
+  };
+};
+
+/** Square a level in [0..1] for perceptual emphasis (small signals feel
+ *  louder to the eye when raised to a power < 1, feel tighter when > 1). */
+export const perceptual = (level: number, gamma: number): number => {
+  if (!Number.isFinite(level) || level <= 0) return 0;
+  const c = Math.max(0, Math.min(1, level));
+  return c ** Math.max(0.01, gamma);
+};
+
+/** Per-bar color along a low→high frequency gradient. Returns an HSL
+ *  string. t = bar position 0..1. Used for the spectrum/radial bars. */
+export const bandHue = (t: number): string => {
+  // Three-stop gradient: gold (low) → violet (mid) → cyan (high),
+  // matching the wavecode Chroma Indigo palette tokens.
+  const x = Math.max(0, Math.min(1, t));
+  if (x < 0.5) {
+    return lerpColor(x * 2, 'hsl(42 95% 60%)', 'hsl(252 75% 65%)');
+  }
+  return lerpColor((x - 0.5) * 2, 'hsl(252 75% 65%)', 'hsl(174 80% 55%)');
+};
+
+/** Bar count recommendations per viewport width — gives ~3px per bar on
+ *  desktop, 5px on mobile. Pure, deterministic. */
+export const pickBarCount = (viewportWidth: number): number => {
+  if (!Number.isFinite(viewportWidth) || viewportWidth <= 0) return 48;
+  // Target 4-5px per bar incl. gap.
+  const n = Math.floor((viewportWidth - 8) / 5);
+  return Math.max(24, Math.min(96, n));
+};
+
+/** Compute cps (cycles per second) from BPM. 1 cycle = 1 quarter note,
+ *  so cps = BPM / 60. Mirrors `formatBpm` in TransportPanel. */
+export const cpsToBpm = (cps: number): number => {
+  if (!Number.isFinite(cps) || cps <= 0) return 0;
+  return Math.round(cps * 60);
+};
