@@ -9,6 +9,9 @@ import {
 import { decodeSnippet } from '~/domain/urlCodec';
 import { installTransportAudioSync } from './useTransportAudioSync';
 import { ensureAudioLoaded, getAudioContextState } from '~/infrastructure/audio/LiveAudioEngine';
+import {
+  hydrateSelectedPreset, resetSelectedPreset,
+} from './selectedPreset';
 
 export type AudioRuntime = {
   readonly ctxState: () => { state: string; sampleRate: number | null };
@@ -22,6 +25,7 @@ const restoreFromIdbOrShare = (): void => {
       const saved = yield* repo.loadScore();
       if (saved) {
         dispatch({ type: 'replaceScore', text: saved });
+        hydrateSelectedPreset();
         markIdbHasScore(true);
         return;
       }
@@ -31,11 +35,16 @@ const restoreFromIdbOrShare = (): void => {
         if (text) {
           startLoadingShared();
           dispatch({ type: 'replaceScore', text });
+          resetSelectedPreset();
           finishLoadingShared();
           setPendingShare(null);
         } else {
           setPendingShare(null);
         }
+      } else {
+        // No IDB score, no pending share: hydrate from whatever's in
+        // localStorage (first-ever launch writes 'creep' default).
+        hydrateSelectedPreset();
       }
     }).pipe(Effect.provide(AppLayer)),
   );
