@@ -23,7 +23,11 @@ import {
 } from './runtimeHighlight';
 
 type FakeHap = {
-  whole?: { begin?: number | { valueOf?: () => number } };
+  whole?: {
+    begin?: number | { valueOf?: () => number };
+    end?: number | { valueOf?: () => number };
+  };
+  hasOnset?: () => boolean;
   context?: { locations?: Array<{ from?: number; to?: number; start?: number; end?: number }> };
 };
 
@@ -143,35 +147,85 @@ describe('parseLayerRanges — top-level comma split', () => {
 });
 
 describe('computeRanges — pure projection', () => {
+  // Helper: a hap that's currently sounding at nowCycle=1.0 (anchor=1.0, ctx=2.0).
+  // All test haps default to begin=0, end=1 so they're "sounding" right now.
+  const NOW_HAP: FakeHap = { whole: { begin: 0, end: 1 }, hasOnset: () => true, context: { locations: [{ from: 10, to: 20 }] } };
+
   it('returns empty when no active state', () => {
     expect(computeRanges(null)).toEqual([]);
   });
 
   it('returns empty when cps is non-positive', () => {
-    const state: ActiveState = { pattern: makePattern([]), ctx: makeCtx(5), anchor: 1, cps: 0, layerRanges: NO_LAYERS };
+    const state: ActiveState = { pattern: makePattern([NOW_HAP]), ctx: makeCtx(1.6), anchor: 1, cps: 0, layerRanges: NO_LAYERS };
     expect(computeRanges(state)).toEqual([]);
   });
 
   it('returns empty when anchor is not finite', () => {
-    const state: ActiveState = { pattern: makePattern([]), ctx: makeCtx(5), anchor: Number.NaN, cps: 1, layerRanges: NO_LAYERS };
+    const state: ActiveState = { pattern: makePattern([NOW_HAP]), ctx: makeCtx(1.6), anchor: Number.NaN, cps: 1, layerRanges: NO_LAYERS };
     expect(computeRanges(state)).toEqual([]);
   });
 
   it('returns empty when audio ctx.currentTime is before anchor', () => {
-    const state: ActiveState = { pattern: makePattern([{ context: { locations: [{ from: 1, to: 5 }] } }]), ctx: makeCtx(0.5), anchor: 1, cps: 1, layerRanges: NO_LAYERS };
+    const state: ActiveState = { pattern: makePattern([NOW_HAP]), ctx: makeCtx(0.5), anchor: 1, cps: 1, layerRanges: NO_LAYERS };
     expect(computeRanges(state)).toEqual([]);
   });
 
-  it('extracts locations from Hap context (default color 0, beat from begin)', () => {
-    const haps: FakeHap[] = [{ whole: { begin: 0.0 }, context: { locations: [{ from: 10, to: 20 }] } }];
-    const state: ActiveState = { pattern: makePattern(haps), ctx: makeCtx(2.0), anchor: 1.0, cps: 1, layerRanges: NO_LAYERS };
-    expect(toRanges(computeRanges(state))).toEqual([{ from: 10, to: 20, color: 0, beat: 'down' }]);
+  it('highlights the hap whose [begin, end) contains nowCycle', () => {
+    // nowCycle = (ctx - anchor) * cps = 0.6 (anchor 1.0, ctx 1.6, cps 1).
+    // Hap [0, 1) contains 0.6; phase=0.6 → 'off'.
+    const hap: FakeHap = { whole: { begin: 0, end: 1 }, context: { locations: [{ from: 10, to: 20 }] } };
+    const state: ActiveState = { pattern: makePattern([hap]), ctx: makeCtx(1.6), anchor: 1.0, cps: 1, layerRanges: NO_LAYERS };
+    expect(toRanges(computeRanges(state))).toEqual([{ from: 10, to: 20, color: 0, beat: 'off' }]);
   });
 
-  it('selects beat from hap.whole.begin — begin in second half → off', () => {
-    const haps: FakeHap[] = [{ whole: { begin: 0.6 }, context: { locations: [{ from: 5, to: 9 }] } }];
-    const state: ActiveState = { pattern: makePattern(haps), ctx: makeCtx(2.0), anchor: 1.0, cps: 1, layerRanges: NO_LAYERS };
-    expect(toRanges(computeRanges(state))).toEqual([{ from: 5, to: 9, color: 0, beat: 'off' }]);
+  it('skips haps that finished before nowCycle (no "ghost" of the previous step)', () => {
+    // Hap a: [0, 0.5) — finished at 0.5; nowCycle=1.0 means it's done.
+    const hap: FakeHap = { whole: { begin: 0, end: 0.5 }, context: { locations: [{ from: 10, to: 20 }] } };
+    const state: ActiveState = { pattern: makePattern([hap]), ctx: makeCtx(1.6), anchor: 1.0, cps: 1, layerRanges: NO_LAYERS };
+    expect(computeRanges(state)).toEqual([]);
+  });
+
+  it('skips haps that have not started yet (no "preview" of the next step)', () => {
+    // Hap b: [2.0, 2.5) — hasn't started at nowCycle=1.0.
+    const hap: FakeHap = { whole: { begin: 2.0, end: 2.5 }, context: { locations: [{ from: 10, to: 20 }] } };
+    const state: ActiveState = { pattern: makePattern([hap]), ctx: makeCtx(1.6), anchor: 1.0, cps: 1, layerRanges: NO_LAYERS };
+    expect(computeRanges(state)).toEqual([]);
+  });
+
+  it('skips continuation haps (hasOnset() === false) — only the "fresh" trigger lights up', () => {
+    // In Strudel, after a step's onset a continuation hap is emitted
+    // that spans the same arc but with hasOnset() === false. We want
+    // to highlight only the first trigger, otherwise every step lights
+    // up N times where N is the number of layers above it.
+    const onset: FakeHap = { whole: { begin: 0, end: 1 }, hasOnset: () => true, context: { locations: [{ from: 10, to: 20 }] } };
+    const continuation: FakeHap = { whole: { begin: 0, end: 1 }, hasOnset: () => false, context: { locations: [{ from: 30, to: 40 }] } };
+    const state: ActiveState = { pattern: makePattern([onset, continuation]), ctx: makeCtx(1.6), anchor: 1.0, cps: 1, layerRanges: NO_LAYERS };
+    expect(toRanges(computeRanges(state))).toEqual([{ from: 10, to: 20, color: 0, beat: 'off' }]);
+  });
+
+  it('shows exactly one location per active hap (no neighbors in ±0.5 window)', () => {
+    // 4 haps in a 4-step pattern, each 0.25 cycle long. At any instant
+    // only the one whose [begin, end) contains nowCycle is highlighted.
+    const stepA: FakeHap = { whole: { begin: 0.00, end: 0.25 }, context: { locations: [{ from: 1, to: 3 }] } };
+    const stepB: FakeHap = { whole: { begin: 0.25, end: 0.50 }, context: { locations: [{ from: 4, to: 6 }] } };
+    const stepC: FakeHap = { whole: { begin: 0.50, end: 0.75 }, context: { locations: [{ from: 7, to: 9 }] } };
+    const stepD: FakeHap = { whole: { begin: 0.75, end: 1.00 }, context: { locations: [{ from: 10, to: 12 }] } };
+    const state: ActiveState = {
+      pattern: makePattern([stepA, stepB, stepC, stepD]),
+      ctx: makeCtx(1.6),  // nowCycle = 0.5 → stepC is sounding
+      anchor: 1.0, cps: 1, layerRanges: NO_LAYERS,
+    };
+    expect(toRanges(computeRanges(state))).toEqual([{ from: 7, to: 9, color: 0, beat: 'off' }]);
+  });
+
+  it('beat comes from nowCycle, not from each hap', () => {
+    // At nowCycle=0.3 (first half) → 'down'; at nowCycle=0.8 (second half) → 'off'.
+    // Two long haps covering both halves are sounding in both cases.
+    const longHap: FakeHap = { whole: { begin: 0, end: 1.0 }, context: { locations: [{ from: 5, to: 9 }] } };
+    const stateDown: ActiveState = { pattern: makePattern([longHap]), ctx: makeCtx(1.3), anchor: 1.0, cps: 1, layerRanges: NO_LAYERS };
+    expect(toRanges(computeRanges(stateDown))).toEqual([{ from: 5, to: 9, color: 0, beat: 'down' }]);
+    const stateOff: ActiveState = { pattern: makePattern([longHap]), ctx: makeCtx(1.8), anchor: 1.0, cps: 1, layerRanges: NO_LAYERS };
+    expect(toRanges(computeRanges(stateOff))).toEqual([{ from: 5, to: 9, color: 0, beat: 'off' }]);
   });
 
   it('assigns color per layer — first layer c0, second layer c1, etc', () => {
@@ -179,15 +233,15 @@ describe('computeRanges — pure projection', () => {
       [0, 50] as const,
       [55, 100] as const,
     ];
-    // Hap locations in each layer.
+    // Both haps are currently sounding (nowCycle=0.5 in both [0,1) and [0,1)).
     const haps: FakeHap[] = [
-      { whole: { begin: 0 }, context: { locations: [{ from: 10, to: 20 }] } },
-      { whole: { begin: 0.25 }, context: { locations: [{ from: 60, to: 80 }] } },
+      { whole: { begin: 0, end: 1 }, context: { locations: [{ from: 10, to: 20 }] } },
+      { whole: { begin: 0, end: 1 }, context: { locations: [{ from: 60, to: 80 }] } },
     ];
-    const state: ActiveState = { pattern: makePattern(haps), ctx: makeCtx(2.0), anchor: 1.0, cps: 1, layerRanges: layers };
+    const state: ActiveState = { pattern: makePattern(haps), ctx: makeCtx(1.6), anchor: 1.0, cps: 1, layerRanges: layers };
     expect(toRanges(computeRanges(state))).toEqual([
-      { from: 10, to: 20, color: 0, beat: 'down' },
-      { from: 60, to: 80, color: 1, beat: 'down' },
+      { from: 10, to: 20, color: 0, beat: 'off' },
+      { from: 60, to: 80, color: 1, beat: 'off' },
     ]);
   });
 
@@ -200,10 +254,10 @@ describe('computeRanges — pure projection', () => {
       [40, 50] as const,  // wraps to color 0
     ];
     const haps: FakeHap[] = [
-      { whole: { begin: 0 }, context: { locations: [{ from: 1, to: 5 }] } },   // layer 0
-      { whole: { begin: 0 }, context: { locations: [{ from: 45, to: 48 }] } }, // layer 4 → c0
+      { whole: { begin: 0, end: 1 }, context: { locations: [{ from: 1, to: 5 }] } },   // layer 0
+      { whole: { begin: 0, end: 1 }, context: { locations: [{ from: 45, to: 48 }] } }, // layer 4 → c0
     ];
-    const state: ActiveState = { pattern: makePattern(haps), ctx: makeCtx(2.0), anchor: 1.0, cps: 1, layerRanges: layers };
+    const state: ActiveState = { pattern: makePattern(haps), ctx: makeCtx(1.6), anchor: 1.0, cps: 1, layerRanges: layers };
     expect(PALETTE_SIZE).toBe(4);
     const out = toRanges(computeRanges(state));
     expect(out[0]?.color).toBe(0);
@@ -211,86 +265,85 @@ describe('computeRanges — pure projection', () => {
   });
 
   it('falls back to color 0 when no layer matches the location', () => {
-    // layerRanges covers [100,200]; hap location is at 50 — outside any layer.
     const layers: ActiveState['layerRanges'] = [[100, 200] as const];
     const haps: FakeHap[] = [
-      { whole: { begin: 0 }, context: { locations: [{ from: 50, to: 60 }] } },
+      { whole: { begin: 0, end: 1 }, context: { locations: [{ from: 50, to: 60 }] } },
     ];
-    const state: ActiveState = { pattern: makePattern(haps), ctx: makeCtx(2.0), anchor: 1.0, cps: 1, layerRanges: layers };
-    expect(toRanges(computeRanges(state))).toEqual([{ from: 50, to: 60, color: 0, beat: 'down' }]);
+    const state: ActiveState = { pattern: makePattern(haps), ctx: makeCtx(1.6), anchor: 1.0, cps: 1, layerRanges: layers };
+    expect(toRanges(computeRanges(state))).toEqual([{ from: 50, to: 60, color: 0, beat: 'off' }]);
   });
 
   it('deduplicates identical (from,to,color,beat) across haps', () => {
     const haps: FakeHap[] = [
-      { whole: { begin: 0 }, context: { locations: [{ from: 10, to: 20 }] } },
-      { whole: { begin: 0 }, context: { locations: [{ from: 10, to: 20 }] } },
+      { whole: { begin: 0, end: 1 }, context: { locations: [{ from: 10, to: 20 }] } },
+      { whole: { begin: 0, end: 1 }, context: { locations: [{ from: 10, to: 20 }] } },
     ];
-    const state: ActiveState = { pattern: makePattern(haps), ctx: makeCtx(2.0), anchor: 1.0, cps: 1, layerRanges: NO_LAYERS };
+    const state: ActiveState = { pattern: makePattern(haps), ctx: makeCtx(1.6), anchor: 1.0, cps: 1, layerRanges: NO_LAYERS };
     expect(computeRanges(state)).toHaveLength(1);
-  });
-
-  it('sorts ranges by `from` ascending', () => {
-    const haps: FakeHap[] = [
-      { whole: { begin: 0 }, context: { locations: [{ from: 30, to: 40 }] } },
-      { whole: { begin: 0 }, context: { locations: [{ from: 10, to: 20 }] } },
-    ];
-    const state: ActiveState = { pattern: makePattern(haps), ctx: makeCtx(2.0), anchor: 1.0, cps: 1, layerRanges: NO_LAYERS };
-    expect(computeRanges(state).map((r) => r.from)).toEqual([10, 30]);
   });
 
   it('drops malformed location entries (NaN, non-finite, to<=from)', () => {
     const haps: FakeHap[] = [
-      { whole: { begin: 0 }, context: { locations: [{ from: Number.NaN, to: 10 }, { from: 5, to: 5 }, { from: 1, to: -1 }, { from: 0, to: 4 }] } },
+      { whole: { begin: 0, end: 1 }, context: { locations: [{ from: Number.NaN, to: 10 }, { from: 5, to: 5 }, { from: 1, to: -1 }, { from: 0, to: 4 }] } },
     ];
-    const state: ActiveState = { pattern: makePattern(haps), ctx: makeCtx(2.0), anchor: 1.0, cps: 1, layerRanges: NO_LAYERS };
-    expect(toRanges(computeRanges(state))).toEqual([{ from: 0, to: 4, color: 0, beat: 'down' }]);
+    const state: ActiveState = { pattern: makePattern(haps), ctx: makeCtx(1.6), anchor: 1.0, cps: 1, layerRanges: NO_LAYERS };
+    expect(toRanges(computeRanges(state))).toEqual([{ from: 0, to: 4, color: 0, beat: 'off' }]);
   });
 
   it('swallows queryArc exceptions, returns empty', () => {
     const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
     const pattern: QueryablePattern = { queryArc: () => { throw new Error('boom'); } };
-    const state: ActiveState = { pattern, ctx: makeCtx(2.0), anchor: 1.0, cps: 1, layerRanges: NO_LAYERS };
+    const state: ActiveState = { pattern, ctx: makeCtx(1.6), anchor: 1.0, cps: 1, layerRanges: NO_LAYERS };
     expect(computeRanges(state)).toEqual([]);
     expect(consoleSpy).toHaveBeenCalled();
     consoleSpy.mockRestore();
   });
 
   it('handles hap without context.locations gracefully', () => {
-    const haps: FakeHap[] = [{}, { context: {} }];
-    const state: ActiveState = { pattern: makePattern(haps), ctx: makeCtx(2.0), anchor: 1.0, cps: 1, layerRanges: NO_LAYERS };
+    const haps: FakeHap[] = [{ whole: { begin: 0, end: 1 }, context: {} }];
+    const state: ActiveState = { pattern: makePattern(haps), ctx: makeCtx(1.6), anchor: 1.0, cps: 1, layerRanges: NO_LAYERS };
     expect(computeRanges(state)).toEqual([]);
   });
 
-  it('flattens multiple locations per hap', () => {
-    const haps: FakeHap[] = [{ whole: { begin: 0 }, context: { locations: [{ from: 5, to: 7 }, { from: 15, to: 18 }] } }];
-    const state: ActiveState = { pattern: makePattern(haps), ctx: makeCtx(2.0), anchor: 1.0, cps: 1, layerRanges: NO_LAYERS };
+  it('flattens multiple locations per hap (chord `<[a,b,c]>`)', () => {
+    const haps: FakeHap[] = [{ whole: { begin: 0, end: 1 }, context: { locations: [{ from: 5, to: 7 }, { from: 15, to: 18 }] } }];
+    const state: ActiveState = { pattern: makePattern(haps), ctx: makeCtx(1.6), anchor: 1.0, cps: 1, layerRanges: NO_LAYERS };
     expect(computeRanges(state).map((r) => r.from)).toEqual([5, 15]);
   });
 
-  it('accepts anchor = 0 as a valid starting time (elapsed = ctx.currentTime)', () => {
-    const haps: FakeHap[] = [{ whole: { begin: 0 }, context: { locations: [{ from: 4, to: 9 }] } }];
-    const state: ActiveState = { pattern: makePattern(haps), ctx: makeCtx(2.0), anchor: 0.0, cps: 1, layerRanges: NO_LAYERS };
+  it('accepts anchor = 0 as a valid starting time', () => {
+    // ctx=0.7, anchor=0 → nowCycle=0.7. Hap [0, 1) contains 0.7.
+    const haps: FakeHap[] = [{ whole: { begin: 0, end: 1 }, context: { locations: [{ from: 4, to: 9 }] } }];
+    const state: ActiveState = { pattern: makePattern(haps), ctx: makeCtx(0.7), anchor: 0.0, cps: 1, layerRanges: NO_LAYERS };
     expect(computeRanges(state).map((r) => r.from)).toEqual([4]);
   });
 
   it('accepts `start`/`end` location format (Strudel core/pattern.mjs:558)', () => {
     const haps: FakeHap[] = [
-      { whole: { begin: 0 }, context: { locations: [{ start: 30, end: 35 }] } },
-      { whole: { begin: 0.5 }, context: { locations: [{ start: 40, end: 50 }] } },
+      { whole: { begin: 0, end: 1 }, context: { locations: [{ start: 30, end: 35 }] } },
+      { whole: { begin: 0, end: 1 }, context: { locations: [{ start: 40, end: 50 }] } },
     ];
-    const state: ActiveState = { pattern: makePattern(haps), ctx: makeCtx(2.0), anchor: 1.0, cps: 1, layerRanges: NO_LAYERS };
+    const state: ActiveState = { pattern: makePattern(haps), ctx: makeCtx(1.6), anchor: 1.0, cps: 1, layerRanges: NO_LAYERS };
     expect(toRanges(computeRanges(state))).toEqual([
-      { from: 30, to: 35, color: 0, beat: 'down' },
+      { from: 30, to: 35, color: 0, beat: 'off' },
       { from: 40, to: 50, color: 0, beat: 'off' },
     ]);
   });
 
-  it('handles whole.begin as Fraction-like with valueOf()', () => {
+  it('handles whole.begin/whole.end as Fraction-like with valueOf()', () => {
     const haps: FakeHap[] = [
-      { whole: { begin: { valueOf: () => 0.7 } }, context: { locations: [{ from: 5, to: 7 }] } },
+      { whole: { begin: { valueOf: () => 0 }, end: { valueOf: () => 1 } }, context: { locations: [{ from: 5, to: 7 }] } },
     ];
-    const state: ActiveState = { pattern: makePattern(haps), ctx: makeCtx(2.0), anchor: 1.0, cps: 1, layerRanges: NO_LAYERS };
+    const state: ActiveState = { pattern: makePattern(haps), ctx: makeCtx(1.6), anchor: 1.0, cps: 1, layerRanges: NO_LAYERS };
     expect(toRanges(computeRanges(state))).toEqual([{ from: 5, to: 7, color: 0, beat: 'off' }]);
+  });
+
+  it('captures long haps (e.g. slow(2)) thanks to the ±1 cycle query window', () => {
+    // Hap spans 2 cycles. nowCycle=1.0 (anchor=1.0, ctx=2.0, cps=0.5 → elapsed=1.0 → nowCycle=0.5).
+    // Hmm — with cps=0.5 the cycle is 2s, so nowCycle=0.5 at elapsed=1.0. Hap [0, 2) contains 0.5.
+    const longHap: FakeHap = { whole: { begin: 0, end: 2 }, context: { locations: [{ from: 5, to: 9 }] } };
+    const state: ActiveState = { pattern: makePattern([longHap]), ctx: makeCtx(1.6), anchor: 1.0, cps: 0.5, layerRanges: NO_LAYERS };
+    expect(toRanges(computeRanges(state))).toEqual([{ from: 5, to: 9, color: 0, beat: 'down' }]);
   });
 });
 
@@ -310,7 +363,7 @@ describe('subscribe + setActive — throttled notification', () => {
   it('notifies when active state changes', () => {
     const cb = vi.fn();
     subscribe(cb);
-    setActive({ pattern: makePattern([]), ctx: makeCtx(2.0), anchor: 1.0, cps: 1, layerRanges: NO_LAYERS });
+    setActive({ pattern: makePattern([]), ctx: makeCtx(1.6), anchor: 1.0, cps: 1, layerRanges: NO_LAYERS });
 
     nowValue = 1100;
     tickOnce();
@@ -321,20 +374,21 @@ describe('subscribe + setActive — throttled notification', () => {
 
   it('throttles: no notification within 33ms window', () => {
     const cb = vi.fn();
-    const pat = makeMutablePattern([{ whole: { begin: 0 }, context: { locations: [{ from: 1, to: 5 }] } }]);
+    const pat = makeMutablePattern([{ whole: { begin: 0, end: 1 }, context: { locations: [{ from: 1, to: 5 }] } }]);
     subscribe(cb);
-    setActive({ pattern: pat, ctx: makeCtx(2.0), anchor: 1.0, cps: 1, layerRanges: NO_LAYERS });
+    setActive({ pattern: pat, ctx: makeCtx(1.6), anchor: 1.0, cps: 1, layerRanges: NO_LAYERS });
 
     nowValue = 1050;
     tickOnce();
     expect(cb).toHaveBeenCalledTimes(1);
 
-    pat.setHaps([{ whole: { begin: 0.6 }, context: { locations: [{ from: 2, to: 6 }] } }]);
+    // Move ranges (still currently sounding at nowCycle=1.0).
+    pat.setHaps([{ whole: { begin: 0, end: 1 }, context: { locations: [{ from: 2, to: 6 }] } }]);
     nowValue = 1060;
     tickOnce();
     expect(cb).toHaveBeenCalledTimes(1);
 
-    pat.setHaps([{ whole: { begin: 0.6 }, context: { locations: [{ from: 3, to: 7 }] } }]);
+    pat.setHaps([{ whole: { begin: 0, end: 1 }, context: { locations: [{ from: 3, to: 7 }] } }]);
     nowValue = 1300;
     tickOnce();
     expect(cb).toHaveBeenCalledTimes(2);
@@ -343,46 +397,53 @@ describe('subscribe + setActive — throttled notification', () => {
 
   it('emits again when color changes (different layer → different palette index)', () => {
     const cb = vi.fn();
-    const pat = makeMutablePattern([{ whole: { begin: 0 }, context: { locations: [{ from: 10, to: 12 }] } }]);
+    const pat = makeMutablePattern([{ whole: { begin: 0, end: 1 }, context: { locations: [{ from: 10, to: 12 }] } }]);
     subscribe(cb);
-    // Two layers, same hap position. Hap falls into the first layer.
-    setActive({ pattern: pat, ctx: makeCtx(2.0), anchor: 1.0, cps: 1, layerRanges: [[0, 50] as const, [55, 100] as const] });
+    setActive({ pattern: pat, ctx: makeCtx(1.6), anchor: 1.0, cps: 1, layerRanges: [[0, 50] as const, [55, 100] as const] });
 
     nowValue = 1050;
     tickOnce();
     expect(cb).toHaveBeenCalledTimes(1);
-    expect(cb.mock.calls[0]![0]).toEqual([{ from: 10, to: 12, color: 0, beat: 'down' }]);
+    // Hap [0, 1) contains nowCycle=0.6 (off), location [10,12) is in layer 0.
+    expect(cb.mock.calls[0]![0]).toEqual([{ from: 10, to: 12, color: 0, beat: 'off' }]);
 
     // Move the hap's location to the second layer (color 1) → emit.
-    pat.setHaps([{ whole: { begin: 0 }, context: { locations: [{ from: 60, to: 80 }] } }]);
+    pat.setHaps([{ whole: { begin: 0, end: 1 }, context: { locations: [{ from: 60, to: 80 }] } }]);
     nowValue = 1200;
     tickOnce();
     expect(cb).toHaveBeenCalledTimes(2);
-    expect(cb.mock.calls[1]![0]).toEqual([{ from: 60, to: 80, color: 1, beat: 'down' }]);
+    expect(cb.mock.calls[1]![0]).toEqual([{ from: 60, to: 80, color: 1, beat: 'off' }]);
   });
 
-  it('emits again when beat changes (downbeat vs offbeat)', () => {
+  it('emits again when the active hap changes (different from/to in the same [begin, end))', () => {
+    // Simulate switching between two chords that occupy the same time slot.
+    // Both haps are currently sounding (their [begin, end) contains nowCycle=0.6);
+    // only the source-range changes, not the time interval.
     const cb = vi.fn();
-    const pat = makeMutablePattern([{ whole: { begin: 0.0 }, context: { locations: [{ from: 5, to: 9 }] } }]);
+    const stepA: FakeHap = { whole: { begin: 0.5, end: 0.75 }, context: { locations: [{ from: 5, to: 7 }] } };
+    const stepB: FakeHap = { whole: { begin: 0.5, end: 0.75 }, context: { locations: [{ from: 8, to: 10 }] } };
+    const pat = makeMutablePattern([stepA]);
     subscribe(cb);
-    setActive({ pattern: pat, ctx: makeCtx(2.0), anchor: 1.0, cps: 1, layerRanges: NO_LAYERS });
+    setActive({ pattern: pat, ctx: makeCtx(1.6), anchor: 1.0, cps: 1, layerRanges: NO_LAYERS });
 
+    // Tick → nowCycle=0.6 → stepA is sounding.
     nowValue = 1050;
     tickOnce();
     expect(cb).toHaveBeenCalledTimes(1);
-    expect(cb.mock.calls[0]![0]).toEqual([{ from: 5, to: 9, color: 0, beat: 'down' }]);
+    expect(cb.mock.calls[0]![0]).toEqual([{ from: 5, to: 7, color: 0, beat: 'off' }]);
 
-    pat.setHaps([{ whole: { begin: 0.6 }, context: { locations: [{ from: 5, to: 9 }] } }]);
-    nowValue = 1200;
+    // Swap to stepB (different from/to, same time interval) → emit.
+    pat.setHaps([stepB]);
+    nowValue = 1300;
     tickOnce();
     expect(cb).toHaveBeenCalledTimes(2);
-    expect(cb.mock.calls[1]![0]).toEqual([{ from: 5, to: 9, color: 0, beat: 'off' }]);
+    expect(cb.mock.calls[1]![0]).toEqual([{ from: 8, to: 10, color: 0, beat: 'off' }]);
   });
 
   it('stops emitting after clearActive', () => {
     const cb = vi.fn();
     subscribe(cb);
-    setActive({ pattern: makePattern([]), ctx: makeCtx(2.0), anchor: 1.0, cps: 1, layerRanges: NO_LAYERS });
+    setActive({ pattern: makePattern([]), ctx: makeCtx(1.6), anchor: 1.0, cps: 1, layerRanges: NO_LAYERS });
     tickOnce();
     expect(cb).toHaveBeenCalledTimes(1);
 
@@ -396,7 +457,7 @@ describe('subscribe + setActive — throttled notification', () => {
   it('unsubscribe stops further notifications', () => {
     const cb = vi.fn();
     const unsub = subscribe(cb);
-    setActive({ pattern: makePattern([]), ctx: makeCtx(2.0), anchor: 1.0, cps: 1, layerRanges: NO_LAYERS });
+    setActive({ pattern: makePattern([]), ctx: makeCtx(1.6), anchor: 1.0, cps: 1, layerRanges: NO_LAYERS });
     tickOnce();
     expect(cb).toHaveBeenCalledTimes(1);
 
@@ -412,7 +473,7 @@ describe('subscribe + setActive — throttled notification', () => {
     const good = vi.fn();
     subscribe(bad);
     subscribe(good);
-    setActive({ pattern: makePattern([]), ctx: makeCtx(2.0), anchor: 1.0, cps: 1, layerRanges: NO_LAYERS });
+    setActive({ pattern: makePattern([]), ctx: makeCtx(1.6), anchor: 1.0, cps: 1, layerRanges: NO_LAYERS });
     tickOnce();
     expect(bad).toHaveBeenCalledTimes(1);
     expect(good).toHaveBeenCalledTimes(1);

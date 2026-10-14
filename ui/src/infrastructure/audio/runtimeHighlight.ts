@@ -190,7 +190,11 @@ export type AudioContextLike = {
 };
 
 type HapLike = {
-  whole?: { begin?: { valueOf?: () => number } | number };
+  whole?: {
+    begin?: { valueOf?: () => number } | number;
+    end?: { valueOf?: () => number } | number;
+  };
+  hasOnset?: () => boolean;
   context?: {
     locations?: ReadonlyArray<
       | { start?: unknown; end?: unknown; from?: unknown; to?: unknown }
@@ -201,19 +205,23 @@ type HapLike = {
 };
 
 /**
- * Map a hap's cycle-fraction to a `Beat` discriminator. The first half
- * of a cycle (`begin % 1` in [0, 0.5)) is the downbeat — bright with
- * outer glow. The second half is the offbeat — dimmer, no glow. The
- * visual contrast between the two is what gives the eye a sense of
- * "where in the cycle we are" beyond just "what color is this layer".
+ * Map a cycle position to a `Beat` discriminator. The first half of
+ * a cycle (`phase` in [0, 0.5)) is the downbeat — bright with outer
+ * glow. The second half is the offbeat — dimmer, no glow. The visual
+ * contrast between the two is what gives the eye a sense of
+ * "where in the cycle we are".
  *
- * For an `<a b c d>` pattern: a (0) and b (0.25) → down; c (0.5) and
- * d (0.75) → off. This produces a clear 4-on-the-floor alternating
- * stripe within each layer.
+ * The discriminator is computed from the *current* cycle position,
+ * not from each hap's individual `begin` — all currently-sounding
+ * haps share the same down/off phase of the global clock, so they
+ * all pulse together within a layer.
  */
-const beatFor = (begin: number): Beat => {
-  if (!Number.isFinite(begin)) return 'down';
-  const phase = begin - Math.floor(begin); // 0..1, equivalent to % 1 but robust to negative begin
+const beatForCycle = (nowCycle: number): Beat => {
+  if (!Number.isFinite(nowCycle)) return 'down';
+  const phase = nowCycle - Math.floor(nowCycle); // 0..1, robust to negative
+  // Inclusive on the down side: phase=0.5 is the peak of the downbeat.
+  // Splitting at 0.5 (half-open) gives exactly half the cycle bright
+  // and half dim — visually even on 4-on-the-floor patterns.
   return phase < 0.5 ? 'down' : 'off';
 };
 
@@ -225,27 +233,59 @@ const layerColorFor = (pos: number, layerRanges: ReadonlyArray<LayerRange>): num
   return 0;
 };
 
+/**
+ * Filter a list of Haps to the ones currently sounding at `nowCycle`,
+ * project each to one or more `ColoredRange` (one per source-location
+ * in `context.locations`), and assign the global per-cycle `beat`
+ * (down/off) shared by every sound at this instant. The layer-based
+ * color is determined by which top-level `,`-separated layer each
+ * location falls into.
+ *
+ * A hap is "currently sounding" when `nowCycle ∈ [whole.begin, whole.end)`.
+ * This gives exactly one source-position range per active layer at
+ * any given instant — the user can see which parallel part of the
+ * pattern is sounding at a glance.
+ */
 const extractFromHaps = (
   haps: ReadonlyArray<unknown>,
   layerRanges: ReadonlyArray<LayerRange>,
+  nowCycle: number,
 ): ColoredRange[] => {
   const seen = new Set<string>();
   const out: ColoredRange[] = [];
+  const beat = beatForCycle(nowCycle);
   for (const raw of haps) {
     if (!raw || typeof raw !== 'object') continue;
     const h = raw as HapLike;
+
+    // Filter to currently-sounding haps only.
+    const whole = h.whole;
+    if (!whole) continue;
+    // Skip continuation haps — only the "first trigger" of a sounded
+    // event gets highlighted. `hasOnset()` is true for onsets and false
+    // for haps that just carry the previous value forward (Strudel
+    // emits one continuation hap per step after the onset so the
+    // scheduler can keep the value alive; we want only onsets).
+    if (typeof h.hasOnset === 'function' && !h.hasOnset()) continue;
+    const begin = (whole.begin as number | { valueOf?: () => number } | undefined);
+    const end = (whole.end as number | { valueOf?: () => number } | undefined);
+    const beginNum =
+      typeof begin === 'number'
+        ? begin
+        : typeof (begin as { valueOf?: () => number } | undefined)?.valueOf === 'function'
+          ? (begin as { valueOf: () => number }).valueOf()
+          : 0;
+    const endNum =
+      typeof end === 'number'
+        ? end
+        : typeof (end as { valueOf?: () => number } | undefined)?.valueOf === 'function'
+          ? (end as { valueOf: () => number }).valueOf()
+          : 0;
+    if (!Number.isFinite(beginNum) || !Number.isFinite(endNum)) continue;
+    if (nowCycle < beginNum || nowCycle >= endNum) continue;
+
     const locs = h.context?.locations;
     if (!Array.isArray(locs)) continue;
-
-    // Beat: read hap.whole.begin (Fraction → number).
-    const wholeBegin = h.whole?.begin;
-    const beginNum =
-      typeof wholeBegin === 'number'
-        ? wholeBegin
-        : typeof (wholeBegin as { valueOf?: () => number } | undefined)?.valueOf === 'function'
-          ? (wholeBegin as { valueOf: () => number }).valueOf()
-          : 0;
-    const beat = beatFor(beginNum);
 
     for (const loc of locs) {
       if (!loc) continue;
@@ -299,8 +339,12 @@ export const computeRanges = (state: ActiveState | null): ReadonlyArray<ColoredR
   const elapsed = ctx.currentTime - anchor;
   if (!Number.isFinite(elapsed) || elapsed < 0) return [];
   const nowCycle = elapsed * cps;
+  // Generous ±1 cycle window so we don't miss long haps (e.g. a
+  // sample slowed by 2x spans 2 cycles). We filter to currently-
+  // sounding haps inside `extractFromHaps`, so the extra candidates
+  // are cheap to evaluate.
   const haps = safeQueryArc(pattern, nowCycle - QUERY_HALF_WINDOW_CYCLES, nowCycle + QUERY_HALF_WINDOW_CYCLES);
-  return extractFromHaps(haps, state.layerRanges);
+  return extractFromHaps(haps, state.layerRanges, nowCycle);
 };
 
 /* ------------------------------------------------------------------ */
@@ -314,7 +358,7 @@ let lastEmitAt = 0;
 let lastRangesKey = '';
 
 const THROTTLE_MS = 33;
-const QUERY_HALF_WINDOW_CYCLES = 0.5;
+const QUERY_HALF_WINDOW_CYCLES = 1.0;
 
 /* ------------------------------------------------------------------ */
 /* Injectable time/raf — overridden by tests; defaults to globals.    */
