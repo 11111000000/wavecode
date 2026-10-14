@@ -56,6 +56,7 @@ MCP endpoint: `https://kanban.kosov.online/mcp/`
 README.md       короткое описание
 AGENTS.md       этот файл
 .gitignore      стандартный для Node-проекта
+.gitverse/      GitVerse Actions workflows (deploy)
 math/<name>/    пакеты решений (math-coding)
 ui/             браузерный SPA (TypeScript + Effect-TS + Solid.js)
 ```
@@ -73,4 +74,95 @@ Composer (`~/Projects/Composer/`) — **отдельный backend-проект 
 - raw `fetch` к llm.kosov.online (LiteLLM proxy, OpenAI-compatible)
 - `idb-keyval` для persistence (IndexedDB)
 - Тесты: vitest (unit), playwright (e2e)
+- CI/CD: GitVerse Actions → SSH на angara-1 → `bin/deploy.sh`
 - Никаких Nix-выходов, никакой контейнеризации — фронтенд деплоится как SPA
+
+## Deployment
+
+Production: https://wavecode.kosov.online/ (Caddy на angara-1, обслуживает
+`/var/lib/wavecode/dist/`). Также доступно на Tailscale:
+https://wavecode.tail347ae6.ts.net/.
+
+### Авто-деплой (push в master)
+
+`.gitverse/workflows/deploy.yml` — push в `master` (или ручной
+`workflow_dispatch`) триггерит shared `ubuntu-latest` runner, который:
+
+1. Берёт приватный ключ из секрета `WAVECODE_DEPLOY_SSH_KEY` и по
+   нему открывает SSH-сессию на angara-1.
+2. На хосте принудительно запускается pipeline (через SSH
+   `command="..."` restriction в `~/.ssh/authorized_keys`):
+   - `git fetch --prune gitverse master`
+   - `git reset --hard gitverse/master` (origin = GitHub mirror,
+     отстаёт от gitverse — берём напрямую)
+   - `git clean -fdx -e ui/.env.local -e ui/node_modules -e ui/dist`
+   - `bin/deploy.sh`:
+     - `pnpm install` (если нет `node_modules`)
+     - `pnpm build` (vite + tsc)
+     - `sudo cp -r ui/dist/* → /var/lib/wavecode/dist/` (caddy:caddy)
+3. CI-шаг `Verify deployment` опрашивает `wavecode.kosov.online/`
+   до 60s — должен вернуть `Last-Modified` header.
+
+Caddy подхватывает новую статику без reload. Если менялся
+`ui/.env.local` (per-app LLM-ключ) — `systemctl reload caddy`
+вручную, **не** входит в auto-deploy.
+
+### Секреты для GitVerse
+
+Один раз настроить в gitverse → Settings → Secrets (`b11111000000/wavecode`):
+
+| Secret                    | Что                                                     |
+|---------------------------|---------------------------------------------------------|
+| `WAVECODE_DEPLOY_HOST`    | hostname или IP angara-1 (например `nixos`)            |
+| `WAVECODE_DEPLOY_PORT`    | SSH-порт (на angara-1 = `1984`)                        |
+| `WAVECODE_DEPLOY_USER`    | SSH-пользователь (на angara-1 = `az`)                 |
+| `WAVECODE_DEPLOY_SSH_KEY` | Приватный ed25519-ключ (public в `~/.ssh/authorized_keys` на angara-1 с `command="..."` + `no-pty,no-X11,no-agent,no-port-forwarding`) |
+
+Генерация ключей (если нужно пересоздать):
+```bash
+ssh-keygen -t ed25519 -N '' -C "wavecode-ci-deploy@gitverse" -f ~/.ssh/wavecode_ci_deploy
+# public → вставить в authorized_keys с restrict'ом (см. выше)
+# private → целиком содержимое ~/.ssh/wavecode_ci_deploy в секрет
+```
+
+### Manual deploy (обход CI)
+
+```bash
+./bin/deploy.sh
+```
+
+Любой push в master триггерит auto-deploy, **плюс** `workflow_dispatch`
+в UI GitVerse → "Run workflow" → запускает тот же flow. Использовать
+для отладки secrets или hotfix когда CI лежит.
+
+### Rollback
+
+```bash
+# Найти последний зелёный коммит
+git log --oneline -20 master
+# Откатить master (создаёт revert-коммит, не переписывает историю)
+git revert <bad-commit-sha>
+git push gitverse master
+# → CI задеплоит revert-коммит через ~1 минуту
+```
+
+`bin/deploy.sh` сохраняет предыдущие билды как
+`/var/lib/wavecode/dist.prev.<timestamp>/` (см. `git clean -fdx -e
+dist.prev.*` в workflow), но **не подменяет active** — это история,
+не для rollback. Rollback всегда через git revert.
+
+### Грабли
+
+- `bin/deploy.sh` использует `sudo` (нужен NOPASSWD для `cp/mkdir/chown`).
+  Текущая настройка — `az: ALL NOPASSWD: ALL` (NixOS default для
+  основного пользователя). CI работает через SSH-ключ с
+  `command="..."` restrict, поэтому compromise ключа даёт
+  злоумышленнику только запуск git+deploy pipeline, не
+  произвольный shell.
+- Caddy vhost настраивается в `~/Projects/AngaraConfig/` (другой
+  репо). Public hostname + TLS сертификаты — там. Этот репо
+  отвечает только за содержимое `/var/lib/wavecode/dist/`.
+- angara-1 держит **только** этот и связанные репо для build'а.
+  Production-data (IDB, messages) живёт в браузере юзера, не
+  на сервере. Поэтому redeploy = "переписать статику", без
+  миграций БД.
