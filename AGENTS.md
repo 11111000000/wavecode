@@ -64,6 +64,30 @@ MCP endpoint: `https://kanban.kosov.online/mcp/`
 - **Skill:** `wavecode-kanban` (загружается on-demand через `skill()` tool —
   см. [AngaraConfig/agents-commons/skills/wavecode-kanban.md](../AngaraConfig/agents-commons/skills/wavecode-kanban.md))
 
+### Auth: bearer token УЖЕ в env — НЕ ищи его в коде
+
+Paseo daemon получает `KANBAN_BEARER` из systemd
+`EnvironmentFile=/etc/opencode/opencode.env` (mode 0600, root:root,
+**НЕ в Git**). Все spawned opencode CLI процессы наследуют эту env
+переменную (проверено: `cat /proc/<opencode-pid>/environ | grep KANBAN`).
+
+В `OPENCODE_CONFIG_CONTENT` уже прописан reference
+`"Authorization": "Bearer {env:KANBAN_BEARER}"` — opencode CLI
+резолвит `{env:KANBAN_BEARER}` на старте через `getenv("KANBAN_BEARER")`.
+**Тебе НЕ нужно ничего нигде искать, читать, передавать.**
+
+- ❌ НЕ делай `echo $KANBAN_BEARER` (только в debug-случае и в pastebin/private log)
+- ❌ НЕ читай `/etc/opencode/opencode.env` или `/etc/secrets/agent-kanban/*`
+  из своих скриптов (нет необходимости, нарушает принцип least-privilege)
+- ❌ НЕ пиши токен в код, коммиты, комментарии, артефакты
+- ❌ НЕ добавляй `.env` файлы с токеном в репо
+
+Если MCP call возвращает `401 Unauthorized` / "no token" / "Missing API key":
+- Сначала проверь `echo $KANBAN_BEARER | head -c 8` (длина > 0 значит env OK)
+- Если пусто — это значит ты запущен НЕ через Paseo daemon (например,
+  локально вручную или через opencode-serve без `EnvironmentFile`)
+- Попроси пользователя перезапустить через Paseo UI
+
 **Перед началом работы:**
 1. Загрузить skill `wavecode-kanban` через `skill()` — там протокол claim →
    post_progress → request_review/complete.
@@ -87,6 +111,7 @@ MCP endpoint: `https://kanban.kosov.online/mcp/`
 - Молча работать без `post_progress` (оператор не видит прогресса).
 - `complete_task` до явного одобрения пользователем через UI.
 - Создавать задачи без явной просьбы (оператор добавляет через UI сам).
+- Логировать / выводить / коммитить bearer-токен (см. секцию Auth выше).
 
 ## Структура репозитория
 
