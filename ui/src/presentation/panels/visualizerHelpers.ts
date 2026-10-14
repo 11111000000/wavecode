@@ -32,6 +32,34 @@ export const channelColor = (channel: number): string => {
   return layerColor(ch - 1);
 };
 
+/** Vivid palette for layer ribbons in the track overview. The previous
+ *  `channelColor` (hue per MIDI channel) doesn't help when a Strudel
+ *  pattern uses the default channel=1 for everything — every ribbon
+ *  ends up the same red. This palette cycles distinct hues by ribbon
+ *  INDEX (sorted by layer number) so 1-2-3-4 layers get 1-2-3-4
+ *  different colors regardless of the underlying channel data. */
+export const RIBBON_PALETTE: ReadonlyArray<string> = [
+  'hsl(42 95% 60%)',   // gold       — first layer (usually bass)
+  'hsl(174 80% 55%)',  // cyan       — second layer
+  'hsl(330 85% 65%)',  // magenta    — third layer
+  'hsl(96 75% 60%)',   // lime       — fourth layer
+  'hsl(15 90% 60%)',   // orange     — fifth layer
+  'hsl(220 75% 65%)',  // sky        — sixth layer
+  'hsl(60 90% 60%)',   // yellow
+  'hsl(290 70% 65%)',  // purple
+];
+
+/** Neutral grey for the overflow pseudo-layer (when > maxLayers). */
+export const RIBBON_OVERFLOW_COLOR = 'hsl(220 8% 70%)';
+
+/** Pick a ribbon color by its index in the sorted layer list. The
+ *  overflow layer (negative `layer` value) gets a neutral grey. */
+export const ribbonColor = (ribbonIndex: number, isOverflow: boolean): string => {
+  if (isOverflow) return RIBBON_OVERFLOW_COLOR;
+  if (!Number.isFinite(ribbonIndex) || ribbonIndex < 0) return RIBBON_PALETTE[0]!;
+  return RIBBON_PALETTE[ribbonIndex % RIBBON_PALETTE.length] ?? RIBBON_PALETTE[0]!;
+};
+
 /** Clamp a frequency-bin index into the visible spectrum range. */
 export const clampBin = (bin: number, fftSize: number): number => {
   const max = Math.max(0, Math.floor(fftSize / 2) - 1);
@@ -291,6 +319,7 @@ export const cpsToBpm = (cps: number): number => {
  */
 export type LayerActivity = {
   readonly layer: number;
+  readonly isOverflow: boolean;
   readonly color: string;
   readonly bars: ReadonlyArray<number>;
 };
@@ -333,8 +362,10 @@ export const computeLayerActivity = (
       : sums.map(() => 0);
     return {
       layer,
-      color: layer === 10 ? 'hsl(220 8% 70%)'
-        : layerColor(Math.max(0, layer - 1)),
+      isOverflow: layer === ('overflow' as unknown as number),
+      color: layer === ('overflow' as unknown as number)
+        ? RIBBON_OVERFLOW_COLOR
+        : ribbonColor(truncated.findIndex(([l]) => l === layer), false),
       bars,
     };
   });
