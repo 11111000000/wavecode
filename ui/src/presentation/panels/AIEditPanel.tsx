@@ -196,7 +196,19 @@ export function AIEditPanel() {
           value={instruction()}
           onInput={(e) => setInstruction(e.currentTarget.value)}
           onKeyDown={(e) => {
-            if ((e.key === 'Enter') && (e.ctrlKey || e.metaKey)) {
+            if (e.key !== 'Enter') return;
+            const isTouchDevice =
+              typeof window !== 'undefined' &&
+              (('ontouchstart' in window) || (navigator.maxTouchPoints ?? 0) > 0);
+            // Mobile: Enter submits, Shift+Enter inserts newline (soft keyboards
+            // have no easy modifier-Enter path).
+            // Desktop: Ctrl/Cmd+Enter submits, plain Enter inserts newline.
+            if (isTouchDevice) {
+              if (e.shiftKey) return;
+              if (e.isComposing) return;
+              e.preventDefault();
+              void submit();
+            } else if (e.ctrlKey || e.metaKey) {
               e.preventDefault();
               void submit();
             }
