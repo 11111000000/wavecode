@@ -137,7 +137,7 @@ export const GOLDEN_PAIRS: ReadonlyArray<GoldenPair> = [
   // ── 4. Higher-order transforms ────────────────────────────────────────
   {
     lisp: '(every 4 (jux rev) (s "bd notes"))',
-    js: 'every(4, jux("rev"), s("bd notes"))',
+    js: 'every(4, jux(rev), s("bd notes"))',
     intent: 'every + jux + rev — function arg positional',
     category: 'higher-order',
   },
@@ -149,7 +149,7 @@ export const GOLDEN_PAIRS: ReadonlyArray<GoldenPair> = [
   },
   {
     lisp: '(jux rev (s "bd sd hh"))',
-    js: 'jux("rev", s("bd sd hh"))',
+    js: 'jux(rev, s("bd sd hh"))',
     intent: 'jux with bare function + pattern',
     category: 'higher-order',
   },
