@@ -3,7 +3,8 @@ import type { NoteEvent } from '~/domain/midi/encoder';
 import {
   bandHue, bandLevel, channelColor, clampBin, computeLayerActivity, cpsToBpm,
   defaultMidiBounds, freqBinForBar, hzToBin, layerColor, lerpColor,
-  perceptual, pickBarCount, projectNote, radialBar, smooth, updatePeakHold,
+  perceptual, pickBarCount, projectNote, radialBar,
+  RIBBON_PALETTE, smooth, updatePeakHold,
 } from './visualizerHelpers';
 
 describe('visualizerHelpers.layerColor', () => {
@@ -475,14 +476,43 @@ describe('visualizerHelpers.computeLayerActivity', () => {
     expect(result[2]?.bars[0]).toBe(1.0);
   });
 
-  it('uses layerColor palette (not neutral grey) for non-drum channels', () => {
-    const result = computeLayerActivity([ev(60, 0, 0.1, 100, 1)], 4, 4);
-    expect(result[0]?.color).toBe(layerColor(0));
+  it('uses ribbonColor palette (per-layer index, not per-channel)', () => {
+    // Two distinct channels → two distinct layers → two distinct colors.
+    // Even if both shared channel=1, the palette would still differentiate
+    // (we'd get one ribbon in palette[0] colour — see next test).
+    const result = computeLayerActivity([
+      ev(60, 0, 0.1, 100, 1),
+      ev(60, 0, 0.1, 100, 2),
+    ], 4, 4);
+    expect(result[0]?.color).toBe(RIBBON_PALETTE[0]);
+    expect(result[1]?.color).toBe(RIBBON_PALETTE[1]);
   });
 
-  it('returns neutral grey for the MIDI drum channel (10)', () => {
-    const result = computeLayerActivity([ev(60, 0, 0.1, 100, 10)], 4, 4);
-    expect(result[0]?.color).toBe('hsl(220 8% 70%)');
+  it('returns overflow pseudo-layer in neutral grey', () => {
+    const events = [
+      ev(60, 0, 0.1, 100, 1),
+      ev(60, 0, 0.1, 100, 2),
+      ev(60, 0, 0.1, 100, 3),
+      ev(60, 0, 0.1, 100, 4),
+    ];
+    const result = computeLayerActivity(events, 4, 3);
+    expect(result[2]?.isOverflow).toBe(true);
+    expect(result[2]?.color).toBe('hsl(220 8% 70%)');
+  });
+
+  it('distinct layers on the same channel get distinct colors', () => {
+    // The previous channelColor-based logic made every event in
+    // channel=1 red. The new palette cycles per ribbon index so the
+    // visualisation tells layers apart even when Strudel doesn't
+    // separate them into distinct MIDI channels.
+    const result = computeLayerActivity([
+      ev(60, 0, 0.1, 100, 1),
+      ev(60, 0, 0.1, 100, 1),
+      ev(60, 0, 0.1, 100, 1),
+    ], 4, 4);
+    // We have only one channel → only one layer, only one ribbon.
+    expect(result).toHaveLength(1);
+    expect(result[0]?.color).toBe(RIBBON_PALETTE[0]);
   });
 
   it('returns all-zero bars when the only notes are zero-velocity', () => {
