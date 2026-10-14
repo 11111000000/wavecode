@@ -1,5 +1,43 @@
 # AGENTS.md — wavecode
 
+---
+
+## AI-agent workflow (server-wide policy, 2026-10-14)
+
+**Source of truth** (Nix-baked, applies to all Paseo agents via
+`daemon.appendSystemPrompt`):
+
+- `~/Projects/AngaraConfig/agents-commons/prompts/git.txt`
+- `~/Projects/AngaraConfig/agents-commons/prompts/worktree-first.txt`
+- `~/Projects/AngaraConfig/AGENTS.md` §16
+- `~/Projects/AngaraConfig/KB/30_decisions/agent-auto-commit-policy-2026-10-14.md`
+
+If this section ever conflicts with the source of truth, the source
+of truth wins.
+
+**Default workflow:**
+
+1. **Work in a branch** - `feat/<slug>` / `fix/<slug>` / `docs/<slug>` /
+   `refactor/<slug>`. Never commit directly to `master` / `main`.
+   Worktree (`git worktree add` or `paseo_create_workspace`) is the
+   preferred way; see the `worktree-first` skill.
+2. **Auto-commit** - after each meaningful edit:
+   `git add <files> && git commit -m "..."`. Conventional Commits,
+   English, <=72-char subject. Never `git add -A` blindly.
+3. **Propose merge, do not auto-merge** - when the branch's work is
+   complete, tell the user what to merge and into which target. Wait
+   for explicit "merge it" / "влей".
+4. **Never push without being asked** - push is public + irreversible.
+   Wait for "push" / "запушь" / "open PR" / "publish". Same rule for
+   `gh pr create` and force-push.
+5. **Report state** - after each commit, show branch, SHA, files
+   changed, one-line summary.
+
+**Project-specific overrides** (if any) below take precedence over
+this section, but defer to the source of truth above.
+
+---
+
 Этот репозиторий использует методологию
 [math-coding v1.0](../math-coding/AGENTS.md) для документирования решений.
 
