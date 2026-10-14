@@ -155,9 +155,13 @@ const splitTopLevelCommas = (text: string, baseOffset: number): LayerRange[] => 
  * [from, to) char ranges in the source.
  *
  * Recognised shapes (in order of detection):
- *   1. `stack(..., ...)` — split inside the parens.
+ *   1. `stack(..., ...)` — split inside the parens. Leading whitespace
+ *      and `// line comments` are skipped before checking for `stack(`,
+ *      so a snippet like
+ *        `// EDM house — ...\nstack(\n  a, b, c\n)`
+ *      is correctly recognised as 3 layers.
  *   2. `$: ..., ...`    — split after the `$:` label.
- *   3. `note(...), note(...)` — flat split.
+ *   3. `note(...), note(...)` — flat split at top-level commas.
  *   4. `note(...)`        — single layer.
  *
  * This is intentionally a *simple* parser: it tracks paren/bracket
@@ -170,8 +174,33 @@ const splitTopLevelCommas = (text: string, baseOffset: number): LayerRange[] => 
  * caller.
  */
 export const parseLayerRanges = (snippet: string): LayerRange[] => {
+  // Skip leading whitespace and `// line comments` to find the
+  // syntactic start. Without this, a snippet that begins with a comment
+  // before its `stack(` wrapper is mis-classified as a single layer
+  // (because top-level commas inside `stack(` are at depth 1, not 0).
   let i = 0;
-  while (i < snippet.length && isWhitespace(snippet[i])) i++;
+  while (i < snippet.length) {
+    while (i < snippet.length && isWhitespace(snippet[i])) i++;
+    // Single-line `// ...` comment — skip to end of line.
+    if (
+      i + 1 < snippet.length &&
+      snippet[i] === '/' && snippet[i + 1] === '/'
+    ) {
+      while (i < snippet.length && snippet[i] !== '\n') i++;
+      continue;
+    }
+    // Block comment `/* ... */` — skip to matching `*/`.
+    if (
+      i + 1 < snippet.length &&
+      snippet[i] === '/' && snippet[i + 1] === '*'
+    ) {
+      i += 2;
+      while (i + 1 < snippet.length && !(snippet[i] === '*' && snippet[i + 1] === '/')) i++;
+      i += 2;
+      continue;
+    }
+    break;
+  }
 
   // 1) `stack(...)` wrapper — split inside the parens.
   const stackMatch = snippet.slice(i).match(/^stack\s*\(/);
@@ -211,6 +240,7 @@ type HapLike = {
     end?: { valueOf?: () => number } | number;
   };
   hasOnset?: () => boolean;
+  value?: unknown;
   context?: {
     locations?: ReadonlyArray<
       | { start?: unknown; end?: unknown; from?: unknown; to?: unknown }
@@ -247,6 +277,62 @@ const layerColorFor = (pos: number, layerRanges: ReadonlyArray<LayerRange>): num
     if (pos >= range[0] && pos < range[1]) return i % PALETTE_SIZE;
   }
   return 0;
+};
+
+/**
+ * Map a hap's `value` to a 0..PALETTE_SIZE-1 color index. This is the
+ * "second axis" of color assignment — when a snippet has only one
+ * top-level layer (so layerRanges gives a single bucket, all marks
+ * would otherwise be the same color), the value hash gives different
+ * notes / samples / chord members distinct hues. The function is
+ * deliberately cheap: charcode sums and mod-4, no crypto.
+ *
+ * Examples (Creep chord layer with one layer):
+ *   "<g2 b2 c3 c3>"  — 4 notes, charCodes 103/98/99/99 → mixed
+ *   "[55,59,62]"     — first note 55 → 55 mod 4 = 3
+ *   "sbd"            — first char 's' (115) mod 4 = 3
+ *
+ * For chord values that are arrays, only the first element is used
+ * (the others are typically continuations or silence).
+ */
+const valueColorFor = (value: unknown): number => {
+  if (value == null) return 0;
+  if (typeof value === 'number') {
+    return Math.abs(Math.round(value)) % PALETTE_SIZE;
+  }
+  if (typeof value === 'string') {
+    // Sum of charCodes mod PALETTE_SIZE — handles both notes ("g2")
+    // and sample names ("sbd") with stable distribution.
+    let sum = 0;
+    for (let i = 0; i < value.length; i++) sum += value.charCodeAt(i);
+    return sum % PALETTE_SIZE;
+  }
+  if (Array.isArray(value)) {
+    // Chord value — fall back to first element.
+    return valueColorFor(value[0]);
+  }
+  return 0;
+};
+
+/**
+ * Combined color: layer index (which `,`-separated parallel part of the
+ * snippet) + value hash (which specific note / sample / chord). This
+ * guarantees visual variety even for snippets that have only one
+ * top-level layer — Creep's chord layer shows all three notes of a
+ * chord in different hues, and a simple `s("bd sd hh")` drum loop
+ * shows kick/snare/hat in three different colours.
+ *
+ * `layerColor` is 0 when layerRanges is empty (no `,` found); then
+ * the result is just the value hash.
+ */
+const combinedColorFor = (
+  pos: number,
+  value: unknown,
+  layerRanges: ReadonlyArray<LayerRange>,
+): number => {
+  const layer = layerColorFor(pos, layerRanges);
+  const valueColor = valueColorFor(value);
+  return (layer + valueColor) % PALETTE_SIZE;
 };
 
 /**
@@ -315,7 +401,7 @@ const extractFromHaps = (
       const f = Number(rawStart);
       const t = Number(rawEnd);
       if (!Number.isFinite(f) || !Number.isFinite(t) || t <= f) continue;
-      const color = layerColorFor(f, layerRanges);
+      const color = combinedColorFor(f, h.value, layerRanges);
       const key = `${f}|${t}|${color}|${state}`;
       if (seen.has(key)) continue;
       seen.add(key);
