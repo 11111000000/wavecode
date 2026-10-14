@@ -71,7 +71,9 @@ describe('lisp/emitter', () => {
     expect(transpile('42')).toBe('42');
     expect(transpile('3.14')).toBe('3.14');
     expect(transpile('"a4 b4"')).toBe('"a4 b4"');
-    expect(transpile('rev')).toBe('"rev"');
+    // bare symbol → identifier (a Strudel function), NOT a string.
+    expect(transpile('rev')).toBe('rev');
+    expect(transpile('sawtooth')).toBe('sawtooth');
   });
 
   it('renders a function call', () => {
@@ -107,7 +109,7 @@ describe('lisp/emitter', () => {
   it('does NOT chain on higher-order functions (every)', () => {
     // (every 4 (jux rev) (s "bd")) — every is not single-pattern ctor.
     expect(transpile('(every 4 (jux rev) (s "bd"))')).toBe(
-      'every(4, jux("rev"), s("bd"))',
+      'every(4, jux(rev), s("bd"))',
     );
   });
 
@@ -155,15 +157,17 @@ describe('lisp/emitter', () => {
 });
 
 describe('lisp/transpiler (integration)', () => {
-  it('returns output + empty errors on success', () => {
-    const r = lispTranspiler('(note "a4")', null);
-    expect(r.output).toBe('note("a4")');
+  it('returns output + empty errors on success (pure, no mini-notation)', () => {
+    const r = lispTranspiler('(note "a4")');
     expect(r.errors).toEqual([]);
+    // Pure core does NOT apply mini-notation — that happens on the audio
+    // path (LiveAudioEngine composes emitJs with @strudel/transpiler).
+    expect(r.output).toBe('note("a4")');
   });
 
   it('returns source as-is + error on syntax error', () => {
     const src = '(note "a4';
-    const r = lispTranspiler(src, null);
+    const r = lispTranspiler(src);
     expect(r.output).toBe(src);
     expect(r.errors).toHaveLength(1);
     expect(r.errors[0]?.message).toMatch(/unterminated string/);
@@ -184,7 +188,7 @@ describe('lisp/golden pairs (Strudel round-trip intent)', () => {
     { lisp: '(s "bd notes" (gain 0.45))', js: 's("bd notes").gain(0.45)' },
     { lisp: '(stack (note "a4" (gain 0.35) (lpf 400)) (s "bd" (gain 0.45)))', js: 'stack(note("a4").gain(0.35).lpf(400), s("bd").gain(0.45))' },
     { lisp: '(note "<g2 b2 c3 c3>*2" (slow 2))', js: 'note("<g2 b2 c3 c3>*2").slow(2)' },
-    { lisp: '(every 4 (jux rev) (s "bd notes"))', js: 'every(4, jux("rev"), s("bd notes"))' },
+    { lisp: '(every 4 (jux rev) (s "bd notes"))', js: 'every(4, jux(rev), s("bd notes"))' },
     { lisp: '(n "[55,59,62]*2" (s "sawtooth") (gain 0.18) (lpf 1800))', js: 'n("[55,59,62]*2").s("sawtooth").gain(0.18).lpf(1800)' },
     { lisp: '(slow 2 (stack (note "a4") (s "bd")))', js: 'slow(2, stack(note("a4"), s("bd")))' },
   ];

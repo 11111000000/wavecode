@@ -137,11 +137,23 @@ const escapeString = (s: string): string =>
     .replace(/\n/g, '\\n')
     .replace(/\r/g, '\\r');
 
-/** Render a single value (atom or list) as a JS expression. */
+/**
+ * Render a single value (atom or list) as a JS expression.
+ *
+ * Semantics:
+ *   - number  → numeric literal
+ *   - string  → string literal (mini-notation data — passes through
+ *               to @strudel/transpiler for mini parsing)
+ *   - symbol  → bare IDENTIFIER (a Strudel function / value reference,
+ *               e.g. `rev`, `jux`, `stack`). NOT a string — Strudel
+ *               functions are identifiers, not sample-name strings.
+ *   - ()      → Pattern.empty()
+ *   - list    → renderCall
+ */
 const renderValue = (e: Expr): string => {
   if (e.kind === 'num') return String(e.value);
   if (e.kind === 'str') return `"${escapeString(e.value)}"`;
-  if (e.kind === 'sym') return `"${e.value}"`;
+  if (e.kind === 'sym') return e.value;
   if (e.kind === 'empty') return 'Pattern.empty()';
   return renderCall(e);
 };

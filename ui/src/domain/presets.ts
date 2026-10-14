@@ -20,6 +20,7 @@
  *   - Lush pad (synth): CC0 Vanyamba + IDM Atmosphare
  *   - Retro lead (synth): CC0 Garzul Minimoog
  *   - Toms funk (samples): CC0 toms
+ *   - Lisp examples: Scheme-подобные s-выражения (lang='lisp')
  *
  * Без `.slow(N)` — каждый такт = 1 cycle (cps=0.5 по умолчанию = 2 сек/такт),
  * chord changes по 1 биту (0.5 сек) на 120 BPM.
@@ -31,6 +32,8 @@ export type Preset = {
   readonly artist?: string;
   readonly score: string;
   readonly custom?: boolean;
+  /** Score language. Undefined → js (default). 'lisp' → Scheme-like dialect. */
+  readonly lang?: 'js' | 'lisp';
 };
 
 export const BUILTIN_PRESETS: ReadonlyArray<Preset> = [
@@ -412,6 +415,34 @@ export const BUILTIN_PRESETS: ReadonlyArray<Preset> = [
       '  // Лёгкий kick для базовой основы',
       '  s("bd ~ ~ ~ ~ ~ ~ ~").gain(0.30)',
       ')',
+    ].join('\n'),
+  },
+  {
+    // Lisp example #1 — минимальный ambient drone.
+    // Демонстрирует Scheme-подобный диалект wavecode (lang='lisp').
+    id: 'lisp-ambient',
+    name: 'Ambient drone (Lisp)',
+    artist: 'wavecode Lisp',
+    lang: 'lisp',
+    score: [
+      ';; Ambient drone — медленные sine-дроны через Lisp s-выражения',
+      '(stack',
+      '  (note "c3 g3" (s "sine") (gain 0.2) (slow 2))',
+      '  (note "e3 b3" (s "triangle") (gain 0.15) (slow 4)))',
+    ].join('\n'),
+  },
+  {
+    // Lisp example #2 — минимальный бит + бас, с цепочкой методов.
+    id: 'lisp-beats',
+    name: 'Minimal beats (Lisp)',
+    artist: 'wavecode Lisp',
+    lang: 'lisp',
+    score: [
+      ';; Minimal beats — kick + hihat + bass, Lisp-форма',
+      '(stack',
+      '  (s "bd*4" (gain 0.5))',
+      '  (s "hh*8" (gain 0.2))',
+      '  (note "c2 e2 g2" (s "sawtooth") (gain 0.25) (lpf 300)))',
     ].join('\n'),
   },
 ];
