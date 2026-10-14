@@ -1,5 +1,6 @@
 import { Effect } from 'effect';
 import { dispatch, appStore } from '../state/appStore';
+import { languageMode } from './languageModeStore';
 import { AppLayer } from '~/infrastructure/composition';
 import { AudioEngine } from '~/domain/services';
 import type { LayerMix } from '~/domain/types';
@@ -113,7 +114,7 @@ const runWrapAndEval = async (
   await Effect.runPromise(
     Effect.gen(function* () {
       const audio = yield* AudioEngine;
-      yield* audio.eval(wrapped);
+      yield* audio.eval(wrapped, languageMode());
     }).pipe(Effect.provide(AppLayer)),
   );
 };
