@@ -1,0 +1,90 @@
+applied_at: 2026-10-14
+branch: fix/preset-id-hydration
+commits:
+  - 2b63296 fix(ui): persist selected preset across reloads
+  - 0d5b814 docs(math): witness for wavecode-preset-id-hydration — applied
+supersedes: null
+notes: |
+  Пресет-селектор в TransportBar после reload'а всегда показывал
+  'Creep' (App.tsx:119 хардкод `createSignal('creep')` без
+  гидрации), а score уже восстанавливался через useAppBootstrap
+  из IDBRepo. Юзер видел рассинхрон: в редакторе и в audio —
+  пресет X, в дропдауне — 'Creep'.
+
+  Решение — выделить selection в module-level signal
+  (presentation/state/selectedPreset.ts) с persist в localStorage
+  по ключу `wavecode-selected-preset-v1`, гидрировать из
+  useAppBootstrap сразу после `repo.loadScore()`.
+
+  Семантика «последний загруженный» (см. packet.md antithesis
+  (3) — Ableton-style): правки score НЕ сбрасывают сигнал,
+  невалидный id (custom удалён) → fallback на 'creep' + persist.
+  Share-URL (`?s=…`) форсит reset — shared snippet не несёт preset
+  context.
+
+  1. **Новый selectedPreset.ts (104 lines)** — module-level signal,
+     `getSelectedPresetId()`, `setSelectedPresetPersist(id)`,
+     `hydrateSelectedPreset()` (валидация через `getPreset`),
+     `resetSelectedPreset()` (физический removeItem + signal =
+     default). Без no-op оптимизации — `localStorage.setItem`
+     дешёвый, а guard ломает «first-launch writes default».
+
+  2. **App.tsx** — убран локальный `presetId` signal, импортирован
+     `getSelectedPresetId` (binding `const presetId =
+     getSelectedPresetId` чтобы все 4 существующих
+     `presetId()`/ `setPresetId(id)` callsite'а работали
+     бесшовно). `onLoadPreset`/`onNew`/`onDeletePreset`/
+     `onSavePreset` → `setSelectedPresetPersist`. `onResetAll`
+     дополнительно зовёт `resetSelectedPreset()`.
+
+  3. **useAppBootstrap** — после успешного `repo.loadScore()`
+     зовёт `hydrateSelectedPreset()`. На share-restore —
+     `resetSelectedPreset()`. На cold start (нет IDB, нет
+     share) — `hydrateSelectedPreset()` всё равно вызывается
+     чтобы записать default в localStorage для последующих
+     reload'ов.
+
+  4. **13 vitest unit-тестов** в selectedPreset.test.ts покрывают:
+     - signal defaults + cold-start read
+     - `setSelectedPresetPersist` updates both
+     - `setSelectedPresetPersist` always writes (no no-op)
+     - `hydrateSelectedPreset` × 5 веток: empty, valid built-in,
+       valid custom, deleted custom, score-drift
+     - `resetSelectedPreset` removes key
+     - integration с `resetAllBrowserData`
+     - BUILTIN_PRESETS sanity
+
+  5. **2 e2e теста** в preset-id-hydration.spec.mjs покрывают:
+     - «выбрал ambient-drone → reload → dropdown всё ещё
+       ambient-drone, score = ambient-drone source»
+     - «localStorage = custom-ghost → reload → fallback to
+       creep + key persisted as 'creep'».
+
+  6. **Совместимость** — никаких изменений в:
+     - reducer.ts (AppState без selectedPresetId — это
+       presentation concern, не domain)
+     - presetsStore.ts (resetAllBrowserData очищает 3 ключа,
+       оставляя место для 4-го в App.tsx onResetAll)
+     - shared-URL codec / audio engine / CodeMirror binding
+
+  Verification:
+    - tsc --noEmit: clean
+    - vitest: 13/13 selectedPreset pass; 761/766 total pass
+      (5 pre-existing uiState.test.ts failures: setTab 'full'
+      vs 'half' + loadStoredSheetHeight — KNOWN, baseline до
+      моих изменений, не регрессия)
+    - vite build: success ~11s
+    - manual smoke через shared chromium:
+      * Open #/app → 'Creep · Radiohead' [selected] (default)
+      * Select 'ambient-drone' → audio plays, score replaced,
+        localStorage `wavecode-selected-preset-v1 = 'ambient-drone'`
+      * Reload → 'Ambient drone · Eno' [selected], score =
+        ambient-drone source, audio 'playing' (eval re-ran) ✅
+      * Inject `localStorage.setItem('wavecode-selected-preset-v1',
+        'custom-ghost')` → Reload → 'Creep · Radiohead' [selected],
+        localStorage = 'creep' (fallback applied + persisted) ✅
+    - lint:no-console (domain/application): clean
+    - lint:src (selectedPreset.ts/test.ts/useAppBootstrap.ts/
+      App.tsx): 2 pre-existing warnings on App.tsx (setTimeout
+      reactivity in keyboard-shortcuts install — out of scope),
+      0 new warnings on my files.
