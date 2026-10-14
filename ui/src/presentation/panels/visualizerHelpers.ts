@@ -271,3 +271,71 @@ export const cpsToBpm = (cps: number): number => {
   if (!Number.isFinite(cps) || cps <= 0) return 0;
   return Math.round(cps * 60);
 };
+
+/**
+ * Per-layer activity envelope across one cycle. Used by the redesigned
+ * track overview to draw a ribbon per layer — a bar chart of where each
+ * layer is busy across time. The user sees the *shape* of the music
+ * (where the kick lands, where the arp builds, where the bass drops)
+ * at a glance, instead of the previous "pile of small rects".
+ *
+ * Each bar value is the sum of `velocity/127` for notes in that layer
+ * that start in this column's `[start, start+columnWidth)` cycle window.
+ * Values are normalised per-layer so the ribbon uses the full vertical
+ * range regardless of how many notes the layer has.
+ *
+ * Layers are returned in insertion order (first note's layer first).
+ * If there are more than `maxLayers` distinct layers, extras are
+ * merged into a single "overflow" pseudo-layer at the end so the UI
+ * doesn't grow unbounded for chaotic patterns.
+ */
+export type LayerActivity = {
+  readonly layer: number;
+  readonly color: string;
+  readonly bars: ReadonlyArray<number>;
+};
+
+export const computeLayerActivity = (
+  events: ReadonlyArray<NoteEvent>,
+  columns: number,
+  maxLayers: number,
+): ReadonlyArray<LayerActivity> => {
+  if (columns <= 0) return [];
+  // Group events by layer (channel = layer index in the audio engine).
+  const byLayer = new Map<number, NoteEvent[]>();
+  for (const e of events) {
+    const ch = Math.max(1, Math.min(16, e.channel | 0));
+    let arr = byLayer.get(ch);
+    if (!arr) {
+      arr = [];
+      byLayer.set(ch, arr);
+    }
+    arr.push(e);
+  }
+  // Stable order: by channel number ascending, then cap at maxLayers.
+  const sorted = Array.from(byLayer.entries()).sort((a, b) => a[0] - b[0]);
+  const truncated = sorted.length > maxLayers
+    ? [...sorted.slice(0, maxLayers - 1),
+       ['overflow' as unknown as number,
+        sorted.slice(maxLayers - 1).flatMap(([, evts]) => evts)] as [number, NoteEvent[]]]
+    : sorted;
+  return truncated.map(([layer, evts]) => {
+    const sums = new Array<number>(columns).fill(0);
+    for (const e of evts) {
+      const colF = e.startCycle * columns;
+      const col = Math.max(0, Math.min(columns - 1, Math.floor(colF)));
+      sums[col] = (sums[col] ?? 0) + (Math.max(0, Math.min(1, e.velocity / 127)));
+    }
+    let max = 0;
+    for (const v of sums) if (v > max) max = v;
+    const bars = max > 0
+      ? sums.map((v) => v / max)
+      : sums.map(() => 0);
+    return {
+      layer,
+      color: layer === 10 ? 'hsl(220 8% 70%)'
+        : layerColor(Math.max(0, layer - 1)),
+      bars,
+    };
+  });
+};

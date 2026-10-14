@@ -1,17 +1,17 @@
 import {
-  For, Show, createSignal, onCleanup, onMount, createEffect, batch,
+  Show, createSignal, onCleanup, onMount, createEffect, createMemo, batch,
   type JSX,
 } from 'solid-js';
 import { Effect } from 'effect';
 import { AudioEngine } from '~/domain/services';
 import { AppLayer } from '~/infrastructure/composition';
 import { appStore } from '../state/appStore';
-import { getAnalyserNode } from '~/infrastructure/audio/LiveAudioEngine';
-import { getDebug } from '~/infrastructure/audio/LiveAudioEngine';
+import { getAnalyserNode, getDebug } from '~/infrastructure/audio/LiveAudioEngine';
 import type { NoteEvent } from '~/domain/midi/encoder';
 import {
-  bandHue, bandLevel, cpsToBpm, defaultMidiBounds, perceptual, pickBarCount,
-  projectNote, radialBar, smooth, updatePeakHold,
+  bandHue, bandLevel, channelColor, computeLayerActivity, cpsToBpm,
+  defaultMidiBounds, perceptual, pickBarCount,
+  radialBar, smooth, updatePeakHold,
 } from './visualizerHelpers';
 
 type Mode = 'spectrum' | 'wave' | 'radial' | 'beat';
@@ -19,6 +19,8 @@ type Mode = 'spectrum' | 'wave' | 'radial' | 'beat';
 const COMPILE_DEBOUNCE_MS = 350;
 const FFT_SIZE = 1024;
 const SAMPLE_RATE_FALLBACK = 44100;
+const RIBBON_COLUMNS = 64;
+const MAX_RIBBON_LAYERS = 6;
 
 /**
  * VisualizerPanel — звуковая визуализация для wavecode.
@@ -46,6 +48,7 @@ export function VisualizerPanel(): JSX.Element {
   const [events, setEvents] = createSignal<ReadonlyArray<NoteEvent>>([]);
   const [analyserReady, setAnalyserReady] = createSignal(false);
   const [playhead, setPlayhead] = createSignal(0);
+  const [activeMidis, setActiveMidis] = createSignal<ReadonlySet<number>>(new Set());
   const [beatEnergy, setBeatEnergy] = createSignal(0);
   const [bandLevels, setBandLevels] = createSignal<{ bass: number; mid: number; treble: number }>({
     bass: 0, mid: 0, treble: 0,
@@ -105,6 +108,19 @@ export function VisualizerPanel(): JSX.Element {
       );
     } catch {
       return 0;
+    }
+  };
+
+  const readActiveHaps = async (): Promise<ReadonlyArray<{ readonly midi: number }>> => {
+    try {
+      return await Effect.runPromise(
+        Effect.gen(function* () {
+          const audio = yield* AudioEngine;
+          return yield* audio.getActiveHaps();
+        }).pipe(Effect.provide(AppLayer)),
+      );
+    } catch {
+      return [];
     }
   };
 
@@ -180,6 +196,11 @@ export function VisualizerPanel(): JSX.Element {
           }
         });
       });
+      // Poll active haps in the same tick — data only changes on
+      // note onsets, so even a 30ms poll is more than enough.
+      void readActiveHaps().then((haps) => {
+        setActiveMidis(new Set(haps.map((h) => h.midi)));
+      });
     }
     drawScope();
     rafId = requestAnimationFrame(loop);
@@ -236,13 +257,14 @@ export function VisualizerPanel(): JSX.Element {
             </div>
           }
         >
-          <TrackSvg events={events()} />
+          <TrackCanvas
+            events={events()}
+            activeMidis={activeMidis()}
+            playhead={playhead()}
+            analyserReady={analyserReady()}
+            beatEnergy={beatEnergy()}
+          />
         </Show>
-        <div
-          class="visualizer-track__playhead"
-          data-active={analyserReady() ? 'true' : 'false'}
-          style={{ '--playhead-x': `${playhead() * 100}%` }}
-        />
       </section>
 
       <section class="visualizer-scope" aria-label="Анализ сигнала">
@@ -547,53 +569,195 @@ const withAlpha = (hsl: string, alpha: number): string => {
 };
 
 // ---------------------------------------------------------------------------
-//  Track overview (SVG)
+//  Track overview (canvas) — activity ribbons + piano roll + active glow
 // ---------------------------------------------------------------------------
 
-const TrackSvg = (props: { events: ReadonlyArray<NoteEvent> }): JSX.Element => {
-  const bounds = (): { lo: number; hi: number } => defaultMidiBounds(props.events);
-  const projected = (): ReadonlyArray<NonNullable<ReturnType<typeof projectNote>>> => {
-    const { lo, hi } = bounds();
-    const out: Array<NonNullable<ReturnType<typeof projectNote>>> = [];
-    for (const e of props.events) {
-      const p = projectNote(e, {
-        viewportW: 1000,
-        viewportH: 100,
-        midiLo: lo,
-        midiHi: hi,
-        cycleStart: 0,
-        cycleEnd: 1,
+const RIBBON_VIEW_W = 1000;
+const RIBBON_VIEW_H = 130;
+
+type TrackProps = {
+  events: ReadonlyArray<NoteEvent>;
+  activeMidis: ReadonlySet<number>;
+  playhead: number;
+  analyserReady: boolean;
+  beatEnergy: number;
+};
+
+const TrackCanvas = (props: TrackProps): JSX.Element => {
+  let canvas: HTMLCanvasElement | undefined;
+
+  // Cached: per-event projection. Recomputed only when `events` changes,
+  // not every RAF tick. Drawing still happens every frame for active-note
+  // glow + playhead, but the expensive pre-compute is one-shot.
+  const cached = createMemo(() => {
+    const events = props.events;
+    const layers = computeLayerActivity(events, RIBBON_COLUMNS, MAX_RIBBON_LAYERS);
+    const bounds = defaultMidiBounds(events);
+    const notes: Array<{
+      x: number; y: number; w: number; h: number;
+      midi: number; channel: number; velocity: number;
+      startCycle: number; endCycle: number;
+    }> = [];
+    const midiRange = Math.max(1, bounds.hi - bounds.lo);
+    for (const e of events) {
+      const x0 = e.startCycle * RIBBON_VIEW_W;
+      const x1 = e.endCycle * RIBBON_VIEW_W;
+      if (x1 < 0 || x0 > RIBBON_VIEW_W) continue;
+      const slotH = 1;
+      const h = Math.max(0.5, (e.velocity / 127) * slotH);
+      const y = ((bounds.hi - e.midi) / midiRange) * 100;
+      notes.push({
+        x: x0, y, w: Math.max(1, x1 - x0), h,
+        midi: e.midi, channel: e.channel, velocity: e.velocity,
+        startCycle: e.startCycle, endCycle: e.endCycle,
       });
-      if (p) out.push(p);
     }
-    return out;
+    return { layers, bounds, notes };
+  });
+
+  const draw = (): void => {
+    const c = canvas;
+    if (!c) return;
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    const cssW = c.clientWidth;
+    const cssH = c.clientHeight;
+    if (cssW <= 0 || cssH <= 0) return;
+    const targetW = Math.max(1, Math.floor(cssW * dpr));
+    const targetH = Math.max(1, Math.floor(cssH * dpr));
+    if (c.width !== targetW) c.width = targetW;
+    if (c.height !== targetH) c.height = targetH;
+    const ctx = c.getContext('2d');
+    if (!ctx) return;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, cssW, cssH);
+
+    const scaleX = cssW / RIBBON_VIEW_W;
+    const scaleY = cssH / RIBBON_VIEW_H;
+    const { layers, notes } = cached();
+
+    // 1. Layer ribbons (top zone, divided equally).
+    const ribbonZone = Math.max(20, layers.length * 14);
+    const ribbonH = layers.length > 0 ? ribbonZone / layers.length : 0;
+    for (let i = 0; i < layers.length; i++) {
+      const layer = layers[i]!;
+      drawRibbon(ctx, layer, 0, i * ribbonH, RIBBON_VIEW_W, ribbonH, scaleX, scaleY);
+    }
+
+    // Separator between ribbons and piano roll.
+    ctx.fillStyle = 'rgba(255,255,255,0.06)';
+    ctx.fillRect(0, ribbonZone * scaleY, cssW, 1);
+
+    // 2. Piano roll (bottom zone).
+    const rollTop = ribbonZone;
+    const rollH = RIBBON_VIEW_H - ribbonZone;
+    const rollScaleY = rollH / 100;
+    const active = props.activeMidis;
+    for (const n of notes) {
+      const nx = n.x * scaleX;
+      const ny = (rollTop + n.y) * scaleY;
+      const nw = Math.max(1, n.w * scaleX);
+      const nh = Math.max(1.5, n.h * scaleY * rollScaleY);
+      const fill = channelColor(n.channel);
+      const isActive = active.has(n.midi)
+        && props.playhead >= n.startCycle
+        && props.playhead < n.endCycle;
+      const baseAlpha = 0.55 + (n.velocity / 127) * 0.35;
+      ctx.fillStyle = withAlpha(fill, baseAlpha);
+      ctx.fillRect(nx, ny, nw, nh);
+      if (isActive) {
+        // Brighter fill on top of base.
+        ctx.fillStyle = fill;
+        ctx.fillRect(nx, ny, nw, nh);
+        // White outline ring.
+        ctx.strokeStyle = withAlpha('#ffffff', 0.9);
+        ctx.lineWidth = 1.5;
+        ctx.strokeRect(nx - 0.5, ny - 0.5, nw + 1, nh + 1);
+        // Vertical light beam from the note up to the ribbon zone.
+        const beamH = (rollTop * scaleY) - ny;
+        if (beamH > 4) {
+          const beamGrad = ctx.createLinearGradient(0, ny, 0, ny + beamH);
+          beamGrad.addColorStop(0, withAlpha(fill, 0.45));
+          beamGrad.addColorStop(1, withAlpha(fill, 0));
+          ctx.fillStyle = beamGrad;
+          ctx.fillRect(nx, ny, nw, beamH);
+        }
+      }
+    }
+
+    // 3. Playhead (full-height vertical line + head dot).
+    const px = props.playhead * cssW;
+    const alpha = props.analyserReady ? 0.9 : 0.18;
+    ctx.fillStyle = withAlpha('hsl(252, 80%, 70%)', alpha * 0.25);
+    ctx.fillRect(px - 3, 0, 6, cssH);
+    ctx.fillStyle = withAlpha('#ffffff', alpha);
+    ctx.fillRect(px - 0.5, 0, 1.5, cssH);
+    ctx.fillStyle = withAlpha('hsl(252, 80%, 70%)', alpha);
+    ctx.beginPath();
+    ctx.arc(px, 4, 3, 0, Math.PI * 2);
+    ctx.fill();
   };
+
+  onMount(() => {
+    let raf = 0;
+    const loop = (): void => {
+      draw();
+      raf = requestAnimationFrame(loop);
+    };
+    raf = requestAnimationFrame(loop);
+    onCleanup(() => cancelAnimationFrame(raf));
+  });
+
   return (
-    <svg
-      class="visualizer-track__svg"
-      viewBox="0 0 1000 100"
-      preserveAspectRatio="none"
-      role="img"
-      aria-label={`События цикла: ${props.events.length}`}
-    >
-      <For each={projected()}>
-        {(p) => (
-          <rect
-            x={p.x}
-            y={p.y}
-            width={p.w}
-            height={p.h}
-            rx={1.2}
-            ry={1.2}
-            fill={p.fill}
-            opacity={0.92}
-          >
-            <title>
-              midi {p.midi} · ch {p.channel}
-            </title>
-          </rect>
-        )}
-      </For>
-    </svg>
+    <canvas
+      class="visualizer-track__canvas"
+      ref={canvas}
+      aria-label={`Карта цикла: ${props.events.length} событий, ${cached().layers.length} слоёв`}
+    />
   );
+};
+
+const drawRibbon = (
+  ctx: CanvasRenderingContext2D,
+  layer: { color: string; bars: ReadonlyArray<number>; layer: number },
+  x: number, y: number, w: number, h: number,
+  scaleX: number, scaleY: number,
+): void => {
+  if (layer.bars.length === 0 || w <= 0) return;
+  const colW = w / layer.bars.length;
+  // Filled envelope area.
+  ctx.beginPath();
+  for (let i = 0; i < layer.bars.length; i++) {
+    const v = layer.bars[i] ?? 0;
+    const cx = x + i * colW + colW / 2;
+    const cy = y + h - v * h;
+    if (i === 0) ctx.moveTo(cx, cy);
+    else ctx.lineTo(cx, cy);
+  }
+  if (layer.bars.length > 0) {
+    ctx.lineTo(x + w, y + h);
+    ctx.lineTo(x, y + h);
+  }
+  ctx.closePath();
+  const grad = ctx.createLinearGradient(0, y * scaleY, 0, (y + h) * scaleY);
+  grad.addColorStop(0, withAlpha(layer.color, 0.85));
+  grad.addColorStop(1, withAlpha(layer.color, 0.08));
+  ctx.fillStyle = grad;
+  ctx.fill();
+  // Top outline (crisp).
+  ctx.beginPath();
+  for (let i = 0; i < layer.bars.length; i++) {
+    const v = layer.bars[i] ?? 0;
+    const cx = x + i * colW + colW / 2;
+    const cy = y + h - v * h;
+    if (i === 0) ctx.moveTo(cx, cy);
+    else ctx.lineTo(cx, cy);
+  }
+  ctx.strokeStyle = layer.color;
+  ctx.lineWidth = 1.2;
+  ctx.stroke();
+  // Layer label on the left.
+  ctx.fillStyle = withAlpha(layer.color, 0.9);
+  ctx.font = '500 9px ui-monospace, monospace';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(`L${layer.layer}`, x * scaleX + 2, (y + h / 2) * scaleY);
 };

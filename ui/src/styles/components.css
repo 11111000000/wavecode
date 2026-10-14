@@ -4025,7 +4025,7 @@ textarea.ai-textarea:focus-visible {
   border-radius: var(--radius-md);
   padding: var(--space-sm);
   flex: 0 0 auto;
-  height: 120px;
+  height: 130px;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -4045,19 +4045,12 @@ textarea.ai-textarea:focus-visible {
 }
 .visualizer-track__grid span[data-pos='0'],
 .visualizer-track__grid span[data-pos='1'] { opacity: 0.7; }
-.visualizer-track__svg {
+.visualizer-track__canvas {
   position: relative;
   z-index: 2;
   width: 100%;
   height: 100%;
   display: block;
-}
-.visualizer-track__svg rect {
-  transition: opacity var(--dur-xs) var(--ease), filter var(--dur-xs) var(--ease);
-}
-.visualizer-track__svg rect:hover {
-  opacity: 1;
-  filter: brightness(1.3) drop-shadow(0 0 4px currentColor);
 }
 .visualizer-track__empty {
   flex: 1;
@@ -4075,23 +4068,6 @@ textarea.ai-textarea:focus-visible {
   border-radius: 50%;
   background: var(--primary);
   animation: visualizer-pulse 1.4s ease-in-out infinite;
-}
-.visualizer-track__playhead {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: var(--playhead-x, 0%);
-  width: 2px;
-  background: linear-gradient(180deg, var(--primary) 0%, var(--cyan) 50%, var(--magenta) 100%);
-  box-shadow: 0 0 8px var(--primary), 0 0 14px var(--primary);
-  pointer-events: none;
-  z-index: 3;
-  transform: translateX(-1px);
-  transition: opacity var(--dur-sm) var(--ease);
-  opacity: 0.9;
-}
-.visualizer-track__playhead[data-active='false'] {
-  opacity: 0.15;
 }
 
 .visualizer-scope {
