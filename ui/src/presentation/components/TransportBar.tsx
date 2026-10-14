@@ -211,37 +211,7 @@ export function TransportBar(props: TransportBarProps): JSX.Element {
           {audioRunning() ? <StopIcon size={16} /> : <PlayIcon size={16} />}
         </button>
 
-        <span class="bpm-indicator" data-testid="bpm-indicator" title="60 × cps × 2 при 4/4">
-          <strong>{formatBpm(localCps())}</strong>
-          <span class="bpm-suffix">BPM</span>
-        </span>
-
-        <div class="app-transport-bar__spacer" aria-hidden="true" />
-
-        <button
-          type="button"
-          class="app-transport-bar__toggle"
-          data-testid="transport-bar-toggle"
-          aria-expanded={expanded()}
-          aria-controls="app-transport-bar-body"
-          title={expanded() ? 'Свернуть панель' : 'Развернуть панель (BPM/пресеты/свинг)'}
-          onClick={toggleExpanded}
-        >
-          <span class="app-transport-bar__toggle-icon" aria-hidden="true">
-            {expanded() ? '▲' : '▼'}
-          </span>
-          <span class="app-transport-bar__toggle-label">
-            {expanded() ? 'Свернуть' : 'BPM · пресеты'}
-          </span>
-        </button>
-      </div>
-
-      <div
-        id="app-transport-bar-body"
-        class="app-transport-bar__body"
-        data-testid="transport-bar-body"
-      >
-        <div class="app-preset-row app-transport-bar__preset">
+        <div class="app-transport-bar__preset">
           <select
             class="preset-select"
             value={props.presetId}
@@ -265,37 +235,35 @@ export function TransportBar(props: TransportBarProps): JSX.Element {
           </select>
         </div>
 
-        <Show when={props.showSavePreset}>
-          <div class="save-preset-bar">
-            <input
-              type="text"
-              placeholder="Имя пресета"
-              value={props.newPresetName}
-              onInput={(e) => props.onNewPresetName(e.currentTarget.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter') props.onSavePreset(); }}
-            />
-            <button
-              type="button"
-              class="ctrl-btn ctrl-btn-primary"
-              onClick={props.onSavePreset}
-              disabled={!props.newPresetName.trim()}
-            >
-              OK
-            </button>
-            <button
-              type="button"
-              class="ctrl-btn"
-              onClick={() => {
-                props.onShowSavePreset(false);
-                props.onNewPresetName('');
-              }}
-            >
-              Отмена
-            </button>
-          </div>
-        </Show>
+        <button
+          type="button"
+          class="app-transport-bar__toggle"
+          data-testid="transport-bar-toggle"
+          aria-expanded={expanded()}
+          aria-controls="app-transport-bar-body"
+          title={expanded() ? 'Свернуть панель' : 'Развернуть панель (BPM/свинг)'}
+          onClick={toggleExpanded}
+        >
+          <span class="app-transport-bar__toggle-icon" aria-hidden="true">
+            {expanded() ? '▲' : '▼'}
+          </span>
+          <span class="app-transport-bar__toggle-label">
+            {expanded() ? 'Свернуть' : 'BPM'}
+          </span>
+        </button>
+      </div>
 
+      <div
+        id="app-transport-bar-body"
+        class="app-transport-bar__body"
+        data-testid="transport-bar-body"
+      >
         <div class="transport-panel" data-testid="transport-panel">
+          <div class="bpm-indicator bpm-indicator--in-body" data-testid="bpm-indicator" title="60 × cps × 2 при 4/4">
+            <strong>{formatBpm(localCps())}</strong>
+            <span class="bpm-suffix">BPM</span>
+          </div>
+
           <div class="transport-controls">
             <label class="cps-control">
               <span class="cps-label">cps</span>
@@ -308,6 +276,7 @@ export function TransportBar(props: TransportBarProps): JSX.Element {
                 onInput={onSliderInput}
                 title="cycles per second (0.05 — 2.0)"
                 aria-label="CPS"
+                data-testid="cps-slider"
               />
               <span class="cps-readout">{formatCps(localCps())}</span>
             </label>
@@ -361,6 +330,36 @@ export function TransportBar(props: TransportBarProps): JSX.Element {
             <div class="playhead" ref={(el) => (playheadEl = el)} style={{ '--playhead-x': '0%' }} />
           </div>
         </div>
+
+        <Show when={props.showSavePreset}>
+          <div class="save-preset-bar">
+            <input
+              type="text"
+              placeholder="Имя пресета"
+              value={props.newPresetName}
+              onInput={(e) => props.onNewPresetName(e.currentTarget.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') props.onSavePreset(); }}
+            />
+            <button
+              type="button"
+              class="ctrl-btn ctrl-btn-primary"
+              onClick={props.onSavePreset}
+              disabled={!props.newPresetName.trim()}
+            >
+              OK
+            </button>
+            <button
+              type="button"
+              class="ctrl-btn"
+              onClick={() => {
+                props.onShowSavePreset(false);
+                props.onNewPresetName('');
+              }}
+            >
+              Отмена
+            </button>
+          </div>
+        </Show>
       </div>
     </div>
   );
