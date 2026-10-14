@@ -72,7 +72,7 @@ const make = (deps: LiveLLMClientDeps): Context.Tag.Service<typeof LLMClient> =>
           try: () => response.text(),
           catch: () => '',
         }).pipe(Effect.catchAll(() => Effect.succeed('')));
-        const errMsg = `LLM HTTP ${response.status}: ${text.slice(0, 500)}`;
+        const errMsg = classifyLLMHttpError(response.status, text);
         console.error('[llm] ✗ HTTP error', errMsg);
         return yield* Effect.fail(new Error(errMsg));
       }
@@ -169,6 +169,91 @@ const make = (deps: LiveLLMClientDeps): Context.Tag.Service<typeof LLMClient> =>
 });
 
 /**
+ * Translate an HTTP error response from LiteLLM into a single actionable
+ * message. We special-case the failure modes we know about so the UI can
+ * give a useful hint instead of a raw 400 JSON dump.
+ *
+ * - 400 {"error":{"type":"no_db_connection",...}} → the bundle's
+ *   VITE_LLM_PROXY_KEY does not match LITELLM_MASTER_KEY on angara-1
+ *   (or the proxy is starting up and both master_key and DB are unset).
+ *   We surface this explicitly because it is silent: the SPA builds
+ *   and deploys, the request reaches the proxy, but auth fails because
+ *   the key is wrong. See math/wavecode-llm-public-auth-key-mismatch
+ *   for the post-mortem.
+ * - 401 "Malformed API Key" → key doesn't start with "sk-" (rare; we
+ *   already log a warning at boot in this case).
+ * - 401 "Authentication Error" → key rejected (rotated? wrong?).
+ * - 503 {"error":"auth_not_ready"} → our fail-closed patch on the
+ *   proxy is doing its job (master_key+DB both unset). The proxy is
+ *   starting up; retry.
+ * - everything else: include the raw body (truncated) so the user can
+ *   see the upstream error.
+ */
+const classifyLLMHttpError = (status: number, body: string): string => {
+  let parsed: { error?: { type?: string; message?: string; code?: number | string } } = {};
+  try {
+    parsed = JSON.parse(body) as typeof parsed;
+  } catch {
+    /* not JSON — fall through to generic */
+  }
+  const errType = parsed.error?.type;
+  const errMsg = parsed.error?.message ?? '';
+
+  if (status === 400 && errType === 'no_db_connection') {
+    return (
+      `LLM HTTP 400: ${errMsg || 'no_db_connection'}\n` +
+      '\n' +
+      'Public LiteLLM (llm-proxy-public.service) отклонил ключ: api_key != master_key, ' +
+      'поэтому LiteLLM ищет virtual key в Prisma DB, но Prisma отключён в ' +
+      'services/llm-proxy.nix (Prisma не работает в Nix store).\n' +
+      '\n' +
+      'В bundle (ui/.env.local) лежит ключ, который НЕ совпадает с ' +
+      'LITELLM_MASTER_KEY на angara-1. Скопируй значение с сервера и обнови .env.local:\n' +
+      '  sudo grep ^LITELLM_MASTER_KEY /etc/secrets/llm-proxy/master.key\n' +
+      '  cp ui/.env.example ui/.env.local   # if missing\n' +
+      '  $EDITOR ui/.env.local             # paste the value, include the sk-litellm- prefix\n' +
+      '  ./bin/deploy.sh\n' +
+      '\n' +
+      'bin/check-llm-key.sh (запускается из deploy.sh) теперь ловит эту ситуацию ДО pnpm build.'
+    );
+  }
+
+  if (status === 503 && errType === undefined && /auth_not_ready/.test(body)) {
+    return (
+      `LLM HTTP 503: proxy is starting up (auth_not_ready)\n` +
+      '\n' +
+      'LiteLLM public instance временно без auth backend (master_key и DB оба не сконфигурены — ' +
+      'это бывает во время config reload). Прокси fail-closed возвращает 503 вместо того, ' +
+      'чтобы пускать всех как PROXY_ADMIN. Подожди 5-10 секунд и retry.'
+    );
+  }
+
+  if (status === 401) {
+    if (/malformed/i.test(errMsg) || /malformed/i.test(body)) {
+      return (
+        `LLM HTTP 401: Malformed API Key. Ключ должен начинаться с 'sk-' ` +
+        `(например, 'sk-litellm-...'). Проверь ui/.env.local VITE_LLM_PROXY_KEY.`
+      );
+    }
+    return (
+      `LLM HTTP 401: Authentication Error. Ключ отклонён прокси. ` +
+      `Возможно, LITELLM_MASTER_KEY на angara-1 был rotated. ` +
+      `Проверь bin/check-llm-key.sh.`
+    );
+  }
+
+  if (status === 429) {
+    return `LLM HTTP 429: rate-limited by proxy. Подожди и retry.`;
+  }
+
+  if (status >= 500) {
+    return `LLM HTTP ${status} (upstream/server error): ${errMsg || body.slice(0, 300)}`;
+  }
+
+  return `LLM HTTP ${status}: ${body.slice(0, 500)}`;
+};
+
+/**
  * Translate the `fetch()` failure into an `Error` whose `message` tells the
  * operator what is wrong without a packet capture.
  *
@@ -223,7 +308,8 @@ export const makeLiveLLMClient = (
     console.warn(
       `[llm] VITE_LLM_PROXY_KEY does not start with 'sk-' — LiteLLM ` +
       `expects the 'sk-litellm-…' format. If you see "Malformed API ` +
-      `Key" 401s, prepend 'sk-litellm-' to the key.`,
+      `Key" 401s, prepend 'sk-litellm-' to the key.\n` +
+      `Run bin/check-llm-key.sh before pnpm build to catch this at deploy time.`,
     );
   }
 

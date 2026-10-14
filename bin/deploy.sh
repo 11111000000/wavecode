@@ -48,15 +48,9 @@ if [ ! -f .env.local ]; then
   exit 1
 fi
 
-# 2. Verify key is set.
-if grep -q "REPLACE-ME" .env.local; then
-  echo "ERROR: VITE_LLM_PROXY_KEY still has placeholder. Run:"
-  echo "  MASTER_KEY=\$(grep LITELLM_MASTER_KEY /etc/secrets/llm-proxy/master.key | cut -d= -f2)"
-  echo "  curl -X POST http://127.0.0.1:11436/key/generate -H \"Authorization: Bearer \$MASTER_KEY\" \\"
-  echo "    -H 'Content-Type: application/json' \\"
-  echo "    -d '{\"key_alias\":\"wavecode-browser\",\"models\":[\"smart\",\"fast\"],\"duration\":\"365d\"}'"
-  exit 1
-fi
+# 2. Verify key matches server's LITELLM_MASTER_KEY (or warn if running
+#    outside angara-1 and we can't read /etc/secrets/llm-proxy/master.key).
+"$UI_DIR/../bin/check-llm-key.sh"
 
 # 3. Install if needed.
 if [ ! -d node_modules ]; then
