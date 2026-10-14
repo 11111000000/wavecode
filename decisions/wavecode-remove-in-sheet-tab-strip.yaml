@@ -1,0 +1,188 @@
+---
+schema: math-coding/3.3
+id: wavecode-remove-in-sheet-tab-strip
+revision: 1
+state: draft
+body_sha: "sha256:9c7f749319767b0565f89195543fb3da644151f59e96f1f8cf52be2ca13f309b"
+yaml_sha: "sha256:9c7f749319767b0565f89195543fb3da644151f59e96f1f8cf52be2ca13f309b"
+
+intent:|
+  Удалить дублирующую полосу табов внутри BottomSheet (Mixer/AI/Status/
+  Step/Piano) — это вторая навигация рядом с основной (TabBar внизу
+  экрана), и на маленьких вьюпортах (≤720px) верхняя полоса
+  визуально теснит заголовок панели и подсветку активного таба
+  делает за пользователя. Источник истины для выбора инструмента —
+  TabBar; in-sheet strip убирается, оставляем только `<h2 title>`.
+commitment: |
+  В BottomSheet header остаются: `<h2 class="wc-sheet__title">`,
+  опциональный `<span class="wc-sheet__subtitle">`, и actions
+  (expand/close). Удалены:
+  - `<SheetTabs />` рендер внутри `<Show when={isMobileViewport()}>`;
+  - компонент `ui/src/presentation/components/SheetTabs.tsx`;
+  - тесты `SheetTabs.test.tsx`;
+  - CSS `.wc-sheet__tabs`, `.wc-sheet__tab`,
+  `.wc-sheet__tab-label` в `ui/src/styles/sheets.css`.
+  Никаких изменений в `uiState.ts` — `setTab` уже работает
+  корректно при sheet-open (открывает sheet нужного kind-а через
+  `openKindSheet`). `data-content-key` на `.wc-sheet__body` сохраняется
+  — fade-in анимация при tab-переключении через TabBar работает
+  без изменений.
+  TabBar (нижний) остаётся единственной primary-nav. Это согласуется
+  с пакетом `wavecode-bottom-bar-unified`: «6 табов = score, step,
+  piano, mixer, ai, status. BottomToolstrip удаляется… дизайн-интент
+  — всё в один нижний бар».
+  Это инверсия части `wavecode-mobile-split-pane` (которая ввела
+  in-sheet strip как secondary-nav); общий split-pane принцип
+  (draggable BottomSheet с snap-точками) остаётся нетронутым.
+counterexample: |
+  The strongest objection to this decision is captured in the `antithesis` field above: (1) «Нужен быстрый доступ к другому инструменту, не закрывая
+antithesis: |
+  (1) «Нужен быстрый доступ к другому инструменту, не закрывая
+  sheet». Возражение: пользователь может тапнуть любой таб в
+  TabBar — он автоматически переключит открытый sheet (setTab
+  уже синхронизирует snap-ы через `openKindSheet` /
+  `snapsByKind`). Дополнительный клик = 0, sheet переоткрывать
+  не нужно.
+  (2) «UX с двумя навигациями — это GarageBand-паттерн, пользователь
+  привык». Возражение: на GarageBand in-sheet strip показывает
+  controls, а не альтернативную навигацию (там это «варианты
+  звучания пиано»). У нас все 5 кнопок — это полная параллель
+  TabBar. Если когда-то понадобится «варианты внутри» (паттерн
+  GarageBand) — добавим; сейчас это не оно, это просто дубль.
+  (3) «Лучше скрыть через CSS, чем удалять компонент —
+  обратимость». Возражение: компонент 70 строк + тесты 127 строк
+  + CSS 47 строк — мёртвый код, который никто не вызовет. Спрятать
+  = оставить регрессионную поверхность (правки тестов/типа, ревью
+  при поиске кода). Удаляем чисто, в witness волны
+  `wavecode-mobile-split-pane` остаётся как история, откат — git
+  revert одного коммита.
+  (4) «А если mobile landscape с узкой высотой — TabBar режется».
+  Возражение: TabBar fixed внизу viewport, не зависит от sheet.
+  Landscape даёт больше вертикального места; предыдущие пакеты
+  (`wavecode-modern-mobile-redesign`, `wavecode-mobile-compact`)
+  уже сократили бар до 6 табов по 60px. На 360×640 горизонтально
+  — все 6 табов видны.
+  В BottomSheet header остаются: `<h2 class="wc-sheet__title">`,
+  опциональный `<span class="wc-sheet__subtitle">`, и actions
+  (expand/close). Удалены:
+  - `<SheetTabs />` рендер внутри `<Show when={isMobileViewport()}>`;
+  - компонент `ui/src/presentation/components/SheetTabs.tsx`;
+  - тесты `SheetTabs.test.tsx`;
+  - CSS `.wc-sheet__tabs`, `.wc-sheet__tab`,
+  `.wc-sheet__tab-label` в `ui/src/styles/sheets.css`.
+  Никаких изменений в `uiState.ts` — `setTab` уже работает
+  корректно при sheet-open (открывает sheet нужного kind-а через
+  `openKindSheet`). `data-content-key` на `.wc-sheet__body` сохраняется
+  — fade-in анимация при tab-переключении через TabBar работает
+  без изменений.
+  TabBar (нижний) остаётся единственной primary-nav. Это согласуется
+  с пакетом `wavecode-bottom-bar-unified`: «6 табов = score, step,
+  piano, mixer, ai, status. BottomToolstrip удаляется… дизайн-интент
+  — всё в один нижний бар».
+  Это инверсия части `wavecode-mobile-split-pane` (которая ввела
+  in-sheet strip как secondary-nav); общий split-pane принцип
+  (draggable BottomSheet с snap-точками) остаётся нетронутым.
+counterexample: |
+  The strongest objection to this decision is captured in the `antithesis` field above: (1) «Нужен быстрый доступ к другому инструменту, не закрывая
+antithesis: |
+  (1) «Нужен быстрый доступ к другому инструменту, не закрывая
+  sheet». Возражение: пользователь может тапнуть любой таб в
+  TabBar — он автоматически переключит открытый sheet (setTab
+  уже синхронизирует snap-ы через `openKindSheet` /
+  `snapsByKind`). Дополнительный клик = 0, sheet переоткрывать
+  не нужно.
+  (2) «UX с двумя навигациями — это GarageBand-паттерн, пользователь
+  привык». Возражение: на GarageBand in-sheet strip показывает
+  controls, а не альтернативную навигацию (там это «варианты
+  звучания пиано»). У нас все 5 кнопок — это полная параллель
+  TabBar. Если когда-то понадобится «варианты внутри» (паттерн
+  GarageBand) — добавим; сейчас это не оно, это просто дубль.
+  (3) «Лучше скрыть через CSS, чем удалять компонент —
+  обратимость». Возражение: компонент 70 строк + тесты 127 строк
+  + CSS 47 строк — мёртвый код, который никто не вызовет. Спрятать
+  = оставить регрессионную поверхность (правки тестов/типа, ревью
+  при поиске кода). Удаляем чисто, в witness волны
+  `wavecode-mobile-split-pane` остаётся как история, откат — git
+  revert одного коммита.
+  (4) «А если mobile landscape с узкой высотой — TabBar режется».
+  Возражение: TabBar fixed внизу viewport, не зависит от sheet.
+  Landscape даёт больше вертикального места; предыдущие пакеты
+  (`wavecode-modern-mobile-redesign`, `wavecode-mobile-compact`)
+  уже сократили бар до 6 табов по 60px. На 360×640 горизонтально
+  — все 6 табов видны.
+axiom_link:
+  - A1
+scope:
+  paths: []
+outcomes:
+  - id: wavecode-remove-in-sheet-tab-strip-outcome
+    statement: |
+      Удалить дублирующую полосу табов внутри BottomSheet (Mixer/AI/Status/
+      Step/Piano) — это вторая навигация рядом с основной (TabBar внизу
+      экрана), и на маленьких вьюпортах (≤720px) верхняя полоса
+      визуально теснит заголовок панели и подсветку активного таба
+      делает за пользователя.
+obligations:
+  - id: wavecode-remove-in-sheet-tab-strip-kernel-validates
+    claim: |
+      The migrated decision file is structurally valid under the math-coding 3.3 schema; `mathc validate` exits 0 for `decisions/<id>.yaml` at HEAD.
+    acceptance:
+      all:
+        - verifier: "mathc validate"
+          result: pass
+  - id: wavecode-remove-in-sheet-tab-strip-witness-from-v1
+    claim: |
+      The original v1.0 packet applied on the recorded date in its `witness` file; this migration preserves that evidence as an `attestations/<id>-evidence.json` file.
+    acceptance:
+      all:
+        - verifier: "attestation-store-has-subject"
+          result: pass
+assumptions:
+  - id: wavecode-remove-in-sheet-tab-strip-assumption-1
+    state: proven
+    statement: |
+      "In-sheet strip дублирует TabBar: оба вызывают Evidence: "BottomSheet.tsx:294 (`onClick={() => setTab(tab.id)}`)
+    owner: human:operator
+  - id: wavecode-remove-in-sheet-tab-strip-assumption-2
+    state: proven
+    statement: |
+      "На текущем mobile-вьюпорте (≤720px) in-sheet strip Evidence: "BottomSheet.tsx:293-295 — обёрнут в
+    owner: human:operator
+  - id: wavecode-remove-in-sheet-tab-strip-assumption-3
+    state: proven
+    statement: |
+      "`setTab` уже синхронизирует active sheet с Evidence: "uiState.ts + packet wavecode-mobile-tabbed-sheet-routing:
+    owner: human:operator
+  - id: wavecode-remove-in-sheet-tab-strip-assumption-4
+    state: proven
+    statement: |
+      "SheetTabs — единственный caller-сайт, кроме теста" Evidence: "`rg -n 'SheetTabs\\b' ui/src` показывает только
+    owner: human:operator
+  - id: wavecode-remove-in-sheet-tab-strip-assumption-5
+    state: proven
+    statement: |
+      "Контракт TabBar как primary-nav зафиксирован в Evidence: "math/wavecode-bottom-bar-unified/packet.md —
+    owner: human:operator
+  - id: wavecode-remove-in-sheet-tab-strip-assumption-6
+    state: assumed
+    statement: |
+      "Существующая визуальная проблема — TabBar (фикс- Evidence: "скриншот автора 2026-10-14 (upload_c5f587cd-9bfb):
+    owner: human:operator
+  - id: wavecode-remove-in-sheet-tab-strip-assumption-7
+    state: proven
+    statement: |
+      "Заголовок `<h2 class='wc-sheet__title'>` сохранится — Evidence: "BottomSheet.tsx:285 (`<h2 class='wc-sheet__title'>
+    owner: human:operator
+  - id: wavecode-remove-in-sheet-tab-strip-assumption-8
+    state: assumed
+    statement: |
+      "Mobile-лэндскейп (горизонтальный viewport) не Evidence: "TabBar фикс-bottom, не зависит от sheet; in-sheet
+    owner: human:operator
+risk:
+  declared_triggers:
+    - v1-to-v3-migration-loss
+  owner: human:operator
+relations:
+  addresses:
+    - wavecode-bootstrap-math-coding-3.3@1
+---

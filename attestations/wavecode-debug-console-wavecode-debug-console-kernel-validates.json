@@ -1,0 +1,19 @@
+{
+  "schema": "math-coding/attestation-3.0-alpha",
+  "kind": "attestation",
+  "subject": {
+    "decision": "wavecode-debug-console",
+    "obligation": "wavecode-debug-console-kernel-validates",
+    "candidate_tree": "HEAD",
+    "materials_digest": ""
+  },
+  "kind_": "build",
+  "producer": {
+    "identity": "ci:migration"
+  },
+  "environment_class_level": 0,
+  "environment_class_label": "dev",
+  "result": "pass",
+  "issued_at": "2026-10-14T00:00:00Z",
+  "id": "sha256:f98530745740e263400a5008f5338c05b664fa3acfd7fbc308ef362f234d1dc6"
+}

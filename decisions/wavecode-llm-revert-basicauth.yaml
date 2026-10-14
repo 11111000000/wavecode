@@ -1,0 +1,149 @@
+---
+schema: math-coding/3.3
+id: wavecode-llm-revert-basicauth
+revision: 1
+state: active
+body_sha: "sha256:ad308247406b75133d86f0e96265b991fcfb72b9f128ed1248f0c46315475501"
+yaml_sha: "sha256:ad308247406b75133d86f0e96265b991fcfb72b9f128ed1248f0c46315475501"
+
+intent:|
+  LLM-эндпоинт `llm.kosov.online` (LiteLLM public listener, 11436)
+  идёт **без** basic-auth на Caddy-уровне: tier="public" (НЕ
+  "public-auth"). Авторизация — двухуровневая:
+  1. CORS allowlist на LiteLLM (FastAPI CORSMiddleware, exact-string).
+  Каждый фронт получает свой origin в списке, чтобы браузер
+  пустил fetch с credentials/no-credentials.
+  2. Per-app Bearer-ключ (LiteLLM `Authorization: Bearer sk-litellm-…`).
+  Один ключ на приложение, ревокабельный, scoped.
+  Всё. Basic-auth, API-key на query, mTLS — НЕ добавляются. Caddy видит
+  `llm` vhost как `tier="public"` и пропускает bearer-only клиентов
+  (Geopulse FastAPI, Genium-clean Lab/TestBench, wavecode AIEditPanel).
+commitment: |
+  Tier=public обратно. ADR (зафиксировать в KB AngaraConfig):
+  authorization model = (CORS allowlist) × (per-app Bearer key)
+  — единственная защита. Threat model: реальная угроза — exfiltration
+  key из bundle; единственная защита от неё — короткоживущий ключ +
+  быстрая ротация (per-app key через `/key/generate` когда починим
+  Prisma/Postgres backend в `services/llm-proxy.nix`), а не
+  basic-auth поверх.
+counterexample: |
+  The strongest objection to this decision is captured in the `antithesis` field above: (1) «basic-auth = defense-in-depth от key exfiltration из JS bundle».
+antithesis: |
+  (1) «basic-auth = defense-in-depth от key exfiltration из JS bundle».
+  Возражение: если атакующий на любом `*.kosov.online` — у него
+  уже есть bundle (CORS не пустит его чужой Origin → preflight
+  fail). Если атакующий **вне** kosov-online — CORS его режет
+  до basic-auth. basic-auth ничего не добавляет, кроме трения
+  для существующих клиентов.
+
+  (2) «basic-auth прячет 11436 от любопытных сканеров портов и
+  единую точку входа». Возражение: 11436 на 127.0.0.1, фаервол
+  закрыт → сканеры не дотянутся. Caddy публичный listener
+  единственная точка входа (201.24.118.191:443), и она
+  публична by design.
+
+  (3) «тогда ограничь public listener только мы с Caddy-vhost на
+  IP allowlist». Возражение: добавляет perimeter filtering,
+  но не решает root cause — broken Genium/Geopulse need fix,
+  а не ещё один слой.
+
+  Предыдущий (2026-10-07) эксперимент tier="public-auth" сломал
+  всех bearer-only клиентов: Caddy basic_auth gate навешивается
+  через `mkTailnetHandler` даже на tailnet (100.81.163.63) и
+  localhost (127.0.0.1:443) listener, не только public. Это side
+  effect kinetic services subtree, не спец-фича.
+  Tier=public обратно. ADR (зафиксировать в KB AngaraConfig):
+  authorization model = (CORS allowlist) × (per-app Bearer key)
+  — единственная защита. Threat model: реальная угроза — exfiltration
+  key из bundle; единственная защита от неё — короткоживущий ключ +
+  быстрая ротация (per-app key через `/key/generate` когда починим
+  Prisma/Postgres backend в `services/llm-proxy.nix`), а не
+  basic-auth поверх.
+counterexample: |
+  The strongest objection to this decision is captured in the `antithesis` field above: (1) «basic-auth = defense-in-depth от key exfiltration из JS bundle».
+antithesis: |
+  (1) «basic-auth = defense-in-depth от key exfiltration из JS bundle».
+  Возражение: если атакующий на любом `*.kosov.online` — у него
+  уже есть bundle (CORS не пустит его чужой Origin → preflight
+  fail). Если атакующий **вне** kosov-online — CORS его режет
+  до basic-auth. basic-auth ничего не добавляет, кроме трения
+  для существующих клиентов.
+
+  (2) «basic-auth прячет 11436 от любопытных сканеров портов и
+  единую точку входа». Возражение: 11436 на 127.0.0.1, фаервол
+  закрыт → сканеры не дотянутся. Caddy публичный listener
+  единственная точка входа (201.24.118.191:443), и она
+  публична by design.
+
+  (3) «тогда ограничь public listener только мы с Caddy-vhost на
+  IP allowlist». Возражение: добавляет perimeter filtering,
+  но не решает root cause — broken Genium/Geopulse need fix,
+  а не ещё один слой.
+
+  Предыдущий (2026-10-07) эксперимент tier="public-auth" сломал
+  всех bearer-only клиентов: Caddy basic_auth gate навешивается
+  через `mkTailnetHandler` даже на tailnet (100.81.163.63) и
+  localhost (127.0.0.1:443) listener, не только public. Это side
+  effect kinetic services subtree, не спец-фича.
+axiom_link:
+  - A5
+scope:
+  paths: []
+outcomes:
+  - id: wavecode-llm-revert-basicauth-outcome
+    statement: |
+      LLM-эндпоинт `llm.
+obligations:
+  - id: wavecode-llm-revert-basicauth-kernel-validates
+    claim: |
+      The migrated decision file is structurally valid under the math-coding 3.3 schema; `mathc validate` exits 0 for `decisions/<id>.yaml` at HEAD.
+    acceptance:
+      all:
+        - verifier: "mathc validate"
+          result: pass
+  - id: wavecode-llm-revert-basicauth-witness-from-v1
+    claim: |
+      The original v1.0 packet applied on the recorded date in its `witness` file; this migration preserves that evidence as an `attestations/<id>-evidence.json` file.
+    acceptance:
+      all:
+        - verifier: "attestation-store-has-subject"
+          result: pass
+assumptions:
+  - id: wavecode-llm-revert-basicauth-assumption-1
+    state: proven
+    statement: |
+      "Caddy basic_auth gate в kinetic применяется ко ВСЕМ Evidence: "AngaraConfig/services/kosov-reverse-proxy/default.nix:133-141
+    owner: human:operator
+  - id: wavecode-llm-revert-basicauth-assumption-2
+    state: proven
+    statement: |
+      "С `2026-10-07` по `2026-10-09` Genium-clean Lab, Evidence: "Журнал curl в этом сеансе до revert'а + код клиентов:
+    owner: human:operator
+  - id: wavecode-llm-revert-basicauth-assumption-3
+    state: proven
+    statement: |
+      "Тест `POST http://127.0.0.1:11436/v1/chat/completions` Evidence: "curl прямо к `:11436` минуя Caddy — LiteLLM
+    owner: human:operator
+  - id: wavecode-llm-revert-basicauth-assumption-4
+    state: proven
+    statement: |
+      "После revert + rebuild: тот же `POST` через Caddy с Evidence: "curl в этом сеансе после revert (08:52:13Z POST,
+    owner: human:operator
+  - id: wavecode-llm-revert-basicauth-assumption-5
+    state: proven
+    statement: |
+      "Side-effect bug от `feat(tree-stend): add SSR Evidence: "Paseo commit f6c7a1b diff в `configuration.nix:862-867`;
+    owner: human:operator
+  - id: wavecode-llm-revert-basicauth-assumption-6
+    state: proven
+    statement: |
+      "Сlosure между basic-auth gate и current threat Evidence: "Логика синтеза: basic-auth не достигает цели →
+    owner: human:operator
+risk:
+  declared_triggers:
+    - v1-to-v3-migration-loss
+  owner: human:operator
+relations:
+  addresses:
+    - wavecode-bootstrap-math-coding-3.3@1
+---

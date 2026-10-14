@@ -1,0 +1,98 @@
+---
+schema: math-coding/3.3
+id: wavecode-sample-pack
+revision: 1
+state: active
+body_sha: "sha256:31058164be34e27e40be6b61a7553d5b0f800303b1e2adcb0a20f7f8746cb70b"
+yaml_sha: "sha256:31058164be34e27e40be6b61a7553d5b0f800303b1e2adcb0a20f7f8746cb70b"
+
+intent:|
+  `public/samples/piano/` — 10 MP3 семплов Salamander Grand Piano v3
+  (CC0 / public domain, ~720KB): A1, A2, A3, A4, C2, C3, C4, C5, C6, C7.
+  Каждый ~50–110KB, mono/stereo 44.1kHz. Полный диапазон A1..C7
+  покрывает 6 октав — от бас-нот до колокольчиков. Загрузка ленивая:
+  `src/infrastructure/audio/PianoSampleLoader.ts` загружает семплы
+  через Strudel `samples({ piano: './samples/piano/' })` при первом
+  использовании (`s("piano:a3")` или подобное).
+  + Synth-808 drum pack: 4 высококачественных 808-style drum пресета
+  (kick, snare, hat, clap) реализованы в `domain/presets.ts` через
+  pure Strudel synthesis — additive sine sweep + envelope для kick,
+  noise+sine+envelope для snare, hpf noise для hat. Никаких .wav —
+  sound generated at runtime.
+  + 2 новых пресета в `BUILTIN_PRESETS`:
+  - 'piano-ballad' — Salamander-piano в стиле Billy Joel
+  - '808-classic' — kick + snare + hat с synth-808
+commitment: |
+  Piano samples (CC0, ~720KB) + Strudel `samples()` loader + 2 demo
+  presets. Synth-808 как bonus. Total bundle impact: +200KB gzip.
+  PWA service worker precaches 1.5MB total — sample + JS + CSS всё
+  кешируется при install. На mobile: progressive download после
+  service worker install (workbox background).
+counterexample: |
+  The strongest objection to this decision is captured in the `antithesis` field above: (1) «Salamander A1..C7 = 10 семплов, между ними будут артефакты
+antithesis: |
+  (1) «Salamander A1..C7 = 10 семплов, между ними будут артефакты
+  при pitch-shift на 2+ полутона». Возражение: Strudel делает
+  pitch-shift на 12-полутоновую раскладку через Tonal/Tone.js —
+  небольшой артефакт приемлем для sketch-режима. (2) «10 семплов
+  × 80KB = 800KB bundle — слишком много». Решение: 720KB compressed
+  gzip ≈ 200KB; PWA service worker кеширует — second load instant.
+  (3) «Synth-808 — не настоящий 808, у него нет аналогового характера».
+  Возражение: это sample-quality ЭМУЛЯЦИЯ, не копия. Для sketches
+  и live-coding — приемлемо. Реальный 808-семпл pack можно добавить
+  позже (если найдём CC0-источник). (4) «Лицензии — нужен
+  redistribution OK». Salamander = CC0 = full redistribution OK.
+  Документировано в `public/samples/piano/LICENSE.txt`.
+  Piano samples (CC0, ~720KB) + Strudel `samples()` loader + 2 demo
+  presets. Synth-808 как bonus. Total bundle impact: +200KB gzip.
+  PWA service worker precaches 1.5MB total — sample + JS + CSS всё
+  кешируется при install. На mobile: progressive download после
+  service worker install (workbox background).
+counterexample: |
+  The strongest objection to this decision is captured in the `antithesis` field above: (1) «Salamander A1..C7 = 10 семплов, между ними будут артефакты
+antithesis: |
+  (1) «Salamander A1..C7 = 10 семплов, между ними будут артефакты
+  при pitch-shift на 2+ полутона». Возражение: Strudel делает
+  pitch-shift на 12-полутоновую раскладку через Tonal/Tone.js —
+  небольшой артефакт приемлем для sketch-режима. (2) «10 семплов
+  × 80KB = 800KB bundle — слишком много». Решение: 720KB compressed
+  gzip ≈ 200KB; PWA service worker кеширует — second load instant.
+  (3) «Synth-808 — не настоящий 808, у него нет аналогового характера».
+  Возражение: это sample-quality ЭМУЛЯЦИЯ, не копия. Для sketches
+  и live-coding — приемлемо. Реальный 808-семпл pack можно добавить
+  позже (если найдём CC0-источник). (4) «Лицензии — нужен
+  redistribution OK». Salamander = CC0 = full redistribution OK.
+  Документировано в `public/samples/piano/LICENSE.txt`.
+axiom_link:
+  - A1
+scope:
+  paths: []
+outcomes:
+  - id: wavecode-sample-pack-outcome
+    statement: |
+      `public/samples/piano/` — 10 MP3 семплов Salamander Grand Piano v3
+      (CC0 / public domain, ~720KB): A1, A2, A3, A4, C2, C3, C4, C5, C6, C7.
+obligations:
+  - id: wavecode-sample-pack-kernel-validates
+    claim: |
+      The migrated decision file is structurally valid under the math-coding 3.3 schema; `mathc validate` exits 0 for `decisions/<id>.yaml` at HEAD.
+    acceptance:
+      all:
+        - verifier: "mathc validate"
+          result: pass
+  - id: wavecode-sample-pack-witness-from-v1
+    claim: |
+      The original v1.0 packet applied on the recorded date in its `witness` file; this migration preserves that evidence as an `attestations/<id>-evidence.json` file.
+    acceptance:
+      all:
+        - verifier: "attestation-store-has-subject"
+          result: pass
+assumptions: []
+risk:
+  declared_triggers:
+    - v1-to-v3-migration-loss
+  owner: human:operator
+relations:
+  addresses:
+    - wavecode-bootstrap-math-coding-3.3@1
+---

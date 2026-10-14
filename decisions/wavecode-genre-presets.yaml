@@ -1,0 +1,105 @@
+---
+schema: math-coding/3.3
+id: wavecode-genre-presets
+revision: 1
+state: active
+body_sha: "sha256:c53eccc2091e2d92009b7ea15535042c2521d542800f1d026e5b06dc6641b819"
+yaml_sha: "sha256:c53eccc2091e2d92009b7ea15535042c2521d542800f1d026e5b06dc6641b819"
+
+intent:|
+  `domain/presets.ts` расширяется с +8 жанровыми пресетами, всего 16:
+  rock/pop/folk уже есть (8 шт.), добавляем:
+  - **EDM 4-on-floor**: kick on every beat + supersaw bass + pluck lead + white noise hat
+  - **Hip-hop boom-bap**: swing 16ths, hard kick 2&4, snare 3, vinyl crackle
+  - **Jazz ii-V-I**: walking bass + comping chords + brushed snare
+  - **Ambient pad**: long-attack sine drone + slow LFO + sparse bells
+  - **Latin / Bossa Nova**: syncopated clave + nylon-string comping + shaker
+  - **Trap / modern hip-hop**: 808 sub + hi-hat rolls + sparse lead
+  - **Reggaeton**: dembow rhythm + detuned synth bass + plucks
+  - **IDM glitch**: polymetric stacks (5/4 + 7/8) + bit-reduced samples
+  - **Dreampop / shoegaze**: 16th-note strum + chorus-washed pad + soft vocal
+  - **Step-Grid demo**: готовый 8-step pattern, чтобы при первом нажатии
+  `🎹 Step` была видна готовая сетка (rock-бит bd 0,2 / sd 1,3 / hh each).
+  Каждый пресет = `stack(...)` с явными ролями (bass / chord / lead / drums),
+  короткий (≤10 строк), self-contained (без `.slow(N)`), играет
+  на cps=0.5 = 1 cycle / 2 сек. Комментарий в первой строке — жанр
+  и ритмический рисунок.
+commitment: |
+  10 новых пресетов в `BUILTIN_PRESETS` (включая step-grid demo).
+  Расширяем `presentation/state/presetsStore.allPresets()` — порядок
+  сохраняется, custom-пресеты идут в конце (existing behavior). UI
+  в App.tsx использует `<For each={allPresets()...}>` в `<optgroup>`,
+  existing layout с лейблами `Встроенные` + `Мои`. Дополнительных
+  изменений UI не нужно — старший optgroup label становится общим
+  (`Встроенные` уже включает все builtin'ы). Минимально инвазивный
+  patch, оставляет custom-preset UX идентичным.
+counterexample: |
+  The strongest objection to this decision is captured in the `antithesis` field above: (1) «Профи не пользуются пресетами, они играют live-coding с нуля».
+antithesis: |
+  (1) «Профи не пользуются пресетами, они играют live-coding с нуля».
+  Возражение: пресет = стартовая точка для модификации. Профи
+  сэмплируют звук пресета, меняют 1-2 параметра → готово за 30 сек
+  вместо 5 мин. (2) «Профи хотят ААА-качество, не синт Strudel».
+  Возражение: всё Phase 5 — про доступный live-coding. Эти пресеты
+  дают «вкус жанра» за 0 строк кода. (3) Strudel поддерживает
+  GM drums, supersaw, fm, но не wavetable-качество. Решение: для
+  ambient/jazz используем pure-tone (sine/triangle) с envelope —
+  качество лучше дефолтных saw. (4) Слишком много пресетов = UI
+  перегружен. Решение: dropdown сгруппирован по жанрам через
+  `<optgroup>` в `presentation/state/presetsStore`/App.tsx —
+  existing `<select>` уже в `.app-preset-row`.
+  10 новых пресетов в `BUILTIN_PRESETS` (включая step-grid demo).
+  Расширяем `presentation/state/presetsStore.allPresets()` — порядок
+  сохраняется, custom-пресеты идут в конце (existing behavior). UI
+  в App.tsx использует `<For each={allPresets()...}>` в `<optgroup>`,
+  existing layout с лейблами `Встроенные` + `Мои`. Дополнительных
+  изменений UI не нужно — старший optgroup label становится общим
+  (`Встроенные` уже включает все builtin'ы). Минимально инвазивный
+  patch, оставляет custom-preset UX идентичным.
+counterexample: |
+  The strongest objection to this decision is captured in the `antithesis` field above: (1) «Профи не пользуются пресетами, они играют live-coding с нуля».
+antithesis: |
+  (1) «Профи не пользуются пресетами, они играют live-coding с нуля».
+  Возражение: пресет = стартовая точка для модификации. Профи
+  сэмплируют звук пресета, меняют 1-2 параметра → готово за 30 сек
+  вместо 5 мин. (2) «Профи хотят ААА-качество, не синт Strudel».
+  Возражение: всё Phase 5 — про доступный live-coding. Эти пресеты
+  дают «вкус жанра» за 0 строк кода. (3) Strudel поддерживает
+  GM drums, supersaw, fm, но не wavetable-качество. Решение: для
+  ambient/jazz используем pure-tone (sine/triangle) с envelope —
+  качество лучше дефолтных saw. (4) Слишком много пресетов = UI
+  перегружен. Решение: dropdown сгруппирован по жанрам через
+  `<optgroup>` в `presentation/state/presetsStore`/App.tsx —
+  existing `<select>` уже в `.app-preset-row`.
+axiom_link:
+  - A1
+scope:
+  paths: []
+outcomes:
+  - id: wavecode-genre-presets-outcome
+    statement: |
+      `domain/presets.
+obligations:
+  - id: wavecode-genre-presets-kernel-validates
+    claim: |
+      The migrated decision file is structurally valid under the math-coding 3.3 schema; `mathc validate` exits 0 for `decisions/<id>.yaml` at HEAD.
+    acceptance:
+      all:
+        - verifier: "mathc validate"
+          result: pass
+  - id: wavecode-genre-presets-witness-from-v1
+    claim: |
+      The original v1.0 packet applied on the recorded date in its `witness` file; this migration preserves that evidence as an `attestations/<id>-evidence.json` file.
+    acceptance:
+      all:
+        - verifier: "attestation-store-has-subject"
+          result: pass
+assumptions: []
+risk:
+  declared_triggers:
+    - v1-to-v3-migration-loss
+  owner: human:operator
+relations:
+  addresses:
+    - wavecode-bootstrap-math-coding-3.3@1
+---

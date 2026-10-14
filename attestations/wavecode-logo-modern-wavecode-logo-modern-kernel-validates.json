@@ -1,0 +1,19 @@
+{
+  "schema": "math-coding/attestation-3.0-alpha",
+  "kind": "attestation",
+  "subject": {
+    "decision": "wavecode-logo-modern",
+    "obligation": "wavecode-logo-modern-kernel-validates",
+    "candidate_tree": "HEAD",
+    "materials_digest": ""
+  },
+  "kind_": "build",
+  "producer": {
+    "identity": "ci:migration"
+  },
+  "environment_class_level": 0,
+  "environment_class_label": "dev",
+  "result": "pass",
+  "issued_at": "2026-10-14T00:00:00Z",
+  "id": "sha256:889327d58b16d10d34af23840b4a8721139a7f463152a425ee975e5cbb3a3da1"
+}

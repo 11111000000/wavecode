@@ -1,0 +1,19 @@
+{
+  "schema": "math-coding/attestation-3.0-alpha",
+  "kind": "attestation",
+  "subject": {
+    "decision": "wavecode-step-sequencer",
+    "obligation": "wavecode-step-sequencer-witness-from-v1",
+    "candidate_tree": "HEAD",
+    "materials_digest": ""
+  },
+  "kind_": "review",
+  "producer": {
+    "identity": "human:v1-migration"
+  },
+  "environment_class_level": 2,
+  "environment_class_label": "dev",
+  "result": "pass",
+  "issued_at": "1970-01-01T00:00:00Z",
+  "id": "sha256:f2c6c59248c082867ec88b5292407457e48911acdd58275cee6b747c8ce7f56b"
+}

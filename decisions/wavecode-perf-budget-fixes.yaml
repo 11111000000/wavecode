@@ -1,0 +1,78 @@
+---
+schema: math-coding/3.3
+id: wavecode-perf-budget-fixes
+revision: 1
+state: draft
+body_sha: "sha256:4df9c72f16b975d2046d7a03eba7637065732b97f2dc00b13912e24b2b0fe249"
+yaml_sha: "sha256:4df9c72f16b975d2046d7a03eba7637065732b97f2dc00b13912e24b2b0fe249"
+
+intent:|
+  Performance budget wavecode: 1.4MB JS bundle (CM + strudel + effect)
+  + 60KB CSS, FCP 2.5s+ на throttled 4G. Реализуем 4 fix-а:
+  (a) CSS variables для piano (убирает 14 inline-style объектов),
+  (b) dynamic-import CodeMirrorEditor (lazy при первом score tab),
+  (c) critical CSS inline в head (первые 8KB), остальное async,
+  (d) sample-loader progress indicator (UI feedback для 2.1MB
+  preload). Плюс audit: EditorView dispose на ScorePanel unmount,
+  createRoot dispose на HMR.
+commitment: |
+  4 файла модифицировать:
+counterexample: |
+  The strongest objection to this decision is captured in the `antithesis` field above: (1) «Critical CSS inline — premature без metrics». Возражение:
+antithesis: |
+  (1) «Critical CSS inline — premature без metrics». Возражение:
+  Lighthouse покажет где именно FCP стоит; если не inline —
+  fix не нужен. Решение: сначала lighthouse baseline, ПОТОМ
+  inline если метрика красная.
+  (2) «Lazy CM — UX cost (latency при первом score)». Возражение:
+  latency < 200ms на fast 3G, юзер за это время не успеет
+  заметить; alternative — show skeleton 100ms (T4 visual).
+  (3) «createRoot dispose — overengineering». Возражение:
+  HMR leak в dev, в prod — норм. Conditional `if (import.meta.hot)`
+  = 1 строка, cost = 0.
+  4 файла модифицировать:
+counterexample: |
+  The strongest objection to this decision is captured in the `antithesis` field above: (1) «Critical CSS inline — premature без metrics». Возражение:
+antithesis: |
+  (1) «Critical CSS inline — premature без metrics». Возражение:
+  Lighthouse покажет где именно FCP стоит; если не inline —
+  fix не нужен. Решение: сначала lighthouse baseline, ПОТОМ
+  inline если метрика красная.
+  (2) «Lazy CM — UX cost (latency при первом score)». Возражение:
+  latency < 200ms на fast 3G, юзер за это время не успеет
+  заметить; alternative — show skeleton 100ms (T4 visual).
+  (3) «createRoot dispose — overengineering». Возражение:
+  HMR leak в dev, в prod — норм. Conditional `if (import.meta.hot)`
+  = 1 строка, cost = 0.
+axiom_link:
+  - A1
+scope:
+  paths: []
+outcomes:
+  - id: wavecode-perf-budget-fixes-outcome
+    statement: |
+      Performance budget wavecode: 1.
+obligations:
+  - id: wavecode-perf-budget-fixes-kernel-validates
+    claim: |
+      The migrated decision file is structurally valid under the math-coding 3.3 schema; `mathc validate` exits 0 for `decisions/<id>.yaml` at HEAD.
+    acceptance:
+      all:
+        - verifier: "mathc validate"
+          result: pass
+  - id: wavecode-perf-budget-fixes-witness-from-v1
+    claim: |
+      The original v1.0 packet applied on the recorded date in its `witness` file; this migration preserves that evidence as an `attestations/<id>-evidence.json` file.
+    acceptance:
+      all:
+        - verifier: "attestation-store-has-subject"
+          result: pass
+assumptions: []
+risk:
+  declared_triggers:
+    - v1-to-v3-migration-loss
+  owner: human:operator
+relations:
+  addresses:
+    - wavecode-bootstrap-math-coding-3.3@1
+---

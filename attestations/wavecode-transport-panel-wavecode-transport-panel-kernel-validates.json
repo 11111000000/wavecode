@@ -1,0 +1,19 @@
+{
+  "schema": "math-coding/attestation-3.0-alpha",
+  "kind": "attestation",
+  "subject": {
+    "decision": "wavecode-transport-panel",
+    "obligation": "wavecode-transport-panel-kernel-validates",
+    "candidate_tree": "HEAD",
+    "materials_digest": ""
+  },
+  "kind_": "build",
+  "producer": {
+    "identity": "ci:migration"
+  },
+  "environment_class_level": 0,
+  "environment_class_label": "dev",
+  "result": "pass",
+  "issued_at": "2026-10-14T00:00:00Z",
+  "id": "sha256:47a9e44aa653bc4f3105ab0e890ff0114609ad98baf89e07ceecdd5f917c7145"
+}

@@ -1,0 +1,19 @@
+{
+  "schema": "math-coding/attestation-3.0-alpha",
+  "kind": "attestation",
+  "subject": {
+    "decision": "wavecode-llm-key-prefix-restore",
+    "obligation": "wavecode-llm-key-prefix-restore-witness-from-v1",
+    "candidate_tree": "HEAD",
+    "materials_digest": ""
+  },
+  "kind_": "observation",
+  "producer": {
+    "identity": "human:v1-migration"
+  },
+  "environment_class_level": 2,
+  "environment_class_label": "dev",
+  "result": "inconclusive",
+  "issued_at": "1970-01-01T00:00:00Z",
+  "id": "sha256:cd16b9b33fb36e1133d37c7c95130fc3e990c35ee73bb43bbe399be236036439"
+}

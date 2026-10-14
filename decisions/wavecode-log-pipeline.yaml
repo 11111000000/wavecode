@@ -1,0 +1,147 @@
+---
+schema: math-coding/3.3
+id: wavecode-log-pipeline
+revision: 1
+state: active
+body_sha: "sha256:774e7d78fe98b1a7b33c2cba9534fb29b16ffa007ec04ecec3aff3860dc9b007"
+yaml_sha: "sha256:774e7d78fe98b1a7b33c2cba9534fb29b16ffa007ec04ecec3aff3860dc9b007"
+
+intent:|
+  The log surface in wavecode is split into three pure pieces so the
+  console UIs (ConsoleButton / ConsoleSheet / Toast) can read from a
+  single source of truth instead of three different chrome sinks:
+
+  1. `cleanLogArgs(args: ReadonlyArray<unknown>): unknown[]` —
+  pure function that strips the `%c` token + companion CSS string
+  from `@strudel/core/logger.mjs:21`. Idempotent: applying it twice
+  produces the same output as applying it once.
+  - Shape A: `console.log('%c[foo] msg', 'background-color: black;
+  color: white; …')` → `['[foo] msg']`
+  - Shape B: `console.log('%c[%c[bar] msg1%c]%c msg2', 'css',
+  'css', 'css')` — the inner `'%c[%c[bar] …' starts with `'%c['`
+  and the second arg is CSS too; the function strips both the
+  outermost and inner `%c` tokens AND drops the trailing CSS
+  args proportionally.
+  - Concatenated 1-arg variant: `console.log('%c[label] line1\nline2')`
+  (no companion CSS arg) — regex strips `'%c'` from the string
+  in-place, leaving one clean string with no CSS fragments.
+  - Anything that doesn't match the heuristic (no leading `%c[`,
+  no second arg, second arg doesn't look like CSS) — returned
+  verbatim. The function never throws.
+
+  2. `logger.ts` — append-only **ring buffer** in `presentation-layer`
+  state. Capacity 500 entries. Drops oldest on overflow. Each entry:
+  `{ id, ts, level: 'log'|'info'|'warn'|'error'|'critical',
+  source: 'app'|'strudel'|'webaudio'|'llm'|'midi'|'unknown',
+  args: unknown[] }`. Source is auto-detected by the first arg
+  string matching a known prefix:
+  - `'%c[haptique…'` / `'%c[webaudio…'` / `'%c[mini…'` → `strudel`
+  - `'%c[MidiInput…'` / `'%c[MidiOutput…'` → `midi`
+  - `'%c[llm…'` / `'%c[LLM…'` → `llm`
+  - `'%c[AudioContext…'` / `'AudioWorkletNode…'` → `webaudio`
+  - anything else → `app`.
+  Detection lives in the module; tests cover 11 prefix patterns.
+
+  3. `wrapStrudelLogger` in `infrastructure/audio/strudelPatches.ts`
+  was updated to call `cleanLogArgs(args)` on every logged entry
+  instead of inlining its own `%c` strip. Single canonical
+  implementation; the patch just dispatches into the ring buffer
+  via `logger.error(...)` / `logger.warn(...)` after cleaning.
+  The `${level}` prefix guard in the patch keeps the pre-patch
+  behavior for non-Strudel logs (those still flow to the original
+  `console.log`).
+
+  All three pieces are idempotent and side-effect-free except for
+  the ring-buffer push and the dispatch to `console.error` from the
+  patched logger. The ring buffer lives in module-scope memory and
+  resets on page reload — no persistence layer (by design: errors
+  that didn't get read shouldn't outlive the session).
+commitment: |
+  Three-layer log architecture:
+counterexample: |
+  The strongest objection to this decision is captured in the `antithesis` field above: (1) «Inline the %c strip in three places (the patch, Toast,
+antithesis: |
+  (1) «Inline the %c strip in three places (the patch, Toast,
+  ConsoleSheet filter, consoleGlobals)». Возражение: каждый
+  inline-вариант угадывает свой кусок соглашений Strudel и
+  дрейфует. Logger 1.3 добавит 4-й цвет → 3 inline-copy
+  придётся править одновременно. (2) «Использовать `intercepted`
+  console и сохранять полные строки». Возражение: 500 строк
+  Strudel-вывода с CSS-фрагментами по 80 байт — это 40 KiB
+  хлама в буфере, пользователь ищет там КОНКРЕТНУЮ ошибку
+  (lastEvalErr pattern). Чистые строки быстрее сканировать.
+  (3) «Сделать ring buffer unlimited». Возражение: неконтролируемый
+  рост memory в долгих сессиях (Strudel `midiio` спамит
+  каждый MS); ограничение 500 ≈ 40 KiB максимум — безопасно.
+  (4) «Auto-detect source по regex match всех строк args»:
+  regex пробегает по каждому arg-у → O(n*k) где n=500, k=8 prefix-
+  patterns. Первый arg всегда string начинается с `[label]` —
+  достаточно проверить 1-й на 11 фиксированных префиксов; сложность
+  O(1) на append. (5) «Использовать IndexedDB / idb-keyval для
+  persistence». Возражение: `wavecode-static-spa-deployment` принял
+  статический деплой без серверной части; IDB-кеш ошибок добавляет
+  регрессионный риск (schema migration) ради фичи, которая нужна
+  только при дебаге. In-memory достаточно: пользователь видит
+  консоль в реальном времени или открывает через ConsoleButton.
+  Three-layer log architecture:
+counterexample: |
+  The strongest objection to this decision is captured in the `antithesis` field above: (1) «Inline the %c strip in three places (the patch, Toast,
+antithesis: |
+  (1) «Inline the %c strip in three places (the patch, Toast,
+  ConsoleSheet filter, consoleGlobals)». Возражение: каждый
+  inline-вариант угадывает свой кусок соглашений Strudel и
+  дрейфует. Logger 1.3 добавит 4-й цвет → 3 inline-copy
+  придётся править одновременно. (2) «Использовать `intercepted`
+  console и сохранять полные строки». Возражение: 500 строк
+  Strudel-вывода с CSS-фрагментами по 80 байт — это 40 KiB
+  хлама в буфере, пользователь ищет там КОНКРЕТНУЮ ошибку
+  (lastEvalErr pattern). Чистые строки быстрее сканировать.
+  (3) «Сделать ring buffer unlimited». Возражение: неконтролируемый
+  рост memory в долгих сессиях (Strudel `midiio` спамит
+  каждый MS); ограничение 500 ≈ 40 KiB максимум — безопасно.
+  (4) «Auto-detect source по regex match всех строк args»:
+  regex пробегает по каждому arg-у → O(n*k) где n=500, k=8 prefix-
+  patterns. Первый arg всегда string начинается с `[label]` —
+  достаточно проверить 1-й на 11 фиксированных префиксов; сложность
+  O(1) на append. (5) «Использовать IndexedDB / idb-keyval для
+  persistence». Возражение: `wavecode-static-spa-deployment` принял
+  статический деплой без серверной части; IDB-кеш ошибок добавляет
+  регрессионный риск (schema migration) ради фичи, которая нужна
+  только при дебаге. In-memory достаточно: пользователь видит
+  консоль в реальном времени или открывает через ConsoleButton.
+axiom_link:
+  - A2
+scope:
+  paths: []
+outcomes:
+  - id: wavecode-log-pipeline-outcome
+    statement: |
+      The log surface in wavecode is split into three pure pieces so the
+      console UIs (ConsoleButton / ConsoleSheet / Toast) can read from a
+      single source of truth instead of three different chrome sinks:
+
+      1.
+obligations:
+  - id: wavecode-log-pipeline-kernel-validates
+    claim: |
+      The migrated decision file is structurally valid under the math-coding 3.3 schema; `mathc validate` exits 0 for `decisions/<id>.yaml` at HEAD.
+    acceptance:
+      all:
+        - verifier: "mathc validate"
+          result: pass
+  - id: wavecode-log-pipeline-witness-from-v1
+    claim: |
+      The original v1.0 packet applied on the recorded date in its `witness` file; this migration preserves that evidence as an `attestations/<id>-evidence.json` file.
+    acceptance:
+      all:
+        - verifier: "attestation-store-has-subject"
+          result: pass
+assumptions: []
+risk:
+  declared_triggers:
+    - v1-to-v3-migration-loss
+  owner: human:operator
+relations:
+  addresses:
+    - wavecode-bootstrap-math-coding-3.3@1
+---

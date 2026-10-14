@@ -1,0 +1,19 @@
+{
+  "schema": "math-coding/attestation-3.0-alpha",
+  "kind": "attestation",
+  "subject": {
+    "decision": "wavecode-mobile-tabbed-sheet-routing",
+    "obligation": "wavecode-mobile-tabbed-sheet-routing-kernel-validates",
+    "candidate_tree": "HEAD",
+    "materials_digest": ""
+  },
+  "kind_": "build",
+  "producer": {
+    "identity": "ci:migration"
+  },
+  "environment_class_level": 0,
+  "environment_class_label": "dev",
+  "result": "pass",
+  "issued_at": "2026-10-14T00:00:00Z",
+  "id": "sha256:cf02cb62da3fe9e194d1d6015c79f4eaa7c1bf3e8d68035b55741888aa2a88b3"
+}

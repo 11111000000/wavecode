@@ -1,0 +1,19 @@
+{
+  "schema": "math-coding/attestation-3.0-alpha",
+  "kind": "attestation",
+  "subject": {
+    "decision": "rollback-and-retry",
+    "obligation": "rollback-and-retry-witness-from-v1",
+    "candidate_tree": "HEAD",
+    "materials_digest": ""
+  },
+  "kind_": "observation",
+  "producer": {
+    "identity": "human:v1-migration"
+  },
+  "environment_class_level": 2,
+  "environment_class_label": "dev",
+  "result": "inconclusive",
+  "issued_at": "1970-01-01T00:00:00Z",
+  "id": "sha256:924131a1877b6b1355b83ccd0acf4e024207e6bb8ad718debaa1061ce9d38a64"
+}

@@ -1,0 +1,220 @@
+---
+schema: math-coding/3.3
+id: wavecode-sample-bank-underscore
+revision: 1
+state: active
+body_sha: "sha256:4f934572b15b8ff375f8381f7269fbc627216663d0a56aa0046d87349a512510"
+yaml_sha: "sha256:4f934572b15b8ff375f8381f7269fbc627216663d0a56aa0046d87349a512510"
+
+intent:|
+  Three independent bugs collapsed into "samples don't play":
+
+  1. **SampleLoader is a silent no-op.** `SampleLoader.ts` declared
+  `function samples()` on globalThis and called it inside
+  `if (typeof samples === 'undefined') return;`. But the only path
+  that puts `samples` on globalThis is `evalScope()` — and
+  `LiveAudioEngine.evalScore` calls `evalScope(core, mini, tonal)`
+  WITHOUT passing `webaudio`. So `samples` is never set, the loader
+  silently bails, the Strudel soundMap stays empty, and every
+  `s("drums:bd")`-style trigger resolves to `undefined` →
+  scheduler fires the hap in silence.
+
+  2. **strudel.json keys use `/` (slash), Strudel soundMap lookup
+  uses `_` (underscore).** superdough/superdough.mjs:538-539 does
+  `if (bank && s) s = \`${bank}_${s}\`;`, so `s("drums:bd")`
+  becomes a lookup of `soundMap["drums_bd"]`. The bank manifests
+  shipped in `public/samples/{drums,piano,synth}/strudel.json` had
+  keys like `"drums/bd"` — the slash is the documentation separator,
+  not the lookup separator. Fix: rename every key from `bank/name`
+  to `bank_name` so `${bank}_${s}` resolves. Convention matches the
+  official `tidalcycles/Dirt-Samples/strudel.json` shape.
+
+  3. **`public/samples/drums/cb.mp3` is 100% silence.** Freesound
+  preview URL for "Cowbell - Tic 03.wav" by RP1312 returned a
+  valid MPEG container with zero audio payload
+  (ffmpeg `silencedetect=noise=-30dB:d=0.5` → `silence_duration:
+  0.5005` on a 0.5005s file). Replaced with a deterministic CC0
+  two-oscillator cowbell (aevalsrc: 540Hz + 800Hz sine pair,
+  500ms, 24kHz mono, 64kbps MP3). Mean -15.7 dB, max -5.1 dB
+  (vs. silent -57.6 / -39.0 dB). Waveform has no copyright,
+  explicitly dedicated CC0 in LICENSE.txt.
+
+  Resolution:
+  + `ui/src/infrastructure/audio/SampleLoader.ts` — static import of
+  `samples` from `@strudel/webaudio` (which re-exports from
+  superdough). Same module instance as `webaudioRepl` (dynamic
+  `import('superdough')` would resolve to a separate module +
+  separate soundMap; see git log fix(audio) precedent in
+  LiveAudioEngine.ts comment). Idempotent with in-flight coalescing.
+  + `ui/public/samples/{drums,piano,synth}/strudel.json` — keys
+  renamed to `bank_name`. All 14 drums + 10 piano + 12 synth
+  sample names participate; 36 entries total.
+  + `ui/public/samples/drums/cb.mp3` — replaced with synthesized CC0
+  cowbell.
+  + `ui/public/samples/drums/LICENSE.txt` — `cb.mp3` attribution
+  updated to wavecode (synthesized CC0), note about the silent
+  Freesound preview that motivated the replacement.
+  + `ui/src/infrastructure/audio/strudel.d.ts` — added type
+  declarations for `samples` and `fetchSampleMap` on both
+  `superdough` and `@strudel/webaudio` modules
+  (Strudel 1.3 ships no `.d.ts`).
+  + `ui/src/infrastructure/audio/SampleLoader.test.ts` — rewritten
+  25 tests against the static-import contract. Old suite mocked
+  globalThis.samples (which was never actually set in production);
+  new suite mocks `@strudel/webaudio.samples` and verifies
+  per-bank / concurrent / failure-recovery semantics. New test:
+  `cb.mp3 is audibly non-empty (silent downloads would defeat the
+  bank)` — guards the silent-download regression.
+  + `ui/src/infrastructure/audio/PianoSampleLoader.test.ts` —
+  simplified to 1 test that verifies the back-compat shim still
+  calls `samples` with the piano manifest URL.
+commitment: |
+  Three-bug unified fix: (a) SampleLoader теперь дёргает настоящий
+  `samples()` через static import, (b) strudel.json ключи
+  стандартизированы под `_`-join, (c) cowbell заменён на рабочий
+  CC0-синтез. Все 14 drums / 10 piano / 12 synth теперь
+  воспроизводятся. Тесты — 25 для SampleLoader + 1 для
+  PianoSampleLoader shim; плюс guard на silent download в
+  регрессию. Build (vite + PWA precache 19 entries, 1421 KiB) —
+  OK. typecheck — clean. Vitest — 251/251 pass.
+counterexample: |
+  The strongest objection to this decision is captured in the `antithesis` field above: (1) «Проще вызвать `evalScope(core, mini, tonal, webaudio)` и
+antithesis: |
+  (1) «Проще вызвать `evalScope(core, mini, tonal, webaudio)` и
+  вернуть `samples` на globalThis». Возражение: `webaudioRepl` сам
+  вызывает `evalScope` внутри, повторный вызов сломает уже
+  настроенный scheduler. Static import чище и не зависит от
+  того, что именно `evalScope` положит на globalThis (мини-парсеры
+  Strudel через mini-notation добавляют `stack`, `note`, `s` — те
+  не нужны). (2) «Можно было поменять пресеты на
+  `s("drums/bd")` вместо JSON-ключей». Возражение: convention
+  Strudel — это `bank:sound` (`bank_sound` в soundMap); смена
+  пресетов означала бы 25 правок в `domain/presets.ts` +
+  привязку к нестандартному синтаксису. Переименование ключей —
+  36 правок в 3 файлах и стандартный формат. (3) «Скачать
+  настоящий CC0 cowbell с Freesound вместо синтеза». Возражение:
+  Freesound preview CDN требует auth-токен (HTTP 200 на HTML,
+  HTTP 404 на прямой .mp3 без токена). Прямые GitHub-копии
+  выдают 404 или HTML. Синтез из 2-х осцилляторов — детерминистичный,
+  4.6KB, явный CC0, не требует внешних зависимостей.
+  Если позже появится рабочая ссылка — тривиально заменить
+  `cb.mp3` тем же скриптом. (4) «Tests стало меньше (25 вместо
+  прежних 22)». Возражение: добавлены 3 новых теста на
+  ключи strudel.json (раньше про JSON-формат не было покрытия)
+  + 1 guard на silent-download. Итого +4 по сравнению с baseline
+  `SampleLoader.test.ts` (22 → 25) + 1 упрощённый
+  PianoSampleLoader. (5) «`samples()` — async, теперь нужен
+  await». Возражение: `App.tsx onMount` уже работает с void-promises
+  (loadAllSamples вызывается через `.then((m) => m.loadAllSamples())`),
+  эффекты onMount запускаются параллельно с первым evalScore,
+  первый preset имеет ~5 секунд на регистрацию банков до того,
+  как пользователь нажмёт Play.
+  Three-bug unified fix: (a) SampleLoader теперь дёргает настоящий
+  `samples()` через static import, (b) strudel.json ключи
+  стандартизированы под `_`-join, (c) cowbell заменён на рабочий
+  CC0-синтез. Все 14 drums / 10 piano / 12 synth теперь
+  воспроизводятся. Тесты — 25 для SampleLoader + 1 для
+  PianoSampleLoader shim; плюс guard на silent download в
+  регрессию. Build (vite + PWA precache 19 entries, 1421 KiB) —
+  OK. typecheck — clean. Vitest — 251/251 pass.
+counterexample: |
+  The strongest objection to this decision is captured in the `antithesis` field above: (1) «Проще вызвать `evalScope(core, mini, tonal, webaudio)` и
+antithesis: |
+  (1) «Проще вызвать `evalScope(core, mini, tonal, webaudio)` и
+  вернуть `samples` на globalThis». Возражение: `webaudioRepl` сам
+  вызывает `evalScope` внутри, повторный вызов сломает уже
+  настроенный scheduler. Static import чище и не зависит от
+  того, что именно `evalScope` положит на globalThis (мини-парсеры
+  Strudel через mini-notation добавляют `stack`, `note`, `s` — те
+  не нужны). (2) «Можно было поменять пресеты на
+  `s("drums/bd")` вместо JSON-ключей». Возражение: convention
+  Strudel — это `bank:sound` (`bank_sound` в soundMap); смена
+  пресетов означала бы 25 правок в `domain/presets.ts` +
+  привязку к нестандартному синтаксису. Переименование ключей —
+  36 правок в 3 файлах и стандартный формат. (3) «Скачать
+  настоящий CC0 cowbell с Freesound вместо синтеза». Возражение:
+  Freesound preview CDN требует auth-токен (HTTP 200 на HTML,
+  HTTP 404 на прямой .mp3 без токена). Прямые GitHub-копии
+  выдают 404 или HTML. Синтез из 2-х осцилляторов — детерминистичный,
+  4.6KB, явный CC0, не требует внешних зависимостей.
+  Если позже появится рабочая ссылка — тривиально заменить
+  `cb.mp3` тем же скриптом. (4) «Tests стало меньше (25 вместо
+  прежних 22)». Возражение: добавлены 3 новых теста на
+  ключи strudel.json (раньше про JSON-формат не было покрытия)
+  + 1 guard на silent-download. Итого +4 по сравнению с baseline
+  `SampleLoader.test.ts` (22 → 25) + 1 упрощённый
+  PianoSampleLoader. (5) «`samples()` — async, теперь нужен
+  await». Возражение: `App.tsx onMount` уже работает с void-promises
+  (loadAllSamples вызывается через `.then((m) => m.loadAllSamples())`),
+  эффекты onMount запускаются параллельно с первым evalScore,
+  первый preset имеет ~5 секунд на регистрацию банков до того,
+  как пользователь нажмёт Play.
+axiom_link:
+  - A1
+scope:
+  paths: []
+outcomes:
+  - id: wavecode-sample-bank-underscore-outcome
+    statement: |
+      Three independent bugs collapsed into "samples don't play":
+
+      1.
+obligations:
+  - id: wavecode-sample-bank-underscore-kernel-validates
+    claim: |
+      The migrated decision file is structurally valid under the math-coding 3.3 schema; `mathc validate` exits 0 for `decisions/<id>.yaml` at HEAD.
+    acceptance:
+      all:
+        - verifier: "mathc validate"
+          result: pass
+  - id: wavecode-sample-bank-underscore-witness-from-v1
+    claim: |
+      The original v1.0 packet applied on the recorded date in its `witness` file; this migration preserves that evidence as an `attestations/<id>-evidence.json` file.
+    acceptance:
+      all:
+        - verifier: "attestation-store-has-subject"
+          result: pass
+assumptions:
+  - id: wavecode-sample-bank-underscore-assumption-1
+    state: proven
+    statement: |
+      "Strudel @strudel/webaudio exports `samples()` via Evidence: "node_modules/@strudel/webaudio/dist/index.mjs:4
+    owner: human:operator
+  - id: wavecode-sample-bank-underscore-assumption-2
+    state: proven
+    statement: |
+      "Strudel bank:sound pattern lookup is Evidence: "node_modules/superdough/superdough.mjs:538-539
+    owner: human:operator
+  - id: wavecode-sample-bank-underscore-assumption-3
+    state: proven
+    statement: |
+      "cb.mp3 was a silent placeholder (max_volume -39.0 dB, Evidence: "ffmpeg -i cb.mp3 -af volumedetect: `max_volume: -39.0
+    owner: human:operator
+  - id: wavecode-sample-bank-underscore-assumption-4
+    state: proven
+    statement: |
+      "LiveAudioEngine.evalScope omits the webaudio module, Evidence: "ui/src/infrastructure/audio/LiveAudioEngine.ts:173
+    owner: human:operator
+  - id: wavecode-sample-bank-underscore-assumption-5
+    state: proven
+    statement: |
+      "Standard strudel.json format (tidalcycles/Dirt-Samples) Evidence: "https://raw.githubusercontent.com/tidalcycles/
+    owner: human:operator
+  - id: wavecode-sample-bank-underscore-assumption-6
+    state: proven
+    statement: |
+      "25 tests in SampleLoader.test.ts + 1 in Evidence: "vitest run output `Test Files 25 passed (25) |
+    owner: human:operator
+  - id: wavecode-sample-bank-underscore-assumption-7
+    state: assumed
+    statement: |
+      "Waveform synthesis (`aevalsrc` with two sine Evidence: "US Copyright Office Compendium of U.S. Copyright
+    owner: human:operator
+risk:
+  declared_triggers:
+    - v1-to-v3-migration-loss
+  owner: human:operator
+relations:
+  addresses:
+    - wavecode-bootstrap-math-coding-3.3@1
+---

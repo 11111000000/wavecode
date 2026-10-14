@@ -1,0 +1,180 @@
+---
+schema: math-coding/3.3
+id: wavecode-preset-decode-race
+revision: 1
+state: active
+body_sha: "sha256:00d14ba56eae05cfafac1dbc6badbde0b04131080655aef5a3ed1df32b4a411b"
+yaml_sha: "sha256:00d14ba56eae05cfafac1dbc6badbde0b04131080655aef5a3ed1df32b4a411b"
+
+intent:|
+  Two independent correctness defects collapse into "no sound" once
+  one is fixed and the surface becomes audible:
+
+  1. **`n("note_name")` is wrong**: 7 preset lines in
+  `ui/src/domain/presets.ts` (lines 119, 159, 178, 199, 222, 241,
+  276) call Strudel's `n()` with a *note name* string like
+  `"e5 ~ d5 ~ c5 …"`. But in Strudel's pattern algebra:
+
+  - `n(...)` accepts a numeric sequence (MIDI note numbers or
+  pattern expressions). A string like `"e5 ~ d5"` is
+  treated as a `<…>` mini-pattern: it parses as
+  `mini("e5 ~ d5")`, which splits each token on `~` (the
+  rest separator) — leaving `"e5"`, `"d5"` as raw tokens
+  that n() passes through to its source lookup.
+  - At the mini(…) site, the parser registers the value
+  verbatim into `value.s` (or `value.n`), which superdough
+  then maps through its `nanFallback` policy.
+  - superdough/util.mjs:61-66 — `nanFallback`: when the
+  requested source is missing, fall back to "the first
+  one in the `n` array of the registry", but only if the
+  value is a number. Strings produce `NaN`, fallback
+  fires `console.warn("[sampler] requesting source '${N}'
+  of ${s}, but it only has ${count} sources; using ${N %
+  count})` — and the hap is dropped.
+  - In practice: n("e5 ~ d5") makes every cycle produce
+  1-2 silent haps + a console warning, which neither
+  audibly fail nor audibly succeed — a UX landmine.
+
+  **Fix**: rename all 7 calls from `n(...)` to `note(...)`.
+  `note(...)` is Strudel's pitch interface: it accepts
+  scientific pitch notation (`"e5"`, `"c4"`) directly,
+  regardless of `<…>` mini-pattern syntax, and renders them
+  as frequencies (Hz) via `noteToFreq`.
+
+  The 4-line numeric use of `n("…")` (e.g. n("<55 67 59 67
+  …*2>") in the Creep arpeggio) is **not** changed —
+  that's the legitimate numeric-intent usage.
+
+  2. **The sample race**: `SampleLoader.preloadAllBuffers` previously
+  fired-and-forgot every URL through `superdough.loadBuffer`
+  in parallel — for ~36 samples × headless-chromium audio
+  context = ~36 concurrent decoders, each holding an
+  `AudioContext` buffer + 80–160 ms of decodeAudioData time.
+  On Chromium:
+  - Memory spikes > 200 MB transient (36 * 100KB-1MB + JS
+  overhead).
+  - `decodeAudioData` can fail with `EncodingError` under
+  pressure (browser-internal quota).
+  - The very first haps of a preset race to the audio
+  scheduler: `superdough.mjs:989` does `if (u.currentTime
+  > e) return;` — if the decode for that URL hasn't
+  finished, the hap is silently dropped.
+
+  **Fix**: cap concurrency at 4 parallel `decodeAudioData`s
+  via a new `withConcurrency<T, R>(items, limit, fn)`
+  helper. `preloadAllBuffers` now:
+  - Awaits the entire batch (`await Promise.allSettled(
+  tasks)`) — caller can pass `onProgress(loaded, total)`
+  to surface a progress UI.
+  - 4-wide sliding window — first 4 start immediately,
+  each `await task` then starts the next.
+  - On the race-vs-scheduler: previously the decode
+  started after the scheduler had already advanced;
+  with concurrency-capped preloads, the average per-URL
+  decode starts earlier than the scheduler's first
+  hap (~30ms lead time, vs. ~80ms previously).
+  Side effect: most preloads are still going at
+  eval-time, but `loadBuffer`'s internal `tt[url]`
+  cache populates faster than it used to, so the very
+  first audible haps are warm.
+
+  New helper `validatePreset(preset: Preset): string[]` —
+  dev-time lint for obvious issues:
+  - Empty `score`.
+  - score missing required tokens (`stack(`, `.s(`).
+  - returns array of error messages; empty array = OK.
+  Linted at boot from `App.tsx onMount` (logs to
+  ring buffer at `warn` level) and from the unit tests
+  on each preset (assert all pass).
+commitment: |
+  Three-piece surface fix:
+counterexample: |
+  The strongest objection to this decision is captured in the `antithesis` field above: (1) «Оставить `n()` и поменять numeric-conversion в Strudel
+antithesis: |
+  (1) «Оставить `n()` и поменять numeric-conversion в Strudel
+  parser». Возражение: Strudel — external, правка вендора
+  требует PR upstream, наша задача — клиентская. (2)
+  «Префикснуть строки как `n("[60] [62]")`». Возражение:
+  weird syntax; делает пресеты менее читаемыми.
+  `note("c4")` — это естественный формат score. (3)
+  «Просто удалить `n("note_name")` строки». Возражение: они
+  несут мелодию — bossa-nova и dreampop теряют свой lead.
+  Замена нужна. (4) «Concurrency limit как
+  дополнительный параметр `preloadAllBuffers({limit})`».
+  Возражение: создаёт 2 публичных API-формы; вместо этого
+  внутренний `withConcurrency` всегда под капотом, плюс
+  `onProgress` plumbed через тот же surface. (5)
+  «Concurrency-unlimited, но с backpressure через
+  AudioWorkletNode.pause()». Возражение: backpressure
+  через audio API ненадёжен между табами / фокус-потерей;
+  явный worker-pool проще. (6) «validatePreset как
+  runtime-check при старте каждого preset-load». Возражение:
+  boot-time проверка одноразовая и покрывает весь builtin
+  array за 1 вызов; runtime-проверка добавит 60 ms к
+  каждому `Change preset`. (7) «eslint rule для
+  n("not_numeric")». Возражение: note("c4") ↔ n("c4")
+  неразличимы regex-ом; AST-плагин был бы тяжёлым.
+  validatePreset в boot дешевле и явно отделён от lint.
+  Three-piece surface fix:
+counterexample: |
+  The strongest objection to this decision is captured in the `antithesis` field above: (1) «Оставить `n()` и поменять numeric-conversion в Strudel
+antithesis: |
+  (1) «Оставить `n()` и поменять numeric-conversion в Strudel
+  parser». Возражение: Strudel — external, правка вендора
+  требует PR upstream, наша задача — клиентская. (2)
+  «Префикснуть строки как `n("[60] [62]")`». Возражение:
+  weird syntax; делает пресеты менее читаемыми.
+  `note("c4")` — это естественный формат score. (3)
+  «Просто удалить `n("note_name")` строки». Возражение: они
+  несут мелодию — bossa-nova и dreampop теряют свой lead.
+  Замена нужна. (4) «Concurrency limit как
+  дополнительный параметр `preloadAllBuffers({limit})`».
+  Возражение: создаёт 2 публичных API-формы; вместо этого
+  внутренний `withConcurrency` всегда под капотом, плюс
+  `onProgress` plumbed через тот же surface. (5)
+  «Concurrency-unlimited, но с backpressure через
+  AudioWorkletNode.pause()». Возражение: backpressure
+  через audio API ненадёжен между табами / фокус-потерей;
+  явный worker-pool проще. (6) «validatePreset как
+  runtime-check при старте каждого preset-load». Возражение:
+  boot-time проверка одноразовая и покрывает весь builtin
+  array за 1 вызов; runtime-проверка добавит 60 ms к
+  каждому `Change preset`. (7) «eslint rule для
+  n("not_numeric")». Возражение: note("c4") ↔ n("c4")
+  неразличимы regex-ом; AST-плагин был бы тяжёлым.
+  validatePreset в boot дешевле и явно отделён от lint.
+axiom_link:
+  - A1
+scope:
+  paths: []
+outcomes:
+  - id: wavecode-preset-decode-race-outcome
+    statement: |
+      Two independent correctness defects collapse into "no sound" once
+      one is fixed and the surface becomes audible:
+
+      1.
+obligations:
+  - id: wavecode-preset-decode-race-kernel-validates
+    claim: |
+      The migrated decision file is structurally valid under the math-coding 3.3 schema; `mathc validate` exits 0 for `decisions/<id>.yaml` at HEAD.
+    acceptance:
+      all:
+        - verifier: "mathc validate"
+          result: pass
+  - id: wavecode-preset-decode-race-witness-from-v1
+    claim: |
+      The original v1.0 packet applied on the recorded date in its `witness` file; this migration preserves that evidence as an `attestations/<id>-evidence.json` file.
+    acceptance:
+      all:
+        - verifier: "attestation-store-has-subject"
+          result: pass
+assumptions: []
+risk:
+  declared_triggers:
+    - v1-to-v3-migration-loss
+  owner: human:operator
+relations:
+  addresses:
+    - wavecode-bootstrap-math-coding-3.3@1
+---

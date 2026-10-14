@@ -1,0 +1,170 @@
+---
+schema: math-coding/3.3
+id: wavecode-piano-modes-and-gain
+revision: 1
+state: active
+body_sha: "sha256:f965e72ff7725b0726ee8593804a5c779ac2b553ba89ae978caea2b66e0cc8be"
+yaml_sha: "sha256:f965e72ff7725b0726ee8593804a5c779ac2b553ba89ae978caea2b66e0cc8be"
+
+intent:|
+  PianoKeyboard имеет 3 ортогональных пользовательских намерения,
+  которые текущая реализация (`wavecode-piano-parallel-rec-instrument`)
+  либо не поддерживает, либо поддерживает сломанно:
+
+  1. **Audition (default)** — играть параллельно композиции, score не
+  трогать. Текущее поведение, но громкость пианино непропорциональна
+  (`PEAK_GAIN = 0.3` на ноту → 4-нотный аккорд = 1.2 в миксе → clipping
+  → психоакустическое маскирование основного трека). Юзер слышит
+  «пианино заглушает трек», хотя scheduler продолжает играть.
+
+  2. **Record** — нажимаемые ноты должны превратиться в Strudel-snippet
+  в editor'е. Сейчас `pianoRecStore` буферизует ноты, но
+  `flushRec()` никем не вызывается: «commit to score» был отложен
+  как «future work» в исходном пакете. Rec — фикция.
+
+  3. **Follow / Visualize** — когда score играет, клавиши пианино
+  подсвечиваются согласно haps из scheduler (MIDI ноты из
+  `compileAndQuery`). Не реализовано вообще.
+
+  Решение — комбинация:
+
+  (a) **Гейн-фикс**: `PEAK_GAIN = 0.10` per-voice + soft-limiter в
+  master-gain ноде пианино (порог 0.7, ratio 4:1) — пианино
+  больше не клиппит и не маскирует Strudel. 4-нотный аккорд = 0.40
+  в миксе, попадает в баланс presetов (средний per-layer gain
+  ~0.15-0.5).
+
+  (b) **FOLLOW toggle** в `PianoToolbar`. При on: каждые 50ms через
+  RAF опрашиваем `compileAndQuery(0, 1)` через `AudioEngine` →
+  Set<number> текущих MIDI → подсветка клавиш с data-source="follow".
+  Сочетается с pressed-клавишами (set union) — если юзер держит
+  C4 и score тоже играет C4, подсветка от двух источников.
+
+  (c) **Commit-action** для REC: кнопка `↑ apply` в `PianoToolbar`.
+  На клике `flushRec()` → snippet (`note("c4").s("triangle")…`) →
+  `dispatch({ type: 'replaceScore', text: stack(score, snippet) })`.
+  Stack-wrap через `appendGridToScore`-патерн (reuses parser, не
+  ломает существующий stack). Если buffer пуст — noop. REC
+  остаётся on после apply (продолжаем писать).
+
+  (d) **Семантика REC по умолчанию** — tap-and-hold, не tap-and-release.
+  Каждое нажатие добавляет в buffer один note-event с
+  `duration = 0.5s` (стандартный Strudel-deck). Это упрощает UX:
+  пользователь не должен удерживать клавишу, чтобы получить ноту;
+  tap = one note, release = ничего не делает (нота уже в buffer).
+  Сложные ритмы (legato, staccato) — следующий пакет, не сейчас.
+
+  Опционально (d'): **LIVE mode** — если и REC, и LIVE оба on,
+  ноты сразу (на release) пишутся в editor как `stack(score, …)`,
+  без буфера. Можно отложить в отдельный пакет.
+commitment: |
+  Шесть компонентов:
+counterexample: |
+  The strongest objection to this decision is captured in the `antithesis` field above: (1) «Audition-mode это default — но зачем тогда явный
+antithesis: |
+  (1) «Audition-mode это default — но зачем тогда явный
+  toggle, если он default-off?». Возражение: FOLLOW не default-on
+  (может визуально шуметь при длинных паттернах), поэтому это
+  toggle. REC тоже не default-on (юзер может случайно нажать
+  пианино, не желая мутить score). Audition — не toggle, это
+  implicit «всё off».
+
+  (2) «Гейн-фикс сломает существующих юзеров, которые привыкли
+  к громкому пианино». Возражение: 0.3 на ноту при 4-нотном аккорде
+  clipping-distorted — это не «громкость», это артефакт. Любой
+  пользователь предпочтёт сбалансированный звук. Если кому-то
+  нужно громче — есть master gain в Mixer panel.
+
+  (3) «FOLLOW требует polling scheduler — это 20Hz CPU cost».
+  Возражение: `compileAndQuery` уже используется в StepGrid и
+  AudioRecorder; это дешёвая операция (cycles=1, ~0.1ms). Polling
+  каждые 50ms = 20Hz × 0.1ms = 2ms/sec = 0.2% CPU. Приемлемо.
+  Альтернатива: push-notification из scheduler, но Cyclist не
+  предоставляет хук — пришлось бы патчить infra.
+
+  (4) «REC + apply две кнопки — лишний UI». Возражение: apply —
+  единственный способ избежать «нажал 50 нот, REC off — и что
+  теперь?». Сейчас без apply это тупик. Commit-action обязателен.
+
+  (5) «Tap=note (не hold) теряет legato/staccato». Возражение:
+  advanced ритмика — следующая итерация. Стандартный 80% кейс
+  (набросать мелодию) — tap=note. Если юзеру нужен rhythm-control,
+  пусть использует StepGrid (он для этого и существует).
+
+  (6) «Stack-wrap через appendGridToScore-parsing — overengineering».
+  Возражение: парсер уже написан (`parseStackTopLayers` в
+  domain/layers/parseStack.ts) и протестирован. Reuse > rewrite.
+  Inline-парсинг 15 строк vs поддержка ещё одного формата score.
+  Шесть компонентов:
+counterexample: |
+  The strongest objection to this decision is captured in the `antithesis` field above: (1) «Audition-mode это default — но зачем тогда явный
+antithesis: |
+  (1) «Audition-mode это default — но зачем тогда явный
+  toggle, если он default-off?». Возражение: FOLLOW не default-on
+  (может визуально шуметь при длинных паттернах), поэтому это
+  toggle. REC тоже не default-on (юзер может случайно нажать
+  пианино, не желая мутить score). Audition — не toggle, это
+  implicit «всё off».
+
+  (2) «Гейн-фикс сломает существующих юзеров, которые привыкли
+  к громкому пианино». Возражение: 0.3 на ноту при 4-нотном аккорде
+  clipping-distorted — это не «громкость», это артефакт. Любой
+  пользователь предпочтёт сбалансированный звук. Если кому-то
+  нужно громче — есть master gain в Mixer panel.
+
+  (3) «FOLLOW требует polling scheduler — это 20Hz CPU cost».
+  Возражение: `compileAndQuery` уже используется в StepGrid и
+  AudioRecorder; это дешёвая операция (cycles=1, ~0.1ms). Polling
+  каждые 50ms = 20Hz × 0.1ms = 2ms/sec = 0.2% CPU. Приемлемо.
+  Альтернатива: push-notification из scheduler, но Cyclist не
+  предоставляет хук — пришлось бы патчить infra.
+
+  (4) «REC + apply две кнопки — лишний UI». Возражение: apply —
+  единственный способ избежать «нажал 50 нот, REC off — и что
+  теперь?». Сейчас без apply это тупик. Commit-action обязателен.
+
+  (5) «Tap=note (не hold) теряет legato/staccato». Возражение:
+  advanced ритмика — следующая итерация. Стандартный 80% кейс
+  (набросать мелодию) — tap=note. Если юзеру нужен rhythm-control,
+  пусть использует StepGrid (он для этого и существует).
+
+  (6) «Stack-wrap через appendGridToScore-parsing — overengineering».
+  Возражение: парсер уже написан (`parseStackTopLayers` в
+  domain/layers/parseStack.ts) и протестирован. Reuse > rewrite.
+  Inline-парсинг 15 строк vs поддержка ещё одного формата score.
+axiom_link:
+  - A3
+scope:
+  paths: []
+outcomes:
+  - id: wavecode-piano-modes-and-gain-outcome
+    statement: |
+      PianoKeyboard имеет 3 ортогональных пользовательских намерения,
+      которые текущая реализация (`wavecode-piano-parallel-rec-instrument`)
+      либо не поддерживает, либо поддерживает сломанно:
+
+      1.
+obligations:
+  - id: wavecode-piano-modes-and-gain-kernel-validates
+    claim: |
+      The migrated decision file is structurally valid under the math-coding 3.3 schema; `mathc validate` exits 0 for `decisions/<id>.yaml` at HEAD.
+    acceptance:
+      all:
+        - verifier: "mathc validate"
+          result: pass
+  - id: wavecode-piano-modes-and-gain-witness-from-v1
+    claim: |
+      The original v1.0 packet applied on the recorded date in its `witness` file; this migration preserves that evidence as an `attestations/<id>-evidence.json` file.
+    acceptance:
+      all:
+        - verifier: "attestation-store-has-subject"
+          result: pass
+assumptions: []
+risk:
+  declared_triggers:
+    - v1-to-v3-migration-loss
+  owner: human:operator
+relations:
+  addresses:
+    - wavecode-bootstrap-math-coding-3.3@1
+---

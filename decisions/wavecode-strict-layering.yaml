@@ -1,0 +1,91 @@
+---
+schema: math-coding/3.3
+id: wavecode-strict-layering
+revision: 1
+state: draft
+body_sha: "sha256:7affb8d2d19d7b286eb8d10af619c5b17074b318eaa488879ca72c23b5d804d3"
+yaml_sha: "sha256:7affb8d2d19d7b286eb8d10af619c5b17074b318eaa488879ca72c23b5d804d3"
+
+intent:|
+  Структурная целостность wavecode обеспечивается ESLint (flat config,
+  v9) с правилом `no-restricted-imports` per-layer: domain не может
+  импортить UI/audio/AI/DB; application не может импортить UI/audio/AI/DB;
+  infrastructure не может импортить UI; presentation не может импортить
+  audio/AI/DB напрямую.
+commitment: |
+  Strict layering предотвращает «гниение архитектуры»: domain остаётся
+  pure (тестируется без моков), application оркестрирует через Effect,
+  infrastructure инкапсулирует IO, presentation только отображает. Это
+  даёт testability и чистую заменяемость (например, swap AudioEngine
+  impl не ломает domain). ESLint enforcement в CI не даёт нарушить
+  случайно. Цена: occasional `// eslint-disable-next-line` для
+  оправданных случаев.
+counterexample: |
+  The strongest objection to this decision is captured in the `antithesis` field above: ESLint — лишний overhead для небольшого проекта; правила можно нарушить
+antithesis: |
+  ESLint — лишний overhead для небольшого проекта; правила можно нарушить
+  через `// eslint-disable-next-line`. Альтернатива — TypeScript-only
+  брэнд-типы или архитектурные тесты (dependency-cruiser), но это
+  дополнительная сложность. Strict layering может мешать быстрому
+  прототипированию.
+  Strict layering предотвращает «гниение архитектуры»: domain остаётся
+  pure (тестируется без моков), application оркестрирует через Effect,
+  infrastructure инкапсулирует IO, presentation только отображает. Это
+  даёт testability и чистую заменяемость (например, swap AudioEngine
+  impl не ломает domain). ESLint enforcement в CI не даёт нарушить
+  случайно. Цена: occasional `// eslint-disable-next-line` для
+  оправданных случаев.
+counterexample: |
+  The strongest objection to this decision is captured in the `antithesis` field above: ESLint — лишний overhead для небольшого проекта; правила можно нарушить
+antithesis: |
+  ESLint — лишний overhead для небольшого проекта; правила можно нарушить
+  через `// eslint-disable-next-line`. Альтернатива — TypeScript-only
+  брэнд-типы или архитектурные тесты (dependency-cruiser), но это
+  дополнительная сложность. Strict layering может мешать быстрому
+  прототипированию.
+axiom_link:
+  - A5
+scope:
+  paths: []
+outcomes:
+  - id: wavecode-strict-layering-outcome
+    statement: |
+      Структурная целостность wavecode обеспечивается ESLint (flat config,
+      v9) с правилом `no-restricted-imports` per-layer: domain не может
+      импортить UI/audio/AI/DB; application не может импортить UI/audio/AI/DB;
+      infrastructure не может импортить UI; presentation не может импортить
+      au
+obligations:
+  - id: wavecode-strict-layering-kernel-validates
+    claim: |
+      The migrated decision file is structurally valid under the math-coding 3.3 schema; `mathc validate` exits 0 for `decisions/<id>.yaml` at HEAD.
+    acceptance:
+      all:
+        - verifier: "mathc validate"
+          result: pass
+  - id: wavecode-strict-layering-witness-from-v1
+    claim: |
+      The original v1.0 packet applied on the recorded date in its `witness` file; this migration preserves that evidence as an `attestations/<id>-evidence.json` file.
+    acceptance:
+      all:
+        - verifier: "attestation-store-has-subject"
+          result: pass
+assumptions:
+  - id: wavecode-strict-layering-assumption-1
+    state: assumed
+    statement: |
+      "Layer separation даёт testability и заменяемость"
+    owner: human:operator
+  - id: wavecode-strict-layering-assumption-2
+    state: proven
+    statement: |
+      "ESLint no-restricted-imports запрещает cross-layer dependencies" Evidence: "ui/eslint.config.js — 4 override-блока для domain/application/infrastructure/presentation"
+    owner: human:operator
+risk:
+  declared_triggers:
+    - v1-to-v3-migration-loss
+  owner: human:operator
+relations:
+  addresses:
+    - wavecode-bootstrap-math-coding-3.3@1
+---

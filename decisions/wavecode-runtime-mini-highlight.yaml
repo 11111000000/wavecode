@@ -1,0 +1,201 @@
+---
+schema: math-coding/3.3
+id: wavecode-runtime-mini-highlight
+revision: 1
+state: active
+body_sha: "sha256:13f049429a9602d3ca0f31134acb84f37774ae985b1b7ee07be2e78800faedba"
+yaml_sha: "sha256:13f049429a9602d3ca0f31134acb84f37774ae985b1b7ee07be2e78800faedba"
+
+intent:|
+  Runtime mini-notation highlight — «дирижёрский луч» поверх существующего
+  статического `cm-mini-notation` подсветчика. Когда pattern играет, те
+  самые sample'ы из `<bd sd hh>` / steps из `[a b c d]`, которые звучат
+  в данный момент, тихо светятся тёплым янтарным тоном с лёгким
+  «дыханием» (фон ~18% opacity, пульс до 35% за 1.6s). Параллельные
+  ветки `stack(...)` подсвечиваются одновременно — каждый активный Hap
+  в его собственных char-range через `hap.context.locations[]`.
+
+  Архитектура:
+  - `infrastructure/audio/runtimeHighlight.ts` — module-scope bridge
+  с подпиской: `setActive(state) | clearActive() | subscribe(cb)`.
+  - `LiveAudioEngine` (modify) — после каждого `repl.evaluate`
+  и `setLayerMix` сохраняет pattern + miniLocations в bridge;
+  после `stop`/`repl.stop` очищает.
+  - `presentation/editor/runtimeMiniHighlight.ts` — CodeMirror
+  `StateField` с active ranges и `ViewPlugin` который подписан
+  на bridge, через `requestAnimationFrame` (~30Hz, throttle 33ms)
+  обновляет поле.
+  - `CodeMirrorEditorImpl` (modify) — добавляет extension
+  `runtimeMiniHighlight` в EditorState.
+  - `styles/components.css` (modify) — `.cm-mini-active` styles
+  с `@keyframes cm-mini-pulse`, `prefers-reduced-motion` → no anim.
+
+  Bridge делит данные на «compiler output» (lastEval metadata: pattern,
+  locations, ctx, anchor, cps) и «current highlight» (production-side:
+  Set<[from, to]>). StateField хранит ТОЛЬКО ranges; pattern и locations
+  живут в bridge (re-транспилируются на каждый eval/setLayerMix).
+commitment: |
+  Runtime mini-notation highlight = bridge (1 instance, module-scope)
+  + CodeMirror StateField/ViewPlugin (per editor view).
+counterexample: |
+  The strongest objection to this decision is captured in the `antithesis` field above: (1) «Highlights нужны в Strudel REPL из коробки». Возражение: Strudel
+antithesis: |
+  (1) «Highlights нужны в Strudel REPL из коробки». Возражение: Strudel
+  highlight (codemirror extension + @strudel/highlight) заточен под
+  Strudel REPL, несовместим с wavecode CodeMirror setup, требует
+  подмены `repl.evaluate`. wavecode highlights = только поверх
+  существующих @strudel building blocks (transpiler `miniLocations` +
+  `Pattern.withLoc`). (2) «queryArc каждый rAF — дорого». Возражение:
+  queryArc для одного Pattern'а ~50-200µs на 4-cycle window (Pattern
+  typical 6-layer stack); на iPhone 14 RAF = 16.67ms, остаётся ~16ms
+  запас. Throttle 33ms (~30Hz) гарантирует ≤1 query / display refresh.
+  При 60Hz без throttle — 2 query/refresh, ненужно. (3) «Locations
+  в Hap.context — могут отсутствовать для не-pure patterns». Решение:
+  fallback — вычислить locations из transpile.miniLocations overlap
+  с viewport; если hap есть, а locations пустые — игнорировать.
+  Edge case `< > ~ ~ > ` целиком из `~` — нет активных звуков, нет
+  подсветки, корректное no-op. (4) «Active Hap привязан к original
+  snippet, но miniNotationHighlight использует regex по doc». Решение:
+  miniNotationHighlight (regex) и runtime highlight (miniLocations)
+  создают разные DecorationSet — CodeMirror объединяет decorations
+  AND-логикой (intersect range), на одном марке активные ranges
+  имеют приоритет. Разные классы: `.cm-mini-notation` (static) и
+  `.cm-mini-active` (runtime) — не конфликтуют стилистически
+  (active содержит notation class как parent, добавляет эффекты).
+  (5) «Animation может тормозить на мобилках / вызывать перерисовку».
+  Решение: animation через CSS class не `transform`/`width` — только
+  `background-color`/`box-shadow` opacity compositing, GPU-friendly.
+  prefers-reduced-motion → отключаем анимацию, оставляем static
+  solid background. (6) «Mixer edits (setLayerMix) инвалидируют
+  char-ranges». Решение: после `setLayerMix` LiveAudioEngine
+  перевызывает bridge.setActive — transpile переисполняется с новыми
+  positions. Locatons, добавленные `.gain(...)` модификаторами,
+  лежат ВНЕ mini-notation string literals → не конфликтуют.
+  (7) «Code 30Hz rAF + 10 layers stack = battery drain». Решение:
+  если audio не играет — `bridge.clearActive()` останавливает rAF-loop
+  (single toggle). Auto-cleanup on tab blur через
+  `document.visibilitychange`. (8) «Во время typing пользователь
+  не должен видеть отвлекающую анимацию». Решение: highlight
+  обновляется только когда scheduler активен (started=true); во
+  время typing без eval — decorations остаются пустыми / stale.
+  Runtime mini-notation highlight = bridge (1 instance, module-scope)
+  + CodeMirror StateField/ViewPlugin (per editor view).
+counterexample: |
+  The strongest objection to this decision is captured in the `antithesis` field above: (1) «Highlights нужны в Strudel REPL из коробки». Возражение: Strudel
+antithesis: |
+  (1) «Highlights нужны в Strudel REPL из коробки». Возражение: Strudel
+  highlight (codemirror extension + @strudel/highlight) заточен под
+  Strudel REPL, несовместим с wavecode CodeMirror setup, требует
+  подмены `repl.evaluate`. wavecode highlights = только поверх
+  существующих @strudel building blocks (transpiler `miniLocations` +
+  `Pattern.withLoc`). (2) «queryArc каждый rAF — дорого». Возражение:
+  queryArc для одного Pattern'а ~50-200µs на 4-cycle window (Pattern
+  typical 6-layer stack); на iPhone 14 RAF = 16.67ms, остаётся ~16ms
+  запас. Throttle 33ms (~30Hz) гарантирует ≤1 query / display refresh.
+  При 60Hz без throttle — 2 query/refresh, ненужно. (3) «Locations
+  в Hap.context — могут отсутствовать для не-pure patterns». Решение:
+  fallback — вычислить locations из transpile.miniLocations overlap
+  с viewport; если hap есть, а locations пустые — игнорировать.
+  Edge case `< > ~ ~ > ` целиком из `~` — нет активных звуков, нет
+  подсветки, корректное no-op. (4) «Active Hap привязан к original
+  snippet, но miniNotationHighlight использует regex по doc». Решение:
+  miniNotationHighlight (regex) и runtime highlight (miniLocations)
+  создают разные DecorationSet — CodeMirror объединяет decorations
+  AND-логикой (intersect range), на одном марке активные ranges
+  имеют приоритет. Разные классы: `.cm-mini-notation` (static) и
+  `.cm-mini-active` (runtime) — не конфликтуют стилистически
+  (active содержит notation class как parent, добавляет эффекты).
+  (5) «Animation может тормозить на мобилках / вызывать перерисовку».
+  Решение: animation через CSS class не `transform`/`width` — только
+  `background-color`/`box-shadow` opacity compositing, GPU-friendly.
+  prefers-reduced-motion → отключаем анимацию, оставляем static
+  solid background. (6) «Mixer edits (setLayerMix) инвалидируют
+  char-ranges». Решение: после `setLayerMix` LiveAudioEngine
+  перевызывает bridge.setActive — transpile переисполняется с новыми
+  positions. Locatons, добавленные `.gain(...)` модификаторами,
+  лежат ВНЕ mini-notation string literals → не конфликтуют.
+  (7) «Code 30Hz rAF + 10 layers stack = battery drain». Решение:
+  если audio не играет — `bridge.clearActive()` останавливает rAF-loop
+  (single toggle). Auto-cleanup on tab blur через
+  `document.visibilitychange`. (8) «Во время typing пользователь
+  не должен видеть отвлекающую анимацию». Решение: highlight
+  обновляется только когда scheduler активен (started=true); во
+  время typing без eval — decorations остаются пустыми / stale.
+axiom_link:
+  - A1
+scope:
+  paths: []
+outcomes:
+  - id: wavecode-runtime-mini-highlight-outcome
+    statement: |
+      Runtime mini-notation highlight — «дирижёрский луч» поверх существующего
+      статического `cm-mini-notation` подсветчика.
+obligations:
+  - id: wavecode-runtime-mini-highlight-kernel-validates
+    claim: |
+      The migrated decision file is structurally valid under the math-coding 3.3 schema; `mathc validate` exits 0 for `decisions/<id>.yaml` at HEAD.
+    acceptance:
+      all:
+        - verifier: "mathc validate"
+          result: pass
+  - id: wavecode-runtime-mini-highlight-witness-from-v1
+    claim: |
+      The original v1.0 packet applied on the recorded date in its `witness` file; this migration preserves that evidence as an `attestations/<id>-evidence.json` file.
+    acceptance:
+      all:
+        - verifier: "attestation-store-has-subject"
+          result: pass
+assumptions:
+  - id: wavecode-runtime-mini-highlight-assumption-1
+    state: proven
+    statement: |
+      "Strudel transpiler возвращает `miniLocations: number[][]` Evidence: "node_modules/@strudel/transpiler/transpiler.mjs:34-44,
+    owner: human:operator
+  - id: wavecode-runtime-mini-highlight-assumption-2
+    state: proven
+    statement: |
+      "Pattern.withLoc(from, to) прикрепляет location к Evidence: "node_modules/@strudel/mini/mini.mjs:170 — `return
+    owner: human:operator
+  - id: wavecode-runtime-mini-highlight-assumption-3
+    state: proven
+    statement: |
+      "repl.state содержит `miniLocations: []` после eval — Evidence: "node_modules/@strudel/core/repl.mjs:35-46 (state shape),
+    owner: human:operator
+  - id: wavecode-runtime-mini-highlight-assumption-4
+    state: proven
+    statement: |
+      "repl.scheduler.pattern — ссылка на active Pattern Evidence: "repl.mjs:106-110 (setPattern wraps scheduler.setPattern),
+    owner: human:operator
+  - id: wavecode-runtime-mini-highlight-assumption-5
+    state: proven
+    statement: |
+      "getActiveHaps уже делает rawCompileAndQuery каждые Evidence: "LiveAudioEngine.ts:555-602 — Effect-обёртка с
+    owner: human:operator
+  - id: wavecode-runtime-mini-highlight-assumption-6
+    state: proven
+    statement: |
+      "requestAnimationFrame в Solid/CodeMirror работает Evidence: "MDN requestAnimationFrame spec; wavecode уже
+    owner: human:operator
+  - id: wavecode-runtime-mini-highlight-assumption-7
+    state: proven
+    statement: |
+      "CodeMirror `StateField` с `EditorView.decorations.from` Evidence: "@codemirror/view docs — `EditorView.decorations` —
+    owner: human:operator
+  - id: wavecode-runtime-mini-highlight-assumption-8
+    state: proven
+    statement: |
+      "CSS animation на background-color — compositor-only, Evidence: "CSS spec — animatable: background-color;
+    owner: human:operator
+  - id: wavecode-runtime-mini-highlight-assumption-9
+    state: proven
+    statement: |
+      "Pattern.queryArc для простого pattern (note cat 6 слоёв) Evidence: "Сравнение с getActiveHaps, который уже делает то же на
+    owner: human:operator
+risk:
+  declared_triggers:
+    - v1-to-v3-migration-loss
+  owner: human:operator
+relations:
+  addresses:
+    - wavecode-bootstrap-math-coding-3.3@1
+---

@@ -1,0 +1,19 @@
+{
+  "schema": "math-coding/attestation-3.0-alpha",
+  "kind": "attestation",
+  "subject": {
+    "decision": "wavecode-llm-public-auth-key-mismatch",
+    "obligation": "wavecode-llm-public-auth-key-mismatch-witness-from-v1",
+    "candidate_tree": "HEAD",
+    "materials_digest": ""
+  },
+  "kind_": "review",
+  "producer": {
+    "identity": "human:v1-migration"
+  },
+  "environment_class_level": 2,
+  "environment_class_label": "dev",
+  "result": "pass",
+  "issued_at": "1970-01-01T00:00:00Z",
+  "id": "sha256:b2e3d5249d401597330992cc8f333ea8e6403f4d4dbd92090eeaa2df3e2852f1"
+}

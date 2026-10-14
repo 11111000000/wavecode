@@ -1,0 +1,19 @@
+{
+  "schema": "math-coding/attestation-3.0-alpha",
+  "kind": "attestation",
+  "subject": {
+    "decision": "console-ux-polish",
+    "obligation": "console-ux-polish-witness-from-v1",
+    "candidate_tree": "HEAD",
+    "materials_digest": ""
+  },
+  "kind_": "review",
+  "producer": {
+    "identity": "human:v1-migration"
+  },
+  "environment_class_level": 2,
+  "environment_class_label": "dev",
+  "result": "pass",
+  "issued_at": "1970-01-01T00:00:00Z",
+  "id": "sha256:aefc7e6da6470a8f27eba8331d7ced4b05138f619e398227b9d19c59715b8253"
+}

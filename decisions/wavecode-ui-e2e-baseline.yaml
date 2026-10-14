@@ -1,0 +1,66 @@
+---
+schema: math-coding/3.3
+id: wavecode-ui-e2e-baseline
+revision: 1
+state: draft
+body_sha: "sha256:4d9f0f5157e4158402f868c08125f373cad1f08b840ce3ea65adf03781dcf0ee"
+yaml_sha: "sha256:4d9f0f5157e4158402f868c08125f373cad1f08b840ce3ea65adf03781dcf0ee"
+
+intent:|
+  E2E verification suite + Lighthouse baseline: 5 playwright
+  сценариев покрывают все user-visible баги после T1-T5 +
+  perf budget + a11y axe-core. Финальный gate перед merge
+  в master.
+commitment: |
+  3 файла:
+counterexample: |
+  The strongest objection to this decision is captured in the `antithesis` field above: (1) «E2E тесты = slow CI». Возражение: тесты параллельны
+antithesis: |
+  (1) «E2E тесты = slow CI». Возражение: тесты параллельны
+  через playwright.config workers=2; total <2 min.
+  (2) «Lighthouse в CI — flaky». Возражение: lighthouse-ci
+  server имеет variance <3% baseline; мы сравниваем с
+  baseline.json, не с абсолютом.
+  3 файла:
+counterexample: |
+  The strongest objection to this decision is captured in the `antithesis` field above: (1) «E2E тесты = slow CI». Возражение: тесты параллельны
+antithesis: |
+  (1) «E2E тесты = slow CI». Возражение: тесты параллельны
+  через playwright.config workers=2; total <2 min.
+  (2) «Lighthouse в CI — flaky». Возражение: lighthouse-ci
+  server имеет variance <3% baseline; мы сравниваем с
+  baseline.json, не с абсолютом.
+axiom_link:
+  - A1
+scope:
+  paths: []
+outcomes:
+  - id: wavecode-ui-e2e-baseline-outcome
+    statement: |
+      E2E verification suite + Lighthouse baseline: 5 playwright
+      сценариев покрывают все user-visible баги после T1-T5 +
+      perf budget + a11y axe-core.
+obligations:
+  - id: wavecode-ui-e2e-baseline-kernel-validates
+    claim: |
+      The migrated decision file is structurally valid under the math-coding 3.3 schema; `mathc validate` exits 0 for `decisions/<id>.yaml` at HEAD.
+    acceptance:
+      all:
+        - verifier: "mathc validate"
+          result: pass
+  - id: wavecode-ui-e2e-baseline-witness-from-v1
+    claim: |
+      The original v1.0 packet applied on the recorded date in its `witness` file; this migration preserves that evidence as an `attestations/<id>-evidence.json` file.
+    acceptance:
+      all:
+        - verifier: "attestation-store-has-subject"
+          result: pass
+assumptions: []
+risk:
+  declared_triggers:
+    - v1-to-v3-migration-loss
+  owner: human:operator
+relations:
+  addresses:
+    - wavecode-bootstrap-math-coding-3.3@1
+---

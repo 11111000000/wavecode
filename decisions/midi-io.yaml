@@ -1,0 +1,212 @@
+---
+schema: math-coding/3.3
+id: midi-io
+revision: 1
+state: draft
+body_sha: "sha256:865272bdbf055a234fe9140c10dff8e351a1916168087876cf979aadd0b5e959"
+yaml_sha: "sha256:865272bdbf055a234fe9140c10dff8e351a1916168087876cf979aadd0b5e959"
+
+intent:|
+  В `ScorePanel` под редактором — пара кнопок «📥 Импорт» / «📤 Экспорт»:
+  (1) текстовый round-trip — `.strudel.txt` / `.js` через `FileReader` +
+  `Blob`, lossless, ровно тот же `Score = string`, что и в редакторе;
+  (2) MIDI round-trip — `.mid` через Standard MIDI File codec, **lossy**:
+  экспорт рендерит snippet через `Pattern.query(@span)` в поток Hap-ов,
+  фильтрует только `note()`/`n()`-паттерны (сэмпловые `s(...)` скипаются
+  с warning; канал 9 GM при импорте маппится в `s(...)`-строку); импорт
+  делает auto-BPM detection из inter-onset интервалов (fallback 120), затем
+  квантизацию на 16th-grid, и группировку нот по MIDI-каналам в
+  `stack(note(...), s(...))`. Длительность экспорта MIDI задаётся
+  оператором в поле «циклов» (default 4). Декодер симметричен экспорту:
+  ровно то, что MIDI умеет, ровно то, что мы восстанавливаем.
+commitment: |
+  Два канала экспорта покрывают разные use-case'ы:
+  текст (lossless) — шеринг, backup, gist, email;
+  MIDI (lossy) — interop с DAW/hardware.
+  Общий код — пара функций в `presentation/components/MidiIOButtons.tsx`:
+  `<input type=file>` для импорта, `URL.createObjectURL(blob)` для
+  экспорта, `<a download>` триггерит скачивание. Сами кодеки чистые
+  и живут в `domain/midi/`, оркестрация — в `application/midi/`.
+  `domain/midi/codec.ts` — pure обёртка над `@tonejs/midi` (парсер/писатель
+  SMF, без DOM, без эффектов — соответствует lint-rules для domain).
+  `domain/midi/decoder.ts` — pure эвристика: `MIDISequence → Strudel
+  snippet` через BPM detection (median inter-onset), 16th quantize,
+  per-channel split. `domain/midi/encoder.ts` — pure структура для
+  Hap-ов → MIDINote (но сама `Pattern.query()` — effect, в
+  `application/midi/exportMidi.ts` через существующий `AudioEngine`).
+  `s()`-паттерны НЕ рендерятся в MIDI-ноты (Strudel-сэмплы не имеют
+  pitch); они скипаются с warning. При импорте канал 9 (GM Drums)
+  маппится в отдельный `s("bd sd ...")` слой через маппинг GM Note→Strudel
+  sample-name (e.g. 36 → bd, 38 → sd, 42 → hh).
+  Decoder heuristic — явно lossy: `note(...)` восстанавливается точно,
+  контроллеры (modulation, expression) и pitch-bend — нет (mini-notation
+  их не выражает). Документируем как limitation в `Notes`.
+  Кнопки живут в `ScorePanel` (а не в шапке), потому что это
+  файл-операции над кодом, контекстно ближе к редактору.
+counterexample: |
+  The strongest objection to this decision is captured in the `antithesis` field above: (1) Только текст, без MIDI — MIDI мост lossy в обе стороны, оператор
+antithesis: |
+  (1) Только текст, без MIDI — MIDI мост lossy в обе стороны, оператор
+  сначала сохранил snippet, экспортнул в MIDI, потерял все комментарии,
+  каналы, контроллеры — зачем? Ответ: для interop с DAW (Logic,
+  Ableton, Reaper), для hardware-секвенсоров, для нотной записи в
+  Finale/MuseScore. Но эта ценность скрыта от оператора, который
+  не делает DAW-pipeline.
+  (2) Только MIDI, без текста — текст тривиален (4 строки кода),
+  но даёт оператору возможность хранить snippet вне браузера
+  (gist, email, backup IDB). Если выбросить — потеряем feature
+  "переслал другу snippet в Slack".
+  (3) WebMIDI API вместо файлов — WebMIDI шлёт события в реальном
+  времени на железо, не в файл. Это другой use-case (live performance),
+  и сейчас нет аппаратного контроллера в требованиях.
+  (4) MusicXML вместо MIDI — MusicXML нотация точнее, но в 5–10×
+  тяжелее по схеме и в нашем контексте (live-coding через
+  mini-notation) не нужен: MIDI для interop, текст для шеринга.
+  (5) Не квантизовать на 16th-grid — даёт верность источнику, но
+  `note("e5 d#5 e5 ...")` без квантизации выглядит как список
+  с дробями. Strudel mini-notation ожидает сетку.
+  (6) Не auto-detect BPM — ставить 120 BPM default. Auto-detect
+  ошибается на rubato/passagens (Für Elise без legato партитуры),
+  fallback на 120 обязателен.
+  (7) Не вводить UI-поле «циклов», фиксировать 4 — гибкость стоит
+  1 input, юзер может захотеть длиннее (4 цикла = 8 сек, мелодия
+  типа «Ode to Joy» длиннее).
+  Два канала экспорта покрывают разные use-case'ы:
+  текст (lossless) — шеринг, backup, gist, email;
+  MIDI (lossy) — interop с DAW/hardware.
+  Общий код — пара функций в `presentation/components/MidiIOButtons.tsx`:
+  `<input type=file>` для импорта, `URL.createObjectURL(blob)` для
+  экспорта, `<a download>` триггерит скачивание. Сами кодеки чистые
+  и живут в `domain/midi/`, оркестрация — в `application/midi/`.
+  `domain/midi/codec.ts` — pure обёртка над `@tonejs/midi` (парсер/писатель
+  SMF, без DOM, без эффектов — соответствует lint-rules для domain).
+  `domain/midi/decoder.ts` — pure эвристика: `MIDISequence → Strudel
+  snippet` через BPM detection (median inter-onset), 16th quantize,
+  per-channel split. `domain/midi/encoder.ts` — pure структура для
+  Hap-ов → MIDINote (но сама `Pattern.query()` — effect, в
+  `application/midi/exportMidi.ts` через существующий `AudioEngine`).
+  `s()`-паттерны НЕ рендерятся в MIDI-ноты (Strudel-сэмплы не имеют
+  pitch); они скипаются с warning. При импорте канал 9 (GM Drums)
+  маппится в отдельный `s("bd sd ...")` слой через маппинг GM Note→Strudel
+  sample-name (e.g. 36 → bd, 38 → sd, 42 → hh).
+  Decoder heuristic — явно lossy: `note(...)` восстанавливается точно,
+  контроллеры (modulation, expression) и pitch-bend — нет (mini-notation
+  их не выражает). Документируем как limitation в `Notes`.
+  Кнопки живут в `ScorePanel` (а не в шапке), потому что это
+  файл-операции над кодом, контекстно ближе к редактору.
+counterexample: |
+  The strongest objection to this decision is captured in the `antithesis` field above: (1) Только текст, без MIDI — MIDI мост lossy в обе стороны, оператор
+antithesis: |
+  (1) Только текст, без MIDI — MIDI мост lossy в обе стороны, оператор
+  сначала сохранил snippet, экспортнул в MIDI, потерял все комментарии,
+  каналы, контроллеры — зачем? Ответ: для interop с DAW (Logic,
+  Ableton, Reaper), для hardware-секвенсоров, для нотной записи в
+  Finale/MuseScore. Но эта ценность скрыта от оператора, который
+  не делает DAW-pipeline.
+  (2) Только MIDI, без текста — текст тривиален (4 строки кода),
+  но даёт оператору возможность хранить snippet вне браузера
+  (gist, email, backup IDB). Если выбросить — потеряем feature
+  "переслал другу snippet в Slack".
+  (3) WebMIDI API вместо файлов — WebMIDI шлёт события в реальном
+  времени на железо, не в файл. Это другой use-case (live performance),
+  и сейчас нет аппаратного контроллера в требованиях.
+  (4) MusicXML вместо MIDI — MusicXML нотация точнее, но в 5–10×
+  тяжелее по схеме и в нашем контексте (live-coding через
+  mini-notation) не нужен: MIDI для interop, текст для шеринга.
+  (5) Не квантизовать на 16th-grid — даёт верность источнику, но
+  `note("e5 d#5 e5 ...")` без квантизации выглядит как список
+  с дробями. Strudel mini-notation ожидает сетку.
+  (6) Не auto-detect BPM — ставить 120 BPM default. Auto-detect
+  ошибается на rubato/passagens (Für Elise без legato партитуры),
+  fallback на 120 обязателен.
+  (7) Не вводить UI-поле «циклов», фиксировать 4 — гибкость стоит
+  1 input, юзер может захотеть длиннее (4 цикла = 8 сек, мелодия
+  типа «Ode to Joy» длиннее).
+axiom_link:
+  - A0
+scope:
+  paths: []
+outcomes:
+  - id: midi-io-outcome
+    statement: |
+      В `ScorePanel` под редактором — пара кнопок «📥 Импорт» / «📤 Экспорт»:
+      (1) текстовый round-trip — `.
+obligations:
+  - id: midi-io-kernel-validates
+    claim: |
+      The migrated decision file is structurally valid under the math-coding 3.3 schema; `mathc validate` exits 0 for `decisions/<id>.yaml` at HEAD.
+    acceptance:
+      all:
+        - verifier: "mathc validate"
+          result: pass
+  - id: midi-io-witness-from-v1
+    claim: |
+      The original v1.0 packet applied on the recorded date in its `witness` file; this migration preserves that evidence as an `attestations/<id>-evidence.json` file.
+    acceptance:
+      all:
+        - verifier: "attestation-store-has-subject"
+          result: pass
+assumptions:
+  - id: midi-io-assumption-1
+    state: proven
+    statement: |
+      "Score это string в AppState (Score = string в domain/types.ts:6)" Evidence: "ui/src/domain/types.ts:6 `export type Score = string`"
+    owner: human:operator
+  - id: midi-io-assumption-2
+    state: proven
+    statement: |
+      "Architecture layers domain→application→infrastructure→presentation Evidence: "ui/ARCHITECTURE.md:55-72 + :496-516"
+    owner: human:operator
+  - id: midi-io-assumption-3
+    state: assumed
+    statement: |
+      "@tonejs/midi pure-parser без DOM/Effect, можно в domain/" Evidence: "https://github.com/Tonejs/midi.js — pure data structures,
+    owner: human:operator
+  - id: midi-io-assumption-4
+    state: proven
+    statement: |
+      "Strudel Pattern.query(spans) возвращает Hap[] с whole/frac/value" Evidence: "@strudel/core Pattern docs (`Hap<T>` interface, query метод)"
+    owner: human:operator
+  - id: midi-io-assumption-5
+    state: proven
+    statement: |
+      "s() паттерны в Strudel — это сэмплы без pitch, MIDI не имеет Evidence: "Strudel docs: `s(name)` — выбор сэмпла, нет note-frequency
+    owner: human:operator
+  - id: midi-io-assumption-6
+    state: proven
+    statement: |
+      "GM канал 9 = Drums; ноты 36/38/42 = bd/sd/hh" Evidence: "General MIDI standard mapping (MMA, 1991) — канал 9 зарезервирован
+    owner: human:operator
+  - id: midi-io-assumption-7
+    state: assumed
+    statement: |
+      "Оператор делает шеринг/backup ДА, MIDI interop тоже ДА Evidence: "ответы на вопросы 2026-10-05: «v1 + v2 вместе»"
+    owner: human:operator
+  - id: midi-io-assumption-8
+    state: assumed
+    statement: |
+      "Кнопки в ScorePanel (не в шапке)" Evidence: "ответ 2026-10-05: «В ScorePanel снизу»"
+    owner: human:operator
+  - id: midi-io-assumption-9
+    state: assumed
+    statement: |
+      "Длительность экспорта MIDI настраиваемая в UI" Evidence: "ответ 2026-10-05: «Настраиваемо в UI»"
+    owner: human:operator
+  - id: midi-io-assumption-10
+    state: assumed
+    statement: |
+      "Decoder — quantize + auto BPM detection" Evidence: "ответ 2026-10-05: «Quantize + автоматический BPM detection»"
+    owner: human:operator
+  - id: midi-io-assumption-11
+    state: assumed
+    statement: |
+      "MIDI-мост lossy в обе стороны" Evidence: "MIDI — discrete events; Strudel mini-notation — source code для
+    owner: human:operator
+risk:
+  declared_triggers:
+    - v1-to-v3-migration-loss
+  owner: human:operator
+relations:
+  addresses:
+    - wavecode-bootstrap-math-coding-3.3@1
+---

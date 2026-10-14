@@ -1,0 +1,119 @@
+---
+schema: math-coding/3.3
+id: wavecode-transport-always-visible
+revision: 1
+state: active
+body_sha: "sha256:24cecae45b3a3d2b7f06108342c911a452d4620ac4851c36bb59526853861124"
+yaml_sha: "sha256:24cecae45b3a3d2b7f06108342c911a452d4620ac4851c36bb59526853861124"
+
+intent:|
+  **Два связанных дефекта от недавней работы:**
+
+  1. **Play panel исчезает под bottom-sheet.** Mobile-only
+  `position: sticky` на `.app-controls-row` (legacy rule)
+  не работает: `.wc-app` — `height: 100%` без `overflow`,
+  sticky требует scroll-контекст. В результате sheet
+  (AI/Step/Piano/Mixer/Status) перекрывает транспорт,
+  юзер теряет возможность остановить воспроизведение.
+
+  2. **Legacy duplicate CSS rules silently override modern.**
+  Пакет `wavecode-legacy-eat-all` перенёс секцию PIANO &
+  STEP GRID из `legacy.css` в конец `components.css`. Но
+  `.step-grid*` (8 классов) и `.piano-key` уже были в
+  components.css раньше! Из-за source-order cascade
+  legacy-стили (с другими значениями gap, padding, grid
+  template) ПОБЕЖДАЮТ современные. Step Grid сейчас
+  рендерится с legacy visual design вместо нового.
+  `.piano-keyboard` container — dead code (DOM использует
+  `.piano-keys`, не `.piano-keyboard`).
+
+  Решение для #1: `position: fixed; top: var(--header-h);
+  z-index: calc(var(--z-sheet) + 12)` + blur фон. Гарантирует
+  видимость независимо от scroll-контекста.
+
+  Решение для #2: удалить legacy duplicate секцию (строки
+  3360-3485 в components.css) — это PIANO & STEP GRID
+  секция, перенесённая из legacy-eat-all. Modern секции
+  (строки 837-908 step-grid, 1196-1232 piano-key) уже в файле
+  и теперь снова выигрывают cascade.
+commitment: |
+  Два коммита:
+counterexample: |
+  The strongest objection to this decision is captured in the `antithesis` field above: (1) «Sticky должен работать в современных браузерах даже
+antithesis: |
+  (1) «Sticky должен работать в современных браузерах даже
+  без overflow на parent». Возражение: да, но элемент
+  приклеивается к top of nearest scrollable ancestor. Если
+  ancestor не scrollable, sticky элемент остаётся в flow, не
+  pinned. Текущее поведение — ровно это.
+  (2) «Position fixed сожмёт layout — куда денется место?».
+  Возражение: добавим `padding-top: var(--controls-h)` на
+  .app-body (или main), чтобы контент не уехал под фикс.
+  Height фиксирован (~52px), content compact.
+  (3) «Лучше добавить Play в BottomToolstrip — он уже fixed,
+  всегда виден». Возражение: BottomToolstrip — для «tools»,
+  Step/Piano/Mixer. Play — это не tool, это primary
+  action. Смешение ломает mental model. Отдельный
+  transport row с правильным z-index — точнее.
+  (4) «Регрессия на desktop?». Возражение: на desktop
+  sheets не используются активно (max-height covers full
+  panel). Фикс-стиль универсален, применяется на всех
+  breakpoints. Bottom-sheet mode — mobile-first, но Play
+  нужен везде.
+  Два коммита:
+counterexample: |
+  The strongest objection to this decision is captured in the `antithesis` field above: (1) «Sticky должен работать в современных браузерах даже
+antithesis: |
+  (1) «Sticky должен работать в современных браузерах даже
+  без overflow на parent». Возражение: да, но элемент
+  приклеивается к top of nearest scrollable ancestor. Если
+  ancestor не scrollable, sticky элемент остаётся в flow, не
+  pinned. Текущее поведение — ровно это.
+  (2) «Position fixed сожмёт layout — куда денется место?».
+  Возражение: добавим `padding-top: var(--controls-h)` на
+  .app-body (или main), чтобы контент не уехал под фикс.
+  Height фиксирован (~52px), content compact.
+  (3) «Лучше добавить Play в BottomToolstrip — он уже fixed,
+  всегда виден». Возражение: BottomToolstrip — для «tools»,
+  Step/Piano/Mixer. Play — это не tool, это primary
+  action. Смешение ломает mental model. Отдельный
+  transport row с правильным z-index — точнее.
+  (4) «Регрессия на desktop?». Возражение: на desktop
+  sheets не используются активно (max-height covers full
+  panel). Фикс-стиль универсален, применяется на всех
+  breakpoints. Bottom-sheet mode — mobile-first, но Play
+  нужен везде.
+axiom_link:
+  - A3
+scope:
+  paths: []
+outcomes:
+  - id: wavecode-transport-always-visible-outcome
+    statement: |
+      **Два связанных дефекта от недавней работы:**
+
+      1.
+obligations:
+  - id: wavecode-transport-always-visible-kernel-validates
+    claim: |
+      The migrated decision file is structurally valid under the math-coding 3.3 schema; `mathc validate` exits 0 for `decisions/<id>.yaml` at HEAD.
+    acceptance:
+      all:
+        - verifier: "mathc validate"
+          result: pass
+  - id: wavecode-transport-always-visible-witness-from-v1
+    claim: |
+      The original v1.0 packet applied on the recorded date in its `witness` file; this migration preserves that evidence as an `attestations/<id>-evidence.json` file.
+    acceptance:
+      all:
+        - verifier: "attestation-store-has-subject"
+          result: pass
+assumptions: []
+risk:
+  declared_triggers:
+    - v1-to-v3-migration-loss
+  owner: human:operator
+relations:
+  addresses:
+    - wavecode-bootstrap-math-coding-3.3@1
+---

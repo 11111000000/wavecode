@@ -1,0 +1,108 @@
+---
+schema: math-coding/3.3
+id: wavecode-ui-minimal-pass-phase-2
+revision: 1
+state: active
+body_sha: "sha256:343fd9945c6d02adbcbe2aad21529182b0844997cd515f0fa4516ebd447ce949"
+yaml_sha: "sha256:343fd9945c6d02adbcbe2aad21529182b0844997cd515f0fa4516ebd447ce949"
+
+intent:|
+  Phase 1 (`math/wavecode-ui-minimal-pass`) убрал визуальный шум,
+  но оставил две дыры:
+
+  - **TabBar всё ещё 4 таба** (Score, AI, Mixer, Status). После
+  Phase 1 Mixer доступен через BottomToolstrip (`Step/Piano/Mixer`),
+  так что таб Mixer — дублирование. Для casual-пользователя
+  «Mixer» — лишний сигнал «я что-то пропустил». На мобиле 4
+  таба — это уже толще, чем в iOS HIG (≤5 рекомендация, но 3
+  чище). Phase 2 убирает Mixer таб → 3 таба: Score, AI, Status.
+
+  - **Pulse-анимации работают всегда**, в т.ч. на mobile и для
+  юзеров с `prefers-reduced-motion`. Особенно мешает:
+  `.wc-admin-warn` (1.6s pulse), `.audio-loading-pill` (1.5s),
+  `.skeleton-pulse` (1.2s — удалено в Phase 1, но похожие
+  остались), `@keyframes admin-warn-pulse`. На mobile они жрут
+  батарею и отвлекают. Phase 2 добавляет `@media (prefers-reduced-
+  motion: reduce)` глобально + `prefers-reduced-motion` overrides
+  на конкретных анимациях.
+
+  Phase 2 НЕ делает:
+  - Объединение `legacy.css` + `components.css` (архитектурный
+  долг, но рискованно — много пересекающихся классов, шанс
+  тихих регрессий в визуале. Отдельный пакет `wavecode-css-
+  consolidate` позже).
+  - Bottom-sheet → drawer для Mixer/Step/Piano (Phase 3).
+commitment: |
+  Три правки в одной серии:
+counterexample: |
+  The strongest objection to this decision is captured in the `antithesis` field above: (1) «Убрать Mixer из TabBar — потеряем power-user shortcut».
+antithesis: |
+  (1) «Убрать Mixer из TabBar — потеряем power-user shortcut».
+  Возражение: Mixer уже доступен 1-tap в BottomToolstrip
+  (`/app` → BottomToolstrip → [Mixer]). Это ровно тот же
+  shortcut. Tab'ы в mobile-bottom-nav — для primary navigation,
+  Mixer — инструмент, ему место рядом со Step/Piano.
+  (2) «Pulse-анимации — это feedback, их отключение ухудшит UX».
+  Возражение: pulse — декорация, не сигнал об ошибке.
+  Информационная нагрузка pulse'а низкая (юзер уже слышит
+  звук ошибки в audio-lastError). Для тех кому нужны
+  «указатели» — admin-warn текст в title и `aria-label`.
+  (3) «prefers-reduced-motion — это нишевая фича, не нужна».
+  Возражение: WCAG 2.1 Success Criterion 2.3.3 (AAA) +
+  OS-level setting (iOS Reduce Motion, Android Remove
+  Animations). Юзеры с вестибулярными расстройствами это
+  ценят. Реализация стоит 3 строки CSS.
+  Три правки в одной серии:
+counterexample: |
+  The strongest objection to this decision is captured in the `antithesis` field above: (1) «Убрать Mixer из TabBar — потеряем power-user shortcut».
+antithesis: |
+  (1) «Убрать Mixer из TabBar — потеряем power-user shortcut».
+  Возражение: Mixer уже доступен 1-tap в BottomToolstrip
+  (`/app` → BottomToolstrip → [Mixer]). Это ровно тот же
+  shortcut. Tab'ы в mobile-bottom-nav — для primary navigation,
+  Mixer — инструмент, ему место рядом со Step/Piano.
+  (2) «Pulse-анимации — это feedback, их отключение ухудшит UX».
+  Возражение: pulse — декорация, не сигнал об ошибке.
+  Информационная нагрузка pulse'а низкая (юзер уже слышит
+  звук ошибки в audio-lastError). Для тех кому нужны
+  «указатели» — admin-warn текст в title и `aria-label`.
+  (3) «prefers-reduced-motion — это нишевая фича, не нужна».
+  Возражение: WCAG 2.1 Success Criterion 2.3.3 (AAA) +
+  OS-level setting (iOS Reduce Motion, Android Remove
+  Animations). Юзеры с вестибулярными расстройствами это
+  ценят. Реализация стоит 3 строки CSS.
+axiom_link:
+  - A3
+scope:
+  paths: []
+outcomes:
+  - id: wavecode-ui-minimal-pass-phase-2-outcome
+    statement: |
+      Phase 1 (`math/wavecode-ui-minimal-pass`) убрал визуальный шум,
+      но оставил две дыры:
+
+      - **TabBar всё ещё 4 таба** (Score, AI, Mixer, Status).
+obligations:
+  - id: wavecode-ui-minimal-pass-phase-2-kernel-validates
+    claim: |
+      The migrated decision file is structurally valid under the math-coding 3.3 schema; `mathc validate` exits 0 for `decisions/<id>.yaml` at HEAD.
+    acceptance:
+      all:
+        - verifier: "mathc validate"
+          result: pass
+  - id: wavecode-ui-minimal-pass-phase-2-witness-from-v1
+    claim: |
+      The original v1.0 packet applied on the recorded date in its `witness` file; this migration preserves that evidence as an `attestations/<id>-evidence.json` file.
+    acceptance:
+      all:
+        - verifier: "attestation-store-has-subject"
+          result: pass
+assumptions: []
+risk:
+  declared_triggers:
+    - v1-to-v3-migration-loss
+  owner: human:operator
+relations:
+  addresses:
+    - wavecode-bootstrap-math-coding-3.3@1
+---

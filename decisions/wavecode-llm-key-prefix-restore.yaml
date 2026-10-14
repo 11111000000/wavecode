@@ -1,0 +1,124 @@
+---
+schema: math-coding/3.3
+id: wavecode-llm-key-prefix-restore
+revision: 1
+state: active
+body_sha: "sha256:e4a66ac2b0ae244fe134542614235d6b75d9392e06fb88fa0e8d5cb068ce768b"
+yaml_sha: "sha256:e4a66ac2b0ae244fe134542614235d6b75d9392e06fb88fa0e8d5cb068ce768b"
+
+intent:|
+  LLM-запросы возвращают 401:
+  «Authentication Error, Malformed API Key passed in.
+  Ensure Key has `Bearer ` prefix.»
+
+  Код клиента корректен: `ui/src/infrastructure/llm/LiveLLMClient.ts:63`
+  формирует `Authorization: \`Bearer ${deps.apiKey}\``. Сам код не
+  сломан. Сломан **сам ключ** в `ui/.env.local:2`:
+
+  VITE_LLM_PROXY_KEY=ea6d97e948e72da6ba6ef529116bf2f3e63a7d2694875d776ab4001fddbb6f6a
+
+  Согласно witness пакета `math/wavecode-llm-revert-basicauth/witness:25`,
+  тот же самый ключ работал именно с префиксом `sk-litellm-`:
+
+  Authorization: Bearer sk-litellm-ea6d97e9…(genium key)
+  → 200 OK, 548 bytes LiteLLM JSON
+
+  То есть литеральная последовательность `ea6d97e9…` это **per-app
+  LiteLLM key** (genium-приложение), а префикс `sk-litellm-` — обязательная
+  часть формата, которую при правке `.env.local` случайно убрали
+  (файл в `.gitignore`, история не отслеживается, mtime = 2026-09-26).
+
+  Решение — восстановить `sk-litellm-` префикс в `.env.local`. Это
+  единственный необходимый фикс; никаких изменений в коде не нужно.
+
+  Дополнительно: для устойчивости к будущим подобным регрессиям —
+  добавить префикс-валидацию в `LiveLLMClient.ts:215-216` (warning при
+  загрузке, если ключ задан, но не начинается с `sk-` — soft-check,
+  не блокирует работу). Это не починит 401, но даст оператору ранний
+  сигнал в `console.warn`.
+commitment: |
+  Две правки:
+counterexample: |
+  The strongest objection to this decision is captured in the `antithesis` field above: (1) «Префикс это формат LiteLLM, а реальная причина может быть
+antithesis: |
+  (1) «Префикс это формат LiteLLM, а реальная причина может быть
+  в ротации `LITELLM_MASTER_KEY` на сервере — тогда клиентский
+  ключ мёртв независимо от префикса». Возражение: witness явно
+  показывает, что этот же литерал работал с префиксом. Если бы
+  master был ротирован, witness curl тоже бы упал. Сначала
+  пробуем минимальный фикс (префикс); если не поможет — следующий
+  пакет про ротацию.
+  (2) «Может быть проблема в Caddy tier — опять public-auth».
+  Возражение: `wavecode-llm-revert-basicauth` откатил это 2026-10-09.
+  Если бы tier вернулся к public-auth, текст ошибки был бы
+  `Www-Authenticate: Basic realm=...`, а не «Malformed API Key».
+  LiteLLM не говорит «Bearer prefix» если preflight 401 от Caddy.
+  (3) «Жёстко требовать `sk-` префикс в коде — это валидация
+  серверного формата, не наше дело». Возражение: только warning,
+  не блокировка. `sk-` префикс — это LiteLLM convention
+  задокументированный в `.env.example:27`. Warning оператору —
+  минимальное вмешательство.
+  (4) «Файл `.env.local` в `.gitignore`, история не сохранилась —
+  как понять что префикс был?». Возражение: witness `wavecode-llm-
+  revert-basicauth` — это literal evidence: «verified рабочий
+  curl с `sk-litellm-ea6d97e9…`» — это контрактное подтверждение
+  от живого теста в момент `applied_at_system: 2026-10-09T08:52Z».
+  Две правки:
+counterexample: |
+  The strongest objection to this decision is captured in the `antithesis` field above: (1) «Префикс это формат LiteLLM, а реальная причина может быть
+antithesis: |
+  (1) «Префикс это формат LiteLLM, а реальная причина может быть
+  в ротации `LITELLM_MASTER_KEY` на сервере — тогда клиентский
+  ключ мёртв независимо от префикса». Возражение: witness явно
+  показывает, что этот же литерал работал с префиксом. Если бы
+  master был ротирован, witness curl тоже бы упал. Сначала
+  пробуем минимальный фикс (префикс); если не поможет — следующий
+  пакет про ротацию.
+  (2) «Может быть проблема в Caddy tier — опять public-auth».
+  Возражение: `wavecode-llm-revert-basicauth` откатил это 2026-10-09.
+  Если бы tier вернулся к public-auth, текст ошибки был бы
+  `Www-Authenticate: Basic realm=...`, а не «Malformed API Key».
+  LiteLLM не говорит «Bearer prefix» если preflight 401 от Caddy.
+  (3) «Жёстко требовать `sk-` префикс в коде — это валидация
+  серверного формата, не наше дело». Возражение: только warning,
+  не блокировка. `sk-` префикс — это LiteLLM convention
+  задокументированный в `.env.example:27`. Warning оператору —
+  минимальное вмешательство.
+  (4) «Файл `.env.local` в `.gitignore`, история не сохранилась —
+  как понять что префикс был?». Возражение: witness `wavecode-llm-
+  revert-basicauth` — это literal evidence: «verified рабочий
+  curl с `sk-litellm-ea6d97e9…`» — это контрактное подтверждение
+  от живого теста в момент `applied_at_system: 2026-10-09T08:52Z».
+axiom_link:
+  - A3
+scope:
+  paths: []
+outcomes:
+  - id: wavecode-llm-key-prefix-restore-outcome
+    statement: |
+      LLM-запросы возвращают 401:
+      «Authentication Error, Malformed API Key passed in.
+obligations:
+  - id: wavecode-llm-key-prefix-restore-kernel-validates
+    claim: |
+      The migrated decision file is structurally valid under the math-coding 3.3 schema; `mathc validate` exits 0 for `decisions/<id>.yaml` at HEAD.
+    acceptance:
+      all:
+        - verifier: "mathc validate"
+          result: pass
+  - id: wavecode-llm-key-prefix-restore-witness-from-v1
+    claim: |
+      The original v1.0 packet applied on the recorded date in its `witness` file; this migration preserves that evidence as an `attestations/<id>-evidence.json` file.
+    acceptance:
+      all:
+        - verifier: "attestation-store-has-subject"
+          result: pass
+assumptions: []
+risk:
+  declared_triggers:
+    - v1-to-v3-migration-loss
+  owner: human:operator
+relations:
+  addresses:
+    - wavecode-bootstrap-math-coding-3.3@1
+---

@@ -1,0 +1,156 @@
+---
+schema: math-coding/3.3
+id: wavecode-audio-recording
+revision: 1
+state: active
+body_sha: "sha256:0acfcdd2ec9f9254e0e3be0e74a5cf0967eba777e9d48c79f120ec8d9f74a8e0"
+yaml_sha: "sha256:0acfcdd2ec9f9254e0e3be0e74a5cf0967eba777e9d48c79f120ec8d9f74a8e0"
+
+intent:|
+  В `.app-controls-row` справа от `▶ Запуск` появляется toggle
+  `⏺ Запись`. В off — состояние «idle». На первое нажатие — две ветки:
+  (1) «live» — `AudioContext.createMediaStreamDestination()` подключён
+  к webaudioRepl output, `MediaRecorder` пишет с mime
+  `audio/webm;codecs=opus` (fallback `audio/mp4` на iOS Safari, далее
+  `audio/ogg`); на второе нажатие — `recorder.stop()` → Blob →
+  `URL.createObjectURL` → `<a download="wavecode-take-<ISO>.webm">`
+  auto-click. (2) «offline render» — отд. кнопка `📼 Render`,
+  открывает модалку с input «cycles» (default 4, range 1–32),
+  `applyEdit` → `OfflineAudioContext(channels:2, sampleRate:44100,
+  length:cycles·cycleFrames)` → `pattern.queryArc()` →
+  `renderHaps(audioBuffer, haps)` → `audioBufferToWav(buffer)` →
+  Blob с `audio/wav` mime → скачивание.
+commitment: |
+  Два режима: live recorder (lo-fi быстрый capture) и offline render
+  (lossless WAV). Live использует `MediaRecorder` + extension detection;
+  offline использует `OfflineAudioContext` (reuse `Pattern.queryArc`
+  из midi-io пакета) + `audioBufferToWav` (encode 16-bit PCM, mono
+  sum-down из stereo). Chunked render с `requestAnimationFrame`
+  + progress modal. IDB не хранит записанные takes (размер), скачивание
+  сразу на stop. iOS fullscreen — отдельный пакет `wavecode-pwa-mobile`,
+  без него limitation остаётся; document в Notes.
+counterexample: |
+  The strongest objection to this decision is captured in the `antithesis` field above: (1) MediaRecorder в Safari iOS поддерживает только `audio/mp4`
+antithesis: |
+  (1) MediaRecorder в Safari iOS поддерживает только `audio/mp4`
+  (AAC-LC), а расширение файла `.webm` на iPhone даст неиграбельный
+  файл. Решение: mime-detect + правильное расширение
+  `.m4a` для AAC. (2) Offline render на 32 цикла = 32·2·44100 ≈
+  2.8M frames → main thread freeze на 1-3 секунды без
+  `WorkerOfflineAudioContext`. Решение: `setTimeout(0)` chunked
+  render по 100ms-slice c progress indicator. (3) Запись через
+  `MediaRecorder` пишет с потерями — профи хотят lossless WAV.
+  Ответ: live `MediaRecorder` (lossy) для быстрого draft +
+  offline render WAV (lossless) для финального — два режима. (4)
+  AudioContext умирает на iOS background → запись на iPhone в фоне
+  = garbage. Документируем как limitation (iOS Safari при сворачивании
+  Safari-tab ставит AudioContext в suspended state; fullscreen PWA
+  решает — отдельный пакет). (5) MediaStreamDestination ≠
+  audio-context destination — нельзя одновременно слышать И писать.
+  Решение: подключаем output И destination И speakers:
+  `output.connect(dest)` + `output.connect(ctx.destination)`.
+  Два режима: live recorder (lo-fi быстрый capture) и offline render
+  (lossless WAV). Live использует `MediaRecorder` + extension detection;
+  offline использует `OfflineAudioContext` (reuse `Pattern.queryArc`
+  из midi-io пакета) + `audioBufferToWav` (encode 16-bit PCM, mono
+  sum-down из stereo). Chunked render с `requestAnimationFrame`
+  + progress modal. IDB не хранит записанные takes (размер), скачивание
+  сразу на stop. iOS fullscreen — отдельный пакет `wavecode-pwa-mobile`,
+  без него limitation остаётся; document в Notes.
+counterexample: |
+  The strongest objection to this decision is captured in the `antithesis` field above: (1) MediaRecorder в Safari iOS поддерживает только `audio/mp4`
+antithesis: |
+  (1) MediaRecorder в Safari iOS поддерживает только `audio/mp4`
+  (AAC-LC), а расширение файла `.webm` на iPhone даст неиграбельный
+  файл. Решение: mime-detect + правильное расширение
+  `.m4a` для AAC. (2) Offline render на 32 цикла = 32·2·44100 ≈
+  2.8M frames → main thread freeze на 1-3 секунды без
+  `WorkerOfflineAudioContext`. Решение: `setTimeout(0)` chunked
+  render по 100ms-slice c progress indicator. (3) Запись через
+  `MediaRecorder` пишет с потерями — профи хотят lossless WAV.
+  Ответ: live `MediaRecorder` (lossy) для быстрого draft +
+  offline render WAV (lossless) для финального — два режима. (4)
+  AudioContext умирает на iOS background → запись на iPhone в фоне
+  = garbage. Документируем как limitation (iOS Safari при сворачивании
+  Safari-tab ставит AudioContext в suspended state; fullscreen PWA
+  решает — отдельный пакет). (5) MediaStreamDestination ≠
+  audio-context destination — нельзя одновременно слышать И писать.
+  Решение: подключаем output И destination И speakers:
+  `output.connect(dest)` + `output.connect(ctx.destination)`.
+axiom_link:
+  - A1
+scope:
+  paths: []
+outcomes:
+  - id: wavecode-audio-recording-outcome
+    statement: |
+      В `.
+obligations:
+  - id: wavecode-audio-recording-kernel-validates
+    claim: |
+      The migrated decision file is structurally valid under the math-coding 3.3 schema; `mathc validate` exits 0 for `decisions/<id>.yaml` at HEAD.
+    acceptance:
+      all:
+        - verifier: "mathc validate"
+          result: pass
+  - id: wavecode-audio-recording-witness-from-v1
+    claim: |
+      The original v1.0 packet applied on the recorded date in its `witness` file; this migration preserves that evidence as an `attestations/<id>-evidence.json` file.
+    acceptance:
+      all:
+        - verifier: "attestation-store-has-subject"
+          result: pass
+assumptions:
+  - id: wavecode-audio-recording-assumption-1
+    state: proven
+    statement: |
+      "MediaRecorder.isTypeSupported() varies per browser: Chrome Evidence: "MDN `MediaRecorder.isTypeSupported()` — per-browser,
+    owner: human:operator
+  - id: wavecode-audio-recording-assumption-2
+    state: proven
+    statement: |
+      "`OfflineAudioContext.length` is in frames, not seconds: Evidence: "Web Audio API spec — `OfflineAudioContext` constructor:
+    owner: human:operator
+  - id: wavecode-audio-recording-assumption-3
+    state: proven
+    statement: |
+      "MediaStream из AudioContext можно подключить к Evidence: "MDN `AudioContext.createMediaStreamDestination()` — есть
+    owner: human:operator
+  - id: wavecode-audio-recording-assumption-4
+    state: proven
+    statement: |
+      "iOS Safari mediaRecorder mime — `'audio/mp4; Evidence: "Apple WebKit Blog — MediaRecorder FAQ: «Use 'audio/mp4'
+    owner: human:operator
+  - id: wavecode-audio-recording-assumption-5
+    state: proven
+    statement: |
+      "AudioContext suspends на iOS Safari если вкладка Evidence: "WebKit bug tracker — `AudioContext.state` →
+    owner: human:operator
+  - id: wavecode-audio-recording-assumption-6
+    state: proven
+    statement: |
+      "`audioBufferToWav` для 16-bit PCM stereo Evidence: "WAV PCM spec — RIFF header 44 bytes + samples ·
+    owner: human:operator
+  - id: wavecode-audio-recording-assumption-7
+    state: proven
+    statement: |
+      "Использовать `Pattern.queryArc(0, N)` для render — Evidence: "ui/src/infrastructure/audio/LiveAudioEngine.ts:319-348
+    owner: human:operator
+  - id: wavecode-audio-recording-assumption-8
+    state: proven
+    statement: |
+      "Chunked render через `setTimeout(0)` между слайсами Evidence: "HTML spec `setTimeout` 4ms minimum; UI thread не
+    owner: human:operator
+  - id: wavecode-audio-recording-assumption-9
+    state: assumed
+    statement: |
+      "Стерео → моно для WAV не нужен: webaudioRepl output Evidence: "Практика — стерео совместимо с DAW import; AAC MP4
+    owner: human:operator
+risk:
+  declared_triggers:
+    - v1-to-v3-migration-loss
+  owner: human:operator
+relations:
+  addresses:
+    - wavecode-bootstrap-math-coding-3.3@1
+---

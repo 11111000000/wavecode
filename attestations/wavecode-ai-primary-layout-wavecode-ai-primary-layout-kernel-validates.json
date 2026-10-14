@@ -1,0 +1,19 @@
+{
+  "schema": "math-coding/attestation-3.0-alpha",
+  "kind": "attestation",
+  "subject": {
+    "decision": "wavecode-ai-primary-layout",
+    "obligation": "wavecode-ai-primary-layout-kernel-validates",
+    "candidate_tree": "HEAD",
+    "materials_digest": ""
+  },
+  "kind_": "build",
+  "producer": {
+    "identity": "ci:migration"
+  },
+  "environment_class_level": 0,
+  "environment_class_label": "dev",
+  "result": "pass",
+  "issued_at": "2026-10-14T00:00:00Z",
+  "id": "sha256:f3db42052fcc898ff023ef74cc0b4db19a3dd1b51a9f0effc2b6e69115c5a52d"
+}

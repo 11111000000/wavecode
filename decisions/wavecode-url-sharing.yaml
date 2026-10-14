@@ -1,0 +1,139 @@
+---
+schema: math-coding/3.3
+id: wavecode-url-sharing
+revision: 1
+state: draft
+body_sha: "sha256:11909f8ea2158f1f1a3e8e9b9c7d0ea4c7272f427a3899a60d2164d631af6e46"
+yaml_sha: "sha256:11909f8ea2158f1f1a3e8e9b9c7d0ea4c7272f427a3899a60d2164d631af6e46"
+
+intent:|
+  В шапке справа от `↷ Redo` — кнопка `🔗 Поделиться`. На нажатие —
+  score сериализуется через `lz-string.compressToEncodedURIComponent`
+  (UTF-16 → base64-with-ASCII-safe custom alphabet), приклеивается к
+  URL `https://<host>/?s=<encoded>&t=<unix-ms>`, длина проверяется
+  — если > 8KB, модалка «длинный score — лучше экспортируй
+  .strudel.txt». На `main.tsx` mount читается `location.search` —
+  если `?s=` есть И `repo.loadScore()` пусто, тогда dispatch
+  `replaceScore {text: decode}`; если IDB уже не пуст, кнопка
+  `📥 Загрузить shared snippet` в модалке. URL в clipboard через
+  `navigator.clipboard.writeText` (с fallback `document.execCommand
+  ('copy')` на старых webview).
+commitment: |
+  LZ-string — small (5KB gzip), стандарт для URL-embedded state
+  (TypeScript: `lz-string` package, ~3KB after tree-shake). Один
+  encode-side, один decode-side, оба pure (легко unit-test'ить).
+  Reading side: `main.tsx` `onMount` парсит URL до `repo.loadScore()`
+  — URL beats IDB; manual override через modal если IDB есть.
+  Никакого tracking/analytics; чистая URL-share.
+counterexample: |
+  The strongest objection to this decision is captured in the `antithesis` field above: (1) Большие score (5KB+) после LZ-string всё равно > 4KB URL →
+antithesis: |
+  (1) Большие score (5KB+) после LZ-string всё равно > 4KB URL →
+  некоторые серверы/CDN 8KB URL limit. Решение: warning при
+  >8KB. (2) `btoa()` ломается на Unicode (русские комментарии в
+  score — preset Mary Had Little Lamb имеет ASCII; но юзер
+  набьёт кириллицу). LZ-string решает — UTF-16 → base64-custom.
+  (3) Shared URL кэшируется в браузерной history —
+  чувствительный score может leak через shared device.
+  Документируем как risk, не решаем. (4) XSS через
+  `location.search` — если злоумышленник сделает URL с
+  ?s=<evil-string> с редиректом через Strudel eval,
+  Strudel throws на синтаксических ошибках и ничего не
+  пишет в DB кроме `replaceScore` — посредственный impact.
+  Documented. (5) `Clipboard.writeText()` требует secure context —
+  localhost/HTTPS; mobile http — fallback на execCommand.
+  LZ-string — small (5KB gzip), стандарт для URL-embedded state
+  (TypeScript: `lz-string` package, ~3KB after tree-shake). Один
+  encode-side, один decode-side, оба pure (легко unit-test'ить).
+  Reading side: `main.tsx` `onMount` парсит URL до `repo.loadScore()`
+  — URL beats IDB; manual override через modal если IDB есть.
+  Никакого tracking/analytics; чистая URL-share.
+counterexample: |
+  The strongest objection to this decision is captured in the `antithesis` field above: (1) Большие score (5KB+) после LZ-string всё равно > 4KB URL →
+antithesis: |
+  (1) Большие score (5KB+) после LZ-string всё равно > 4KB URL →
+  некоторые серверы/CDN 8KB URL limit. Решение: warning при
+  >8KB. (2) `btoa()` ломается на Unicode (русские комментарии в
+  score — preset Mary Had Little Lamb имеет ASCII; но юзер
+  набьёт кириллицу). LZ-string решает — UTF-16 → base64-custom.
+  (3) Shared URL кэшируется в браузерной history —
+  чувствительный score может leak через shared device.
+  Документируем как risk, не решаем. (4) XSS через
+  `location.search` — если злоумышленник сделает URL с
+  ?s=<evil-string> с редиректом через Strudel eval,
+  Strudel throws на синтаксических ошибках и ничего не
+  пишет в DB кроме `replaceScore` — посредственный impact.
+  Documented. (5) `Clipboard.writeText()` требует secure context —
+  localhost/HTTPS; mobile http — fallback на execCommand.
+axiom_link:
+  - A1
+scope:
+  paths: []
+outcomes:
+  - id: wavecode-url-sharing-outcome
+    statement: |
+      В шапке справа от `↷ Redo` — кнопка `🔗 Поделиться`.
+obligations:
+  - id: wavecode-url-sharing-kernel-validates
+    claim: |
+      The migrated decision file is structurally valid under the math-coding 3.3 schema; `mathc validate` exits 0 for `decisions/<id>.yaml` at HEAD.
+    acceptance:
+      all:
+        - verifier: "mathc validate"
+          result: pass
+  - id: wavecode-url-sharing-witness-from-v1
+    claim: |
+      The original v1.0 packet applied on the recorded date in its `witness` file; this migration preserves that evidence as an `attestations/<id>-evidence.json` file.
+    acceptance:
+      all:
+        - verifier: "attestation-store-has-subject"
+          result: pass
+assumptions:
+  - id: wavecode-url-sharing-assumption-1
+    state: proven
+    statement: |
+      "lz-string v1.5.0 ~6KB minified, ~3KB gzipped; ESM Evidence: "npm `lz-string`: tarball size, tree-shaking via
+    owner: human:operator
+  - id: wavecode-url-sharing-assumption-2
+    state: assumed
+    statement: |
+      "URL RFC 3986 — practical length ~8KB safe across Evidence: "stackoverflow + blog posts — practical URL limit 2KB
+    owner: human:operator
+  - id: wavecode-url-sharing-assumption-3
+    state: proven
+    statement: |
+      "Strudel eval fails on syntax errors — если Evidence: "Strudel `transpiler.evaluate()` — catches syntax и
+    owner: human:operator
+  - id: wavecode-url-sharing-assumption-4
+    state: proven
+    statement: |
+      "Clipboard API secure context = HTTPS OR localhost Evidence: "MDN `Clipboard.writeText`: «Available only in secure
+    owner: human:operator
+  - id: wavecode-url-sharing-assumption-5
+    state: proven
+    statement: |
+      "Приоритет URL > IDB: если URL пришёл, юзер явно Evidence: "web app convention (Figma/CodeSandbox/REPL.it) —
+    owner: human:operator
+  - id: wavecode-url-sharing-assumption-6
+    state: proven
+    statement: |
+      "Декодирование URL обрабатывает `+` decode в lz-string Evidence: "lz-string docs — encoded output использует URI-safe
+    owner: human:operator
+  - id: wavecode-url-sharing-assumption-7
+    state: proven
+    statement: |
+      "Размер score ≤8KB покрывает 95% use-case: 8 Evidence: "wavecode текущие 8 presets — measurement ~600B–1KB
+    owner: human:operator
+  - id: wavecode-url-sharing-assumption-8
+    state: assumed
+    statement: |
+      "`?t=<unix-ms>` в URL — timestamp для cache-bust + Evidence: "URL share convention (GitHub gist `?ts=` для analytics,
+    owner: human:operator
+risk:
+  declared_triggers:
+    - v1-to-v3-migration-loss
+  owner: human:operator
+relations:
+  addresses:
+    - wavecode-bootstrap-math-coding-3.3@1
+---

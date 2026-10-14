@@ -1,0 +1,109 @@
+---
+schema: math-coding/3.3
+id: wavecode-preset-shadow-migration
+revision: 1
+state: draft
+body_sha: "sha256:8ae9f8b66ff825f3d9ff0fb60edc4c17b62d4ea0ebde57f3a0e00de5ea9f3b06"
+yaml_sha: "sha256:8ae9f8b66ff825f3d9ff0fb60edc4c17b62d4ea0ebde57f3a0e00de5ea9f3b06"
+
+intent:|
+  При загрузке `presetsStore` кастомные пресеты, чьё имя (lowercase,
+  trimmed) совпадает с именем встроенного пресета, дропаются молча
+  и localStorage перезаписывается. Защищает от shadow-кастома,
+  сохранённого из устаревшего билт-пресета, который сбивает с толку
+  оператора в дропдауне («обновил пресет — но звук старый»).
+commitment: |
+  Минимальная миграция в `presetsStore.load()`: case-insensitive
+  trim сравнение имени кастома со всеми `BUILTIN_PRESETS[*].name`.
+  Совпадение → дроп + перезапись. Срабатывает ровно один раз на
+  сессию (при module init). Без UI-уведомления: silent migration
+  соответствует best-practice (drop migration scripts в Postgres,
+  schema-version migrations в Diesel), оператору не нужно принимать
+  решение. Покрыто unit-тестом `drops custom presets whose name
+  shadows a builtin on load`.
+counterexample: |
+  The strongest objection to this decision is captured in the `antithesis` field above: (a) Ничего не делать — оператор сам разберётся (F5, clear localStorage,
+antithesis: |
+  (a) Ничего не делать — оператор сам разберётся (F5, clear localStorage,
+  удалить кастомный через UI). На практике: жалобы «обновление не
+  работает» → 4 итерации одной и той же жалобы на тот же пресет.
+  (b) Детектить конфликт по id — но id кастомных имеет префикс `custom-`,
+  встроенные — kebab-case типа `fur-elise`, коллизий по id не бывает;
+  конфликт проявляется на уровне отображаемого имени.
+  (c) Префиксовать встроенные «(built-in)» в дропдауне — визуальная
+  развязка, но не убирает shadow: кастом всё равно выигрывает, если
+  оператор кликнул на него по привычке.
+  (d) Версионировать кастом-пресеты + «Reset on schema mismatch» —
+  оркестрация migrations, overkill для текущего объёма.
+  Минимальная миграция в `presetsStore.load()`: case-insensitive
+  trim сравнение имени кастома со всеми `BUILTIN_PRESETS[*].name`.
+  Совпадение → дроп + перезапись. Срабатывает ровно один раз на
+  сессию (при module init). Без UI-уведомления: silent migration
+  соответствует best-practice (drop migration scripts в Postgres,
+  schema-version migrations в Diesel), оператору не нужно принимать
+  решение. Покрыто unit-тестом `drops custom presets whose name
+  shadows a builtin on load`.
+counterexample: |
+  The strongest objection to this decision is captured in the `antithesis` field above: (a) Ничего не делать — оператор сам разберётся (F5, clear localStorage,
+antithesis: |
+  (a) Ничего не делать — оператор сам разберётся (F5, clear localStorage,
+  удалить кастомный через UI). На практике: жалобы «обновление не
+  работает» → 4 итерации одной и той же жалобы на тот же пресет.
+  (b) Детектить конфликт по id — но id кастомных имеет префикс `custom-`,
+  встроенные — kebab-case типа `fur-elise`, коллизий по id не бывает;
+  конфликт проявляется на уровне отображаемого имени.
+  (c) Префиксовать встроенные «(built-in)» в дропдауне — визуальная
+  развязка, но не убирает shadow: кастом всё равно выигрывает, если
+  оператор кликнул на него по привычке.
+  (d) Версионировать кастом-пресеты + «Reset on schema mismatch» —
+  оркестрация migrations, overkill для текущего объёма.
+axiom_link:
+  - A4
+scope:
+  paths:
+    - "ui/src/presentation/state/presetsStore.ts/**"
+outcomes:
+  - id: wavecode-preset-shadow-migration-outcome
+    statement: |
+      При загрузке `presetsStore` кастомные пресеты, чьё имя (lowercase,
+      trimmed) совпадает с именем встроенного пресета, дропаются молча
+      и localStorage перезаписывается.
+obligations:
+  - id: wavecode-preset-shadow-migration-kernel-validates
+    claim: |
+      The migrated decision file is structurally valid under the math-coding 3.3 schema; `mathc validate` exits 0 for `decisions/<id>.yaml` at HEAD.
+    acceptance:
+      all:
+        - verifier: "mathc validate"
+          result: pass
+  - id: wavecode-preset-shadow-migration-witness-from-v1
+    claim: |
+      The original v1.0 packet applied on the recorded date in its `witness` file; this migration preserves that evidence as an `attestations/<id>-evidence.json` file.
+    acceptance:
+      all:
+        - verifier: "attestation-store-has-subject"
+          result: pass
+assumptions:
+  - id: wavecode-preset-shadow-migration-assumption-1
+    state: proven
+    statement: |
+      "Кастом с именем 'Für Elise' дропается на module load" Evidence: "vitest presetsStore.test.ts:45-67 (12 tests passed 2026-10-02)"
+    owner: human:operator
+  - id: wavecode-preset-shadow-migration-assumption-2
+    state: proven
+    statement: |
+      "localStorage перезаписывается удалённой записью" Evidence: "тот же test, JSON.parse raw не содержит custom-stale id"
+    owner: human:operator
+  - id: wavecode-preset-shadow-migration-assumption-3
+    state: proven
+    statement: |
+      "Миграция прозрачна для кастомов с уникальными именами" Evidence: "presetsStore.test.ts:101 'custom presets survive a fresh module load' все еще passes"
+    owner: human:operator
+risk:
+  declared_triggers:
+    - v1-to-v3-migration-loss
+  owner: human:operator
+relations:
+  addresses:
+    - wavecode-bootstrap-math-coding-3.3@1
+---

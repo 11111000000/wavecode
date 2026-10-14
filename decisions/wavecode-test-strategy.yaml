@@ -1,0 +1,94 @@
+---
+schema: math-coding/3.3
+id: wavecode-test-strategy
+revision: 1
+state: draft
+body_sha: "sha256:48eed01eb5d4df58f1b83bf305f37631157c2bc8f2f15042fd2019d67545134f"
+yaml_sha: "sha256:48eed01eb5d4df58f1b83bf305f37631157c2bc8f2f15042fd2019d67545134f"
+
+intent:|
+  Тестовая стратегия wavecode — пирамида: много unit-тестов на domain
+  и application (vitest), умеренно на infrastructure (vitest с моками),
+  мало e2e на критичные user-flows (playwright).
+commitment: |
+  Domain (типы, схемы, pure-функции) тестируется без моков: parse,
+  validate, applyEdit, parseToolCall — vitest, ~100 тестов, запуск
+  за <1s. Application (reducer, use-cases) тестируется с TestClock
+  и mock Layer: agentStep transitions, editScore flow — vitest, ~50
+  тестов. Infrastructure тестируется с моками @ai-sdk и Web Worker:
+  LLMClient отправляет правильный формат, AudioEngine.eval проксирует
+  в Worker — vitest, ~20 тестов. Presentation (Solid-компоненты)
+  тестируется через @solidjs/testing-library — минимально. E2E:
+  5-10 critical flows через playwright (open editor, eval snippet,
+  agent edits score, audio plays, persistence across reload).
+counterexample: |
+  The strongest objection to this decision is captured in the `antithesis` field above: Только e2e-тесты (playwright) покрывают весь stack и не требуют моков.
+antithesis: |
+  Только e2e-тесты (playwright) покрывают весь stack и не требуют моков.
+  Только unit-тесты — быстрые, но не проверяют wiring. BDD (cucumber)
+  — лучше для documentation, но overhead для разработки.
+  Domain (типы, схемы, pure-функции) тестируется без моков: parse,
+  validate, applyEdit, parseToolCall — vitest, ~100 тестов, запуск
+  за <1s. Application (reducer, use-cases) тестируется с TestClock
+  и mock Layer: agentStep transitions, editScore flow — vitest, ~50
+  тестов. Infrastructure тестируется с моками @ai-sdk и Web Worker:
+  LLMClient отправляет правильный формат, AudioEngine.eval проксирует
+  в Worker — vitest, ~20 тестов. Presentation (Solid-компоненты)
+  тестируется через @solidjs/testing-library — минимально. E2E:
+  5-10 critical flows через playwright (open editor, eval snippet,
+  agent edits score, audio plays, persistence across reload).
+counterexample: |
+  The strongest objection to this decision is captured in the `antithesis` field above: Только e2e-тесты (playwright) покрывают весь stack и не требуют моков.
+antithesis: |
+  Только e2e-тесты (playwright) покрывают весь stack и не требуют моков.
+  Только unit-тесты — быстрые, но не проверяют wiring. BDD (cucumber)
+  — лучше для documentation, но overhead для разработки.
+axiom_link:
+  - A5
+scope:
+  paths: []
+outcomes:
+  - id: wavecode-test-strategy-outcome
+    statement: |
+      Тестовая стратегия wavecode — пирамида: много unit-тестов на domain
+      и application (vitest), умеренно на infrastructure (vitest с моками),
+      мало e2e на критичные user-flows (playwright).
+obligations:
+  - id: wavecode-test-strategy-kernel-validates
+    claim: |
+      The migrated decision file is structurally valid under the math-coding 3.3 schema; `mathc validate` exits 0 for `decisions/<id>.yaml` at HEAD.
+    acceptance:
+      all:
+        - verifier: "mathc validate"
+          result: pass
+  - id: wavecode-test-strategy-witness-from-v1
+    claim: |
+      The original v1.0 packet applied on the recorded date in its `witness` file; this migration preserves that evidence as an `attestations/<id>-evidence.json` file.
+    acceptance:
+      all:
+        - verifier: "attestation-store-has-subject"
+          result: pass
+assumptions:
+  - id: wavecode-test-strategy-assumption-1
+    state: assumed
+    statement: |
+      "Пирамида: много unit, мало e2e"
+    owner: human:operator
+  - id: wavecode-test-strategy-assumption-2
+    state: assumed
+    statement: |
+      "Domain-функции тестируются без моков (pure)"
+    owner: human:operator
+  - id: wavecode-test-strategy-assumption-3
+    state: assumed
+    statement: |
+      "Application — с TestClock и mock Layer"
+    owner: human:operator
+risk:
+  declared_triggers:
+    - v1-to-v3-migration-loss
+  owner: human:operator
+relations:
+  addresses:
+    - wavecode-bootstrap-math-coding-3.3@1
+---
