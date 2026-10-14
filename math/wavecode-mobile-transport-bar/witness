@@ -1,0 +1,82 @@
+applied_at: 2026-10-14
+branch: master
+commits:
+  - f6d9052 feat(ui): mobile transport bar with collapse toggle
+  - TBD    docs(math): witness for wavecode-mobile-transport-bar — applied
+supersedes: null
+notes: |
+  Один feature-коммит + пакет + witness. Слияние preset-row +
+  controls-row в один .app-transport-bar (collapsible) с persistent
+  state в localStorage.
+
+  1. **Новый TransportBar.tsx (298 lines)** — single fixed container
+     с strip (Play + BPM + toggle) + collapsible body (preset select +
+     save bar + transport-panel). data-collapsed атрибут — source of
+     truth для CSS. createEffect мирорит на .app-body для CSS @media
+     padding-top switching. localStorage
+     'wavecode-mobile-transport-expanded-v1' для persistence.
+
+  2. **11 новых vitest тестов** покрывают: mobile/desktop default
+     (через mock matchMedia), click toggle + state flip, localStorage
+     persistence (read on init, write on every click), .app-body data-
+     attribute mirroring через createEffect, Play button always visible
+     (in strip), Stop state when running, preset select reachable
+     after expand, no-throw без onPlay/onStop props.
+
+  3. **CSS restructuring** — components.css получил новый
+     .app-transport-bar block (~80 lines) + mobile @media overrides.
+     Universal collapse rule (вне @media) гарантирует что toggle
+     работает и на desktop. tokens.css получил
+     --app-transport-h-collapsed: 48px и --app-transport-h-expanded:
+     108px с comment cross-link к этому пакету.
+
+  4. **Mobile 412×900 collapsed** — bar 49px (strip 48 + border 1) +
+     appBody padding-top 48px. cmHost 683px, 50+ lines visible.
+     Toggle button "▼ Развернуть панель (BPM/пресеты/свинг)" в strip.
+
+  5. **Mobile 412×900 expanded** — bar 102px (strip 49 + body 53) +
+     appBody padding-top 108px. cmHost 623px, ~18 lines. Preset
+     select + cps slider visible. Swing/cps-presets/playhead скрыты
+     (pre-existing — transport-panel inline-flex с flex-wrap не
+     вмещает на 412px). Master-до моих изменений показывал то же
+     самое — preserved, не регрессия.
+
+  6. **Desktop 1280×800 expanded (default)** — bar 102px + appBody
+     padding-top 96px (legacy calc(--preset-row-h + --controls-h)
+     formula сохранена, никаких регрессий). Все controls visible
+     (preset + cps + swing + cps-presets + playhead).
+
+  7. **Desktop 1280×800 collapsed (если user toggle)** — bar 45px +
+     appBody padding-top 48px. cmHost 141 (vs 189 expanded) — +75px
+     editor space.
+
+  8. **localStorage persistence** — read on init (default:
+     !isMobileViewport() = collapsed mobile, expanded desktop).
+     Write на каждый click. Hard reload сохраняет state.
+
+  9. **inline `<style>` в index.html** обновлён синхронно с
+     @layer components — un-layered inline beats @layer, требует
+     ручной синхронизации (consistent с wavecode-mobile-compact /
+     preset-row-and-toast-z / mobile-fixed-h).
+
+  10. **Совместимость** — TransportPanel.tsx сохранён (отдельный
+      компонент с TransportPanel.test.tsx). 5 pre-existing test
+      failures (uiState.test.ts setTab 'full' vs 'half') — KNOWN,
+      baseline до моих изменений. НЕ регрессия.
+
+  Verification:
+  - tsc --noEmit: clean
+  - vitest: 735 pass (5 pre-existing failures), 11 новых tests pass
+  - vite build: success 8.98s, PWA precache generated
+  - browser 412×900 mobile collapsed: bar 49, body hidden,
+    appBody padding 48, cmHost 683
+  - browser 412×900 mobile expanded: bar 102, body flex 53,
+    appBody padding 108, cmHost 623
+  - browser 1280×800 desktop expanded: bar 102, appBody padding 96,
+    cmHost 189
+  - browser 1280×800 desktop collapsed: bar 45, appBody padding 48,
+    cmHost 141
+  - localStorage 'wavecode-mobile-transport-expanded-v1' persists
+    across hard reloads.
+  - AI sheet open на mobile: bar z-index 52 (sheet+12) > sheet 41,
+    Play button доступен.
