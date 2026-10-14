@@ -222,7 +222,7 @@ export function TransportBar(props: TransportBarProps): JSX.Element {
           >
             <optgroup label="Встроенные">
               <For each={allPresets().filter((p) => !p.custom)}>
-                {(p) => <option value={p.id}>{p.name}{p.artist ? ` · ${p.artist}` : ''}</option>}
+                {(p) => <option value={p.id}>{p.name}{p.artist ? ` · ${p.artist}` : ''}{p.lang === 'lisp' ? ' · (Lisp)' : ''}</option>}
               </For>
             </optgroup>
             <Show when={allPresets().some((p) => p.custom)}>
