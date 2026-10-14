@@ -1,16 +1,13 @@
 /**
- * Lisp → Strudel transpiler (pure core).
+ * Lisp → Strudel transpiler.
+ *
+ * Public API matches `@strudel/transpiler.transpiler` shape so it can be
+ * swapped in `webaudioRepl({ transpiler: lispTranspiler })`.
  *
  * Pipeline: tokenize → parse → emit.
  *
- * This module is DELIBERATELY free of `@strudel/*` imports: the audio
- * path (`@strudel/transpiler`) pulls in `@kabelsalat/web` (a CJS-only
- * module) which breaks the Vitest ESM resolver. Keeping this module pure
- * means unit tests can exercise the Lisp core without touching Strudel.
- *
- * Mini-notation is applied on the AUDIO path only — see
- * `LiveAudioEngine.ensureRepl`, which composes `emitJs` with
- * `@strudel/transpiler.transpiler` for `lisp` mode.
+ * Strudel mini-notation inside string literals is preserved untouched —
+ * `@strudel/transpiler.transpiler` (the second arg) handles it downstream.
  */
 
 import type { Token } from './lexer';
@@ -29,27 +26,16 @@ export type LispTranspilerResult = {
 };
 
 /**
- * Emit a Lisp source as plain JS (Strudel API calls), WITHOUT the
- * mini-notation pass. Throws `LispSyntaxError` on bad input.
+ * WebaudioRepl `transpiler` shim.
  *
- * Used by `transpileScoreToJs` (the "→ JS" button) so the user sees a
- * clean `note("a4 b4 c5")` instead of the mini-notation-transformed
- * `note(m("a4 b4 c5", offset))` that only the audio path should see.
+ * On syntax error, returns the source as-is with errors populated so
+ * the caller can surface them in the UI instead of crashing.
  */
-export const emitJs = (code: string): string => {
-  const tokens = tokenize(code);
-  const ast = parse(tokens);
-  return emit(ast);
-};
-
-/**
- * Pure Lisp → JS transpiler. No mini-notation pass (that is applied on
- * the audio path). On Lisp syntax error, returns the source as-is with
- * `errors` populated so callers can surface it instead of crashing.
- */
-export const lispTranspiler = (code: string): LispTranspilerResult => {
+export const lispTranspiler = (code: string, _strudel: unknown): LispTranspilerResult => {
   try {
-    const output = emitJs(code);
+    const tokens = tokenize(code);
+    const ast = parse(tokens);
+    const output = emit(ast);
     return { output, miniLocations: [], errors: [] };
   } catch (e) {
     if (e instanceof LispSyntaxError) {

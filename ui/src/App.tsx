@@ -256,8 +256,6 @@ function AppShell(): JSX.Element {
           if (!preset) return;
           setSelectedPresetPersist(id);
           dispatch({ type: 'replaceScore', text: preset.score });
-          if (preset.lang === 'lisp') setLanguageMode('lisp');
-          else setLanguageMode('js');
           void evalScore();
         }}
         onShowSavePreset={(v) => setShowSavePreset(v)}

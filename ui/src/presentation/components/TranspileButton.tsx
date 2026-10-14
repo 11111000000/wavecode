@@ -1,26 +1,26 @@
 import { Show, type JSX } from 'solid-js';
 
 import { transpileScoreToJs } from '~/application/useCases/transpileScore';
-import { detectLanguage } from '~/domain/languageMode';
-import { setLanguageMode } from '../state/languageModeStore';
+import { languageMode, setLanguageMode } from '../state/languageModeStore';
 import { appStore, dispatch } from '../state/appStore';
 import { consoleStore } from './consoleStore';
 
 /**
  * "→ JS" button that converts a Lisp-mode score to its JS form in one click.
  *
- * Visible only when the current score ACTUALLY contains Lisp (detected
- * from content via `detectLanguage`), NOT from persisted mode state — a
- * stale `localStorage` `lisp` value while the score is still JS must not
- * leave a dangling button.
+ * Visible only when:
+ *   - current mode is Lisp
+ *   - score is non-empty
  *
  * On click: run `transpileScoreToJs`. On success — replace score and
- * clear the persisted mode to `js`. On failure — show a toast, leave
- * score and mode unchanged.
+ * flip mode to JS. On failure — show a toast, leave score and mode
+ * unchanged. This is the user-driven counterpart of the deleted
+ * `LanguageToggle`: rather than silently switching mode on a JS-shaped
+ * score (which would break eval), the user explicitly opts in.
  */
 export function TranspileButton(): JSX.Element {
   const isVisible = (): boolean =>
-    detectLanguage(appStore.score) === 'lisp' && appStore.score.trim().length > 0;
+    languageMode() === 'lisp' && appStore.score.trim().length > 0;
 
   const onClick = (): void => {
     const r = transpileScoreToJs(appStore.score);
