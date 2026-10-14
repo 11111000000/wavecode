@@ -1,6 +1,7 @@
 import { createSignal, Show, For, createEffect, onCleanup } from 'solid-js';
 import { Effect } from 'effect';
 import { dispatch, appStore } from '../state/appStore';
+import { languageMode } from '../state/languageModeStore';
 import { AppLayer } from '~/infrastructure/composition';
 import { AudioEngine } from '~/domain/services';
 import { unlockAudioContext } from '~/infrastructure/audio/LiveAudioEngine';
@@ -111,7 +112,7 @@ export function AIEditPanel() {
       await Effect.runPromise(
         Effect.gen(function* () {
           const audio = yield* AudioEngine;
-          yield* audio.eval(newScore);
+          yield* audio.eval(newScore, languageMode());
         }).pipe(Effect.provide(AppLayer)),
       );
       dispatch({ type: 'audioStatusChange', status: 'playing' });
