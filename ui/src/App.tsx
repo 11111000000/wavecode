@@ -13,7 +13,8 @@ import {
 import { appStore, dispatch } from './presentation/state/appStore';
 import { installTypingTracker } from './presentation/state/editorTypingTracker';
 import { evalScore, stopAudio } from './presentation/state/audioActions';
-import { isGridEmptyState, loadFromScore } from './presentation/state/gridState';
+import { isGridEmptyState } from './presentation/state/gridState';
+import { syncGridFromScore } from './presentation/components/StepGrid';
 import {
   getPreset, saveCustomPreset, deleteCustomPreset, resetAllBrowserData,
 } from './presentation/state/presetsStore';
@@ -174,12 +175,16 @@ function AppShell(): JSX.Element {
     installConsoleGlobals();
   });
 
-  // Auto-load grid from current score when user opens Step tab.
-  // Replaces the onBeforeOpenStep prop that BottomToolstrip used to receive.
-  // Runs once per switch to 'step' (Solid effect with [untrack] guard).
+  // Auto-sync grid from current score when user opens Step tab.
+  // Uses `syncGridFromScore` (from StepGrid.tsx) which is mode-aware:
+  //   - view mode: re-parse score into the grid
+  //   - sketch mode: only re-seed if the draft is empty
+  //   - edit mode: re-parse (gated on canEditGridLayer)
+  // Replaces the older "only load if grid is empty" auto-load from
+  // `wavecode-step-grid-autoload-and-sync` which didn't respect modes.
   createEffect(() => {
     if (getActiveTab() === 'step' && untrack(isGridEmptyState)) {
-      loadFromScore(appStore.score);
+      syncGridFromScore();
     }
   });
 

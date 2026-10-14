@@ -695,6 +695,54 @@ await repl.evaluate(snippet);
           return null as null;
         },
       }).pipe(Effect.catchAll(() => Effect.void)),
+    /**
+     * Hot-swap a new score into the live scheduler. Used by StepGrid
+     * edit-mode per-tap (see `math/wavecode-step-grid-modes`).
+     *
+     * Flow is the same as `setLayerMix` but the input is a complete
+     * score (not a mixer-state patch). We rebuild the snippet via
+     * `injectMix(newScore, layerMix)` so mixer state is preserved
+     * across edit-mode taps, then call `repl.evaluate(newSnippet)`
+     * which atomically swaps the parsed Pattern into the running
+     * scheduler at the next lookahead window — no `repl.stop`, no
+     * audio gap, no scheduler reset.
+     *
+     * Trade-offs: identical to `setLayerMix`. On parse failure, the
+     * existing `repl.scheduler.pattern` keeps playing; UI debounces
+     * retry on the next tap.
+     */
+    setScore: (score: string, layerMix: ReadonlyArray<LayerMix>) =>
+      Effect.tryPromise({
+        try: async () => {
+          if (!score.trim()) return;
+          const audioCtx = unlockAudioContext();
+          const repl = await ensureRepl(audioCtx);
+          const newSnippet = injectMix(score, layerMix);
+          // Snapshot the rebuilt snippet so a subsequent `eval()` (e.g.
+          // user pressed ▶) picks up the same source — same contract
+          // as `eval()` itself.
+          setDebug({ lastEvaluatedSnippet: newSnippet });
+          await repl.evaluate(newSnippet);
+          // Refresh runtime highlight bridge — same path as setLayerMix.
+          const livePattern = repl.scheduler?.pattern;
+          const anchor = debugState.lastEvalClock > 0 ? debugState.lastEvalClock : audioCtx.currentTime;
+          if (livePattern && typeof (livePattern as { queryArc?: unknown }).queryArc === 'function') {
+            setRuntimeHighlightActive({
+              pattern: livePattern as unknown as { queryArc(begin: number, end: number): ReadonlyArray<unknown> },
+              ctx: audioCtx,
+              anchor,
+              cps: debugState.cps > 0 ? debugState.cps : 1,
+              layerRanges: parseLayerRanges(newSnippet),
+            });
+          }
+        },
+        catch: (err) => {
+          // Silent rollback — same contract as setLayerMix.
+          const msg = err instanceof Error ? err.message : String(err);
+          console.warn('[wavecode/LiveAudioEngine.setScore] parse failed, keeping previous pattern:', msg);
+          return null as null;
+        },
+      }).pipe(Effect.catchAll(() => Effect.void)),
     getCycleProgress: () =>
       Effect.sync(() => {
         // Sync-only — вызывается RAF-ом, обещание здесь неуместно.

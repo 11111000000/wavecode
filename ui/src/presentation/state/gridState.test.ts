@@ -1,11 +1,24 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { emptyGrid, gridToScore, setCell, type Grid } from '~/domain/music/gridTypes';
 import {
   appendGridToScore,
+  applyEditToLayer,
+  clearDraft,
+  commitDraft,
+  dirtyCellCount,
+  enterEdit,
+  enterSketch,
+  enterView,
+  getDraftGrid,
+  getLastCommittedGrid,
+  getMode,
   hasTopLevelStack,
+  isDraftClean,
   isGridEmptyState,
   loadFromScore,
   setGridDirect,
+  setModeDirect,
+  toggleCellInDraft,
   getGrid,
 } from './gridState';
 
@@ -183,5 +196,210 @@ describe('loadFromScore — populates grid from s("…") rows', () => {
     const after = getGrid();
     expect(after).not.toEqual(before);
     expect(after[0]).toEqual([true, false, true, false, true, false, true, false]);
+  });
+});
+
+/**
+ * Mode-aware state — see `math/wavecode-step-grid-modes/packet.md`.
+ *
+ *   - enterView/enterSketch/enterEdit mutate the mode signal and
+ *     re-seed draft + lastCommitted according to each mode's contract.
+ *   - commitDraft advances lastCommitted to the current draft
+ *     (sketch mode "↑ commit" semantics).
+ *   - applyEditToLayer splices the draft in-place into a 4-s-layer
+ *     stack (edit mode per-tap) and falls back to appendGridToScore
+ *     if the score is no longer parseable.
+ *   - dirtyCellCount / isDraftClean drive the "N unsaved" badge.
+ */
+
+/**
+ * Reset module-scope state before each test. gridState signals
+ * (`draftGrid`, `lastCommittedGrid`, `mode`) are shared across
+ * test files (and any consumer that imports gridState), so we
+ * MUST reset between tests to avoid pollution. Also reset mode
+ * to 'view' (the safe default) so rejection-path tests don't
+ * see leaked 'edit' state.
+ */
+beforeEach(() => {
+  clearDraft();
+  setModeDirect('view');
+});
+
+describe('gridState — enterView', () => {
+  it('sets mode=view, parses score into draft + lastCommitted', () => {
+    clearDraft();
+    const score = 'stack(\n  s("bd ~ sd ~"),\n  s("hh hh"),\n  s("cp cp"),\n  s("bd ~ ~ ~")\n)';
+    enterView(score);
+    expect(getMode()).toBe('view');
+    expect(getDraftGrid()).toEqual(getLastCommittedGrid());
+    expect(getDraftGrid()[0]?.[0]).toBe(true);
+    expect(getDraftGrid()[1]?.[1]).toBe(true);
+    expect(dirtyCellCount()).toBe(0);
+  });
+
+  it('parses empty score into an empty grid', () => {
+    clearDraft();
+    enterView('');
+    expect(getMode()).toBe('view');
+    expect(getDraftGrid()).toEqual(emptyGrid());
+    expect(dirtyCellCount()).toBe(0);
+  });
+});
+
+describe('gridState — enterSketch', () => {
+  it('sets mode=sketch, keeps existing draft if non-empty', () => {
+    clearDraft();
+    // Simulate a non-empty draft (user already mid-sketching).
+    const draft = setCell(emptyGrid(), 0, 0, true);
+    setGridDirect(draft);
+    enterSketch('note("c4")');
+    expect(getMode()).toBe('sketch');
+    expect(getDraftGrid()).toBe(draft);
+  });
+
+  it('parses score if draft is empty', () => {
+    clearDraft();
+    const score = 's("bd ~ sd ~ hh ~ cp ~")';
+    enterSketch(score);
+    expect(getMode()).toBe('sketch');
+    expect(getDraftGrid()[0]).toEqual([true, false, true, false, true, false, true, false]);
+  });
+});
+
+describe('gridState — enterEdit', () => {
+  it('accepts a 4-s-layer stack and sets mode=edit', () => {
+    clearDraft();
+    const score = 'stack(s("bd"), s("sd"), s("hh"), s("cp"))';
+    const result = enterEdit(score);
+    expect(result.ok).toBe(true);
+    expect(getMode()).toBe('edit');
+    expect(getDraftGrid()).toEqual(getLastCommittedGrid());
+  });
+
+  it('rejects non-stack score with a reason', () => {
+    clearDraft();
+    const result = enterEdit('note("c4")');
+    expect(result.ok).toBe(false);
+    expect(result.reason).toBeTruthy();
+    expect(getMode()).not.toBe('edit');
+  });
+
+  it('rejects stack with only 1 s-layer', () => {
+    clearDraft();
+    const result = enterEdit('stack(s("bd"))');
+    expect(result.ok).toBe(false);
+    expect(getMode()).not.toBe('edit');
+  });
+
+  it('accepts 4-s-layer stack mixed with non-sample layers', () => {
+    clearDraft();
+    const score = 'stack(note("c4"), s("bd"), s("sd"), s("hh"), s("cp"))';
+    const result = enterEdit(score);
+    expect(result.ok).toBe(true);
+  });
+});
+
+describe('gridState — commitDraft (sketch mode ↑ commit)', () => {
+  it('returns new score via appendGridToScore and advances lastCommitted', () => {
+    clearDraft();
+    const g = setCell(emptyGrid(), 0, 0, true);
+    setGridDirect(g);
+    const currentScore = '';
+    const newScore = commitDraft(currentScore);
+    expect(newScore).not.toBeNull();
+    expect(newScore).toMatch(/^stack\(/);
+    expect(newScore).toContain('s("bd ~ ~ ~ ~ ~ ~ ~")');
+    expect(getLastCommittedGrid()).toBe(g);
+    expect(dirtyCellCount()).toBe(0);
+  });
+
+  it('returns null when draft is empty (nothing to commit)', () => {
+    clearDraft();
+    const newScore = commitDraft('note("c4")');
+    expect(newScore).toBeNull();
+  });
+});
+
+describe('gridState — applyEditToLayer (edit mode per-tap)', () => {
+  it('splices draft into 4-s-layer stack in place (no double-wrap)', () => {
+    clearDraft();
+    // Use explicit rest tokens (`~`) so loadFromScore gives a clean
+    // empty grid to start from — otherwise every cell becomes "true"
+    // and toggleCellInDraft(0,0) would actually UNtoggle an unwanted
+    // hit (the loadFromScore best-effort parser doesn't validate the
+    // sample token matches the row's GRID_ROWS entry).
+    const score = 'stack(s("~ ~ ~ ~ ~ ~ ~ ~"), s("~ ~ ~ ~ ~ ~ ~ ~"), s("~ ~ ~ ~ ~ ~ ~ ~"), s("~ ~ ~ ~ ~ ~ ~ ~"))';
+    enterEdit(score);
+    toggleCellInDraft(0, 0); // bd step 0
+    const newScore = applyEditToLayer(score);
+    expect(newScore).not.toBeNull();
+    expect(newScore).toContain('s("bd ~ ~ ~ ~ ~ ~ ~")');
+    // No double-wrap: score still has one outer stack.
+    expect((newScore ?? '').match(/stack\(/g)?.length).toBe(1);
+  });
+
+  it('preserves non-sample layers in mixed stack', () => {
+    clearDraft();
+    const score = 'stack(note("c4"), s("~ ~ ~ ~ ~ ~ ~ ~"), s("~ ~ ~ ~ ~ ~ ~ ~"), s("~ ~ ~ ~ ~ ~ ~ ~"), s("~ ~ ~ ~ ~ ~ ~ ~"))';
+    enterEdit(score);
+    toggleCellInDraft(1, 1);
+    const newScore = applyEditToLayer(score);
+    expect(newScore).toContain('note("c4")');
+    expect(newScore).toContain('s("~ sd ~ ~ ~ ~ ~ ~")');
+  });
+
+  it('falls back to appendGridToScore if score is no longer parseable', () => {
+    clearDraft();
+    const score = 'stack(s("~ ~ ~ ~ ~ ~ ~ ~"), s("~ ~ ~ ~ ~ ~ ~ ~"), s("~ ~ ~ ~ ~ ~ ~ ~"), s("~ ~ ~ ~ ~ ~ ~ ~"))';
+    enterEdit(score);
+    toggleCellInDraft(0, 0);
+    // Simulate the user editing the score outside the grid.
+    const userEdited = 'note("c4 e4 g4")';
+    const newScore = applyEditToLayer(userEdited);
+    expect(newScore).not.toBeNull();
+    expect(newScore).toMatch(/^stack\(/);
+    expect(newScore).toContain('note("c4 e4 g4")');
+    expect(newScore).toContain('s("bd ~ ~ ~ ~ ~ ~ ~")');
+  });
+
+  it('returns null when score is empty and draft is empty', () => {
+    clearDraft();
+    const newScore = applyEditToLayer('');
+    expect(newScore).toBeNull();
+  });
+});
+
+describe('gridState — dirtyCellCount / isDraftClean', () => {
+  it('0 when draft equals lastCommitted (initial state)', () => {
+    clearDraft();
+    expect(dirtyCellCount()).toBe(0);
+    expect(isDraftClean()).toBe(true);
+  });
+
+  it('counts the number of cells that differ after a toggle', () => {
+    clearDraft();
+    toggleCellInDraft(0, 0);
+    toggleCellInDraft(0, 3);
+    expect(dirtyCellCount()).toBe(2);
+    expect(isDraftClean()).toBe(false);
+  });
+
+  it('returns to 0 after commitDraft advances lastCommitted', () => {
+    clearDraft();
+    toggleCellInDraft(0, 0);
+    commitDraft('');
+    expect(dirtyCellCount()).toBe(0);
+    expect(isDraftClean()).toBe(true);
+  });
+});
+
+describe('gridState — setModeDirect (manual mode override for tests)', () => {
+  it('switches mode without touching grid state', () => {
+    setModeDirect('view');
+    expect(getMode()).toBe('view');
+    setModeDirect('sketch');
+    expect(getMode()).toBe('sketch');
+    setModeDirect('edit');
+    expect(getMode()).toBe('edit');
   });
 });

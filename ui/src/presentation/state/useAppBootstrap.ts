@@ -12,6 +12,12 @@ import { ensureAudioLoaded, getAudioContextState } from '~/infrastructure/audio/
 import {
   hydrateSelectedPreset, resetSelectedPreset,
 } from './selectedPreset';
+import { useGridStateAutoSave } from './useGridStateAutoSave';
+import {
+  setGridDirect,
+  setLastCommittedGrid,
+  setModeDirect,
+} from './gridState';
 
 export type AudioRuntime = {
   readonly ctxState: () => { state: string; sampleRate: number | null };
@@ -50,6 +56,26 @@ const restoreFromIdbOrShare = (): void => {
   );
 };
 
+/**
+ * Restore StepGrid state from IDB (mode + draft + lastCommitted).
+ * Runs once on mount, before any user-visible state could be
+ * observed. If no state was saved (first launch), we keep the
+ * defaults (mode=view, empty grids).
+ */
+const restoreGridState = (): void => {
+  void Effect.runPromise(
+    Effect.gen(function* () {
+      const repo = yield* Repo;
+      const saved = yield* repo.loadGridState();
+      if (saved) {
+        setModeDirect(saved.mode);
+        setGridDirect(saved.draftGrid);
+        setLastCommittedGrid(saved.lastCommittedGrid);
+      }
+    }).pipe(Effect.provide(AppLayer)),
+  );
+};
+
 const installAudioPreloadOnFirstGesture = (): void => {
   let preloaded = false;
   const preload = (): void => {
@@ -66,6 +92,7 @@ const installAudioPreloadOnFirstGesture = (): void => {
 /**
  * App-level bootstrap: install transport sync, lazy-load sample banks,
  * restore the saved score from IDB (or apply pending ?s=… share snippet),
+ * restore StepGrid state (mode + draft + lastCommitted) from IDB,
  * register a one-shot audio preload on the first user gesture, and poll
  * the AudioContext state every 500ms (drives the topbar LED + FAB tone).
  *
@@ -83,6 +110,8 @@ export const useAppBootstrap = (): AudioRuntime => {
     installTransportAudioSync();
     void import('~/infrastructure/audio/SampleLoader').then((m) => m.loadAllSamples());
     restoreFromIdbOrShare();
+    restoreGridState();
+    useGridStateAutoSave();
     installAudioPreloadOnFirstGesture();
 
     const pollId = window.setInterval(() => {

@@ -66,3 +66,62 @@ export const gridToScore = (g: Grid): string => {
 /** True if grid has at least one active cell. */
 export const isGridEmpty = (g: Grid): boolean =>
   g.every((r) => r.every((c) => !c));
+
+/**
+ * StepGrid interaction mode.
+ *
+ * The grid has three orthogonal user intentions that previously
+ * looked identical from the UI (just a 4×8 of tappable cells).
+ * The mode pill disambiguates what a tap *does*:
+ *
+ *   - `view`   — read-only mirror of the score. Tap = preview a
+ *                drum hit via raw Web Audio. Score and grid state
+ *                are NOT modified. Used to inspect "what does my
+ *                code look like as a beat?" without danger.
+ *   - `sketch` — ephemeral draft buffer. Tap = preview + toggle a
+ *                draft cell. Draft is NOT in the score until the
+ *                user explicitly presses `↑ commit`. On sheet
+ *                close, a confirm dialog appears if the draft
+ *                has unsaved changes.
+ *   - `edit`   — direct, in-place edit of the 4 `s("…")` rows in
+ *                the current top-level `stack(...)`. Every tap
+ *                splices the corresponding layer and re-evaluates
+ *                the live scheduler (debounced 50ms). Gated on
+ *                `parseStackTopLayers` returning exactly 4 layers
+ *                whose first token is `s(`; otherwise the mode
+ *                button is disabled.
+ *
+ * See `math/wavecode-step-grid-modes` for the design rationale.
+ */
+export type GridMode = 'view' | 'sketch' | 'edit';
+
+export const GRID_MODES: ReadonlyArray<GridMode> = ['view', 'sketch', 'edit'];
+
+/** True if the two grids have identical cell values. */
+export const gridsEqual = (a: Grid, b: Grid): boolean => {
+  if (a.length !== b.length) return false;
+  for (let r = 0; r < a.length; r += 1) {
+    const ra = a[r];
+    const rb = b[r];
+    if (!ra || !rb || ra.length !== rb.length) return false;
+    for (let c = 0; c < ra.length; c += 1) {
+      if (ra[c] !== rb[c]) return false;
+    }
+  }
+  return true;
+};
+
+/** Count cells that differ between two grids (0..32). */
+export const countGridDiff = (a: Grid, b: Grid): number => {
+  let n = 0;
+  const rows = Math.min(a.length, b.length);
+  for (let r = 0; r < rows; r += 1) {
+    const ra = a[r] ?? [];
+    const rb = b[r] ?? [];
+    const cols = Math.min(ra.length, rb.length);
+    for (let c = 0; c < cols; c += 1) {
+      if (ra[c] !== rb[c]) n += 1;
+    }
+  }
+  return n;
+};

@@ -8,6 +8,8 @@ import type {
   OfflineRenderOptions,
   OfflineRenderResult,
 } from '~/infrastructure/audio/OfflineRender';
+import type { GridMode } from './music/gridTypes';
+import type { Grid } from './music/gridTypes';
 
 /**
  * Service Tags (интерфейсы).
@@ -80,6 +82,26 @@ export class AudioEngine extends Context.Tag('AudioEngine')<
       layerMix: ReadonlyArray<LayerMix>,
     ) => Effect.Effect<void, never, never>;
     /**
+     * Hot-swap a new score into the live scheduler without a full
+     * `eval` cycle (no `repl.stop`, scheduler keeps running, the new
+     * pattern takes over at the next lookahead window). Used by
+     * StepGrid edit-mode per-tap — the score is mutated by splicing
+     * one `s("…")` row in-place via `editGridLayer`, and we push the
+     * new snippet into the scheduler without disrupting playback.
+     *
+     * On parse failure (corrupt snippet), the existing
+     * `repl.scheduler.pattern` is left untouched — same silent-
+     * rollback contract as `setLayerMix`. Implementations must be
+     * idempotent.
+     *
+     * Companion of `setLayerMix` — both are runtime state pushers.
+     * See `math/wavecode-step-grid-modes/packet.md` synthesis (d).
+     */
+    readonly setScore: (
+      score: string,
+      layerMix: ReadonlyArray<LayerMix>,
+    ) => Effect.Effect<void, never, never>;
+    /**
      * Synchronous read of current playback cycle position (0..1).
      * Computed from AudioContext clock + last successful eval start time.
      * Returns 0 when audio has never been started.
@@ -134,7 +156,27 @@ export class Repo extends Context.Tag('Repo')<
     readonly saveMessages: (
       messages: ReadonlyArray<Message>,
     ) => Effect.Effect<void, never, never>;
+    /**
+     * Load the persisted StepGrid state — mode, draft, and
+     * lastCommitted grid. Reload restores user intent so a
+     * mid-sketch user doesn't lose their unsaved work.
+     */
+    readonly loadGridState: () => Effect.Effect<GridStateSnapshot | null, never, never>;
+    readonly saveGridState: (
+      snapshot: GridStateSnapshot,
+    ) => Effect.Effect<void, never, never>;
   }
 >() {}
+
+/**
+ * Persisted StepGrid state. `null` from `loadGridState` means
+ * "no state saved yet" — caller should seed the defaults
+ * (mode=view, empty grids).
+ */
+export type GridStateSnapshot = {
+  readonly mode: GridMode;
+  readonly draftGrid: Grid;
+  readonly lastCommittedGrid: Grid;
+};
 
 export type AppEnv = LLMClient | AudioEngine | Repo;
