@@ -130,6 +130,22 @@
   --preset-row-h:    44px;   /* wavecode-preset-row-and-toast-z: PresetRow fixed row (single select + padding) */
   --controls-h:      52px;   /* wavecode-transport-always-visible: TransportPanel fixed row */
   --tabbar-h:        60px;
+  /* wavecode-mobile-fixed-h-and-toast-dedupe: суммарная высота
+   * фиксированных рядов сверху на mobile (max-width:720px), которая
+   * В РЕАЛЬНОСТИ занимается на 412×900 viewport:
+   *   56  TopBar (--header-h)
+   *  +36  presetRow  (min-height 32 + 2*2 padding)
+   *  + 8  gap         (--preset-row-h token = 44, но реально 36;
+   *                    controlsRow.top = 56+44 = 100 → 8px gap)
+   *  +59  controlsRow (min-height 44 + 6+6 padding + 3px content
+   *                    overflow; @media rule на mobile не побеждает
+   *                    non-media rule по source-order)
+   *  =159  total fixed offset
+   * .app-body padding-top должен быть ≥ 159-56 = 103, плюс buffer.
+   * Используется ТОЛЬКО на mobile (см. media-query в components.css);
+   * на desktop продолжает работать desktop-формула
+   * calc(var(--preset-row-h) + var(--controls-h)) = 96px. */
+  --app-top-fixed-h-mobile: 108px;
   --fab-size:        56px;
   --fab-size-mini:   40px;
   --gutter:          16px;

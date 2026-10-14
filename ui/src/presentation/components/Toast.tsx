@@ -27,9 +27,15 @@
  *
  * Sample-load progress hook: подписывается на
  * `wavecode:sample-progress` и при `status: 'loaded'` пушит
- * однократный info-toast «Сэмплы загружены (N/N)». На status='error'
- * пушит warn-toast «Не удалось загрузить все сэмплы». 'loading' события
- * игнорируются — прогресс показывает SampleProgressBadge в TabBar.
+ * info-toast «Сэмплы загружены (N/N)». Так как SampleLoader эмитит
+ * 'loaded' на завершении КАЖДОГО банка (piano 21/21, drums 49/49,
+ * synth 73/73), используется settle-таймер (TOAST_SAMPLE_SETTLE_MS):
+ * каждый новый 'loaded' перезапускает таймер; тост пушится только
+ * когда после последнего 'loaded' прошло 1500ms без новых. На
+ * status='error' пушит warn-toast «Сэмплы загружены частично» (и
+ * отменяет pending settle-таймер, чтобы не было race). 'loading'
+ * события игнорируются — прогресс показывает SampleProgressBadge
+ * в TabBar.
  */
 
 import { type JSX, For, Show, onCleanup, onMount, createMemo } from 'solid-js';
@@ -67,6 +73,24 @@ const SEVERITY_ICON_JSX: Readonly<
 
 /** Размер иконки внутри .toast-icon (квадрат 20×20, отступ 2px). */
 const TOAST_ICON_SIZE = 16;
+
+/**
+ * SampleLoader эмитит `wavecode:sample-progress` с status='loaded' на
+ * завершении КАЖДОГО банка (piano: 21/21, drums: 49/49, synth: 73/73).
+ * Чтобы юзер видел один тост «Сэмплы загружены» после загрузки
+ * ВСЕХ банков, а не три подряд — дебаунсим: после первого 'loaded'
+ * запускаем settle-таймер; если за TOAST_SAMPLE_SETTLE_MS приходит
+ * ещё 'loaded', перезапускаем таймер с новыми данными. Финальный
+ * тост содержит числа последнего завершённого банка (≈ cumulative
+ * total самого «большого» банка).
+ *
+ * 1500ms выбрано потому что SampleLoader загружает банки
+ * последовательно (см. `registerBank` → `await samples(manifestUrl)`
+ * → `await preloadAllBuffers`) — между завершениями банков
+ * обычно <100ms. 1500ms гарантированно перекрывает burst, но
+ * остаётся визуально отзывчивым.
+ */
+const TOAST_SAMPLE_SETTLE_MS = 1500;
 
 function severityToTone(s: ToastSeverity): string {
   return SEVERITY_TOKEN[s];
@@ -151,17 +175,26 @@ function ToastItem(props: ToastItemProps): JSX.Element {
 export function Toast(): JSX.Element {
   const items = createMemo(() => consoleStore.toasts());
   onMount(() => {
+    let settleTimer: ReturnType<typeof setTimeout> | undefined;
     const onProgress = (e: Event): void => {
       const detail = (e as CustomEvent<SampleProgressEvent>).detail;
       if (!detail) return;
       if (detail.status === 'loaded' && detail.total > 0) {
-        consoleStore.pushToast({
-          severity: 'info',
-          title: 'Сэмплы загружены',
-          body: `${detail.loaded}/${detail.total} готовы к воспроизведению`,
-          source: 'samples',
-        });
+        if (settleTimer !== undefined) clearTimeout(settleTimer);
+        settleTimer = setTimeout(() => {
+          settleTimer = undefined;
+          consoleStore.pushToast({
+            severity: 'info',
+            title: 'Сэмплы загружены',
+            body: `${detail.loaded}/${detail.total} готовы к воспроизведению`,
+            source: 'samples',
+          });
+        }, TOAST_SAMPLE_SETTLE_MS);
       } else if (detail.status === 'error' && detail.total > 0) {
+        if (settleTimer !== undefined) {
+          clearTimeout(settleTimer);
+          settleTimer = undefined;
+        }
         consoleStore.pushToast({
           severity: 'warn',
           title: 'Сэмплы загружены частично',
@@ -172,7 +205,10 @@ export function Toast(): JSX.Element {
       // 'loading' / 'idle' — no toast; progress lives in SampleProgressBadge.
     };
     window.addEventListener(SAMPLE_PROGRESS_EVENT, onProgress as EventListener);
-    onCleanup(() => window.removeEventListener(SAMPLE_PROGRESS_EVENT, onProgress as EventListener));
+    onCleanup(() => {
+      window.removeEventListener(SAMPLE_PROGRESS_EVENT, onProgress as EventListener);
+      if (settleTimer !== undefined) clearTimeout(settleTimer);
+    });
   });
   return (
     <div class="toast-stack" role="region" aria-label="Notifications">
