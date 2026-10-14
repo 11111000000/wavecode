@@ -15,7 +15,6 @@ import {
   type SheetKind,
   type SheetSnap,
 } from '../state/uiState';
-import { SheetTabs } from './SheetTabs';
 import { triggerHaptic, triggerSnapPulse } from '~/infrastructure/haptics';
 
 type Props = ParentProps<{
@@ -287,12 +286,9 @@ export function BottomSheet(props: Props): JSX.Element {
           <Show when={props.subtitle}>
             <span class="wc-sheet__subtitle">{props.subtitle}</span>
           </Show>
-          {/* Internal sheet tabs: secondary navigation between
-              tools (Mixer/AI/Status/Step/Piano) when sheet is open.
-              Hidden via CSS on desktop (no-op when no sheet open). */}
-          <Show when={isMobileViewport()}>
-            <SheetTabs />
-          </Show>
+          {/* Switching between tools (Mixer/AI/Status/Step/Piano)
+              happens via the bottom TabBar, not via an in-sheet tab
+              strip — the latter duplicated the primary nav. */}
           <div class="wc-sheet__actions">
             <button
               type="button"
