@@ -1,10 +1,10 @@
 /**
- * ConsoleButton — fixed bottom-right FAB для открытия ConsoleSheet.
+ * ConsoleButton — topbar icon button для открытия ConsoleSheet.
  *
- * - Always visible: position: fixed; safe-area-aware bottom;
- *   size 44×44 (touch-target / WCAG 2.5.5 AAA).
- * - При unreadErrors() > 0: красный фон + pulse-glow анимация.
- * - Бейдж со счётчиком поверх кнопки (top-right corner).
+ * - Lives in .wc-topbar__actions (inline in the chrome header, not
+ *   floating). Size/visual: 44×44 wc-icon-btn, matches New/Undo/Redo.
+ * - При unreadErrors() > 0: красный текст + err-soft фон + pulse-glow
+ *   анимация, плюс бейдж со счётчиком в правом-верхнем углу.
  *
  * Hotkey hint (Phase-2 polish):
  *   - title attribute показывает платформо-зависимый хинт:
@@ -50,7 +50,7 @@ export function ConsoleButton(): JSX.Element {
   return (
     <button
       type="button"
-      class={`console-btn ${consoleStore.unreadErrors() > 0 ? 'has-errors' : ''}`}
+      class={`wc-icon-btn console-btn ${consoleStore.unreadErrors() > 0 ? 'has-errors' : ''}`}
       aria-label="Open console"
       title={CONSOLE_BUTTON_TITLE}
       data-testid="console-btn"
