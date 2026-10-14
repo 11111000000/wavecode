@@ -28,7 +28,7 @@ describe('TransportPanel — Play/Stop button (math/wavecode-play-in-control)', 
     ) as HTMLButtonElement | null;
     expect(btn).toBeTruthy();
     expect(btn!.getAttribute('aria-label')).toBe('Запуск');
-    expect(btn!.getAttribute('data-tone')).toBe('amber');
+    expect(btn!.getAttribute('data-tone')).toBe('primary');
     expect(btn!.getAttribute('data-state')).toBe('play');
     // The PlayIcon path is the triangle `M3 2 L13 8 L3 14 Z`.
     const svg = btn!.querySelector('svg');

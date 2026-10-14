@@ -3,7 +3,7 @@ import { PlayIcon, StopIcon, RecordIcon } from '../icons';
 
 type Props = ParentProps<{
   onClick: () => void;
-  tone?: 'amber' | 'cyan' | 'magenta';
+  tone?: 'primary' | 'cyan' | 'magenta';
   variant?: 'play' | 'stop' | 'record' | 'plus';
   ariaLabel: string;
   size?: 'default' | 'mini';
@@ -26,7 +26,7 @@ export function FAB(props: Props): JSX.Element {
     <button
       type="button"
       class={`wc-fab${props.size === 'mini' ? ' wc-fab--mini' : ''}`}
-      data-tone={props.tone ?? 'amber'}
+      data-tone={props.tone ?? 'primary'}
       data-state={props.pulse ? 'recording' : 'idle'}
       onClick={() => props.onClick()}
       aria-label={props.ariaLabel}

@@ -55,7 +55,7 @@ body {
 
 /* ── SELECTION ───────────────────────────────────────────── */
 ::selection {
-  background: var(--amber);
+  background: var(--primary);
   color: var(--fg-inverse);
   text-shadow: none;
 }
@@ -109,12 +109,12 @@ p { margin: 0; }
 ul, ol { margin: 0; padding: 0; }
 
 a {
-  color: var(--amber);
+  color: var(--primary);
   text-decoration: none;
   border-bottom: 1px solid transparent;
   transition: border-color var(--dur-xs) var(--ease);
 }
-a:hover { border-bottom-color: var(--amber); }
+a:hover { border-bottom-color: var(--primary); }
 
 button {
   font-family: inherit;
@@ -181,7 +181,9 @@ code, pre, .mono { font-family: var(--font-mono); }
 /* ── UTILITIES (text-only) ───────────────────────────────── */
 .dim   { color: var(--fg-dim); }
 .ghost { color: var(--fg-ghost); }
-.amber { color: var(--amber); }
+.primary { color: var(--primary); }
+.amber  { color: var(--primary); }   /* legacy alias */
+.warm  { color: var(--warm); }
 .cyan  { color: var(--cyan); }
 .magenta { color: var(--magenta); }
 .ok    { color: var(--ok); }

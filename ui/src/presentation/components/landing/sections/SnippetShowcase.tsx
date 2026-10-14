@@ -6,17 +6,17 @@ type PresetItem = {
   readonly id: string;
   readonly name: string;
   readonly genre: string;
-  readonly tone: 'amber' | 'cyan' | 'magenta';
+  readonly tone: 'primary' | 'cyan' | 'magenta';
 };
 
 const PRESETS: ReadonlyArray<PresetItem> = [
-  { id: 'creep',          name: 'Creep',           genre: 'Индie-рок · Radiohead',   tone: 'amber'   },
+  { id: 'creep',          name: 'Creep',           genre: 'Индie-рок · Radiohead',   tone: 'primary'   },
   { id: 'edm-house',      name: 'EDM 4-on-floor',   genre: 'Хаус · 128 BPM',           tone: 'cyan'    },
   { id: 'hiphop-boombap', name: 'Хип-хоп',          genre: '90-е · Нью-Йорк',          tone: 'magenta' },
-  { id: 'jazz-ii-v-i',    name: 'Джаз ii-V-I',      genre: 'Бибоп · ходячий бас',     tone: 'amber'   },
+  { id: 'jazz-ii-v-i',    name: 'Джаз ii-V-I',      genre: 'Бибоп · ходячий бас',     tone: 'primary'   },
   { id: 'bossa-nova',     name: 'Босса-нова',      genre: '3+2 · клаве',              tone: 'cyan'    },
   { id: 'trap',           name: 'Трэп',             genre: '808 · суб-бас',            tone: 'magenta' },
-  { id: 'idm-glitch',     name: 'IDM глитч',        genre: '5/4 + 7/8',                tone: 'amber'   },
+  { id: 'idm-glitch',     name: 'IDM глитч',        genre: '5/4 + 7/8',                tone: 'primary'   },
   { id: 'dreampop',       name: 'Dream pop',        genre: 'Шугейз · 16-ми',           tone: 'cyan'    },
 ];
 

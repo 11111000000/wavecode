@@ -56,7 +56,7 @@ export function Hero(): JSX.Element {
 
         <h1 class="l-hero__title" id="hero-title">
           Скажи словами —{' '}
-          <span class="accent-amber">получится музыка</span>
+          <span class="accent-primary">получится музыка</span>
         </h1>
 
         <p class="l-hero__sub">

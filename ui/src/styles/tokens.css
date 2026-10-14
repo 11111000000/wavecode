@@ -1,11 +1,14 @@
 /*
- * design tokens — Synthwave Modern Terminal.
+ * design tokens — Chroma Indigo Spectrum.
  *
- * Палитра: spectrum amber (primary) + cyan (playing) + magenta (record)
- * на amoled-black. Surface scale с 4 уровнями elevation, motion
- * spring-based, radius — мягкий modern (8-12px), z-scale пересмотрен.
+ * Палитра: --primary (violet, brand) + --live (cyan, playing) +
+ * --record (magenta, recording) + --warm (gold, warmth) на
+ * cool amoled-black. Surface scale с 4 уровнями elevation,
+ * motion spring-based, radius — мягкий modern (8-12px),
+ * z-scale пересмотрен.
  *
- * Reference: math/wavecode-modern-mobile-redesign/packet.md
+ * Reference: math/wavecode-palette-rebalance/packet.md
+ *  (supersedes: math/wavecode-modern-mobile-redesign)
  */
 
 :root {
@@ -29,15 +32,20 @@
   --fg-inverse: #0a0a0e;
 
   /* ── SPECTRUM ACCENTS (semantic) ──────────────────────────── */
-  --amber:      #ffaa3b;   /* primary — actions, identity, brand */
-  --amber-soft: rgba(255, 170, 59, 0.14);
-  --amber-glow: rgba(255, 170, 59, 0.45);
+  --primary:    #a78bfa;   /* primary — actions, identity, brand (violet) */
+  --primary-soft: rgba(167, 139, 250, 0.14);
+  --primary-glow: rgba(167, 139, 250, 0.45);
 
-  --cyan:       #5eead4;   /* playing-state, audio-active */
+  --warm:       #fbbf24;         /* warm — gold accent (BPM, hot
+                                          indicators, hover-shimmer, playhead) */
+  --warm-soft:  rgba(251, 191, 36, 0.14);
+  --warm-glow:  rgba(251, 191, 36, 0.45);
+
+  --cyan:       #5eead4;         /* live — playing-state, audio-active */
   --cyan-soft:  rgba(94, 234, 212, 0.14);
   --cyan-glow:  rgba(94, 234, 212, 0.45);
 
-  --magenta:    #f472b6;   /* record-state, error accent */
+  --magenta:    #f472b6;         /* record — record-state, error accent */
   --magenta-soft: rgba(244, 114, 182, 0.14);
   --magenta-glow: rgba(244, 114, 182, 0.45);
 
@@ -51,7 +59,7 @@
   /* ── BORDERS ──────────────────────────────────────────────── */
   --border:        #27272a;  /* zinc-800 */
   --border-strong: #3f3f46;  /* zinc-700 */
-  --border-active: var(--amber);
+  --border-active: var(--primary);
   --border-focus:  var(--cyan);
 
   /* ── RADIUS (modern, soft) ───────────────────────────────── */
@@ -178,7 +186,8 @@
   --ease-in:     cubic-bezier(0.4, 0, 1, 1);
 
   /* ── SHADOWS ──────────────────────────────────────────────── */
-  --shadow-glow-amber:   0 0 12px var(--amber-glow);
+  --shadow-glow-primary:  0 0 12px var(--primary-glow);
+  --shadow-glow-warm:     0 0 12px var(--warm-glow);
   --shadow-glow-cyan:    0 0 12px var(--cyan-glow);
   --shadow-glow-magenta: 0 0 12px var(--magenta-glow);
   --shadow-pop:    0 8px 32px rgba(0, 0, 0, 0.6);

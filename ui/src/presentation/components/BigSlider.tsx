@@ -1,7 +1,7 @@
 import { splitProps, type Component } from 'solid-js';
 
 type Props = {
-  tone?: 'amber' | 'cyan' | 'magenta';
+  tone?: 'primary' | 'cyan' | 'magenta';
   min?: number;
   max?: number;
   step?: number;
@@ -23,7 +23,7 @@ export const BigSlider: Component<Props> = (props) => {
     <input
       type="range"
       class="wc-slider-big"
-      data-tone={local.tone ?? 'amber'}
+      data-tone={local.tone ?? 'primary'}
       min={local.min ?? 0}
       max={local.max ?? 1}
       step={local.step ?? 0.01}

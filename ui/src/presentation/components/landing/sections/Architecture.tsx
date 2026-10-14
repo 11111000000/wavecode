@@ -48,7 +48,7 @@ export function Architecture(): JSX.Element {
             <span>ты пишешь</span>
           </span>
           <span class="l-arch__legend-item">
-            <span class="l-arch__legend-swatch" style={{ background: 'var(--amber-soft)', border: '1px solid var(--amber)' }} />
+            <span class="l-arch__legend-swatch" style={{ background: 'var(--primary-soft)', border: '1px solid var(--primary)' }} />
             <span>звучит</span>
           </span>
           <span class="l-arch__legend-item">

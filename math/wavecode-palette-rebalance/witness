@@ -1,0 +1,43 @@
+applied_at: 2026-10-14
+branch: wavecode/palette-chroma-indigo
+commit: see `git log --oneline` after `witness` file creation
+notes: |
+  Direction A. Chroma Indigo: --primary #a78bfa (violet) replaces
+  --amber #ffaa3b throughout components.css (~95 places), landing.css,
+  base.css, admin.css. Spectrum gradient in 3 brand assets (favicon,
+  WavecodeLogo inline, landing topbar logo, index.html boot loader)
+  shifted from amber → cyan → magenta to primary → cyan → magenta.
+  data-tone attribute renamed from 'amber' to 'primary' everywhere
+  (CSS selectors + JSX strings + test expectations). New --warm
+  token (#fbbf24 gold) introduced with --warm-soft and --warm-glow
+  variants, applied to .playhead in components.css (scanning-beam
+  warm-feeling shimmer line). Pre-existing 5 test failures in
+  uiState.test.ts are unrelated (verified by re-running on master).
+
+  Verification:
+    - `tsc --noEmit`: clean.
+    - `vite build`: dist 1.66 MB precache, 19 entries, 0 errors.
+    - `vitest run`: 709 passed, 5 pre-existing failures in uiState.test.ts.
+    - dist/assets/*.css search "#ffaa3b" → 0 hits; "a78bfa" → present.
+    - Index.html boot loader, favicon.svg, icons/index.tsx render with
+      violet → cyan → magenta gradient.
+
+  Supersedes partial of:
+    - math/wavecode-modern-mobile-redesign (palette dimension only;
+      typography, layout, mobile-flow — без изменений).
+    - math/wavecode-logo-modern (spectrum gradient теперь primary →
+      cyan → magenta вместо amber → cyan → magenta; LED dot теперь
+      primary; tile geometry сохраняется).
+
+  Не вошло в этот коммит (deferred):
+    - Перевод всех упоминаний "amber" в комментариях (~12 мест в
+      components.css, base.css, icons.tsx, FAB.tsx). Комментарии —
+      описание design-system, не behavior; оставлены как historical
+      reference для grounding. (Можно отдельным пакетом
+      `wavecode-palette-comments-cleanup` если важно.)
+    - PNG-версии favicon (icon-192, icon-512, apple-touch-180).
+      Как и в предыдущем пакете, требует rsvg-convert/inkscape,
+      не в PATH.
+    - Token-semantic-decoupling (`--action`, `--attention`, `--positive`,
+      `--negative`) поверх `--primary`, `--warm`, `--live`, `--record` —
+      описан в synthesis packet.md как next step; не блокирует rebrand.

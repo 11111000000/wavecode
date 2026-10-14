@@ -125,7 +125,7 @@ export function TransportPanel(props: TransportPanelProps = {}): JSX.Element {
         <button
           type="button"
           class="transport-play-btn"
-          data-tone={audioRunning() ? 'cyan' : 'amber'}
+          data-tone={audioRunning() ? 'cyan' : 'primary'}
           data-state={audioRunning() ? 'stop' : 'play'}
           aria-label={audioRunning() ? 'Стоп' : 'Запуск'}
           aria-pressed={audioRunning()}

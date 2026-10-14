@@ -64,8 +64,8 @@
   display: inline-block;
   font-family: var(--font-mono);
   font-size: var(--fs-md);
-  color: var(--amber);
-  text-shadow: 0 0 8px var(--amber-glow);
+  color: var(--primary);
+  text-shadow: 0 0 8px var(--primary-glow);
   letter-spacing: 0.04em;
   white-space: nowrap;
 }
@@ -73,8 +73,8 @@
   animation: wc-brand-glow 2.2s ease-in-out infinite;
 }
 @keyframes wc-brand-glow {
-  0%, 100% { opacity: 0.8; text-shadow: 0 0 4px var(--amber-glow); }
-  50%      { opacity: 1.0; text-shadow: 0 0 12px var(--amber); }
+  0%, 100% { opacity: 0.8; text-shadow: 0 0 4px var(--primary-glow); }
+  50%      { opacity: 1.0; text-shadow: 0 0 12px var(--primary); }
 }
 
 /* BrandLogo — SVG-логотип «W waveform + spectrum» */
@@ -82,10 +82,10 @@
   display: inline-block;
   vertical-align: middle;
   flex-shrink: 0;
-  color: var(--amber);
-  filter: drop-shadow(0 0 6px var(--amber-glow));
+  color: var(--primary);
+  filter: drop-shadow(0 0 6px var(--primary-glow));
   transition: filter var(--dur-sm) var(--ease);
 }
 .wc-brand-logo:hover {
-  filter: drop-shadow(0 0 10px var(--amber));
+  filter: drop-shadow(0 0 10px var(--primary));
 }
