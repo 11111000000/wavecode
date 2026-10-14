@@ -18,6 +18,23 @@
 
 set -euo pipefail
 
+# Resolve pnpm to an absolute path — non-interactive SSH sessions (e.g.
+# GitVerse Actions runner) don't source ~/.bashrc, so a bare `pnpm` would
+# fail with "command not found" even when pnpm is installed for the user.
+# corepack installs pnpm at /home/<user>/.local/bin/pnpm; fall back to
+# PATH lookup so the script still works on dev hosts where pnpm is in
+# /run/current-system/sw/bin or corepack-managed shims.
+if command -v pnpm >/dev/null 2>&1; then
+  PNPM="$(command -v pnpm)"
+else
+  PNPM="/home/${SUDO_USER:-$USER}/.local/bin/pnpm"
+fi
+if [ ! -x "$PNPM" ]; then
+  echo "ERROR: pnpm not found. Install via corepack:"
+  echo "  corepack enable && corepack prepare pnpm@latest --activate"
+  exit 1
+fi
+
 UI_DIR="$(cd "$(dirname "$0")/../ui" && pwd)"
 DEPLOY_DIR="/var/lib/wavecode/dist"
 
@@ -44,12 +61,12 @@ fi
 # 3. Install if needed.
 if [ ! -d node_modules ]; then
   echo "==> pnpm install"
-  pnpm install --no-frozen-lockfile
+  "$PNPM" install --no-frozen-lockfile
 fi
 
 # 4. Build.
 echo "==> pnpm build"
-pnpm build
+"$PNPM" build
 
 # 5. Deploy to /var/lib/wavecode/dist (Caddy needs read access there).
 echo "==> sudo cp -r $UI_DIR/dist/* → $DEPLOY_DIR/"
