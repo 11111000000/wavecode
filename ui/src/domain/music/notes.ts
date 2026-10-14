@@ -63,10 +63,11 @@ export const singleNoteSnippet = (note: string): string => {
  * Instrument-aware Strudel snippet for a single MIDI note.
  *
  * Maps a MIDI number → Strudel note name (e.g. 60 → "c4") and emits a
- * one-voice pattern with the selected `PianoInstrument` (triangle/sine/
- * sawtooth/square). Used by `pianoRecStore.commitSnippet` so the buffer
- * committed to the editor mirrors what the user just played on the
- * on-screen piano.
+ * one-voice pattern with the selected `PianoInstrument` (a sample
+ * name from the Strudel bank — piano / casio / guitar / synth /
+ * triangle / sine / sawtooth / square). Used by
+ * `pianoRecStore.commitSnippet` so the buffer committed to the editor
+ * mirrors what the user just played on the on-screen piano.
  *
  * Out-of-range MIDI (NaN, negative, > 127) falls back to `a4` with
  * triangle — matches `singleNoteSnippet`'s tolerance and keeps snippet
@@ -136,29 +137,61 @@ export const isBlackKey = (midi: number): boolean => {
 };
 
 // =========================================================================
-// Piano instrument — waveform selector for the Web Audio piano synth.
+// Piano instrument — selector for the on-screen piano.
 // =========================================================================
 //
 // Lives in domain (pure type, no audio imports) because:
-//   - It's a string literal union, identical to the OscillatorType
-//     strings exposed by Web Audio API.
-//   - The mapping `PianoInstrument -> OscillatorType` is a pure cast
-//     (no runtime work); both infrastructure/audio/PianoSynth and
+//   - It's a string literal union; the values are Strudel sample
+//     names that also happen to overlap with the Web Audio
+//     `OscillatorType` string literal union (the first 4).
+//   - The mapping `PianoInstrument -> OscillatorType` is a small
+//     function (not pure identity any more); both
+//     infrastructure/audio/PianoSynth and
 //     presentation/state/pianoRecStore need the type.
 //
-// The infrastructure layer imports `PianoInstrument` from here and uses
-// `pianoInstrumentToOscType()` to pass it to `OscillatorNode.type`.
-// The presentation layer imports the type as the value held in the
-// pianoRecStore instrument signal.
+// Sample vs oscillator distinction (wavecode-piano-sample-picker):
+//   The 4 oscillator literals (triangle / sine / sawtooth / square)
+//   are pure Web Audio waveforms — used as a "raw synth" preview
+//   when the user wants to feel the underlying synth character.
+//   The 4 sample literals (piano / casio / guitar / synth) are
+//   names that Strudel resolves from the sample bank at eval time.
+//   When the user picks "piano" and records, the committed snippet
+//   uses `s("piano")` — so the recorded note plays through Strudel's
+//   piano sample rather than a triangle oscillator, matching the
+//   timbre of the rest of the score. The PianoSynth falls back to
+//   the closest oscillator for the tap-latency preview (full
+//   Strudel path would add ~50-200ms latency per note).
+//
+// The infrastructure layer imports `PianoInstrument` from here and
+// uses `pianoInstrumentToOscType()` to pass it to
+// `OscillatorNode.type`. The presentation layer imports the type as
+// the value held in the pianoRecStore instrument signal and as
+// the value used by `noteToneSnippet` to construct the committed
+// Strudel snippet (`s("${instrument}")`).
 
-/** Oscillator waveform for the on-screen piano. Matches Web Audio
- *  `OscillatorType` string literal union (excluding 'custom'). */
-export type PianoInstrument = 'triangle' | 'sine' | 'sawtooth' | 'square';
+/** Sample name (or oscillator waveform) for the on-screen piano.
+ *  The 4 oscillator literals double as Strudel sample names that
+ *  resolve to the corresponding Web Audio waveform. The 4 sample
+ *  literals resolve to Strudel-bank samples at eval time. */
+export type PianoInstrument =
+  | 'triangle' | 'sine' | 'sawtooth' | 'square'
+  | 'piano' | 'casio' | 'guitar' | 'synth';
 
-/** Coerce the domain `PianoInstrument` to a Web Audio `OscillatorType`.
- *  The mapping is identity (the string union values match the W3C
- *  OscillatorType string literal union exactly), but the function
- *  exists so the cast is explicit at the boundary — protects against
- *  future drift if the W3C spec adds a literal to one union but not the
- *  other. */
-export const pianoInstrumentToOscType = (inst: PianoInstrument): OscillatorType => inst;
+/** Coerce the domain `PianoInstrument` to a Web Audio
+ *  `OscillatorType`. Oscillator literals map identity; sample
+ *  literals fall back to the closest oscillator timbre (triangle
+ *  for "piano" — soft, sine for "casio" — warm, sawtooth for
+ *  "guitar" — bright, square for "synth" — harsh). Full sample
+ *  playback through Strudel is a future-work packet. */
+export const pianoInstrumentToOscType = (inst: PianoInstrument): OscillatorType => {
+  switch (inst) {
+    case 'triangle': return 'triangle';
+    case 'sine':     return 'sine';
+    case 'sawtooth': return 'sawtooth';
+    case 'square':   return 'square';
+    case 'piano':    return 'triangle';
+    case 'casio':    return 'sine';
+    case 'guitar':   return 'sawtooth';
+    case 'synth':    return 'square';
+  }
+};

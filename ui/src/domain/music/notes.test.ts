@@ -5,6 +5,7 @@ import {
   strudelNoteToMidi,
   singleNoteSnippet,
   multiNoteSnippet,
+  noteToneSnippet,
   SILENCE_SNIPPET,
   isInPianoRange,
   rangeNotes,
@@ -138,17 +139,26 @@ describe('notes', () => {
   });
 
   describe('pianoInstrumentToOscType (W3C OscillatorType cast)', () => {
-    // The mapping is identity — `PianoInstrument` is structurally a
-    // subset of `OscillatorType` ('triangle' | 'sine' | 'sawtooth' |
-    // 'square', which is exactly the W3C OscillatorType union minus
-    // 'custom'). These tests guard against accidental drift.
+    // (wavecode-piano-sample-picker) The 4 oscillator literals map
+    // identity; the 4 sample literals fall back to a close oscillator
+    // timbre. Tests guard against accidental drift.
 
-    const all: ReadonlyArray<PianoInstrument> = ['triangle', 'sine', 'sawtooth', 'square'];
+    const all: ReadonlyArray<PianoInstrument> = [
+      'triangle', 'sine', 'sawtooth', 'square',
+      'piano', 'casio', 'guitar', 'synth',
+    ];
 
-    it('returns the same string for every supported waveform', () => {
-      for (const inst of all) {
+    it('returns the same string for every oscillator literal', () => {
+      for (const inst of ['triangle', 'sine', 'sawtooth', 'square'] as const) {
         expect(pianoInstrumentToOscType(inst)).toBe(inst);
       }
+    });
+
+    it('sample literals fall back to a close oscillator timbre', () => {
+      expect(pianoInstrumentToOscType('piano')).toBe('triangle');
+      expect(pianoInstrumentToOscType('casio')).toBe('sine');
+      expect(pianoInstrumentToOscType('guitar')).toBe('sawtooth');
+      expect(pianoInstrumentToOscType('synth')).toBe('square');
     });
 
     it('result is structurally an OscillatorType (assignment-safe)', () => {
@@ -166,8 +176,28 @@ describe('notes', () => {
       }
     });
 
-    it('exhaustive — exactly 4 instruments', () => {
-      expect(all).toHaveLength(4);
+    it('exhaustive — exactly 8 instruments', () => {
+      expect(all).toHaveLength(8);
+    });
+  });
+
+  describe('noteToneSnippet with sample literals (wavecode-piano-sample-picker)', () => {
+    it('emits s("piano") snippet when instrument is "piano"', () => {
+      const out = noteToneSnippet(60, 'piano');
+      expect(out).toContain('.s("piano")');
+      expect(out).toContain('note("c4")');
+    });
+
+    it('emits s("casio") snippet when instrument is "casio"', () => {
+      const out = noteToneSnippet(64, 'casio');
+      expect(out).toContain('.s("casio")');
+      expect(out).toContain('note("e4")');
+    });
+
+    it('emits s("triangle") snippet when instrument is "triangle" (oscillator literal still works)', () => {
+      const out = noteToneSnippet(67, 'triangle');
+      expect(out).toContain('.s("triangle")');
+      expect(out).toContain('note("g4")');
     });
   });
 });
