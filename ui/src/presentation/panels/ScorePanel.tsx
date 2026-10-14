@@ -9,7 +9,7 @@ import {
 import { appStore, dispatch } from '../state/appStore';
 import { getDebug } from '~/infrastructure/audio/LiveAudioEngine';
 import { CodeMirrorEditor, type CodeMirrorEditorApi } from '../components/CodeMirrorEditor';
-import { LanguageToggle } from '../components/LanguageToggle';
+import { TranspileButton } from '../components/TranspileButton';
 import { MiniNotationToolbar } from '../components/MiniNotationToolbar';
 import { PianoKeyboard } from '../components/PianoKeyboard';
 import {
@@ -244,7 +244,7 @@ export function ScorePanel() {
               editorApi = api;
             }}
           />
-          <LanguageToggle />
+          <TranspileButton />
         </div>
       </Suspense>
 
