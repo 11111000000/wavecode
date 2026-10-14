@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import {
-  channelColor, clampBin, defaultMidiBounds, freqBinForBar, layerColor,
-  lerpColor, projectNote,
+  bandHue, bandLevel, channelColor, clampBin, cpsToBpm,
+  defaultMidiBounds, freqBinForBar, hzToBin, layerColor, lerpColor,
+  perceptual, pickBarCount, projectNote, radialBar, smooth, updatePeakHold,
 } from './visualizerHelpers';
 
 describe('visualizerHelpers.layerColor', () => {
@@ -209,5 +210,198 @@ describe('visualizerHelpers.defaultMidiBounds', () => {
     ];
     // observed range 60..60 + 4 padding = 4, bumped to lo+12 = 70.
     expect(defaultMidiBounds(events)).toEqual({ lo: 58, hi: 70 });
+  });
+});
+
+describe('visualizerHelpers.hzToBin', () => {
+  it('maps 0 Hz to bin 0', () => {
+    expect(hzToBin(0, 44100, 1024)).toBe(0);
+  });
+
+  it('maps Nyquist (sampleRate/2) to the top bin', () => {
+    // sampleRate/2 = 22050, fftSize = 1024, bin = (22050 * 1024) / 44100 = 512
+    expect(hzToBin(22050, 44100, 1024)).toBe(512);
+  });
+
+  it('returns 0 for invalid sample rates / FFT sizes', () => {
+    expect(hzToBin(440, 0, 1024)).toBe(0);
+    expect(hzToBin(440, 44100, 0)).toBe(0);
+  });
+});
+
+describe('visualizerHelpers.bandLevel', () => {
+  it('averages the bins in [loHz..hiHz] and normalises to 0..1', () => {
+    // 44100 Hz sample rate, 1024 fftSize → 1 bin = 43.07 Hz.
+    // 250..500 Hz → bins 5..11 (approx). Fill with 128 (silence at 0.5).
+    const bins = new Uint8Array(512);
+    for (let i = 0; i < 512; i++) bins[i] = i < 5 ? 0 : i > 11 ? 0 : 200;
+    const lvl = bandLevel(bins, 250, 500, 44100, 1024);
+    expect(lvl).toBeGreaterThan(0.7);
+    expect(lvl).toBeLessThanOrEqual(1);
+  });
+
+  it('returns 0 for empty bins', () => {
+    expect(bandLevel(new Uint8Array(0), 100, 1000, 44100, 1024)).toBe(0);
+  });
+
+  it('returns 0 when the band falls outside the FFT range', () => {
+    const bins = new Uint8Array(512).fill(255);
+    expect(bandLevel(bins, 100000, 200000, 44100, 1024)).toBe(0);
+  });
+});
+
+describe('visualizerHelpers.updatePeakHold', () => {
+  it('instantly follows a rising signal (attack)', () => {
+    const peaks = new Float32Array([0, 0, 0]);
+    const values = new Float32Array([0.8, 0.2, 0.5]);
+    const next = updatePeakHold(peaks, values, 0.01);
+    expect(next[0]).toBeCloseTo(0.8, 5);
+    expect(next[1]).toBeCloseTo(0.2, 5);
+    expect(next[2]).toBeCloseTo(0.5, 5);
+  });
+
+  it('slowly decays when the signal falls (release)', () => {
+    const peaks = new Float32Array([0.8, 0.2, 0.5]);
+    const values = new Float32Array([0.0, 0.0, 0.0]);
+    const next = updatePeakHold(peaks, values, 0.05);
+    expect(next[0]).toBeCloseTo(0.75, 5);
+    expect(next[1]).toBeCloseTo(0.15, 5);
+    expect(next[2]).toBeCloseTo(0.45, 5);
+  });
+
+  it('never goes below the new value', () => {
+    const peaks = new Float32Array([0.3]);
+    const values = new Float32Array([0.9]);
+    const next = updatePeakHold(peaks, values, 0.5);
+    // Float32 storage → ~6 sig figs; use closeTo instead of toBe.
+    expect(next[0]).toBeCloseTo(0.9, 5);
+  });
+
+  it('handles length mismatches by taking the shorter side', () => {
+    const peaks = new Float32Array([0.1, 0.2, 0.3]);
+    const values = new Float32Array([0.5]);
+    const next = updatePeakHold(peaks, values, 0.0);
+    expect(next.length).toBe(1);
+    expect(next[0]).toBe(0.5);
+  });
+});
+
+describe('visualizerHelpers.smooth', () => {
+  it('returns the next value when prev is NaN', () => {
+    expect(smooth(Number.NaN, 0.5, 0.3)).toBe(0.5);
+  });
+
+  it('returns prev when next is NaN', () => {
+    expect(smooth(0.5, Number.NaN, 0.3)).toBe(0.5);
+  });
+
+  it('lerps by alpha', () => {
+    expect(smooth(0, 1, 0.25)).toBeCloseTo(0.25, 5);
+    expect(smooth(1, 0, 0.25)).toBeCloseTo(0.75, 5);
+  });
+
+  it('clamps alpha to [0..1]', () => {
+    expect(smooth(0, 1, 2)).toBe(1);
+    expect(smooth(0, 1, -1)).toBe(0);
+  });
+});
+
+describe('visualizerHelpers.radialBar', () => {
+  it('places t=0 at the top of the circle', () => {
+    const { x0, y0, x1, y1 } = radialBar(0, 1, 100, 100, 20, 50);
+    // angle = -π/2 → (cos, sin) = (0, -1) → y0 = 100 - 20 = 80, y1 = 100 - 50 = 50
+    expect(x0).toBeCloseTo(100, 5);
+    expect(y0).toBeCloseTo(80, 5);
+    expect(x1).toBeCloseTo(100, 5);
+    expect(y1).toBeCloseTo(50, 5);
+  });
+
+  it('places t=0.25 at the right of the circle', () => {
+    const { x1, y1 } = radialBar(0.25, 1, 100, 100, 20, 50);
+    // angle = 0 → (1, 0) → x1 = 150, y1 = 100
+    expect(x1).toBeCloseTo(150, 5);
+    expect(y1).toBeCloseTo(100, 5);
+  });
+
+  it('level=0 collapses the bar to the inner radius', () => {
+    const a = radialBar(0.5, 0, 100, 100, 20, 50);
+    const b = radialBar(0.5, 1, 100, 100, 20, 50);
+    expect(a.x1).toBeCloseTo(b.x0, 5);
+    expect(a.y1).toBeCloseTo(b.y0, 5);
+  });
+
+  it('clamps level to [0..1]', () => {
+    const a = radialBar(0.1, -0.5, 100, 100, 20, 50);
+    const b = radialBar(0.1, 0, 100, 100, 20, 50);
+    expect(a.x1).toBeCloseTo(b.x1, 5);
+    expect(a.y1).toBeCloseTo(b.y1, 5);
+  });
+});
+
+describe('visualizerHelpers.perceptual', () => {
+  it('returns 0 for non-positive input', () => {
+    expect(perceptual(0, 0.5)).toBe(0);
+    expect(perceptual(-0.5, 0.5)).toBe(0);
+    expect(perceptual(Number.NaN, 0.5)).toBe(0);
+  });
+
+  it('raises to the given gamma', () => {
+    expect(perceptual(0.5, 2)).toBeCloseTo(0.25, 5);
+    expect(perceptual(0.5, 0.5)).toBeCloseTo(Math.sqrt(0.5), 5);
+  });
+
+  it('clamps input to [0..1]', () => {
+    expect(perceptual(1.5, 1)).toBe(1);
+  });
+});
+
+describe('visualizerHelpers.bandHue', () => {
+  it('produces a valid hsl() at every t in [0..1]', () => {
+    for (let t = 0; t <= 1; t += 0.1) {
+      const c = bandHue(t);
+      expect(c).toMatch(/^hsl\(\d+ \d+% \d+%\)$/);
+    }
+  });
+
+  it('low end is warm (gold), high end is cool (cyan)', () => {
+    const lo = bandHue(0);
+    const hi = bandHue(1);
+    // Hue 42 (gold) and 174 (cyan) are far apart.
+    const loHue = Number(lo.match(/hsl\((\d+)/)?.[1]);
+    const hiHue = Number(hi.match(/hsl\((\d+)/)?.[1]);
+    expect(loHue).toBeLessThan(60);
+    expect(hiHue).toBeGreaterThan(150);
+  });
+});
+
+describe('visualizerHelpers.pickBarCount', () => {
+  it('returns a value within [24..96]', () => {
+    expect(pickBarCount(360)).toBeGreaterThanOrEqual(24);
+    expect(pickBarCount(360)).toBeLessThanOrEqual(96);
+    expect(pickBarCount(1920)).toBeLessThanOrEqual(96);
+  });
+
+  it('returns 48 (the default) for invalid inputs', () => {
+    expect(pickBarCount(0)).toBe(48);
+    expect(pickBarCount(-1)).toBe(48);
+    expect(pickBarCount(Number.NaN)).toBe(48);
+  });
+
+  it('gives more bars on wider viewports', () => {
+    expect(pickBarCount(1920)).toBeGreaterThan(pickBarCount(360));
+  });
+});
+
+describe('visualizerHelpers.cpsToBpm', () => {
+  it('multiplies cps by 60 and rounds to nearest integer', () => {
+    expect(cpsToBpm(0.5)).toBe(30);
+    expect(cpsToBpm(2)).toBe(120);
+    expect(cpsToBpm(0.7)).toBe(42);
+  });
+
+  it('returns 0 for non-positive or non-finite input', () => {
+    expect(cpsToBpm(0)).toBe(0);
+    expect(cpsToBpm(-1)).toBe(0);
+    expect(cpsToBpm(Number.NaN)).toBe(0);
   });
 });

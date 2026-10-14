@@ -3892,9 +3892,15 @@ textarea.ai-textarea:focus-visible {
  *
  *  Структура:
  *    .visualizer-panel
- *      .visualizer-header  (title + mode toggle)
+ *      .visualizer-header  (title + BPM pill + mode toggle)
  *      .visualizer-track   (SVG-карта цикла + playhead)
- *      .visualizer-scope   (canvas с FFT/waveform)
+ *      .visualizer-scope   (canvas + bass-glow overlay)
+ *      .visualizer-bands   (bass / mid / treble level meters)
+ *      .visualizer-stats   (event count + live indicator)
+ *
+ *  CSS-переменные, прокидываемые из JS:
+ *    --beat-energy  (0..1) — bass-уровень, дыхание для panel glow
+ *    --beat-bpm     (int)  — текущий BPM, для pulse-frequency
  *
  *  Цвета дёргаются из design-tokens (--primary, --cyan, --magenta,
  *  --surface-*). Внутри SVG блоки рисуются напрямую с hsl() — там
@@ -3902,14 +3908,33 @@ textarea.ai-textarea:focus-visible {
  * ========================================================================= */
 
 .visualizer-panel {
+  --beat-energy: 0;
+  --beat-bpm: 0;
   display: flex;
   flex-direction: column;
-  gap: var(--space-md);
-  padding: var(--space-md);
+  gap: var(--space-sm);
+  padding: var(--space-sm) var(--space-md) var(--space-md);
   height: 100%;
   font-family: var(--font-sans);
   color: var(--fg);
+  position: relative;
+  overflow: hidden;
 }
+/* Bass-driven outer glow — wide violet halo that "breathes" with kick. */
+.visualizer-panel::before {
+  content: '';
+  position: absolute;
+  inset: -20%;
+  background: radial-gradient(
+    ellipse at center,
+    hsla(252, 80%, 60%, calc(0.18 + var(--beat-energy) * 0.22)) 0%,
+    hsla(252, 80%, 60%, 0) 60%
+  );
+  pointer-events: none;
+  z-index: 0;
+  transition: opacity var(--dur-md) var(--ease);
+}
+.visualizer-panel > * { position: relative; z-index: 1; }
 
 .visualizer-header {
   display: flex;
@@ -3917,6 +3942,7 @@ textarea.ai-textarea:focus-visible {
   justify-content: space-between;
   gap: var(--space-md);
   flex-shrink: 0;
+  flex-wrap: wrap;
 }
 .visualizer-header__title {
   display: inline-flex;
@@ -3931,19 +3957,40 @@ textarea.ai-textarea:focus-visible {
   height: 8px;
   border-radius: 50%;
   background: var(--primary);
-  box-shadow: 0 0 8px var(--primary);
+  box-shadow: 0 0 8px var(--primary), 0 0 14px var(--primary);
   animation: visualizer-pulse 1.4s ease-in-out infinite;
 }
 @keyframes visualizer-pulse {
-  0%, 100% { opacity: 0.45; transform: scale(0.85); }
+  0%, 100% { opacity: 0.55; transform: scale(0.85); }
   50%      { opacity: 1;    transform: scale(1.15); }
+}
+.visualizer-header__bpm {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  font-size: var(--fs-2xs);
+  font-weight: var(--fw-medium);
+  letter-spacing: var(--ls-wide);
+  font-variant-numeric: tabular-nums;
+  color: var(--fg-dim);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  text-transform: lowercase;
+  font-family: var(--font-mono);
+  transition: color var(--dur-xs) var(--ease), border-color var(--dur-xs) var(--ease);
+}
+.visualizer-header__bpm[data-active='true'] {
+  color: var(--cyan);
+  border-color: var(--cyan);
+  box-shadow: 0 0 6px var(--cyan);
 }
 .visualizer-header__modes {
   display: inline-flex;
   background: var(--surface-2);
   border: 1px solid var(--border);
   border-radius: var(--radius-pill);
-  padding: 2px;
+  padding: 3px;
   gap: 2px;
 }
 .visualizer-mode-btn {
@@ -3952,20 +3999,23 @@ textarea.ai-textarea:focus-visible {
   border: none;
   color: var(--fg-dim);
   font-family: var(--font-sans);
-  font-size: var(--fs-xs);
+  font-size: var(--fs-sm);
   font-weight: var(--fw-medium);
   letter-spacing: var(--ls-wide);
   text-transform: lowercase;
-  padding: 4px 12px;
+  padding: 6px 14px;
+  min-height: 32px;
   border-radius: var(--radius-pill);
   cursor: pointer;
-  transition: color var(--dur-xs) var(--ease), background var(--dur-xs) var(--ease);
+  transition: color var(--dur-xs) var(--ease), background var(--dur-xs) var(--ease), box-shadow var(--dur-xs) var(--ease);
+  -webkit-tap-highlight-color: transparent;
 }
 .visualizer-mode-btn:hover { color: var(--fg); }
+.visualizer-mode-btn:active { transform: scale(0.97); }
 .visualizer-mode-btn[data-active='true'] {
   background: var(--primary);
   color: var(--surface-0);
-  box-shadow: 0 0 6px var(--primary);
+  box-shadow: 0 0 8px var(--primary), 0 0 16px var(--primary);
 }
 
 .visualizer-track {
@@ -3974,8 +4024,8 @@ textarea.ai-textarea:focus-visible {
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   padding: var(--space-sm);
-  flex: 1 1 auto;
-  min-height: 140px;
+  flex: 0 0 auto;
+  height: 120px;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -4003,20 +4053,28 @@ textarea.ai-textarea:focus-visible {
   display: block;
 }
 .visualizer-track__svg rect {
-  transition: opacity var(--dur-xs) var(--ease);
+  transition: opacity var(--dur-xs) var(--ease), filter var(--dur-xs) var(--ease);
 }
 .visualizer-track__svg rect:hover {
   opacity: 1;
-  filter: brightness(1.2);
+  filter: brightness(1.3) drop-shadow(0 0 4px currentColor);
 }
 .visualizer-track__empty {
   flex: 1;
   display: flex;
   align-items: center;
   justify-content: center;
+  gap: var(--space-sm);
   font-size: var(--fs-sm);
   color: var(--fg-dim);
   font-style: italic;
+}
+.visualizer-track__empty-pulse {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--primary);
+  animation: visualizer-pulse 1.4s ease-in-out infinite;
 }
 .visualizer-track__playhead {
   position: absolute;
@@ -4030,7 +4088,7 @@ textarea.ai-textarea:focus-visible {
   z-index: 3;
   transform: translateX(-1px);
   transition: opacity var(--dur-sm) var(--ease);
-  opacity: 0.85;
+  opacity: 0.9;
 }
 .visualizer-track__playhead[data-active='false'] {
   opacity: 0.15;
@@ -4038,28 +4096,161 @@ textarea.ai-textarea:focus-visible {
 
 .visualizer-scope {
   position: relative;
-  background: linear-gradient(180deg, var(--surface-1) 0%, var(--surface-0) 100%);
+  background:
+    radial-gradient(ellipse at 30% 0%, hsla(252, 80%, 60%, 0.06) 0%, transparent 60%),
+    radial-gradient(ellipse at 70% 100%, hsla(174, 80%, 55%, 0.05) 0%, transparent 60%),
+    linear-gradient(180deg, var(--surface-1) 0%, var(--surface-0) 100%);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
-  height: 140px;
+  height: 220px;
   flex-shrink: 0;
   overflow: hidden;
+}
+@media (max-width: 720px) {
+  .visualizer-scope { height: 180px; }
+  .visualizer-track { height: 100px; }
 }
 .visualizer-scope__canvas {
   display: block;
   width: 100%;
   height: 100%;
 }
+/* Beat-energy glow — radial pulse synced to bass hits. */
+.visualizer-scope__glow {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(
+    circle at 50% 100%,
+    hsla(252, 80%, 60%, calc(var(--beat-energy, 0) * 0.45)) 0%,
+    hsla(252, 80%, 60%, 0) 70%
+  );
+  mix-blend-mode: screen;
+  transition: opacity var(--dur-md) var(--ease);
+}
 .visualizer-scope__empty {
   position: absolute;
   inset: 0;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  font-size: var(--fs-sm);
-  color: var(--fg-dim);
-  font-style: italic;
+  gap: var(--space-md);
   padding: var(--space-md);
   text-align: center;
+}
+.visualizer-scope__empty-orbit {
+  position: relative;
+  width: 64px;
+  height: 64px;
+}
+.visualizer-scope__empty-orbit span {
+  position: absolute;
+  inset: 0;
+  border: 1.5px solid var(--primary);
+  border-radius: 50%;
+  opacity: 0;
+  animation: visualizer-orbit 2.4s ease-out infinite;
+}
+.visualizer-scope__empty-orbit span:nth-child(2) { animation-delay: 0.8s; }
+.visualizer-scope__empty-orbit span:nth-child(3) { animation-delay: 1.6s; }
+@keyframes visualizer-orbit {
+  0%   { transform: scale(0.4); opacity: 0.9; }
+  100% { transform: scale(1.4); opacity: 0; }
+}
+.visualizer-scope__empty-label {
+  font-size: var(--fs-sm);
+  color: var(--fg-dim);
+  font-family: var(--font-mono);
+}
+.visualizer-scope__empty-label kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  height: 24px;
+  padding: 0 6px;
+  margin: 0 2px;
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+  color: var(--primary);
+  background: var(--surface-2);
+  border: 1px solid var(--primary);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 0 6px var(--primary);
+}
+
+/* Band meters — bass / mid / treble. */
+.visualizer-bands {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-sm);
+  flex-shrink: 0;
+}
+.visualizer-band {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  font-family: var(--font-mono);
+  font-size: var(--fs-2xs);
+  text-transform: lowercase;
+  letter-spacing: var(--ls-wide);
+}
+.visualizer-band__label {
+  width: 42px;
+  flex-shrink: 0;
+  color: var(--fg-dim);
+}
+.visualizer-band__track {
+  flex: 1;
+  height: 6px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  overflow: hidden;
+  position: relative;
+}
+.visualizer-band__fill {
+  height: 100%;
+  border-radius: var(--radius-pill);
+  transition: width 60ms linear;
+}
+.visualizer-band__value {
+  width: 26px;
+  flex-shrink: 0;
+  text-align: right;
+  color: var(--fg-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.visualizer-stats {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  font-size: var(--fs-2xs);
+  font-family: var(--font-mono);
+  color: var(--fg-dim);
+  letter-spacing: var(--ls-wide);
+  text-transform: lowercase;
+  flex-shrink: 0;
+}
+.visualizer-stats__sep { opacity: 0.4; }
+.visualizer-stats__live {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--cyan);
+  text-transform: uppercase;
+  letter-spacing: var(--ls-wider);
+  font-weight: var(--fw-semibold);
+}
+.visualizer-stats__live::before {
+  content: '';
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--cyan);
+  box-shadow: 0 0 6px var(--cyan);
+  animation: visualizer-pulse 1.0s ease-in-out infinite;
 }
 
