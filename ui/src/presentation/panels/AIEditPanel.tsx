@@ -1,7 +1,6 @@
 import { createSignal, Show, For, createEffect, onCleanup } from 'solid-js';
 import { Effect } from 'effect';
 import { dispatch, appStore } from '../state/appStore';
-import { detectLanguage } from '~/domain/languageMode';
 import { AppLayer } from '~/infrastructure/composition';
 import { AudioEngine } from '~/domain/services';
 import { unlockAudioContext } from '~/infrastructure/audio/LiveAudioEngine';
@@ -72,11 +71,7 @@ export function AIEditPanel() {
             text,
             hist,
             { status: appStore.audio.status, ...(appStore.audio.lastError ? { lastError: appStore.audio.lastError } : {}) },
-            {
-              model: currentSettings.model,
-              thinking: currentSettings.thinking,
-              mode: detectLanguage(appStore.score),
-            },
+            { model: currentSettings.model, thinking: currentSettings.thinking },
           );
         }).pipe(Effect.provide(AppLayer)),
       );
@@ -116,7 +111,7 @@ export function AIEditPanel() {
       await Effect.runPromise(
         Effect.gen(function* () {
           const audio = yield* AudioEngine;
-          yield* audio.eval(newScore, detectLanguage(newScore));
+          yield* audio.eval(newScore);
         }).pipe(Effect.provide(AppLayer)),
       );
       dispatch({ type: 'audioStatusChange', status: 'playing' });

@@ -6,8 +6,6 @@ import type * as TonalModule from '@strudel/tonal';
 import type * as TranspilerModule from '@strudel/transpiler';
 import type * as WebaudioModule from '@strudel/webaudio';
 import * as superdough from 'superdough';
-import type { LanguageMode } from '~/domain/languageMode';
-import { lispTranspiler, type LispTranspilerResult } from '~/infrastructure/lisp/transpiler';
 import type { LayerMix } from '~/domain/types';
 import type { NoteEvent } from '~/domain/midi/encoder';
 import { injectMix } from '~/application/useCases/injectMix';
@@ -181,16 +179,9 @@ type DebugState = {
    * каждые 50ms без перезапуска scheduler.
    */
   lastEvaluatedSnippet: string;
-  /**
-   * Mode, в котором был интерпретирован `lastEvaluatedSnippet`.
-   * Используется `setLayerMix` и `getActiveHaps` для повторной
-   * `compileAndQuery` с тем же transpiler, что был при eval.
-   * См. `math/wavecode-lisp-transpiler` packet.
-   */
-  lastEvaluatedMode: LanguageMode;
 };
 
-let cachedRepl: { mode: LanguageMode; handle: Promise<ReplHandle> } | null = null;
+let cachedRepl: Promise<ReplHandle> | null = null;
 let modulesPromise: Promise<StrudelModules> | null = null;
 let debugState: DebugState = {
   triggers: 0,
@@ -202,7 +193,6 @@ let debugState: DebugState = {
   lastEvalClock: 0,
   evalCps: 0,
   lastEvaluatedSnippet: '',
-  lastEvaluatedMode: 'js',
 };
 
 const setDebug = (patch: Partial<DebugState>): void => {
@@ -229,29 +219,6 @@ const loadModules = (): Promise<StrudelModules> => {
     }));
   }
   return modulesPromise;
-};
-
-/**
- * Compose the Lisp transpiler with `@strudel/transpiler.transpiler` so
- * mini-notation inside string literals is applied on the audio path.
- *
- * `lispTranspiler` (in infrastructure/lisp) is pure — it emits JS calls
- * but leaves strings untouched. Without this composition,
- * `note("a4 b4 c5")` reaches Strudel as a raw string and plays silence.
- *
- * Returns a `(code, opts) => { output, ... }` shim matching Strudel's
- * `evaluate` contract. On Lisp syntax error the source is passed through
- * with `errors` populated (Strudel then surfaces the error upstream).
- */
-const makeLispAudioTranspiler = (
-  strudelTranspiler: (code: string, opts?: unknown) => { output: string },
-): ((code: string, opts?: unknown) => LispTranspilerResult) => {
-  return (code, opts) => {
-    const lisp = lispTranspiler(code);
-    if (lisp.errors.length > 0) return lisp;
-    const mini = strudelTranspiler(lisp.output, opts);
-    return { output: mini.output, miniLocations: [], errors: [] };
-  };
 };
 
 export const unlockAudioContext = (): AudioContext => {
@@ -305,11 +272,9 @@ export const getAudioContextState = (): { state: string; sampleRate: number | nu
   return { state: ctx.state, sampleRate: ctx.sampleRate };
 };
 
-const ensureRepl = (audioCtx: AudioContext, mode: LanguageMode): Promise<ReplHandle> => {
-  if (cachedRepl && cachedRepl.mode === mode) return cachedRepl.handle;
-  // Mode changed (or first call) — drop the old handle and rebuild.
-  // Note: the old scheduler is stopped before reassignment (see `eval`).
-  const handle: Promise<ReplHandle> = (async () => {
+const ensureRepl = (audioCtx: AudioContext): Promise<ReplHandle> => {
+  if (cachedRepl) return cachedRepl;
+  cachedRepl = (async () => {
     setDebug({ replErr: null });
     let modules: StrudelModules;
     try {
@@ -371,12 +336,9 @@ const ensureRepl = (audioCtx: AudioContext, mode: LanguageMode): Promise<ReplHan
 
       const repl = modules.webaudio.webaudioRepl({
         audioContext: audioCtx,
-        transpiler:
-          mode === 'lisp'
-            ? makeLispAudioTranspiler(modules.transpilerMod.transpiler)
-            : modules.transpilerMod.transpiler,
+        transpiler: modules.transpilerMod.transpiler,
       });
-      console.log(`[wavecode] webaudioRepl created (mode=${mode})`);
+      console.log('[wavecode] webaudioRepl created');
 
       return {
         evaluate: async (code: string) => {
@@ -430,13 +392,10 @@ const ensureRepl = (audioCtx: AudioContext, mode: LanguageMode): Promise<ReplHan
       const msg = err instanceof Error ? err.message : String(err);
       setDebug({ replErr: msg });
       console.error('[wavecode/ensureRepl] error:', msg, err);
-      // Drop the failed cache entry so the next call retries.
-      cachedRepl = null;
       throw err;
     }
   })();
-  cachedRepl = { mode, handle };
-  return handle;
+  return cachedRepl as Promise<ReplHandle>;
 };
 
 type HapLike = {
@@ -465,7 +424,6 @@ const fractionToNumber = (v: unknown): number => {
 const rawCompileAndQuery = async (
   snippet: string,
   cycles: number,
-  mode: LanguageMode = 'js',
 ): Promise<ReadonlyArray<NoteEvent>> => {
   const modules = await loadModules();
   await modules.core.evalScope(modules.core, modules.mini, modules.tonal);
@@ -474,11 +432,7 @@ const rawCompileAndQuery = async (
     transpiler?: unknown;
   };
   if (!transpilerMod.evaluate) throw new Error('transpilerMod.evaluate недоступен');
-  const transpiler =
-    mode === 'lisp'
-      ? makeLispAudioTranspiler(transpilerMod.transpiler as (c: string, o?: unknown) => { output: string })
-      : transpilerMod.transpiler;
-  const result = await transpilerMod.evaluate(snippet, transpiler);
+  const result = await transpilerMod.evaluate(snippet, transpilerMod.transpiler);
   const pattern = result.pattern as { queryArc?: (a: number, b: number) => unknown[] } | undefined;
   if (!pattern || typeof pattern.queryArc !== 'function') {
     throw new Error('compiled pattern не поддерживает queryArc');
@@ -551,12 +505,12 @@ const extractFromHap = (
 export const LiveAudioEngine: Layer.Layer<AudioEngine, never, never> = Layer.succeed(
   AudioEngine,
   {
-    eval: (snippet: string, mode: LanguageMode = 'js') =>
+    eval: (snippet: string) =>
       Effect.tryPromise({
         try: async () => {
           const audioCtx = (window as unknown as { __wavecodeAudioCtx?: AudioContext }).__wavecodeAudioCtx
             ?? unlockAudioContext();
-          const repl = await ensureRepl(audioCtx, mode);
+          const repl = await ensureRepl(audioCtx);
           // Stop the in-flight scheduler first so the previous pattern
           // does NOT keep playing one more cycle after the new one is
           // loaded. Without this, switching presets while audio was playing
@@ -571,7 +525,7 @@ await repl.evaluate(snippet);
             // scheduler's first lookahead resolves. `getActiveHaps` uses
             // this to re-run `compileAndQuery` against the latest score
             // without re-starting the scheduler.
-            setDebug({ lastEvaluatedSnippet: snippet, lastEvaluatedMode: mode });
+            setDebug({ lastEvaluatedSnippet: snippet });
             // Activate runtime mini-notation highlight (CodeMirror): feed
             // the freshly-scheduled Pattern into the bridge so editor
             // decorations start emitting. We call setActive unconditionally
@@ -614,14 +568,14 @@ await repl.evaluate(snippet);
       Effect.tryPromise({
         try: async () => {
           if (!cachedRepl) return;
-          const repl = await cachedRepl.handle;
+          const repl = await cachedRepl;
           repl.stop();
         },
         catch: () => null as null,
       }).pipe(Effect.catchAll(() => Effect.void)),
-    compileAndQuery: (snippet: string, cycles: number, mode: LanguageMode = 'js') =>
+    compileAndQuery: (snippet: string, cycles: number) =>
       Effect.tryPromise({
-        try: async () => rawCompileAndQuery(snippet, cycles, mode),
+        try: async () => rawCompileAndQuery(snippet, cycles),
         catch: (err) => {
           const msg = err instanceof Error ? err.message : String(err);
           console.error('[wavecode/LiveAudioEngine.compileAndQuery]', msg, err);
@@ -642,7 +596,7 @@ await repl.evaluate(snippet);
           // math/wavecode-step-grid-autoload-and-sync.
           setDebug({ cps });
           if (!cachedRepl) return;
-          const repl = await cachedRepl.handle;
+          const repl = await cachedRepl;
           repl.setCps?.(cps);
         },
         catch: () => null as null,
@@ -682,20 +636,13 @@ await repl.evaluate(snippet);
         try: async () => {
           const lastSnippet = debugState.lastEvaluatedSnippet;
           if (!lastSnippet.trim()) return;
-          // Use the mode that was active when the snippet was originally
-          // evaluated. `injectMix` works on the SOURCE form (lisp or js);
-          // the live repl is keyed by the same mode.
-          const lastMode = debugState.lastEvaluatedMode;
-          // Mixer hot-swap is JS-only in phase 1 — injectMix appends
-          // `.gain()` and would break s-expressions. No-op for Lisp.
-          if (lastMode === 'lisp') return;
           const audioCtx = unlockAudioContext();
-          const repl = await ensureRepl(audioCtx, lastMode);
+          const repl = await ensureRepl(audioCtx);
           const newSnippet = injectMix(lastSnippet, layerMix);
           // Snapshot the rebuilt snippet synchronously so a subsequent
           // `eval()` (e.g. user pressed ▶) picks up the same source —
           // same contract as `eval()` itself.
-          setDebug({ lastEvaluatedSnippet: newSnippet, lastEvaluatedMode: lastMode });
+          setDebug({ lastEvaluatedSnippet: newSnippet });
           await repl.evaluate(newSnippet);
           // Refresh runtime highlight bridge — pattern was hot-swapped;
           // the new miniLocations (from the re-transpile) must reach the
@@ -746,13 +693,8 @@ await repl.evaluate(snippet);
       Effect.tryPromise({
         try: async () => {
           if (!score.trim()) return;
-          // Use the mode that was active when the score was originally
-          // evaluated. The live repl is keyed by LanguageMode (see
-          // `wavecode-lisp-transpiler` packet), so a mode mismatch would
-          // route the new pattern through the wrong parser.
-          const lastMode = debugState.lastEvaluatedMode;
           const audioCtx = unlockAudioContext();
-          const repl = await ensureRepl(audioCtx, lastMode);
+          const repl = await ensureRepl(audioCtx);
           const newSnippet = injectMix(score, layerMix);
           // Snapshot the rebuilt snippet so a subsequent `eval()` (e.g.
           // user pressed ▶) picks up the same source — same contract
@@ -814,11 +756,8 @@ await repl.evaluate(snippet);
 
           // Query a 2-cycle window so we catch haps whose begin is just
           // before "now" but whose end is past "now" (a note that
-          // started 50ms ago should still be lit up). Use the same
-          // mode that was active at eval — Lisp snippets must be
-          // re-transpiled through the Lisp transpiler to be
-          // queryable.
-          const events = await rawCompileAndQuery(snippet, 2, debugState.lastEvaluatedMode);
+          // started 50ms ago should still be lit up).
+          const events = await rawCompileAndQuery(snippet, 2);
           const windowStart = nowCycle - 0.05; // 50ms tolerance backwards
           const windowEnd = nowCycle + 0.95;   // up to ~1 cycle ahead
 
@@ -865,7 +804,7 @@ await repl.evaluate(snippet);
           return new Error(`recordLive failed: ${msg}`);
         },
       }),
-    renderOffline: (snippet: string, opts, callbacks, mode: LanguageMode = 'js') =>
+    renderOffline: (snippet: string, opts, callbacks) =>
       Effect.tryPromise({
         try: async () => {
           const modules = await loadModules();
@@ -875,11 +814,7 @@ await repl.evaluate(snippet);
             transpiler?: unknown;
           };
           if (!transpilerMod.evaluate) throw new Error('transpilerMod.evaluate недоступен');
-          const transpiler =
-            mode === 'lisp'
-              ? makeLispAudioTranspiler(transpilerMod.transpiler as (c: string, o?: unknown) => { output: string })
-              : transpilerMod.transpiler;
-          if (!transpiler) throw new Error('transpiler недоступен');
+          if (!transpilerMod.transpiler) throw new Error('transpilerMod.transpiler недоступен');
           const sdIdx = (await import('superdough')) as unknown as Record<string, unknown>;
           const sdOut = (await import(
             /* @vite-ignore */ 'superdough/superdoughoutput.mjs'
@@ -918,7 +853,7 @@ await repl.evaluate(snippet);
               },
               transpilerMod: {
                 evaluate: transpilerMod.evaluate,
-                transpiler,
+                transpiler: transpilerMod.transpiler,
               },
               liveAudioCtx: liveCtx,
             },

@@ -1,6 +1,5 @@
 import { Effect } from 'effect';
 import { dispatch, appStore } from '../state/appStore';
-import { detectLanguage } from '~/domain/languageMode';
 import { AppLayer } from '~/infrastructure/composition';
 import { AudioEngine } from '~/domain/services';
 import type { LayerMix } from '~/domain/types';
@@ -154,22 +153,6 @@ const runWrapAndEval = async (
   transport: typeof appStore.transportState,
   layerMix: typeof appStore.layerMix,
 ): Promise<void> => {
-  const mode = detectLanguage(score);
-
-  // Lisp scores bypass mixer/swing wrapping. `injectMix` appends
-  // `.gain()` (JS syntax) when it doesn't find a `stack(` and
-  // `evalWithTransport` wraps in `(...)`, both of which break
-  // s-expressions. Phase 1: Lisp evals raw, no mixer/swing.
-  if (mode === 'lisp') {
-    await Effect.runPromise(
-      Effect.gen(function* () {
-        const audio = yield* AudioEngine;
-        yield* audio.eval(score, 'lisp');
-      }).pipe(Effect.provide(AppLayer)),
-    );
-    return;
-  }
-
   // Mixer side-state: gain/mute/solo — applied at eval time only,
   // never mutates the persisted score.
   const mixed = injectMix(score, layerMix);
@@ -179,7 +162,7 @@ const runWrapAndEval = async (
   await Effect.runPromise(
     Effect.gen(function* () {
       const audio = yield* AudioEngine;
-      yield* audio.eval(wrapped, 'js');
+      yield* audio.eval(wrapped);
     }).pipe(Effect.provide(AppLayer)),
   );
 };

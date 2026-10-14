@@ -1,7 +1,6 @@
 import { Show, createSignal, onCleanup, createMemo } from 'solid-js';
 import { Effect } from 'effect';
 import { appStore } from '../state/appStore';
-import { detectLanguage } from '~/domain/languageMode';
 import { AppLayer } from '~/infrastructure/composition';
 import { AudioEngine } from '~/domain/services';
 import type {
@@ -177,7 +176,6 @@ export function RecordButton() {
             {
               onProgress: (p) => setRenderProgress(p),
             },
-            detectLanguage(score),
           );
         }).pipe(Effect.provide(AppLayer)),
       );
