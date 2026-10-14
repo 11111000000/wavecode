@@ -75,6 +75,63 @@ const patchCreatePeriodicWave = (): void => {
   (window as unknown as { __patchedPeriodicWave?: boolean }).__patchedPeriodicWave = true;
 };
 
+/**
+ * Install an AnalyserNode as a "tap" on the audio path going to the
+ * speakers. Strudel/superdough owns the master-gain → destination
+ * routing internally and exposes no hook to insert analysis nodes;
+ * the standard visualization trick is to patch `AudioNode.prototype.connect`
+ * so that any `node.connect(audioCtx.destination)` call is rewritten as
+ * `node.connect(analyser); analyser.connect(audioCtx.destination)`.
+ *
+ * The analyser is pass-through (audio still reaches the speakers), and
+ * exposes `getByteFrequencyData` / `getByteTimeDomainData` for the
+ * `VisualizerPanel` to read. We use a re-entry guard so the
+ * `analyser.connect(destination)` we issue ourselves does not recurse.
+ *
+ * Idempotent per audioCtx (engine caches the AudioContext in
+ * `__wavecodeAudioCtx` so this runs at most once per session).
+ *
+ * See packet `math/visualizer-tab` for the design rationale.
+ */
+const installAnalyserTap = (audioCtx: AudioContext, analyser: AnalyserNode): void => {
+  const tag = (AudioNode.prototype as unknown as {
+    __wcAnalyserCtx?: WeakSet<AudioContext>;
+  });
+  tag.__wcAnalyserCtx = tag.__wcAnalyserCtx ?? new WeakSet<AudioContext>();
+  if (tag.__wcAnalyserCtx.has(audioCtx)) return;
+  tag.__wcAnalyserCtx.add(audioCtx);
+
+  const original = AudioNode.prototype.connect;
+  let inTap = false;
+  const patched = function (this: AudioNode, ...args: unknown[]): AudioNode | undefined {
+    const target = args[0];
+    if (!inTap && target === audioCtx.destination) {
+      inTap = true;
+      try {
+        const outIdx = (args[1] as number | undefined) ?? 0;
+        const inIdx = (args[2] as number | undefined) ?? 0;
+        const r = (original as unknown as (...a: unknown[]) => AudioNode).call(
+          this,
+          analyser,
+          outIdx,
+          0,
+        );
+        (original as unknown as (...a: unknown[]) => AudioNode).call(
+          analyser,
+          target,
+          0,
+          inIdx,
+        );
+        return r;
+      } finally {
+        inTap = false;
+      }
+    }
+    return (original as unknown as (...a: unknown[]) => AudioNode).apply(this, args);
+  };
+  AudioNode.prototype.connect = patched as typeof AudioNode.prototype.connect;
+};
+
 type StrudelModules = {
   core: typeof CoreModule;
   mini: typeof MiniModule;
@@ -166,14 +223,33 @@ const loadModules = (): Promise<StrudelModules> => {
 
 export const unlockAudioContext = (): AudioContext => {
   patchCreatePeriodicWave();
-  const existing = (window as unknown as { __wavecodeAudioCtx?: AudioContext }).__wavecodeAudioCtx;
-  const audioCtx = existing ?? new AudioContext();
-  (window as unknown as { __wavecodeAudioCtx?: AudioContext }).__wavecodeAudioCtx = audioCtx;
+  const win = window as unknown as {
+    __wavecodeAudioCtx?: AudioContext;
+    __wavecodeAnalyser?: AnalyserNode;
+  };
+  let audioCtx = win.__wavecodeAudioCtx;
+  if (!audioCtx) {
+    audioCtx = new AudioContext();
+    win.__wavecodeAudioCtx = audioCtx;
+    // Create one persistent AnalyserNode and install the destination-tap
+    // BEFORE any other code (Strudel's webaudioRepl) routes audio. The
+    // visualizer reads it via `getAnalyserNode()` / `__wavecodeAnalyser`.
+    const analyser = audioCtx.createAnalyser();
+    analyser.fftSize = 1024;
+    analyser.smoothingTimeConstant = 0.78;
+    installAnalyserTap(audioCtx, analyser);
+    win.__wavecodeAnalyser = analyser;
+  }
   setDebug({ audioCtxState: audioCtx.state });
   if (audioCtx.state === 'suspended') {
     void audioCtx.resume();
   }
   return audioCtx;
+};
+
+export const getAnalyserNode = (): AnalyserNode | null => {
+  const win = window as unknown as { __wavecodeAnalyser?: AnalyserNode };
+  return win.__wavecodeAnalyser ?? null;
 };
 
 export const testBeep = (frequency = 440, durationMs = 400): void => {
