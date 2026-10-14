@@ -26,7 +26,6 @@ import { useAppBootstrap } from './presentation/state/useAppBootstrap';
 import { useAutoSave } from './presentation/state/useAutoSave';
 import { TabBar } from './presentation/components/TabBar';
 import { Toast } from './presentation/components/Toast';
-import { ConsoleButton } from './presentation/components/ConsoleButton';
 import { ConsoleSheet } from './presentation/components/ConsoleSheet';
 import { installConsoleGlobals } from './presentation/components/consoleGlobals';
 import { TopBar } from './presentation/components/app/TopBar';
@@ -256,7 +255,6 @@ function AppShell(): JSX.Element {
       />
       <PanelsLayout />
       <TabBar />
-      <ConsoleButton />
       <ConsoleSheet />
     </main>
   );

@@ -6,6 +6,7 @@ import {
   LayoutSwapIcon, WavecodeLogo,
 } from '~/presentation/icons';
 import { ShareButton } from '~/presentation/components/ShareButton';
+import { ConsoleButton } from '~/presentation/components/ConsoleButton';
 import { OverflowMenu } from './OverflowMenu';
 
 type CtxState = { state: string; sampleRate: number | null };
@@ -112,6 +113,7 @@ export function TopBar(props: TopBarProps): JSX.Element {
           <RedoIcon size={18} />
         </button>
         <ShareButton />
+        <ConsoleButton />
         <button
           type="button"
           class="wc-icon-btn"

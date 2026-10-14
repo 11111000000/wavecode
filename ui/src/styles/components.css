@@ -1730,77 +1730,56 @@ button:not([disabled]):not(.no-shrink):active {
   }
 }
 
-/* ----- ConsoleButton (fixed bottom-right FAB-like) ----- */
+/* ----- ConsoleButton (topbar icon-btn, highlights on errors) -----
+ *
+ * Lives in .wc-topbar__actions alongside New/Undo/Redo/Share/Layout/
+ * Overflow — same 44×44 wc-icon-btn footprint, no fixed positioning.
+ * Adds:
+ *   - .has-errors  → red soft background + red text + pulse-glow
+ *                    animation so the button is impossible to miss when
+ *                    a console error is pending.
+ *   - .console-btn-badge → magenta counter pill at the icon's
+ *                    top-right corner, like ShareButton's badge.
+ */
 
 .console-btn {
-  position: fixed;
-  bottom: calc(var(--safe-bottom) + 16px);
-  right: 16px;
-  z-index: var(--z-fab);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 44px;
-  height: 44px;
-  padding: 0;
-  background: var(--surface-2);
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-pill);
-  color: var(--fg-dim);
-  cursor: pointer;
-  box-shadow: var(--shadow-fab);
-  transition:
-    background var(--dur-xs) var(--ease),
-    border-color var(--dur-xs) var(--ease),
-    color var(--dur-xs) var(--ease),
-    transform var(--dur-2xs) var(--ease);
+  /* Inherits size/positioning from .wc-icon-btn. We only override
+   * the has-errors state — the idle look is identical to New/Undo/
+   * Redo, so the button feels native to the chrome. */
 }
-.console-btn:hover    { background: var(--surface-3); color: var(--fg); }
-.console-btn:active   { transform: scale(0.94); }
-.console-btn:focus-visible {
-  outline: none;
-  box-shadow: var(--shadow-fab), 0 0 0 2px var(--border-focus);
-}
+
 .console-btn.has-errors {
-  background: var(--err);
-  border-color: var(--err);
-  color: var(--fg-inverse);
+  color: var(--err);
+  background: var(--err-soft, rgba(251, 113, 133, 0.14));
   animation: pulse-glow 1s ease-in-out infinite;
 }
-.console-btn.has-errors:hover { background: var(--err); color: var(--fg-inverse); }
+.console-btn.has-errors:hover {
+  color: var(--err);
+  background: var(--err-soft, rgba(251, 113, 133, 0.14));
+}
 
 .console-btn-badge {
   position: absolute;
-  top: -4px;
-  right: -4px;
-  min-width: 18px;
-  height: 18px;
-  padding: 0 5px;
+  top: 4px;
+  right: 4px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  font-size: var(--fs-3xs);
+  font-weight: var(--fw-semibold);
+  background: var(--err);
+  color: var(--fg-inverse);
+  border-radius: var(--radius-pill);
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: var(--magenta);
-  color: var(--fg-inverse);
-  border: 2px solid var(--surface-0);
-  border-radius: var(--radius-pill);
-  font-family: var(--font-mono);
-  font-size: var(--fs-2xs);
-  font-weight: var(--fw-semibold);
   line-height: 1;
+  pointer-events: none;
 }
 
 @keyframes pulse-glow {
-  0%, 100% { opacity: 1;   box-shadow: var(--shadow-fab), 0 0 0 0 var(--err-glow, rgba(251, 113, 133, 0.55)); }
-  50%      { opacity: 0.7; box-shadow: var(--shadow-fab), 0 0 0 10px transparent; }
-}
-
-/* On mobile the FAB sits at z-fab; the console button shouldn't collide
- * with it: shift the console button up so it sits next to FAB. */
-@media (max-width: 720px) {
-  .console-btn {
-    bottom: calc(var(--safe-bottom) + var(--fab-size) + var(--space-lg) + 4px);
-    right: 12px;
-  }
+  0%, 100% { opacity: 1;   box-shadow: 0 0 0 0 var(--err-glow, rgba(251, 113, 133, 0.55)); }
+  50%      { opacity: 0.7; box-shadow: 0 0 0 6px transparent; }
 }
 
 /* ----- ConsoleSheet (bottom sheet / right drawer) ----- */
