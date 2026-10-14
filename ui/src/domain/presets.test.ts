@@ -2,9 +2,8 @@ import { describe, it, expect, vi } from 'vitest';
 import { BUILTIN_PRESETS, validatePreset } from './presets';
 
 describe('BUILTIN_PRESETS', () => {
-  it('has 20 entries (18 JS + 2 Lisp examples)', () => {
-    expect(BUILTIN_PRESETS).toHaveLength(20);
-    expect(BUILTIN_PRESETS.filter((p) => p.lang === 'lisp')).toHaveLength(2);
+  it('has 18 entries (1 old Creep + 10 genre + 1 step demo + 2 piano demos + 2 drum demos + 3 synth demos)', () => {
+    expect(BUILTIN_PRESETS).toHaveLength(18);
   });
 
   it('has unique ids', () => {
@@ -25,10 +24,9 @@ describe('BUILTIN_PRESETS', () => {
     }
   });
 
-  it('every score contains a Strudel mini-notation call (note(...) / s(...) / Lisp form)', () => {
+  it('every score contains a Strudel mini-notation call (note(...) or s(...))', () => {
     for (const p of BUILTIN_PRESETS) {
-      // JS form: note( / s( — Lisp form: (note "..." / (s "..."
-      expect(p.score).toMatch(/note\(|s\(|\(note\s|\(s\s/);
+      expect(p.score).toMatch(/note\(|s\(/);
     }
   });
 
@@ -80,12 +78,12 @@ describe('BUILTIN_PRESETS', () => {
     expect(tomsFunk?.score).toContain('drums_ride');
   });
 
-  it('every preset has balanced stack() (JS) or (stack (Lisp) with same-line/newline close', () => {
+  it('every preset has balanced stack() with same-line closing or proper newlines', () => {
     for (const p of BUILTIN_PRESETS) {
-      // Loose check: `stack(` (JS) or `(stack ` (Lisp) opens a stack.
-      expect(p.score).toMatch(/stack\(|\(stack\s/);
-      // Count of `(` and `)` should roughly balance (ignoring those
-      // inside strings is hard — simple heuristic, at least 1 of each).
+      // Loose check: `stack(` opens and matching `)` closes on a line.
+      expect(p.score).toMatch(/stack\(/);
+      // Count of `(` and `)` should match (ignoring those inside strings is hard,
+      // so we use a simple heuristic — at least 1 of each).
       const opens = (p.score.match(/\(/g) ?? []).length;
       const closes = (p.score.match(/\)/g) ?? []).length;
       expect(opens).toBeGreaterThan(0);

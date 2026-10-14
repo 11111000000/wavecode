@@ -1,7 +1,6 @@
 import { Context, type Effect } from 'effect';
 import type { LayerMix, Message } from './types';
 import type { NoteEvent } from './midi/encoder';
-import type { LanguageMode } from './languageMode';
 import type { LiveRecorderHandle } from '~/infrastructure/audio/AudioRecorder';
 import type {
   OfflineRenderCallbacks,
@@ -43,10 +42,7 @@ export class LLMClient extends Context.Tag('LLMClient')<
 export class AudioEngine extends Context.Tag('AudioEngine')<
   AudioEngine,
   {
-    readonly eval: (
-      snippet: string,
-      mode?: LanguageMode,
-    ) => Effect.Effect<void, Error, never>;
+    readonly eval: (snippet: string) => Effect.Effect<void, Error, never>;
     readonly stop: () => Effect.Effect<void, never, never>;
     /**
      * Compile snippet to a Strudel Pattern and query the first N cycles.
@@ -56,7 +52,6 @@ export class AudioEngine extends Context.Tag('AudioEngine')<
     readonly compileAndQuery: (
       snippet: string,
       cycles: number,
-      mode?: LanguageMode,
     ) => Effect.Effect<ReadonlyArray<NoteEvent>, Error, never>;
     /**
      * Update Strudel scheduler tempo in real-time (cycles per second).
@@ -142,7 +137,6 @@ export class AudioEngine extends Context.Tag('AudioEngine')<
       snippet: string,
       opts: OfflineRenderOptions,
       callbacks?: OfflineRenderCallbacks,
-      mode?: LanguageMode,
     ) => Effect.Effect<OfflineRenderResult, Error, never>;
   }
 >() {}

@@ -15,19 +15,12 @@ import { installTypingTracker } from './presentation/state/editorTypingTracker';
 import { evalScore, stopAudio } from './presentation/state/audioActions';
 import { isGridEmptyState } from './presentation/state/gridState';
 import { syncGridFromScore } from './presentation/components/StepGrid';
-import { setLanguageMode } from './presentation/state/languageModeStore';
 import {
   getPreset, saveCustomPreset, deleteCustomPreset, resetAllBrowserData,
 } from './presentation/state/presetsStore';
 import {
   getSelectedPresetId, setSelectedPresetPersist, resetSelectedPreset,
 } from './presentation/state/selectedPreset';
-import type { LanguageMode } from './domain/languageMode';
-import {
-  NewCompositionDialog,
-  NEW_JS_TEMPLATE,
-  NEW_LISP_TEMPLATE,
-} from './presentation/components/NewCompositionDialog';
 import { AppLayer } from '~/infrastructure/composition';
 import { Repo } from '~/domain/services';
 import { useAppBootstrap } from './presentation/state/useAppBootstrap';
@@ -41,6 +34,8 @@ import { TransportBar } from './presentation/components/TransportBar';
 import { PanelsLayout } from './presentation/components/app/PanelsLayout';
 import { Admin } from './presentation/pages/Admin';
 import { Landing } from './presentation/components/landing/Landing';
+
+const NEW_COMPOSITION_TEMPLATE = '// Начни новую композицию здесь\n';
 
 const confirmReset = (): boolean => window.confirm(
   'Сбросить ВСЕ настройки и очистить локальное хранилище?\n(localStorage + IDB score/messages)',
@@ -130,17 +125,6 @@ function AppShell(): JSX.Element {
   const [audioStarting, setAudioStarting] = createSignal(false);
   const [mobileMode, setMobileModeSignal] = createSignal<MobileMode>(getMobileMode());
   const [newPresetName, setNewPresetName] = createSignal('');
-  const [showNewCompDialog, setShowNewCompDialog] = createSignal(false);
-
-  const onNewCompPick = (mode: LanguageMode): void => {
-    void stopAudio();
-    const text = mode === 'lisp' ? NEW_LISP_TEMPLATE : NEW_JS_TEMPLATE;
-    dispatch({ type: 'replaceScore', text });
-    setLanguageMode(mode);
-    dispatch({ type: 'clearMessages' });
-    setSelectedPresetPersist('creep');
-    setShowNewCompDialog(false);
-  };
 
   onMount(() => {
     installTypingTracker(dispatch);
@@ -207,11 +191,6 @@ function AppShell(): JSX.Element {
   return (
     <main class="app wc-app">
       <Toast />
-      <NewCompositionDialog
-        open={showNewCompDialog()}
-        onPick={onNewCompPick}
-        onCancel={() => setShowNewCompDialog(false)}
-      />
       <TopBar
         audioRunning={audio.audioRunning()}
         audioStarting={audioStarting()}
@@ -228,7 +207,10 @@ function AppShell(): JSX.Element {
         onRedo={redo}
         onNew={() => {
           if (!confirmNew()) return;
-          setShowNewCompDialog(true);
+          void stopAudio();
+          dispatch({ type: 'replaceScore', text: NEW_COMPOSITION_TEMPLATE });
+          dispatch({ type: 'clearMessages' });
+          setSelectedPresetPersist('creep');
         }}
         onDeletePreset={() => {
           const id = presetId();
@@ -256,8 +238,6 @@ function AppShell(): JSX.Element {
           if (!preset) return;
           setSelectedPresetPersist(id);
           dispatch({ type: 'replaceScore', text: preset.score });
-          if (preset.lang === 'lisp') setLanguageMode('lisp');
-          else setLanguageMode('js');
           void evalScore();
         }}
         onShowSavePreset={(v) => setShowSavePreset(v)}
