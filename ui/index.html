@@ -239,19 +239,22 @@
           padding-top: var(--app-transport-h-expanded) !important;
         }
       }
-      .preset-select {
-        min-height: var(--control-h);
-        padding: 0 var(--space-lg) 0 var(--space-md);
-        font-family: var(--font-sans);
-        font-size: var(--fs-sm);
-        color: var(--fg);
-        background: var(--surface-1);
-        border: 1px solid var(--border);
-        border-radius: var(--radius-md);
-        cursor: pointer;
-        appearance: none;
-        -webkit-appearance: none;
-      }
+       .preset-select {
+         min-height: var(--control-h);
+         padding: 0 var(--space-lg) 0 var(--space-md);
+         font-family: var(--font-sans);
+         font-size: var(--fs-sm);
+         color: var(--fg);
+         background: var(--surface-1);
+         border: 1px solid var(--border);
+         border-radius: var(--radius-md);
+         cursor: pointer;
+         appearance: none;
+         -webkit-appearance: none;
+         /* wavecode-transport-bar-preset-always: fill available width
+          * in the strip so preset is always visible. */
+         width: 100%;
+       }
       .wc-chip {
         display: inline-flex;
         align-items: center;

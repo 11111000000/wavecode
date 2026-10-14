@@ -3006,6 +3006,27 @@ textarea.ai-textarea:focus-visible {
   min-width: 0;
 }
 
+/* Preset select fills the strip horizontally between Play and toggle.
+ * Preset must be ALWAYS visible (user request 2026-10-14: «композиция
+ * должна быть всегда видна»), BPM slider is the expandable one. */
+.app-transport-bar__strip .app-transport-bar__preset {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+}
+.app-transport-bar__strip .app-transport-bar__preset .preset-select {
+  flex: 1 1 auto;
+  min-width: 0;
+  width: 100%;
+}
+
+/* bpm-indicator when inside the body: same pill style as the strip
+ * version, but stacked above the cps slider for context. */
+.bpm-indicator--in-body {
+  align-self: flex-start;
+  margin-bottom: var(--space-2xs);
+}
+
 .app-transport-bar__toggle {
   display: inline-flex;
   align-items: center;

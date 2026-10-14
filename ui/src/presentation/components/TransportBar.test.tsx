@@ -187,29 +187,37 @@ describe('TransportBar (math/wavecode-mobile-transport-bar)', () => {
     expect(onStop).toHaveBeenCalledTimes(1);
   });
 
-  it('preset <select> is reachable after expand (it lives inside body)', async () => {
+  it('preset <select> is ALWAYS reachable in the strip (user request 2026-10-14)', () => {
     const onLoadPreset = vi.fn();
     const { container } = renderBar({ onLoadPreset });
 
     const select = container.querySelector('[data-testid="preset-select"]') as HTMLSelectElement;
     expect(select).toBeTruthy();
-
-    const toggle = container.querySelector(
-      '[data-testid="transport-bar-toggle"]',
-    ) as HTMLButtonElement;
-    fireEvent.click(toggle);
-
-    await waitFor(() => {
-      expect(
-        container.querySelector('[data-testid="transport-bar"]')?.getAttribute('data-collapsed'),
-      ).toBe('false');
-    });
+    // Preset lives in the strip — not in the expandable body. So it's
+    // reachable WITHOUT clicking the toggle. Verify by selecting
+    // without expanding.
+    expect(select.closest('.app-transport-bar__body')).toBeNull();
+    expect(select.closest('.app-transport-bar__strip')).toBeTruthy();
 
     // The select has the value "creep" (matches props.presetId); we
     // dispatch a change event simulating a different selection.
     select.value = 'fur-elise';
     fireEvent.change(select);
     expect(onLoadPreset).toHaveBeenCalled();
+  });
+
+  it('toggle body no longer contains preset (preset moved to strip)', () => {
+    const { container } = renderBar();
+    const toggle = container.querySelector(
+      '[data-testid="transport-bar-toggle"]',
+    ) as HTMLButtonElement;
+    fireEvent.click(toggle); // expand
+
+    const body = container.querySelector(
+      '[data-testid="transport-bar-body"]',
+    ) as HTMLElement;
+    const selectInBody = body.querySelector('[data-testid="preset-select"]');
+    expect(selectInBody).toBeNull();
   });
 
   it('renders without onPlay/onStop props (default noop) and does not throw', () => {
