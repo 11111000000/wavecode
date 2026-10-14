@@ -199,7 +199,10 @@ export type TabId = 'score' | 'step' | 'piano' | 'mixer' | 'chat' | 'status';
  *  `@media (max-width: 720px)`). Non-null = user-resized via
  *  drag-handle; persisted across sessions in localStorage. */
 const SHEET_H_KEY = 'wavecode-mobile-sheet-h-v1';
-export const SHEET_HEIGHT_MIN_PX = 240;
+// wavecode-mobile-compact: min raised from 240 → 360 so user can't
+// drag the sheet below ~half-viewport on common phones. CSS
+// .wc-sheet { min-height: 50vh } enforces the same cap visually.
+export const SHEET_HEIGHT_MIN_PX = 360;
 export const SHEET_HEIGHT_MAX_PX = 560;
 
 const [sheetHeightPx, setSheetHeightPxRaw] = createSignal<number | null>(null);

@@ -187,43 +187,44 @@
 
   /* The sheet itself: in-flow, no transform, height driven by
    * either snap (closed/peek/half/full) or explicit --sheet-h.
-   *
-   * wavecode-mobile-compact: snap heights reduced.
-   * - peek 35→30vh (sheet barе visible, max editor room)
-   * - half 50→40vh (default for tabs, comfortable piano+mixer view)
-   * - full 70→65vh (heavy workflows — still leaves ≥15vh for score)
-   * Default height (--sheet-h) also reduced 50→40vh. Together
-   * these free ~85-100px on a 900vh viewport for the cm-host. */
-  .wc-sheet {
-    position: relative !important;
-    left: auto !important;
-    right: auto !important;
-    bottom: auto !important;
-    width: 100% !important;
-    max-width: none !important;
-    height: var(--sheet-h, 40vh) !important;
-    max-height: 65vh !important;
-    min-height: 0 !important;
-    transform: none !important;
-    border-radius: 12px 12px 0 0 !important;
-    border-top: 1px solid var(--border-strong);
-    border-left: none;
-    border-right: none;
-    border-bottom: none;
-    box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.5);
-    transition: height 240ms var(--ease-spring);
-    flex: 0 0 auto;
-  }
-  .wc-sheet[data-snap='closed'] {
-    height: 0 !important;
-    visibility: hidden;
-    border: none;
-    box-shadow: none;
-    padding: 0;
-  }
-  .wc-sheet[data-snap='peek']   { height: 30vh !important; }
-  .wc-sheet[data-snap='half']   { height: 40vh !important; }
-  .wc-sheet[data-snap='full']   { height: 65vh !important; }
+    *
+    * wavecode-mobile-compact: snap heights reduced.
+    * - peek 35→50vh (sheet не меньше половины; user spec)
+    * - half 50→50vh (default for tabs — sheet takes half, editor takes rest)
+    * - full 70→65vh (heavy workflows — still leaves ≥15vh for score)
+    * Default height (--sheet-h) = 50vh. Together this gives
+    * editor ~50% of viewport when sheet is open, ~100% when closed.
+    * min-height: 50vh prevents drag-to-resize below half. */
+   .wc-sheet {
+     position: relative !important;
+     left: auto !important;
+     right: auto !important;
+     bottom: auto !important;
+     width: 100% !important;
+     max-width: none !important;
+     height: var(--sheet-h, 50vh) !important;
+     max-height: 65vh !important;
+     min-height: 50vh !important;
+     transform: none !important;
+     border-radius: 12px 12px 0 0 !important;
+     border-top: 1px solid var(--border-strong);
+     border-left: none;
+     border-right: none;
+     border-bottom: none;
+     box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.5);
+     transition: height 240ms var(--ease-spring);
+     flex: 0 0 auto;
+   }
+   .wc-sheet[data-snap='closed'] {
+     height: 0 !important;
+     visibility: hidden;
+     border: none;
+     box-shadow: none;
+     padding: 0;
+   }
+   .wc-sheet[data-snap='peek']   { height: 50vh !important; }
+   .wc-sheet[data-snap='half']   { height: 50vh !important; }
+   .wc-sheet[data-snap='full']   { height: 65vh !important; }
 
   /* Disable bottom handle-area on mobile — top-handle does the work. */
   .wc-sheet__handle-area { display: none !important; }
@@ -358,21 +359,21 @@
     border-color: var(--cyan);
   }
 
-  /* ScorePanel: flex child that takes the remainder of .app-body
-   * above the sheet. min-height 200px so the editor stays readable
-   * even when the sheet is full (65vh after wavecode-mobile-compact).
-   *
-   * wavecode-mobile-compact: max-height formula uses 100dvh напрямую
-   * (не зависит от .app-body padding-top:76px), но поскольку flex
-   * distribution внутри .app-body уже даёт score-panel столько,
-   * сколько осталось, max-height фактически не ограничивает.
-   * Оставлен как safety-ceiling. */
+   /* ScorePanel: flex child that takes the remainder of .app-body
+    * above the sheet. min-height 200px so the editor stays readable
+    * even when the sheet is full (65vh after wavecode-mobile-compact).
+    *
+    * wavecode-mobile-compact: max-height formula uses 100dvh напрямую
+    * (не зависит от .app-body padding-top:76px), но поскольку flex
+    * distribution внутри .app-body уже даёт score-panel столько,
+    * сколько осталось, max-height фактически не ограничивает.
+    * Оставлен как safety-ceiling. */
   .score-panel {
     flex: 1 1 auto;
     min-height: 200px;
     max-height: calc(
       100dvh - var(--header-h, 48px) - var(--tabbar-h, 56px)
-      - var(--safe-bottom, 0px) - var(--sheet-h, 40vh)
+      - var(--safe-bottom, 0px) - var(--sheet-h, 50vh)
     );
     overflow: hidden;
   }
