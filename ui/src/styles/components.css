@@ -3779,39 +3779,79 @@ textarea.ai-textarea:focus-visible {
 
 /* Runtime mini-notation highlight — the "дирижёрский луч".
  *
+ * Two-dimensional encoding:
+ *   - `.c0`..`.c3` → layer (top-level `,`-separated expression in the
+ *     snippet). Each parallel `stack(...)` branch gets its own colour
+ *     so the eye can see which part of the pattern is sounding.
+ *     Palette: cyan / amber / magenta / ok-green; wraps every 4 layers.
+ *   - `.down` / `.off` → beat discriminator. `down` = first half of a
+ *     cycle (begin % 1 in [0, 0.5)) — bright + outer glow. `off` =
+ *     second half — dimmer, no outer glow. This gives a strong
+ *     downbeat/offbeat contrast within each layer without animation,
+ *     and reads clearly for a typical 4-on-the-floor `<a b c d>`.
+ *
+ * 4 colours × 2 beats = 8 visual lanes — enough to disambiguate the
+ * parallel parts of a typical pattern at a glance.
+ *
  * Applied as a CSS class by CodeMirror marks produced by
- * `presentation/editor/runtimeMiniHighlight.ts`. The bridge drives the
- * mark range set based on currently-sounding Haps from Strudel;
- * animation is a soft "breath" — not synced to cps to avoid jitter.
+ * `presentation/editor/runtimeMiniHighlight.ts`. The mark class is
+ * `cm-mini-active c{0..3} {down|off}`.
  *
  * See math/wavecode-runtime-mini-highlight/packet.md. */
 .cm-mini-active {
-  background-color: var(--cyan-soft);
-  box-shadow: 0 0 0 1px var(--cyan-glow) inset;
   border-radius: 2px;
-  color: var(--cyan);
   transition:
     background-color 80ms ease,
-    box-shadow 80ms ease,
-    color 80ms ease;
-  animation: cm-mini-pulse 1.6s ease-in-out infinite alternate;
+    box-shadow 80ms ease;
 }
-@keyframes cm-mini-pulse {
-  from {
-    background-color: var(--cyan-soft);
-    box-shadow: 0 0 0 1px var(--cyan-glow) inset;
-  }
-  to {
-    background-color: rgba(94, 234, 212, 0.32);
-    box-shadow: 0 0 0 1px rgba(94, 234, 212, 0.7) inset;
-  }
+/* c0 — cyan (default layer) */
+.cm-mini-active.c0.down {
+  background-color: rgba(94, 234, 212, 0.55);
+  box-shadow:
+    0 0 0 1px rgba(94, 234, 212, 0.85) inset,
+    0 0 8px rgba(94, 234, 212, 0.35);
+}
+.cm-mini-active.c0.off {
+  background-color: rgba(94, 234, 212, 0.18);
+  box-shadow: 0 0 0 1px rgba(94, 234, 212, 0.45) inset;
+}
+/* c1 — amber */
+.cm-mini-active.c1.down {
+  background-color: rgba(255, 170, 59, 0.55);
+  box-shadow:
+    0 0 0 1px rgba(255, 170, 59, 0.85) inset,
+    0 0 8px rgba(255, 170, 59, 0.35);
+}
+.cm-mini-active.c1.off {
+  background-color: rgba(255, 170, 59, 0.18);
+  box-shadow: 0 0 0 1px rgba(255, 170, 59, 0.45) inset;
+}
+/* c2 — magenta */
+.cm-mini-active.c2.down {
+  background-color: rgba(244, 114, 182, 0.55);
+  box-shadow:
+    0 0 0 1px rgba(244, 114, 182, 0.85) inset,
+    0 0 8px rgba(244, 114, 182, 0.35);
+}
+.cm-mini-active.c2.off {
+  background-color: rgba(244, 114, 182, 0.18);
+  box-shadow: 0 0 0 1px rgba(244, 114, 182, 0.45) inset;
+}
+/* c3 — ok (green) */
+.cm-mini-active.c3.down {
+  background-color: rgba(74, 222, 128, 0.55);
+  box-shadow:
+    0 0 0 1px rgba(74, 222, 128, 0.85) inset,
+    0 0 8px rgba(74, 222, 128, 0.35);
+}
+.cm-mini-active.c3.off {
+  background-color: rgba(74, 222, 128, 0.18);
+  box-shadow: 0 0 0 1px rgba(74, 222, 128, 0.45) inset;
 }
 @media (prefers-reduced-motion: reduce) {
-  .cm-mini-active {
-    animation: none;
-    background-color: rgba(94, 234, 212, 0.32);
-    box-shadow: 0 0 0 1px var(--cyan-glow) inset;
-  }
+  /* No animation here by design — beat position is the contrast.
+     Keep the rule so future motion-attached properties can opt out. */
+  .cm-mini-active { transition: none; }
 }
 
 /* =========================================================================

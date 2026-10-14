@@ -1,4 +1,5 @@
 ---
+status: applied
 proposition: |
   Runtime mini-notation highlight — «дирижёрский луч» поверх существующего
   статического `cm-mini-notation` подсветчика. Когда pattern играет, те
@@ -182,6 +183,42 @@ substrate: |
      snapshot DOM — найти `.cm-mini-active` элемент.
 status: applied
 axiom: A1
+palette: |
+  Двухмерная кодировка подсветки (per-layer × per-beat):
+
+  **Per-layer (4 цвета)**: каждый top-level `,`-separated expression в
+  snippet получает свой цвет из палитры:
+    - c0 = cyan (#5eead4)         — playing/primary lane
+    - c1 = amber (#ffaa3b)        — secondary lane
+    - c2 = magenta (#f472b6)       — tertiary
+    - c3 = ok-green (#4ade80)      — quaternary
+  >4 layer'ов → wrap around. Layer-индекс определяется парсингом snippet
+  на top-level `,` (с учётом `stack(...)` / `$:` wrapper'ов). Это дает
+  визуальное разделение параллельных частей паттерна — пользователь
+  видит, **какой именно** stack-уровень сейчас активен.
+
+  **Per-beat (2 яркости)**: каждый hap несёт дискриминатор
+  `begin % 1 in [0, 0.5)` → 'down' (ярко), иначе 'off' (приглушенно).
+    - `.down` (downbeat, первая половина цикла): background ~55% alpha,
+      inset border 0.85 alpha, **outer glow 8px blur 0.35 alpha**
+    - `.off` (offbeat, вторая половина): background ~18% alpha, inset
+      border 0.45 alpha, без outer glow
+
+  Итого 4 × 2 = 8 визуальных lane'ов. На типичном 4-on-the-floor
+  `<a b c d>` это даёт чистый 4-step pattern с 2-downbeat / 2-offbeat
+  видимых одновременно, причём downbeat визуально ярче — глаз
+  естественно отслеживает ритм.
+
+  Pulse animation **убрана** (раньше была cyan-soft ↔ 0.32 alpha
+  "breath"). Per-beat contrast даёт более явный ритмический сигнал,
+  без motion-эффекта, который напрягает глаза при 30Hz updates.
+  `prefers-reduced-motion` оставлен как no-op (motion уже не было).
+
+  Маркеры добавляются через `Decoration.mark({ class: 'cm-mini-active
+  c{N} {down|off}' })`. CodeMirror применяет их как nested DOM:
+  `<span class="cm-mini-notation"><span class="cm-mini-active c1 down">c3</span></span>`.
+  Static syntax color (mini-notation) сохраняется на родительском span,
+  runtime background на nested.
 epistemics:
   - statement: "Strudel transpiler возвращает `miniLocations: number[][]`
       — массив [from, to] каждой leaf-атома мини-нотации в исходном

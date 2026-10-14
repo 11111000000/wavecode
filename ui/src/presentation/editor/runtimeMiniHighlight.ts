@@ -3,18 +3,19 @@
  *
  * Connects the module-scope `runtimeHighlight` bridge (driven by
  * LiveAudioEngine + rAF loop) to a CodeMirror DecorationSet. The bridge
- * emits throttled, dedup'd char ranges; this extension reflects them as
- * `cm-mini-active` marks without competing with the static
- * `cm-mini-notation` syntax marker.
+ * emits throttled, dedup'd `ColoredRange[]` (per-layer color + per-beat
+ * `down`/`off` brightness); this extension reflects them as
+ * `cm-mini-active c{color} {beat}` marks without competing with the
+ * static `cm-mini-notation` syntax marker.
  *
  * Design contract: see `math/wavecode-runtime-mini-highlight/packet.md`.
  *
  * Decoration order:
  *   - cm-mini-notation (static, syntax) — provided by miniNotationHighlight
- *   - cm-mini-active   (runtime, this file)
+ *   - cm-mini-active   (runtime, this file) — `c{0..3} {down|off}`
  *
- * CodeMirror applies overlapping marks via DOM nesting; the active class
- * sits inside the notation span and only changes background-color /
+ * CodeMirror applies overlapping marks via DOM nesting; the active
+ * class sits inside the notation span and only changes background-color /
  * box-shadow — it does not override text color, so the static syntax
  * hue remains visible.
  *
@@ -40,17 +41,17 @@ import {
 } from '@codemirror/view';
 import {
   subscribe,
-  type CharRange,
+  type ColoredRange,
 } from '~/infrastructure/audio/runtimeHighlight';
 
-const EMPTY_RANGES: ReadonlyArray<CharRange> = Object.freeze([]);
+const EMPTY_RANGES: ReadonlyArray<ColoredRange> = Object.freeze([]);
 
-const setActiveRangesEffect: StateEffectType<ReadonlyArray<CharRange>> =
-  StateEffect.define<ReadonlyArray<CharRange>>();
+const setActiveRangesEffect: StateEffectType<ReadonlyArray<ColoredRange>> =
+  StateEffect.define<ReadonlyArray<ColoredRange>>();
 
-const activeRangesField = StateField.define<ReadonlyArray<CharRange>>({
+const activeRangesField = StateField.define<ReadonlyArray<ColoredRange>>({
   create: () => EMPTY_RANGES,
-  update: (value, tr): ReadonlyArray<CharRange> => {
+  update: (value, tr): ReadonlyArray<ColoredRange> => {
     for (const e of tr.effects) {
       if (e.is(setActiveRangesEffect)) return e.value;
     }
@@ -60,22 +61,26 @@ const activeRangesField = StateField.define<ReadonlyArray<CharRange>>({
 
 /**
  * Build a DecorationSet from active ranges, clipped to `docLength`.
- * Out-of-bounds or zero-length ranges are skipped — they would render
- * as `0 × 0px` rectangles or trigger CodeMirror assertions on
- * position > docLength.
+ * Each range carries a `color` (palette index 0..3) and a `beat`
+ * (`down` | `off`) — combined into the class
+ * `cm-mini-active c{color} {beat}` so CSS can give each combination
+ * a distinct intensity. Out-of-bounds or zero-length ranges are
+ * skipped — they would render as `0 × 0px` rectangles or trigger
+ * CodeMirror assertions on position > docLength.
  */
 const buildDecorationSet = (
-  ranges: ReadonlyArray<CharRange>,
+  ranges: ReadonlyArray<ColoredRange>,
   docLength: number,
 ): DecorationSet => {
   if (ranges.length === 0 || docLength <= 0) return Decoration.none;
   const marks = [];
   for (const r of ranges) {
-    if (!Number.isFinite(r[0]) || !Number.isFinite(r[1])) continue;
-    const from = Math.max(0, Math.min(r[0], docLength));
-    const to = Math.max(0, Math.min(r[1], docLength));
+    if (!Number.isFinite(r.from) || !Number.isFinite(r.to)) continue;
+    const from = Math.max(0, Math.min(r.from, docLength));
+    const to = Math.max(0, Math.min(r.to, docLength));
     if (to - from <= 0) continue;
-    marks.push(Decoration.mark({ class: 'cm-mini-active' }).range(from, to));
+    const cls = `cm-mini-active c${r.color} ${r.beat}`;
+    marks.push(Decoration.mark({ class: cls }).range(from, to));
   }
   if (marks.length === 0) return Decoration.none;
   return Decoration.set(marks, true);
@@ -86,7 +91,7 @@ export const runtimeMiniHighlight: Extension = [
   ViewPlugin.fromClass(
     class {
       decorations: DecorationSet;
-      private prevRanges: ReadonlyArray<CharRange> = EMPTY_RANGES;
+      private prevRanges: ReadonlyArray<ColoredRange> = EMPTY_RANGES;
       private prevDocLength = -1;
       private readonly unsub: () => void;
 

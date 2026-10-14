@@ -12,7 +12,7 @@ import { injectMix } from '~/application/useCases/injectMix';
 import { LiveRecorder, pickSupportedMime } from './AudioRecorder';
 import { renderToWav } from './OfflineRender';
 import { applyVoicingAliases } from './strudelPatches';
-import { setActive as setRuntimeHighlightActive, clearActive as clearRuntimeHighlightActive } from './runtimeHighlight';
+import { setActive as setRuntimeHighlightActive, clearActive as clearRuntimeHighlightActive, parseLayerRanges } from './runtimeHighlight';
 
 // `wrapSuperdoughLoadBuffer` is imported lazily (inside ensureRepl) so
 // that test files which pull in `LiveAudioEngine` (e.g. audioActions.ts,
@@ -476,6 +476,7 @@ await repl.evaluate(snippet);
                 ctx: audioCtx,
                 anchor: audioCtx.currentTime,
                 cps: debugState.cps > 0 ? debugState.cps : 1,
+                layerRanges: parseLayerRanges(snippet),
               });
             } else if (process.env.NODE_ENV !== 'production') {
               console.warn('[wavecode/LiveAudioEngine.eval] no livePattern; setActive skipped (repl.scheduler=', !!repl.scheduler, 'hasPattern=', !!livePattern, ')');
@@ -579,6 +580,7 @@ await repl.evaluate(snippet);
               ctx: audioCtx,
               anchor,
               cps: debugState.cps > 0 ? debugState.cps : 1,
+              layerRanges: parseLayerRanges(newSnippet),
             });
           }
         },
