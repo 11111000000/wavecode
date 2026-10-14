@@ -693,13 +693,8 @@ await repl.evaluate(snippet);
       Effect.tryPromise({
         try: async () => {
           if (!score.trim()) return;
-          // Use the mode that was active when the score was originally
-          // evaluated. The live repl is keyed by LanguageMode (see
-          // `wavecode-lisp-transpiler` packet), so a mode mismatch would
-          // route the new pattern through the wrong parser.
-          const lastMode = debugState.lastEvaluatedMode;
           const audioCtx = unlockAudioContext();
-          const repl = await ensureRepl(audioCtx, lastMode);
+          const repl = await ensureRepl(audioCtx);
           const newSnippet = injectMix(score, layerMix);
           // Snapshot the rebuilt snippet so a subsequent `eval()` (e.g.
           // user pressed ▶) picks up the same source — same contract
