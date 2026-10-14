@@ -26,7 +26,7 @@ substrate: |
   ui/src/application/useCases/llmEdit.ts (mode-aware prompt)
   ui/src/infrastructure/lisp/goldenPairs.ts (новый, 30+ пар)
   ui/src/infrastructure/lisp/goldenPairs.test.ts (новый, transpile checks)
-status: draft
+status: applied
 axiom: A1
 epistemics:
   - statement: "applyEdit в llmEdit.ts захардкожен на JS-prompt"
@@ -178,4 +178,22 @@ export const getSystemPrompt = (mode: 'js' | 'lisp'): string =>
 
 ## Status
 
-**draft.** Phase 2 implementation в работе.
+**applied.** Phase 2 implementation complete:
+- `LISP_SYSTEM_PROMPT` параллельный JS-prompt в `lispPrompt.ts`
+- `getSystemPrompt(mode)` dispatcher — JS / Lisp
+- `applyEdit` mode-aware (опциональный `mode` в options)
+- `AIEditPanel` передаёт `languageMode()`
+- 30+ golden pairs в `infrastructure/lisp/goldenPairs.ts` (6 категорий)
+- 71 test в `goldenPairs.test.ts` + 13 test в `lispPrompt.test.ts`
+- tsc + ESLint clean, 120/120 vitest pass
+
+Manual e2e в `tests/e2e/lisp-transpiler.spec.ts` ещё не прогонял локально —
+требует dev-сервер. UI-уровневая проверка Lisp-LLM end-to-end (когда LLM
+реально отвечает Lisp'ом) — Phase 3 через auto-eval.
+
+## Phases (обновлено)
+
+- **Phase 1 (DONE, `wavecode-lisp-transpiler`):** транспнлятор + UI.
+- **Phase 2 (DONE, этот пакет):** LISP_SYSTEM_PROMPT + golden pairs.
+- **Phase 3 (TODO, будущее):** LLM-as-judge для auto-eval, few-shot expansion
+  из реальных user logs, dedicated Lisp-trained prompt chain.
