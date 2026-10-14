@@ -186,7 +186,14 @@
   }
 
   /* The sheet itself: in-flow, no transform, height driven by
-   * either snap (closed/peek/half/full) or explicit --sheet-h. */
+   * either snap (closed/peek/half/full) or explicit --sheet-h.
+   *
+   * wavecode-mobile-compact: snap heights reduced.
+   * - peek 35→30vh (sheet barе visible, max editor room)
+   * - half 50→40vh (default for tabs, comfortable piano+mixer view)
+   * - full 70→65vh (heavy workflows — still leaves ≥15vh for score)
+   * Default height (--sheet-h) also reduced 50→40vh. Together
+   * these free ~85-100px on a 900vh viewport for the cm-host. */
   .wc-sheet {
     position: relative !important;
     left: auto !important;
@@ -194,8 +201,8 @@
     bottom: auto !important;
     width: 100% !important;
     max-width: none !important;
-    height: var(--sheet-h, 50vh) !important;
-    max-height: 70vh !important;
+    height: var(--sheet-h, 40vh) !important;
+    max-height: 65vh !important;
     min-height: 0 !important;
     transform: none !important;
     border-radius: 12px 12px 0 0 !important;
@@ -214,9 +221,9 @@
     box-shadow: none;
     padding: 0;
   }
-  .wc-sheet[data-snap='peek']   { height: 35vh !important; }
-  .wc-sheet[data-snap='half']   { height: 50vh !important; }
-  .wc-sheet[data-snap='full']   { height: 70vh !important; }
+  .wc-sheet[data-snap='peek']   { height: 30vh !important; }
+  .wc-sheet[data-snap='half']   { height: 40vh !important; }
+  .wc-sheet[data-snap='full']   { height: 65vh !important; }
 
   /* Disable bottom handle-area on mobile — top-handle does the work. */
   .wc-sheet__handle-area { display: none !important; }
@@ -352,14 +359,20 @@
   }
 
   /* ScorePanel: flex child that takes the remainder of .app-body
-    * above the sheet. min-height 200px so the editor stays readable
-    * even when the sheet is full (70vh). */
+   * above the sheet. min-height 200px so the editor stays readable
+   * even when the sheet is full (65vh after wavecode-mobile-compact).
+   *
+   * wavecode-mobile-compact: max-height formula uses 100dvh напрямую
+   * (не зависит от .app-body padding-top:76px), но поскольку flex
+   * distribution внутри .app-body уже даёт score-panel столько,
+   * сколько осталось, max-height фактически не ограничивает.
+   * Оставлен как safety-ceiling. */
   .score-panel {
     flex: 1 1 auto;
     min-height: 200px;
     max-height: calc(
       100dvh - var(--header-h, 48px) - var(--tabbar-h, 56px)
-      - var(--safe-bottom, 0px) - var(--sheet-h, 50vh)
+      - var(--safe-bottom, 0px) - var(--sheet-h, 40vh)
     );
     overflow: hidden;
   }

@@ -206,14 +206,29 @@
       }
       .wc-icon-btn[data-active='true'] { color: var(--amber); }
 
-      /* ===== CRITICAL: preset-row + chips (сразу под topbar) ===== */
+      /* ===== CRITICAL: preset-row + chips (сразу под topbar) =====
+       *
+       * wavecode-mobile-compact: inline rule обновлён под новый
+       * layered CSS. Un-layered inline имеет приоритет над
+       * @layer components в bundled CSS, поэтому эту копию
+       * нужно держать в синхроне с src/styles/components.css. */
       .app-preset-row {
         display: flex;
         gap: var(--space-xs);
         align-items: center;
         flex-wrap: wrap;
-        position: relative;
-        z-index: calc(var(--z-sheet) + 5);
+        position: fixed;
+        top: var(--header-h);
+        left: 0;
+        right: 0;
+        z-index: calc(var(--z-sheet) + 13);
+        padding: var(--space-2xs) var(--space-md);
+      }
+      @media (max-width: 720px) {
+        .app-preset-row {
+          padding: 2px var(--space-sm);
+          min-height: 32px;
+        }
       }
       .preset-select {
         min-height: var(--control-h);
