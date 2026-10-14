@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
+import type { NoteEvent } from '~/domain/midi/encoder';
 import {
-  bandHue, bandLevel, channelColor, clampBin, cpsToBpm,
+  bandHue, bandLevel, channelColor, clampBin, computeLayerActivity, cpsToBpm,
   defaultMidiBounds, freqBinForBar, hzToBin, layerColor, lerpColor,
   perceptual, pickBarCount, projectNote, radialBar, smooth, updatePeakHold,
 } from './visualizerHelpers';
@@ -403,5 +404,89 @@ describe('visualizerHelpers.cpsToBpm', () => {
     expect(cpsToBpm(0)).toBe(0);
     expect(cpsToBpm(-1)).toBe(0);
     expect(cpsToBpm(Number.NaN)).toBe(0);
+  });
+});
+
+describe('visualizerHelpers.computeLayerActivity', () => {
+  const ev = (
+    midi: number, startCycle: number, endCycle: number,
+    velocity: number, channel: number,
+  ): NoteEvent => ({ midi, startCycle, endCycle, velocity, channel });
+
+  it('returns [] for no events or zero columns', () => {
+    expect(computeLayerActivity([], 64, 4)).toEqual([]);
+    expect(computeLayerActivity([ev(60, 0, 0.5, 100, 1)], 0, 4)).toEqual([]);
+  });
+
+  it('groups events by channel and returns one entry per layer', () => {
+    const events = [
+      ev(60, 0, 0.5, 100, 1),
+      ev(62, 0.5, 1, 100, 1),
+      ev(48, 0, 1, 80, 2),
+    ];
+    const result = computeLayerActivity(events, 4, 4);
+    expect(result).toHaveLength(2);
+    expect(result[0]?.layer).toBe(1);
+    expect(result[1]?.layer).toBe(2);
+  });
+
+  it('produces normalised bars (max value = 1.0) for a single layer', () => {
+    const events = [
+      ev(60, 0,    0.1, 127, 1),
+      ev(60, 0.25, 0.1, 127, 1),
+      ev(60, 0.5,  0.1, 127, 1),
+      ev(60, 0.75, 0.1, 127, 1),
+    ];
+    const result = computeLayerActivity(events, 4, 4);
+    const bars = result[0]?.bars ?? [];
+    expect(bars.length).toBe(4);
+    for (const v of bars) {
+      expect(v).toBeCloseTo(1.0, 5);
+    }
+  });
+
+  it('concentrates density in the column the note starts in', () => {
+    const result = computeLayerActivity([ev(60, 0, 0.1, 127, 1)], 4, 4);
+    const bars = result[0]?.bars ?? [];
+    expect(bars[0]).toBeCloseTo(1.0, 5);
+    expect(bars[1]).toBe(0);
+    expect(bars[2]).toBe(0);
+    expect(bars[3]).toBe(0);
+  });
+
+  it('clamps the column index to [0, columns-1]', () => {
+    const result = computeLayerActivity([ev(60, 1, 1, 100, 1)], 4, 4);
+    const bars = result[0]?.bars ?? [];
+    expect(bars[3]).toBe(1.0);
+  });
+
+  it('truncates layers above maxLayers and merges them into one', () => {
+    const events = [
+      ev(60, 0, 0.1, 100, 1),
+      ev(60, 0, 0.1, 100, 2),
+      ev(60, 0, 0.1, 100, 3),
+      ev(60, 0, 0.1, 100, 4),
+      ev(60, 0, 0.1, 100, 5),
+    ];
+    const result = computeLayerActivity(events, 4, 3);
+    expect(result).toHaveLength(3);
+    expect(result[0]?.layer).toBe(1);
+    expect(result[1]?.layer).toBe(2);
+    expect(result[2]?.bars[0]).toBe(1.0);
+  });
+
+  it('uses layerColor palette (not neutral grey) for non-drum channels', () => {
+    const result = computeLayerActivity([ev(60, 0, 0.1, 100, 1)], 4, 4);
+    expect(result[0]?.color).toBe(layerColor(0));
+  });
+
+  it('returns neutral grey for the MIDI drum channel (10)', () => {
+    const result = computeLayerActivity([ev(60, 0, 0.1, 100, 10)], 4, 4);
+    expect(result[0]?.color).toBe('hsl(220 8% 70%)');
+  });
+
+  it('returns all-zero bars when the only notes are zero-velocity', () => {
+    const result = computeLayerActivity([ev(60, 0, 0.1, 0, 1)], 4, 4);
+    for (const v of result[0]?.bars ?? []) expect(v).toBe(0);
   });
 });
