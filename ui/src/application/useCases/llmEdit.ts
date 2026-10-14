@@ -1,5 +1,7 @@
 import { Effect } from 'effect';
 import { LLMClient } from '~/domain/services';
+import type { LanguageMode } from '~/domain/languageMode';
+import { getSystemPrompt } from './lispPrompt';
 
 /**
  * System prompt для wavecode AI-редактора.
@@ -210,10 +212,18 @@ export const applyEdit = (
   instruction: string,
   history: ReadonlyArray<DialogTurn> = [],
   audioState: { status: string; lastError?: string } = { status: 'unknown' },
-  options: { model?: 'smart' | 'fast'; thinking?: 'low' | 'high' | 'off' } = {},
+  options: {
+    model?: 'smart' | 'fast';
+    thinking?: 'low' | 'high' | 'off';
+    mode?: LanguageMode;
+  } = {},
 ): Effect.Effect<string, Error | string, LLMClient> =>
   Effect.gen(function* () {
     const llm = yield* LLMClient;
+    // Phase 2: mode-aware system prompt. JS-mode keeps the original
+    // Strudel-JS prompt; Lisp-mode dispatches to LISP_SYSTEM_PROMPT via
+    // `getSystemPrompt(mode)`. See math/wavecode-lisp-llm-prompt packet.
+    const systemPrompt = getSystemPrompt(options.mode ?? 'js');
 
     // Build messages array: history + current request.
     // History ограничена до последних 10 turns чтобы не переполнять контекст.
@@ -236,7 +246,7 @@ export const applyEdit = (
     const stream = yield* llm.streamCompletion({
       model: options.model ?? 'smart',
       thinking: options.thinking ?? 'low',
-      systemPrompt: SYSTEM_PROMPT,
+      systemPrompt,
       messages,
     });
 

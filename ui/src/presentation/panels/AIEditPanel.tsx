@@ -72,7 +72,11 @@ export function AIEditPanel() {
             text,
             hist,
             { status: appStore.audio.status, ...(appStore.audio.lastError ? { lastError: appStore.audio.lastError } : {}) },
-            { model: currentSettings.model, thinking: currentSettings.thinking },
+            {
+              model: currentSettings.model,
+              thinking: currentSettings.thinking,
+              mode: languageMode(),
+            },
           );
         }).pipe(Effect.provide(AppLayer)),
       );
