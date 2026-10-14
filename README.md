@@ -42,7 +42,10 @@ JS-код со Strudel mini-notation — в реальном времени. П�
 ```
 README.md
 AGENTS.md
-math/                     пакеты решений (math-coding)
+math/                     legacy пакеты решений math-coding v1.0 (87 шт.)
+decisions/                решения math-coding 3.3 (active source of truth)
+attestations/             attestation store (kernel evidence для self-check)
+schemas/                  JSON-schema reference (math-coding 3.3 kernel input)
 ui/
 ├── package.json
 ├── tsconfig.json
@@ -57,29 +60,31 @@ ui/
 
 ## Решения
 
-Каждое решение — пакет в `math/` (полный список в
-[`math/README.md`](math/README.md), 40+ пакетов).
+Каждое решение — файл в `decisions/<id>.yaml` (math-coding 3.3 schema).
+Полный список: `mathc packages` или `ls decisions/*.yaml`.
+Подробнее — в [AGENTS.md](AGENTS.md).
 
-| Пакет | Статус | Решение |
+| Решение | Статус | Резюме |
 |---|---|---|
-| `wavecode-scope` | draft | wavecode — чистофронтовый SPA, без backend |
-| `wavecode-stack-performance` | draft | UI на Solid.js вместо React для max performance |
-| `wavecode-strudel-in-browser` | applied | Audio через `@strudel/webaudio` (main thread) |
-| `wavecode-effect-ts-architecture` | applied | Effect-TS как архитектурный рантайм (4 слоя + Layer DI) |
-| `wavecode-codemirror-6` | applied | CodeMirror 6 для редактора (over Monaco) |
-| `wavecode-llm-litellm-proxy` | applied | LLM через llm.kosov.online (LiteLLM), OpenAI-compatible |
-| `wavecode-static-spa-deployment` | applied | Деплой как статический SPA, без Nix/Docker |
-| `wavecode-test-strategy` | applied | vitest + playwright (пирамида) |
-| `wavecode-strict-layering` | applied | ESLint no-restricted-imports per-layer |
-| `wavecode-log-pipeline` | applied | `cleanLogArgs` + ring-buffer logger — strip Strudel `%c+CSS`, перехват console.* |
-| `wavecode-debug-console` | applied | Toast + ConsoleButton + ConsoleSheet — error-button не auto-popup |
-| `wavecode-piano-polyphony` | applied | Multi-note stack + 30ms debounce + note-off silence для on-screen piano |
-| `wavecode-preset-decode-race` | applied | 7 пресетов n("name") → note("name") + await preload + concurrency 4 |
-| `wavecode-logger-enhancements` | applied | `fatal` level + per-source throttle (5/1s) + IDB-persisted last-100 errors |
-| `console-ux-polish`¹ | applied | fatal severity + color-blind SVG icons + Cmd/Ctrl+` hotkey |
-| `wavecode-quality-tooling` | applied | `no-console` lint в domain/application + `validate:presets` + pre-commit hook |
+| `wavecode-scope` | active | wavecode — чистофронтовый SPA, без backend |
+| `wavecode-stack-performance` | active | UI на Solid.js вместо React для max performance |
+| `wavecode-strudel-in-browser` | active | Audio через `@strudel/webaudio` (main thread) |
+| `wavecode-effect-ts-architecture` | active | Effect-TS как архитектурный рантайм (4 слоя + Layer DI) |
+| `wavecode-codemirror-6` | active | CodeMirror 6 для редактора (over Monaco) |
+| `wavecode-llm-litellm-proxy` | active | LLM через llm.kosov.online (LiteLLM), OpenAI-compatible |
+| `wavecode-static-spa-deployment` | active | Деплой как статический SPA, без Nix/Docker |
+| `wavecode-test-strategy` | active | vitest + playwright (пирамида) |
+| `wavecode-strict-layering` | active | ESLint no-restricted-imports per-layer |
+| `wavecode-log-pipeline` | active | `cleanLogArgs` + ring-buffer logger — strip Strudel `%c+CSS`, перехват console.* |
+| `wavecode-debug-console` | active | Toast + ConsoleButton + ConsoleSheet — error-button не auto-popup |
+| `wavecode-piano-polyphony` | active | Multi-note stack + 30ms debounce + note-off silence для on-screen piano |
+| `wavecode-preset-decode-race` | active | 7 пресетов n("name") → note("name") + await preload + concurrency 4 |
+| `wavecode-logger-enhancements` | active | `fatal` level + per-source throttle (5/1s) + IDB-persisted last-100 errors |
+| `console-ux-polish`¹ | active | fatal severity + color-blind SVG icons + Cmd/Ctrl+` hotkey |
+| `wavecode-quality-tooling` | active | `no-console` lint в domain/application + `validate:presets` + pre-commit hook |
 
-¹ outlier без `wavecode-` префикса — см. [math/README.md](math/README.md) footnote.
+¹ outlier без `wavecode-` префикса — legacy id из v1.0 (см. PR
+`feat/math-coding-3.3-upgrade`).
 
 ## Console UX
 
