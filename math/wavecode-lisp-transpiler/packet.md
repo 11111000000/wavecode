@@ -204,11 +204,21 @@ eval даёт тот же Strudel-pattern что `pair.js`.
 
 ## Phases
 
-- **Phase 1 (этот пакет):** транспнлятор + тесты + LanguageToggle +
-  integration в LiveAudioEngine. LLM НЕ на Lisp.
+- **Phase 1 (этот коммит):** транспнлятор + тесты + LanguageToggle +
+  integration в LiveAudioEngine. LLM НЕ на Lisp. **DONE** — коммиты
+  `9b64d2d` (packet) + `f354602` (transpiler core) +
+  `4a1d2d1` (audio) + `a260c45` (UI + e2e).
 - **Phase 2 (отдельный пакет):** LLM-system-prompt + golden-pair tests +
-  unit-tests на транспнляцию.
+  unit-tests на транспнляцию. **TODO** — следующий пакет
+  `wavecode-lisp-llm-prompt`.
 
 ## Status
 
-**draft.** Phases 2 и 3 ещё не сделаны. См. `witness` после merge + verify.
+**draft** для всего пакета. Phase 1 implementation готова к merge —
+manual e2e в `tests/e2e/lisp-transpiler.spec.ts` ещё не прогонялся
+локально (требует dev-сервер); unit-тесты транспнлятора (36/36) +
+tsc + ESLint clean. Master имеет 5 pre-existing failures в
+uiState.test.ts, не связанные с этим пакетом.
+
+При merge в master — создать `witness` файл, обновить packet до
+`status: applied`.
