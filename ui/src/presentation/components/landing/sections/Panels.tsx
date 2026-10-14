@@ -7,7 +7,7 @@ import {
 type Panel = {
   readonly name: string;
   readonly body: string;
-  readonly tone: 'amber' | 'cyan' | 'magenta' | 'silver';
+  readonly tone: 'primary' | 'cyan' | 'magenta' | 'silver';
   readonly Icon: (p: { size?: number }) => JSX.Element;
 };
 
@@ -15,7 +15,7 @@ const PANELS: ReadonlyArray<Panel> = [
   {
     name: 'Play / Stop',
     body: 'Запустить, остановить, поставить на паузу. Одна кнопка снизу справа.',
-    tone: 'amber',
+    tone: 'primary',
     Icon: TransportIcon,
   },
   {
@@ -33,7 +33,7 @@ const PANELS: ReadonlyArray<Panel> = [
   {
     name: 'Бит-бокс',
     body: 'Сетка 16×8 для ударных. Клик — нота звучит. Меняешь сетку — меняется бит.',
-    tone: 'amber',
+    tone: 'primary',
     Icon: StepGridIcon,
   },
   {
@@ -51,7 +51,7 @@ const PANELS: ReadonlyArray<Panel> = [
   {
     name: 'Библиотека звуков',
     body: 'Готовые наборы ударных, фортепиано, баса — не нужно ничего скачивать.',
-    tone: 'amber',
+    tone: 'primary',
     Icon: SampleIcon,
   },
   {

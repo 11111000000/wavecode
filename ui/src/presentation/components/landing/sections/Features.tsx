@@ -8,7 +8,7 @@ import {
 type Feature = {
   readonly title: string;
   readonly body: string;
-  readonly tone: 'amber' | 'cyan' | 'magenta';
+  readonly tone: 'primary' | 'cyan' | 'magenta';
   readonly Icon: (p: { size?: number }) => JSX.Element;
 };
 
@@ -19,7 +19,7 @@ const FEATURES: ReadonlyArray<Feature> = [
       'Опиши, что хочешь услышать, обычными словами. AI превратит ' +
       'их в музыкальный код прямо в редакторе. Можно править и ' +
       'слова, и код — они обновляются вместе.',
-    tone: 'amber',
+    tone: 'primary',
     Icon: AgentIcon,
   },
   {
@@ -46,7 +46,7 @@ const FEATURES: ReadonlyArray<Feature> = [
       'Подсветка кода, подсказки, быстрые кнопки для нот и ' +
       'эффектов. Видно, что играет прямо сейчас, и можно ' +
       'вернуться на любой шаг назад.',
-    tone: 'amber',
+    tone: 'primary',
     Icon: EditorIcon,
   },
   {

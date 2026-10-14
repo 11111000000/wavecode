@@ -3,7 +3,7 @@ import type { JSX, ParentProps } from 'solid-js';
 type Props = ParentProps<{
   onClick: () => void;
   ariaLabel: string;
-  tone?: 'amber' | 'cyan' | 'magenta' | 'ghost';
+  tone?: 'primary' | 'cyan' | 'magenta' | 'ghost';
   active?: boolean;
   badge?: number;
   size?: 'default' | 'lg';

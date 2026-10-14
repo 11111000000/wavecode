@@ -39,9 +39,12 @@
         --fg-dim:     #a1a1aa;
         --fg-ghost:   #52525b;
         --fg-inverse: #0a0a0e;
-        --amber:      #ffaa3b;
-        --amber-soft: rgba(255, 170, 59, 0.14);
-        --amber-glow: rgba(255, 170, 59, 0.45);
+        --primary:    #a78bfa;
+        --primary-soft: rgba(167, 139, 250, 0.14);
+        --primary-glow: rgba(167, 139, 250, 0.45);
+        --warm:       #fbbf24;
+        --warm-soft:  rgba(251, 191, 36, 0.14);
+        --warm-glow:  rgba(251, 191, 36, 0.45);
         --cyan:       #5eead4;
         --cyan-soft:  rgba(94, 234, 212, 0.14);
         --magenta:    #f472b6;
@@ -75,7 +78,8 @@
         --safe-top:     env(safe-area-inset-top, 0);
         --safe-bottom:  env(safe-area-inset-bottom, 0);
         --z-sheet: 40;
-        --shadow-glow-amber: 0 0 12px var(--amber-glow);
+        --shadow-glow-primary: 0 0 12px var(--primary-glow);
+        --shadow-glow-warm:    0 0 12px var(--warm-glow);
       }
 
       * { box-sizing: border-box; }
@@ -124,7 +128,7 @@
       .boot .bar {
         font-family: 'Geist Mono', monospace;
         font-size: 12px;
-        color: var(--amber);
+        color: var(--primary);
         letter-spacing: 0.06em;
         margin-top: 8px;
       }
@@ -165,8 +169,8 @@
         gap: var(--space-xs);
         font-family: var(--font-mono);
         font-size: var(--fs-xs);
-        color: var(--amber);
-        text-shadow: 0 0 6px var(--amber-glow);
+        color: var(--primary);
+        text-shadow: 0 0 6px var(--primary-glow);
         letter-spacing: var(--ls-wide);
         margin-right: var(--space-xs);
       }
@@ -204,7 +208,7 @@
         cursor: pointer;
         flex-shrink: 0;
       }
-      .wc-icon-btn[data-active='true'] { color: var(--amber); }
+      .wc-icon-btn[data-active='true'] { color: var(--primary); }
 
       /* ===== CRITICAL: transport-bar + chips (сразу под topbar) =====
        *
@@ -271,9 +275,9 @@
         white-space: nowrap;
       }
       .wc-chip[data-active='true'] {
-        background: var(--amber);
+        background: var(--primary);
         color: var(--fg-inverse);
-        border-color: var(--amber);
+        border-color: var(--primary);
       }
 
       /* ===== CRITICAL: audio loading pill (sample preload feedback) ===== */
@@ -282,9 +286,9 @@
         align-items: center;
         gap: var(--space-2xs);
         padding: 2px var(--space-xs);
-        background: var(--amber-soft);
-        color: var(--amber);
-        border: 1px solid var(--amber);
+        background: var(--primary-soft);
+        color: var(--primary);
+        border: 1px solid var(--primary);
         border-radius: var(--radius-pill);
         font-family: var(--font-mono);
         font-size: var(--fs-2xs);
@@ -305,7 +309,7 @@
         <svg class="logo" width="80" height="80" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
           <defs>
             <linearGradient id="bg" x1="0" y1="0" x2="48" y2="48" gradientUnits="userSpaceOnUse">
-              <stop offset="0"   stop-color="#ffaa3b"/>
+              <stop offset="0"   stop-color="#a78bfa"/>
               <stop offset="0.5" stop-color="#5eead4"/>
               <stop offset="1"   stop-color="#f472b6"/>
             </linearGradient>
@@ -319,7 +323,7 @@
           </defs>
           <rect x="2" y="2" width="44" height="44" rx="10" fill="#0a0a0e" stroke="url(#bg)" stroke-width="1.6"/>
           <path d="M8 24 L11 24 L13 14 L15 34 L17 18 L20 30 L22 24 L25 24" stroke="url(#bg)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" fill="none" filter="url(#bootglow)"/>
-          <circle cx="32" cy="24" r="2.6" fill="#ffaa3b">
+          <circle cx="32" cy="24" r="2.6" fill="#a78bfa">
             <animate attributeName="opacity" values="1;0.5;1" dur="1.6s" repeatCount="indefinite"/>
           </circle>
           <rect x="38" y="20" width="2" height="8" rx="0.6" fill="#f472b6" opacity="0.85">

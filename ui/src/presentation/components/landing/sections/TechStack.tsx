@@ -4,15 +4,15 @@ import { For } from 'solid-js';
 type Stack = {
   readonly name: string;
   readonly note: string;
-  readonly tone: 'amber' | 'cyan' | 'magenta' | 'ok' | 'silver';
+  readonly tone: 'primary' | 'cyan' | 'magenta' | 'ok' | 'silver';
 };
 
 const CORE: ReadonlyArray<Stack> = [
   { name: 'TypeScript',      note: 'строгая типизация',     tone: 'cyan'    },
-  { name: 'Solid.js',        note: 'быстрый UI',            tone: 'amber'   },
+  { name: 'Solid.js',        note: 'быстрый UI',            tone: 'primary'   },
   { name: 'Effect-TS',       note: 'архитектура',           tone: 'magenta' },
   { name: 'CodeMirror 6',   note: 'редактор кода',         tone: 'cyan'    },
-  { name: 'Strudel',         note: 'музыкальный движок',    tone: 'amber'   },
+  { name: 'Strudel',         note: 'музыкальный движок',    tone: 'primary'   },
   { name: 'Web Audio',       note: 'звук в браузере',       tone: 'magenta' },
 ];
 
@@ -25,7 +25,7 @@ const QUALITY: ReadonlyArray<Stack> = [
 
 const DEPLOY: ReadonlyArray<Stack> = [
   { name: 'Vite 5',          note: 'сборка',               tone: 'cyan'    },
-  { name: 'vite-plugin-pwa', note: 'кеш в браузере',       tone: 'amber'   },
+  { name: 'vite-plugin-pwa', note: 'кеш в браузере',       tone: 'primary'   },
   { name: 'Caddy',           note: 'reverse proxy',        tone: 'silver'  },
   { name: 'NixOS',           note: 'хостинг',              tone: 'silver'  },
 ];

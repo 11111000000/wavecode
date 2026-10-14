@@ -101,7 +101,7 @@ stack(
                   <span class="l-mockup__msg-text">
                     Готово. Bass стал 220 Hz на низком срезе, swing 0.4
                     с 1/16 делает звук живее. Проверь сцену: stack
-                    теперь дышит <span style={{ color: 'var(--amber)' }}>★</span>
+                    теперь дышит <span style={{ color: 'var(--primary)' }}>★</span>
                   </span>
                 </div>
                 <div class="l-mockup__msg l-mockup__msg-ai">

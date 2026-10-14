@@ -179,7 +179,7 @@ export const WavecodeLogo = (p: IconProps): JSX.Element => (
   >
     <defs>
       <linearGradient id="wclogo-grad" x1="0" y1="0" x2="120" y2="0" gradientUnits="userSpaceOnUse">
-        <stop offset="0"   stop-color="#ffaa3b" />
+        <stop offset="0"   stop-color="#a78bfa" />
         <stop offset="0.5" stop-color="#5eead4" />
         <stop offset="1"   stop-color="#f472b6" />
       </linearGradient>
@@ -192,7 +192,7 @@ export const WavecodeLogo = (p: IconProps): JSX.Element => (
       stroke-linejoin="round"
       fill="none"
     />
-    <circle cx="32" cy="16" r="2.6" fill="#ffaa3b">
+    <circle cx="32" cy="16" r="2.6" fill="#a78bfa">
       <animate attributeName="opacity" values="1;0.5;1" dur="1.6s" repeatCount="indefinite" />
     </circle>
     <text

@@ -362,8 +362,8 @@ export const CriticalIcon = (p: Props): JSX.Element => (
  * Sizes: small (32×11) для topbar, large (128×44) для boot screen.
  */
 /**
- * WavecodeLogo — square 48×48 spectrum-tile logo: amber→cyan→magenta
- * gradient waveform on a slate rounded-square with a pulsing amber dot
+ * WavecodeLogo — square 48×48 spectrum-tile logo: primary→cyan→magenta
+ * gradient waveform on a slate rounded-square with a pulsing primary dot
  * и magenta cursor-block. Заменил старый BrandLogo с <text>wc</text>.
  * Единый для boot loader (favicon.svg), TopBar, TopNav (лендинг).
  */
@@ -381,7 +381,7 @@ export const WavecodeLogo = (p: { size?: number; class?: string }): JSX.Element 
     >
       <defs>
         <linearGradient id="wclogo-grad" x1="0" y1="0" x2="48" y2="48" gradientUnits="userSpaceOnUse">
-          <stop offset="0"   stop-color="#ffaa3b"/>
+          <stop offset="0"   stop-color="#a78bfa"/>
           <stop offset="0.5" stop-color="#5eead4"/>
           <stop offset="1"   stop-color="#f472b6"/>
         </linearGradient>
@@ -394,7 +394,7 @@ export const WavecodeLogo = (p: { size?: number; class?: string }): JSX.Element 
         stroke-linecap="round"
         stroke-linejoin="round"
       />
-      <circle cx="32" cy="24" r="2.6" fill="#ffaa3b">
+      <circle cx="32" cy="24" r="2.6" fill="#a78bfa">
         <animate attributeName="opacity" values="1;0.5;1" dur="1.6s" repeatCount="indefinite"/>
       </circle>
       <rect x="38" y="20" width="2" height="8" rx="0.6" fill="#f472b6">

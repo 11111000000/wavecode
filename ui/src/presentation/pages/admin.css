@@ -33,7 +33,7 @@
   color: var(--fg);
 }
 .admin-title-sub {
-  color: var(--amber);
+  color: var(--primary);
   font-weight: var(--fw-regular);
   margin-left: var(--space-2xs);
 }
@@ -97,7 +97,7 @@
 }
 .admin-section[open] > .admin-section-summary::before {
   transform: rotate(90deg);
-  color: var(--amber);
+  color: var(--primary);
 }
 .admin-section-title {
   font-family: var(--font-mono);
@@ -115,8 +115,8 @@
   height: 22px;
   padding: 0 var(--space-xs);
   border-radius: var(--radius-pill);
-  background: var(--amber-soft);
-  color: var(--amber);
+  background: var(--primary-soft);
+  color: var(--primary);
   font-family: var(--font-mono);
   font-size: var(--fs-2xs);
   font-weight: var(--fw-bold);

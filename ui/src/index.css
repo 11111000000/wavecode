@@ -3,7 +3,7 @@
  *
  * 6-слойная архитектура через CSS cascade layers (mobile-first):
  *
- *   tokens      палитра spectrum (amber+cyan+magenta), surface-0..4,
+ *   tokens      палитра spectrum (primary+cyan+magenta), surface-0..4,
  *               motion (--ease-spring), radius scale, z-scale
  *   base        reset, Geist typography, focus ring, scrollbars,
  *               safe-area padding, prefers-reduced-motion override

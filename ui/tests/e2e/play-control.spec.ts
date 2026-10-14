@@ -55,7 +55,7 @@ test('play button lives in PresetRow, click toggles to Stop, and AI-textarea sta
   const playBtn = page.locator('[data-testid="transport-play-btn"]');
   await expect(playBtn).toBeVisible({ timeout: 5000 });
   await expect(playBtn).toHaveAttribute('aria-label', 'Запуск');
-  await expect(playBtn).toHaveAttribute('data-tone', 'amber');
+  await expect(playBtn).toHaveAttribute('data-tone', 'primary');
   await expect(playBtn).toHaveAttribute('aria-pressed', 'false');
 
   const insideControlsRow = await playBtn.evaluate((el) => Boolean(el.closest('.app-controls-row')));
@@ -119,14 +119,14 @@ test('play button lives in PresetRow, click toggles to Stop, and AI-textarea sta
   //   - Stop variant (audio running): label='Стоп', tone='cyan',
   //     aria-pressed='true'.
   //   - Still Play variant (audio not running): label='Запуск',
-  //     tone='amber'. In that case the click is still valid; the
+  //     tone='primary'. In that case the click is still valid; the
   //     layout-invariant assertions below are what we actually test.
   if (newLabel === 'Стоп') {
     expect(newTone).toBe('cyan');
     await expect(afterClick).toHaveAttribute('aria-pressed', 'true');
   } else {
     expect(newLabel).toBe('Запуск');
-    expect(newTone).toBe('amber');
+    expect(newTone).toBe('primary');
   }
 
   // 6. The AI-textarea is STILL visible after the click — clicking the
