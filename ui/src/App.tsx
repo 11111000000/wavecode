@@ -27,11 +27,10 @@ import { ConsoleButton } from './presentation/components/ConsoleButton';
 import { ConsoleSheet } from './presentation/components/ConsoleSheet';
 import { installConsoleGlobals } from './presentation/components/consoleGlobals';
 import { TopBar } from './presentation/components/app/TopBar';
-import { PresetRow } from './presentation/components/app/PresetRow';
+import { TransportBar } from './presentation/components/TransportBar';
 import { PanelsLayout } from './presentation/components/app/PanelsLayout';
 import { Admin } from './presentation/pages/Admin';
 import { Landing } from './presentation/components/landing/Landing';
-import { TransportPanel } from './presentation/components/TransportPanel';
 
 const NEW_COMPOSITION_TEMPLATE = '// Начни новую композицию здесь\n';
 
@@ -220,10 +219,12 @@ function AppShell(): JSX.Element {
         }}
         onOpenAdmin={() => { window.history.pushState(null, '', '#/admin'); window.dispatchEvent(new HashChangeEvent('hashchange')); }}
       />
-      <PresetRow
+      <TransportBar
         presetId={presetId()}
         showSavePreset={showSavePreset()}
         newPresetName={newPresetName()}
+        audioRunning={audio.audioRunning}
+        audioStarting={audioStarting}
         onLoadPreset={(id) => {
           const preset = getPreset(id);
           if (!preset) return;
@@ -241,20 +242,14 @@ function AppShell(): JSX.Element {
           setShowSavePreset(false);
           setNewPresetName('');
         }}
+        onPlay={() => {
+          setAudioStarting(true);
+          void evalScore();
+        }}
+        onStop={() => {
+          void stopAudio();
+        }}
       />
-      <div class="app-controls-row">
-        <TransportPanel
-          audioRunning={audio.audioRunning}
-          audioStarting={audioStarting}
-          onPlay={() => {
-            setAudioStarting(true);
-            void evalScore();
-          }}
-          onStop={() => {
-            void stopAudio();
-          }}
-        />
-      </div>
       <PanelsLayout />
       <TabBar />
       <ConsoleButton />
