@@ -2,7 +2,7 @@ import { Show, onCleanup, type JSX } from 'solid-js';
 import { appStore } from '~/presentation/state/appStore';
 import type { MobileMode } from '~/presentation/state/uiState';
 import {
-  UndoIcon, RedoIcon, NewIcon, ResetIcon,
+  UndoIcon, RedoIcon, NewIcon,
   LayoutSwapIcon, WavecodeLogo,
 } from '~/presentation/icons';
 import { ShareButton } from '~/presentation/components/ShareButton';
@@ -111,16 +111,6 @@ export function TopBar(props: TopBarProps): JSX.Element {
           title="Повторить (Ctrl+Y)"
         >
           <RedoIcon size={18} />
-        </button>
-        <button
-          type="button"
-          class="wc-icon-btn"
-          data-tone="ghost"
-          onClick={props.onResetAll}
-          aria-label="Сбросить все настройки"
-          title="Сбросить все настройки (localStorage + IDB)"
-        >
-          <ResetIcon size={18} />
         </button>
         <ShareButton />
         <ConsoleButton />
