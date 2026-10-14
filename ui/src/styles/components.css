@@ -2694,7 +2694,17 @@ button:not([disabled]):not(.no-shrink):active {
   flex-direction: column;
   gap: 1px;
   background: var(--border);
-  overflow: hidden;
+  /* wavecode-ai-footer-overlap: overflow был hidden — на низких
+   * вьюпортах (landscape / планшет / маленькое окно) сумма
+   * min-height'ов стекованных панелей (score 220 + ai 240 + status)
+   * превышает доступную высоту, и нижняя часть .ai-footer
+   * (textarea + «Применить») уходила под fixed .wc-tabbar и
+   * обрезалась. Делаем вертикальный скролл: контент, который не
+   * влез, теперь доступен выше таббара (padding-bottom резервирует
+   * место). Mobile split-pane (≤720px) сохраняет overflow:hidden
+   * через sheets.css (слой выше). */
+  overflow-y: auto;
+  overflow-x: hidden;
   position: relative;
   z-index: 0;
   /* wavecode-transport-always-visible: leave room for fixed
