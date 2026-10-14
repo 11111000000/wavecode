@@ -1,7 +1,7 @@
 applied_at: 2026-10-14
 branch: fix/preset-id-hydration
 commits:
-  - TBD    fix(ui): persist selected preset across reloads
+  - 9061205 fix(ui): persist selected preset across reloads
 supersedes: null
 notes: |
   Пресет-селектор в TransportBar после reload'а всегда показывал
