@@ -1,0 +1,119 @@
+---
+schema: math-coding/3.3
+id: wavecode-fur-elise-preset-accuracy
+revision: 1
+state: draft
+body_sha: "sha256:1785f24088986a56c2451ee080c20dcb43d1e55ea7a3f54710ed2b5398bccf3f"
+yaml_sha: "sha256:1785f24088986a56c2451ee080c20dcb43d1e55ea7a3f54710ed2b5398bccf3f"
+
+intent:|
+  Пресет Für Elise в `ui/src/domain/presets.ts` рендерит узнаваемую
+  тему через (1) корректный ритм-контур мелодии (9 начальных нот
+  E D# E D# E B D C A), (2) характерный бас A2/E2 чередующийся
+  (фирменная bass-motion пьесы), (3) простой A-moll арпеджио
+  в среднем регистре, (4) без ударных — классика, не поп.
+commitment: |
+  Strudel-рендеринг классики несовершен по определению: нет семплов
+  фортепиано, нет выразительной динамики, нет педалей. Но если
+  выровнять pitch + bass + гармонию + убрать явно чужой шум (hihat),
+  первые 9 нот узнаются сразу. Исправление:
+  - bass: a2/e2 a2-e2-...-a2 (чередование, не A3-G3-F3-A3)
+  - mid arpeggio: A-moll a4 c5 e5 повторяется, не случайная сетка
+  - drum: убрать `s("white*4")` (классика без хэт-нэйл)
+  - melody: оставить без изменений (ноты e5 d#5 e5 d#5 e5 b4
+  d5 c5 a4 — корректные первые 9 нот)
+  Цикл cps=0.5 (2 сек) при 9 нотах даёт ~270 BPM note-rate —
+  быстрее оригинала (80 BPM Adagio), но в одной темповой зоне
+  с другими пресетами; чтобы не разъезжаться с rock-пресетами,
+  `.slow(N)` не добавлен. Если понадобится адажио для классики —
+  отдельный пакет.
+counterexample: |
+  The strongest objection to this decision is captured in the `antithesis` field above: (a) Продолжать рендерить как было — мелодия узнаётся только
+antithesis: |
+  (a) Продолжать рендерить как было — мелодия узнаётся только
+  по питчам, бас A3/G3/F3-A3 и hihat (white*4) делают звук
+  техно-шумовым, оператор жалуется «мелодия не узнаётся».
+  (b) Использовать сэмплы фортепиано через Dirt — Strudel-стек
+  wavecode не имеет готовых piano-сэмплов и не зависит от SuperDirt
+  (см. `wavecode-strudel-in-browser`), это отдельная инфраструктура.
+  (d) Транскрибировать всю пьесу целиком (~3 мин) — пакет
+  про пресеты как demo-content; 9-нотный snippet достаточен для
+  мгновенного recognition.
+  Strudel-рендеринг классики несовершен по определению: нет семплов
+  фортепиано, нет выразительной динамики, нет педалей. Но если
+  выровнять pitch + bass + гармонию + убрать явно чужой шум (hihat),
+  первые 9 нот узнаются сразу. Исправление:
+  - bass: a2/e2 a2-e2-...-a2 (чередование, не A3-G3-F3-A3)
+  - mid arpeggio: A-moll a4 c5 e5 повторяется, не случайная сетка
+  - drum: убрать `s("white*4")` (классика без хэт-нэйл)
+  - melody: оставить без изменений (ноты e5 d#5 e5 d#5 e5 b4
+  d5 c5 a4 — корректные первые 9 нот)
+  Цикл cps=0.5 (2 сек) при 9 нотах даёт ~270 BPM note-rate —
+  быстрее оригинала (80 BPM Adagio), но в одной темповой зоне
+  с другими пресетами; чтобы не разъезжаться с rock-пресетами,
+  `.slow(N)` не добавлен. Если понадобится адажио для классики —
+  отдельный пакет.
+counterexample: |
+  The strongest objection to this decision is captured in the `antithesis` field above: (a) Продолжать рендерить как было — мелодия узнаётся только
+antithesis: |
+  (a) Продолжать рендерить как было — мелодия узнаётся только
+  по питчам, бас A3/G3/F3-A3 и hihat (white*4) делают звук
+  техно-шумовым, оператор жалуется «мелодия не узнаётся».
+  (b) Использовать сэмплы фортепиано через Dirt — Strudel-стек
+  wavecode не имеет готовых piano-сэмплов и не зависит от SuperDirt
+  (см. `wavecode-strudel-in-browser`), это отдельная инфраструктура.
+  (d) Транскрибировать всю пьесу целиком (~3 мин) — пакет
+  про пресеты как demo-content; 9-нотный snippet достаточен для
+  мгновенного recognition.
+axiom_link:
+  - A2
+scope:
+  paths: []
+outcomes:
+  - id: wavecode-fur-elise-preset-accuracy-outcome
+    statement: |
+      Пресет Für Elise в `ui/src/domain/presets.
+obligations:
+  - id: wavecode-fur-elise-preset-accuracy-kernel-validates
+    claim: |
+      The migrated decision file is structurally valid under the math-coding 3.3 schema; `mathc validate` exits 0 for `decisions/<id>.yaml` at HEAD.
+    acceptance:
+      all:
+        - verifier: "mathc validate"
+          result: pass
+  - id: wavecode-fur-elise-preset-accuracy-witness-from-v1
+    claim: |
+      The original v1.0 packet applied on the recorded date in its `witness` file; this migration preserves that evidence as an `attestations/<id>-evidence.json` file.
+    acceptance:
+      all:
+        - verifier: "attestation-store-has-subject"
+          result: pass
+assumptions:
+  - id: wavecode-fur-elise-preset-accuracy-assumption-1
+    state: proven
+    statement: |
+      "Pitch-контур первых 9 нот = e5 d#5 e5 d#5 e5 b4 d5 c5 a4 — верный" Evidence: "Wikipedia 'Für Elise'"
+    owner: human:operator
+  - id: wavecode-fur-elise-preset-accuracy-assumption-2
+    state: assumed
+    statement: |
+      "Бас A2/E2 — каноническая bass-motion Für Elise" Evidence: "слуховой контроль + нотная запись Bagatelle No. 25 WoO 59"
+    owner: human:operator
+  - id: wavecode-fur-elise-preset-accuracy-assumption-3
+    state: proven
+    statement: |
+      "Ударных в академическом оригинале нет — hihat удалён" Evidence: "нотная партитура WoO 59"
+    owner: human:operator
+  - id: wavecode-fur-elise-preset-accuracy-assumption-4
+    state: proven
+    statement: |
+      "Тесты BUILTIN_PRESETS проходят (6/6 vitest) после фикса" Evidence: "2026-10-02, opencode-сессия"
+    owner: human:operator
+risk:
+  declared_triggers:
+    - v1-to-v3-migration-loss
+  owner: human:operator
+relations:
+  addresses:
+    - wavecode-bootstrap-math-coding-3.3@1
+---

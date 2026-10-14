@@ -1,0 +1,250 @@
+---
+schema: math-coding/3.3
+id: wavecode-strudel-runtime-patches
+revision: 1
+state: active
+body_sha: "sha256:2149c1b151b3fd7db20bb4829c8f6f3641a5f0eadc199196a98197cb64202e4d"
+yaml_sha: "sha256:2149c1b151b3fd7db20bb4829c8f6f3641a5f0eadc199196a98197cb64202e4d"
+
+intent:|
+  Три независимых бага в Strudel-стеке `@strudel/{core,tonal,webaudio}`
+  коллапсируют в «захлёбывающийся UI»: в консоль летит ~10 logs/sec,
+  а LLM-ответы оператора не доходят. Каждый корень — отдельный, фиксы
+  ортогональны:
+
+  1. **`[voicing]: unknown chord "<X>"`.** `voicings.mjs:144` делает
+  `dictionary[symbol].map(...)`; если chord-suffix (`maj7`, `min7`)
+  не ключ — throws, catch в `voicing.mjs:210` логирует на КАЖДЫЙ
+  hap. ireal-dictionary (`simple` из `ireal.mjs`) содержит
+  tonal-style keys (`^7`, `m7`, `+`, etc.) + авто-алиасы через
+  `voicingAlias()` для `^` / `-` / `+`, но НЕ для длинных форм
+  `maj7` / `min7`. `<Dmin7 G7 Cmaj7>` в Jazz ii-V-I пресете ловит
+  это ~8 раз/sec потому что voicing ре-эвалится на каждый hap
+  резолвящийся chord'а (а не один раз/цикл, как можно подумать).
+
+  2. **`[getTrigger] error: sound drums not found!`.**
+  `superdough.mjs:572` бросает этот `Error` когда `soundMap[s]`
+  undefined. SampleLoader регистрирует `drums_bd`, `drums_sd` …
+  bare-алиасы (`bd`, `sd`, …) через `addBareAliases()`, но НЕ
+  ключ `drums` (это BANK имя, не sound). LLM регулярно халлюцинирует
+  `s("drums")` как «общий барабан» — scheduler-fire на hap-саунде
+  `drums` → `soundMap["drums"]` undefined → throw на каждом
+  цикле scheduler'а (тот же ~200 ms цикл что и выше).
+
+  3. **CSS-строка `background-color: black;color:white;border-radius:15px`
+  в КАЖДОМ `[getTrigger]` / `[voicing]` / `[cyclist]` сообщении.**
+  `@strudel/core/logger.mjs:21` вызывает
+  `console.log(\`%c${message}\`, 'background-color: black;…')`.
+  В Chromium DevTools `%c` + companion CSS дают ОДНО стилизованное
+  сообщение. В Paseo chat / copy-paste / log-файлах CSS-string
+  append'ится к тексту verbatim → мусор в каждой строке ошибок.
+
+  4. **`[AIEditPanel] LLM error: LLM HTTP request failed: Failed to fetch`.**
+  `LiveLLMClient.ts:67` ловит `err` от `fetch()` и пишет
+  `err.message` в `Error`. На Chromium `fetch` бросает
+  `TypeError: Failed to fetch` для трёх КАЧЕСТВЕННО разных причин
+  (CORS preflight fail / mixed-content / network down), и
+  `err.message` их НЕ различимы. Оператор видит одно и то же
+  сообщение и не понимает, чинить proxy или сертификат.
+
+  Resolution:
+  + `ui/src/infrastructure/audio/strudelPatches.ts` — единственный
+  файл, держит ТРИ pure-helper'а: `wrapStrudelLogger`,
+  `applyVoicingAliases(tonal)`, `applyBankAliasFallback(webaudio,
+  fallbacks?)`. Idempotent, без side-effect на import.
+  + `ui/src/infrastructure/audio/strudelPatches.test.ts` — 13 unit
+  тестов против pure-shape модулей (мокаем `voicingRegistry`/
+  `soundMap` как plain objects). Никакого реального `@strudel/*`
+  в test loop.
+  + `ui/src/main.tsx` — `wrapStrudelLogger()` в самом верху,
+  ДО первого `import('@strudel/...')`. Pattern-detection: 1-й arg
+  начинается с `%c[`, 2-й arg — CSS string с `border-radius|…white|background-color`.
+  При совпадении — strip `%c`, reroute через `console.error(msg,
+  ...rest)`.
+  + `ui/src/infrastructure/audio/LiveAudioEngine.ts:177-185` —
+  `applyVoicingAliases(modules.tonal)` сразу после `evalScope(core,
+  mini, tonal)` и перед первым `webaudioRepl`. Тонкие моменты:
+  `voicingAlias()` регистрации (`@strudel/tonal/voicings.mjs:225-243`)
+  идут при ИМПОРТЕ модуля → наши alias'ы должны идти ПОСЛЕ них.
+  Это условие выполняется только когда мы зовём patch ПОСЛЕ
+  `loadModules()`, не раньше.
+  + `ui/src/infrastructure/audio/SampleLoader.ts:42,78-91,99-104` —
+  импорт `applyBankAliasFallback` + `DEFAULT_BANK_FALLBACKS`,
+  новый локальный `applyBankFallbacksFromModuleShape()` →
+  `registerBank()` зовёт его после `addBareAliases()`. Default
+  fallbacks: `drums→drums_bd, drum→drums_bd, piano→piano_a4,
+  synth→synth_bass-c2`. Только ADD missing + только когда
+  fallback key уже есть в map (deferred — сэмплы могут грузиться
+  позже).
+  + `ui/src/infrastructure/llm/LiveLLMClient.ts:171-212` — новый
+  `classifyLLMTransportError(err, apiUrl)`. Browser fetch бросает
+  одно `Failed to fetch` для разных рут-причин; helper обнаруживает
+  pattern (regex `Failed to fetch|NetworkError|fetch failed|load failed`),
+  инспектирует `window.location.origin` vs `apiUrl`, добавляет
+  `(CORS: добавить …; mixed-content: …)` суффикс к сообщению.
+  Оператор может сразу сказать «proxy не allowlist'нул origin»
+  vs «у меня DNS лежит».
+commitment: |
+  Boot-time monkey-patch + post-load mutations. Чистый inline код,
+  ноль new deps, ноль изменений в node_modules, ноль fetch-retry.
+counterexample: |
+  The strongest objection to this decision is captured in the `antithesis` field above: (1) «Submit PR в upstream Strudel» — текущая кодовая база на
+antithesis: |
+  (1) «Submit PR в upstream Strudel» — текущая кодовая база на
+  `@strudel/core@1.2.6` + `@strudel/tonal@1.2.6` от 2025;
+  апстрим может уже иметь фикс, но даже если да — минор-апдейт
+  Strudel в wavecode отдельный риск (touch sensitivity к
+  scheduler API) и не помогает с нашими конкретными use-cases
+  (важно, чтобы `min7`/`maj7` разрешались в wavecode-style
+  ii-V-I). Inline-patch дешевле и обратимо.
+
+  (2) «Patch-package на logger.mjs» — даёт persistent patch через
+  postinstall, но добавляет зависимость от patch-package в lockfile
+  + пост-инсталл хук. Boot-time monkey-patch через
+  `console.log = wrapped` не трогает ничего в node_modules, не
+  ломается на `npm ci`, и обратим удалением одного файла.
+  Минус: HMR может заэпизодически зашить дважды (защищено
+  `logWrapped` флагом).
+
+  (3) «Регистрировать bank-fallback в App.tsx через await import
+  strudel/webaudio» — добавляет ещё одну точку импорта Strudel в
+  boot-path; уже сейчас Strudel модули грузятся лениво в
+  LiveAudioEngine. Делать это в `SampleLoader.registerBank()`
+  означает callsite порядок: samples → bare-aliases → bank-fallback
+  (one bank at a time), что естественно.
+
+  (4) «Сделать `s("drums")` synthetic — а не alias на банк» —
+  superdough ожидает ЛЮБОЙ lookup-result имеет `onTrigger(t, …)`
+  в `data`. Synthetic drum воспроизводился бы, но имел бы другую
+  velocity-кривую чем 808 → score авторы удивлялись бы что их
+  `s("drums:bd")` звучит иначе чем `s("drums")`. Alias на
+  конкретный sound (`drums_bd`) даёт предсказуемый результат.
+
+  (5) «Retry при `Failed to fetch`» — соблазнительно, но КОРЕНЬ
+  проблемы сервер-side (proxy CORS allowlist). Retry замаскирует
+  реальную причину и будет спамить LLM-proxy. Лучше честное
+  сообщение с подсказкой куда смотреть. Если бы был прогресс-бар
+  retry — отдельный task; в данном пакете не делаем.
+
+  (6) «Удалить `%c` из logger.mjs через patch-package вместо
+  monkey-patch» — patch-package требует regeneration патча при
+  каждом lockfile-bump; monkey-patch `console.log` живёт в
+  нашем коде и переживает любые обновления `@strudel/core`.
+  Кроме того, в DEV-режиме DevTools-console всё равно покажет
+  console.error с красной иконкой что достаточно для UX.
+  Boot-time monkey-patch + post-load mutations. Чистый inline код,
+  ноль new deps, ноль изменений в node_modules, ноль fetch-retry.
+counterexample: |
+  The strongest objection to this decision is captured in the `antithesis` field above: (1) «Submit PR в upstream Strudel» — текущая кодовая база на
+antithesis: |
+  (1) «Submit PR в upstream Strudel» — текущая кодовая база на
+  `@strudel/core@1.2.6` + `@strudel/tonal@1.2.6` от 2025;
+  апстрим может уже иметь фикс, но даже если да — минор-апдейт
+  Strudel в wavecode отдельный риск (touch sensitivity к
+  scheduler API) и не помогает с нашими конкретными use-cases
+  (важно, чтобы `min7`/`maj7` разрешались в wavecode-style
+  ii-V-I). Inline-patch дешевле и обратимо.
+
+  (2) «Patch-package на logger.mjs» — даёт persistent patch через
+  postinstall, но добавляет зависимость от patch-package в lockfile
+  + пост-инсталл хук. Boot-time monkey-patch через
+  `console.log = wrapped` не трогает ничего в node_modules, не
+  ломается на `npm ci`, и обратим удалением одного файла.
+  Минус: HMR может заэпизодически зашить дважды (защищено
+  `logWrapped` флагом).
+
+  (3) «Регистрировать bank-fallback в App.tsx через await import
+  strudel/webaudio» — добавляет ещё одну точку импорта Strudel в
+  boot-path; уже сейчас Strudel модули грузятся лениво в
+  LiveAudioEngine. Делать это в `SampleLoader.registerBank()`
+  означает callsite порядок: samples → bare-aliases → bank-fallback
+  (one bank at a time), что естественно.
+
+  (4) «Сделать `s("drums")` synthetic — а не alias на банк» —
+  superdough ожидает ЛЮБОЙ lookup-result имеет `onTrigger(t, …)`
+  в `data`. Synthetic drum воспроизводился бы, но имел бы другую
+  velocity-кривую чем 808 → score авторы удивлялись бы что их
+  `s("drums:bd")` звучит иначе чем `s("drums")`. Alias на
+  конкретный sound (`drums_bd`) даёт предсказуемый результат.
+
+  (5) «Retry при `Failed to fetch`» — соблазнительно, но КОРЕНЬ
+  проблемы сервер-side (proxy CORS allowlist). Retry замаскирует
+  реальную причину и будет спамить LLM-proxy. Лучше честное
+  сообщение с подсказкой куда смотреть. Если бы был прогресс-бар
+  retry — отдельный task; в данном пакете не делаем.
+
+  (6) «Удалить `%c` из logger.mjs через patch-package вместо
+  monkey-patch» — patch-package требует regeneration патча при
+  каждом lockfile-bump; monkey-patch `console.log` живёт в
+  нашем коде и переживает любые обновления `@strudel/core`.
+  Кроме того, в DEV-режиме DevTools-console всё равно покажет
+  console.error с красной иконкой что достаточно для UX.
+axiom_link:
+  - A2
+scope:
+  paths: []
+outcomes:
+  - id: wavecode-strudel-runtime-patches-outcome
+    statement: |
+      Три независимых бага в Strudel-стеке `@strudel/{core,tonal,webaudio}`
+      коллапсируют в «захлёбывающийся UI»: в консоль летит ~10 logs/sec,
+      а LLM-ответы оператора не доходят.
+obligations:
+  - id: wavecode-strudel-runtime-patches-kernel-validates
+    claim: |
+      The migrated decision file is structurally valid under the math-coding 3.3 schema; `mathc validate` exits 0 for `decisions/<id>.yaml` at HEAD.
+    acceptance:
+      all:
+        - verifier: "mathc validate"
+          result: pass
+  - id: wavecode-strudel-runtime-patches-witness-from-v1
+    claim: |
+      The original v1.0 packet applied on the recorded date in its `witness` file; this migration preserves that evidence as an `attestations/<id>-evidence.json` file.
+    acceptance:
+      all:
+        - verifier: "attestation-store-has-subject"
+          result: pass
+assumptions:
+  - id: wavecode-strudel-runtime-patches-assumption-1
+    state: proven
+    statement: |
+      "@strudel/core/logger.mjs:21 вызывает Evidence: "Содержимое ui/node_modules/@strudel/core/logger.mjs:21;
+    owner: human:operator
+  - id: wavecode-strudel-runtime-patches-assumption-2
+    state: proven
+    statement: |
+      "@strudel/tonal/voicings.mjs:144 содержит Evidence: "ui/node_modules/@strudel/tonal/voicings.mjs:139-146 —
+    owner: human:operator
+  - id: wavecode-strudel-runtime-patches-assumption-3
+    state: proven
+    statement: |
+      "ireal.mjs dictionary keys = '7', 'm7', '^7', 'm9', etc. — Evidence: "ui/node_modules/@strudel/tonal/ireal.mjs:8-100 (simple)
+    owner: human:operator
+  - id: wavecode-strudel-runtime-patches-assumption-4
+    state: proven
+    statement: |
+      "superdough.mjs:572 throws `Error(\`sound ${s} not Evidence: "ui/node_modules/superdough/superdough.mjs:550-573:
+    owner: human:operator
+  - id: wavecode-strudel-runtime-patches-assumption-5
+    state: proven
+    statement: |
+      "SampleLoader.addBareAliases() добавляет `bd` → `drums_bd`, Evidence: "ui/src/infrastructure/audio/SampleLoader.ts:59-76 — loop
+    owner: human:operator
+  - id: wavecode-strudel-runtime-patches-assumption-6
+    state: proven
+    statement: |
+      "Chromium fetch() throws TypeError 'Failed to fetch' Evidence: "WHATWG Fetch §3.2.4 (CORS preflight fetch) — при blocked
+    owner: human:operator
+  - id: wavecode-strudel-runtime-patches-assumption-7
+    state: proven
+    statement: |
+      "LiveLLMClient.ts перед фиксом теряет err.cause при Evidence: "ui/src/infrastructure/llm/LiveLLMClient.ts:67 (pre-fix)
+    owner: human:operator
+risk:
+  declared_triggers:
+    - v1-to-v3-migration-loss
+  owner: human:operator
+relations:
+  addresses:
+    - wavecode-bootstrap-math-coding-3.3@1
+---

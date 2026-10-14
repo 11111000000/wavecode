@@ -1,0 +1,236 @@
+---
+schema: math-coding/3.3
+id: wavecode-ci-deploy
+revision: 1
+state: active
+body_sha: "sha256:eef93c68e74117facf351b5bbda5bd436621a603275f1a5c1bbe8b38f960e95c"
+yaml_sha: "sha256:eef93c68e74117facf351b5bbda5bd436621a603275f1a5c1bbe8b38f960e95c"
+
+intent:|
+  Production (`https://wavecode.kosov.online/`) деплоится вручную:
+  оператор SSH-ит на angara-1 и запускает `bin/deploy.sh`, который
+  делает pnpm install + pnpm build + sudo cp в
+  `/var/lib/wavecode/dist/` (caddy:caddy). Каждый merge в master
+  требовал ручного шага — забыл задеплоить = prod отстаёт от master
+  на один цикл.
+
+  Решение — GitVerse Actions workflow (`.gitverse/workflows/deploy.yml`)
+  срабатывает на push в master и через SSH-ключ (с `command=`
+  restriction в `authorized_keys`) гоняет тот же `bin/deploy.sh`
+  на angara-1. Manual fallback остаётся (`./bin/deploy.sh` локально
+  или `workflow_dispatch` через UI).
+
+  Ключевые дизайн-решения:
+  - Build не на CI: shared `ubuntu-latest` runner не имеет pnpm-кеша
+  и не знает про /home/az/.local/bin/pnpm (corepack install path).
+  Build на хосте angara-1, где уже всё настроено — `bin/deploy.sh`
+  делает pnpm install + build в одну команду.
+  - SSH deploy key, не PAT/токен: `command="..."` в `authorized_keys`
+  ограничивает ключ ровно pipeline'ом (git fetch + reset + clean +
+  deploy.sh). Compromise ключа → злоумышленник не получает
+  произвольный shell, только возможность прогнать тот же deploy.
+  - `git fetch gitverse` (не origin): origin = GitHub mirror,
+  отстаёт. CI должен тянуть с gitverse напрямую.
+  - `git reset --hard + clean -fdx` (с `-e ui/.env.local`):
+  dev-дерево angara-1 — source of truth только для prod-билда,
+  не для локальной разработки. Любой WIP стирается при деплое;
+  WIP должен жить в worktree, не в main checkout'е.
+  - `bin/deploy.sh` resolves pnpm to absolute path:
+  `command -v pnpm` → fallback на `/home/<user>/.local/bin/pnpm`.
+  Non-interactive SSH sessions (GitVerse runner) не source'ят
+  `~/.bashrc`, поэтому bare `pnpm` падает с "command not found".
+
+  Trigger: `on.push.branches: [master]` + `workflow_dispatch`
+  (для отладки secrets и hotfix когда CI лежит).
+
+  Concurrency: `cancel-in-progress: false` — два параллельных
+  деплоя (push + dispatch) НЕ отменяют друг друга; второй ждёт
+  первого. Race в /var/lib/wavecode/dist/ может оставить
+  half-deployed bundle.
+commitment: |
+  Три коммита в одной серии на ветке `feat/ci-deploy-pipeline`
+  (merged в master коммитом 59694b6):
+counterexample: |
+  The strongest objection to this decision is captured in the `antithesis` field above: (1) «Можно делать build на CI runner, потом rsync dist/ в
+antithesis: |
+  (1) «Можно делать build на CI runner, потом rsync dist/ в
+  /var/lib/wavecode/dist/». Возражение: shared ubuntu-latest
+  не имеет ни pnpm-кеша, ни локального path-настройки corepack.
+  Build на CI добавляет 60-90s задержки + требует secret'а
+  `.env.local` в CI (тоже secret, тоже в UI). Build на angara-1
+  уже настроен, бесплатен, и использует тот же скрипт что и
+  manual deploy. Single source of truth.
+  (2) «Можно webhook из GitVerse → systemd timer на angara-1».
+  Возражение: требует webhook-listening демона + auth-secret'а
+  + дополнительного moving part. GitVerse Actions — стандартный
+  паттерн, логи видны в UI, retry из коробки. `kb-changes-poll`
+  в AngaraConfig делает так для KB, но у wavecode таких
+  реляционных constraints нет — GitVerse Actions проще.
+  (3) «Можно self-hosted runner на angara-1, тогда SSH не нужен».
+  Возражение: requires `actions-runner` install + systemd unit +
+  registration token + auto-update cron. Дороже в setup'е, не
+  даёт функционального выигрыша (runner всё равно должен
+  делать то же самое: git fetch + reset + clean + bin/deploy.sh).
+  См. Phase 2 в `bin/deploy-angara-2.sh` (AngaraConfig) — это
+  eventual, не Phase 1.
+  (4) «Можно deploy-ключ с NOPASSWD sudo, чтобы CI сам делал
+  `sudo cp` без forced command». Возражение: тогда compromise
+  ключа = arbitrary sudo = root-equivalent. Forced command
+  ограничивает blast radius до "прогнать тот же deploy" —
+  idempotent, auditable, revocable.
+  (5) «Нужно atomic swap (dist.new → dist) чтобы не было
+  half-deployed». Возражение: Caddy не блокирует файлы
+  (read-only open()), `sudo cp -r dist/. dist/` пишет
+  файлы по очереди. Между первым и последним файлом
+  /var/lib/wavecode/dist/index.html может ссылаться на
+  assets, которых ещё нет → 404 на полсекунды. Это ок для
+  SPA (browser re-fetches index.html на любой 404), и
+  исправление добавило бы complexity (rename, sync) без
+  real benefit. Если критично — Phase 2.
+  (6) «`git reset --hard` стирает локальный WIP разработчика,
+  это неожиданно». Возражение: dev-дерево на angara-1 — НЕ
+  место для WIP. WIP живёт в worktree (`paseo_create_workspace
+  isolation="worktree"`), не в main checkout'е. Если
+  разработчик правит main checkout напрямую — он уже не
+  следует convention. Convention документирована в AGENTS.md
+  и kb-publish skill.
+  (7) «Пакет не нужен, trivial change». Возражение: precedent
+  (math/wavecode-mobile-transport-bar, math/wavecode-ui-state,
+  math/wavecode-preset-row-and-toast-z) — каждый
+  infrastructure-уровневое изменение (CI, deploy, persistence)
+  сопровождается packet. Compromise deploy key = full RCE на
+  production — non-trivial enough to require the paper trail.
+  Три коммита в одной серии на ветке `feat/ci-deploy-pipeline`
+  (merged в master коммитом 59694b6):
+counterexample: |
+  The strongest objection to this decision is captured in the `antithesis` field above: (1) «Можно делать build на CI runner, потом rsync dist/ в
+antithesis: |
+  (1) «Можно делать build на CI runner, потом rsync dist/ в
+  /var/lib/wavecode/dist/». Возражение: shared ubuntu-latest
+  не имеет ни pnpm-кеша, ни локального path-настройки corepack.
+  Build на CI добавляет 60-90s задержки + требует secret'а
+  `.env.local` в CI (тоже secret, тоже в UI). Build на angara-1
+  уже настроен, бесплатен, и использует тот же скрипт что и
+  manual deploy. Single source of truth.
+  (2) «Можно webhook из GitVerse → systemd timer на angara-1».
+  Возражение: требует webhook-listening демона + auth-secret'а
+  + дополнительного moving part. GitVerse Actions — стандартный
+  паттерн, логи видны в UI, retry из коробки. `kb-changes-poll`
+  в AngaraConfig делает так для KB, но у wavecode таких
+  реляционных constraints нет — GitVerse Actions проще.
+  (3) «Можно self-hosted runner на angara-1, тогда SSH не нужен».
+  Возражение: requires `actions-runner` install + systemd unit +
+  registration token + auto-update cron. Дороже в setup'е, не
+  даёт функционального выигрыша (runner всё равно должен
+  делать то же самое: git fetch + reset + clean + bin/deploy.sh).
+  См. Phase 2 в `bin/deploy-angara-2.sh` (AngaraConfig) — это
+  eventual, не Phase 1.
+  (4) «Можно deploy-ключ с NOPASSWD sudo, чтобы CI сам делал
+  `sudo cp` без forced command». Возражение: тогда compromise
+  ключа = arbitrary sudo = root-equivalent. Forced command
+  ограничивает blast radius до "прогнать тот же deploy" —
+  idempotent, auditable, revocable.
+  (5) «Нужно atomic swap (dist.new → dist) чтобы не было
+  half-deployed». Возражение: Caddy не блокирует файлы
+  (read-only open()), `sudo cp -r dist/. dist/` пишет
+  файлы по очереди. Между первым и последним файлом
+  /var/lib/wavecode/dist/index.html может ссылаться на
+  assets, которых ещё нет → 404 на полсекунды. Это ок для
+  SPA (browser re-fetches index.html на любой 404), и
+  исправление добавило бы complexity (rename, sync) без
+  real benefit. Если критично — Phase 2.
+  (6) «`git reset --hard` стирает локальный WIP разработчика,
+  это неожиданно». Возражение: dev-дерево на angara-1 — НЕ
+  место для WIP. WIP живёт в worktree (`paseo_create_workspace
+  isolation="worktree"`), не в main checkout'е. Если
+  разработчик правит main checkout напрямую — он уже не
+  следует convention. Convention документирована в AGENTS.md
+  и kb-publish skill.
+  (7) «Пакет не нужен, trivial change». Возражение: precedent
+  (math/wavecode-mobile-transport-bar, math/wavecode-ui-state,
+  math/wavecode-preset-row-and-toast-z) — каждый
+  infrastructure-уровневое изменение (CI, deploy, persistence)
+  сопровождается packet. Compromise deploy key = full RCE на
+  production — non-trivial enough to require the paper trail.
+axiom_link:
+  - A5
+scope:
+  paths: []
+outcomes:
+  - id: wavecode-ci-deploy-outcome
+    statement: |
+      Production (`https://wavecode.
+obligations:
+  - id: wavecode-ci-deploy-kernel-validates
+    claim: |
+      The migrated decision file is structurally valid under the math-coding 3.3 schema; `mathc validate` exits 0 for `decisions/<id>.yaml` at HEAD.
+    acceptance:
+      all:
+        - verifier: "mathc validate"
+          result: pass
+  - id: wavecode-ci-deploy-witness-from-v1
+    claim: |
+      The original v1.0 packet applied on the recorded date in its `witness` file; this migration preserves that evidence as an `attestations/<id>-evidence.json` file.
+    acceptance:
+      all:
+        - verifier: "attestation-store-has-subject"
+          result: pass
+assumptions:
+  - id: wavecode-ci-deploy-assumption-1
+    state: proven
+    statement: |
+      "bin/deploy.sh уже реализует весь deploy-pipeline (install + build + sudo cp), Caddy обслуживает /var/lib/wavecode/dist/" Evidence: "ui/src/... нет, bin/deploy.sh:1-93 — единственный артефакт; /var/lib/wavecode/dist/ owned by caddy:caddy; Caddy vhost в AngaraConfig (см. ls /var/lib/wavecode/dist/)"
+    owner: human:operator
+  - id: wavecode-ci-deploy-assumption-2
+    state: proven
+    statement: |
+      "Manual deploy (bin/deploy.sh по SSH) работал до этого packet'а" Evidence: "Last-Modified /var/lib/wavecode/dist/index.html обновлялось при каждом merge в предыдущих коммитах; AGENTS.md НЕ упоминает CI (значит ручной deploy был convention)"
+    owner: human:operator
+  - id: wavecode-ci-deploy-assumption-3
+    state: proven
+    statement: |
+      "origin = github mirror, отстаёт от gitverse" Evidence: "git remote -v → origin = github.com/11111000000/wavecode, gitverse = gitverse.ru:11111000000/wavecode. На 2026-10-14 gitverse/master = 59694b6, origin/master = 1031d8a — отставание ~5 коммитов"
+    owner: human:operator
+  - id: wavecode-ci-deploy-assumption-4
+    state: proven
+    statement: |
+      "Non-interactive SSH sessions (включая GitVerse Actions runners) не source'ят ~/.bashrc, поэтому /home/az/.local/bin (corepack install) НЕ в PATH" Evidence: "ssh test: PATH=/run/wrappers/bin:/home/az/.nix-profile/bin:... НЕ содержит /home/az/.local/bin. Поэтому `pnpm build` в deploy.sh падает с 'command not found' при CI-запуске, хотя работает при интерактивном SSH"
+    owner: human:operator
+  - id: wavecode-ci-deploy-assumption-5
+    state: proven
+    statement: |
+      "az имеет NOPASSWD: ALL на angara-1 (NixOS default для основного пользователя)" Evidence: "sudo -nl: 'User az may run the following commands on nixos: (ALL : ALL) NOPASSWD: ALL'"
+    owner: human:operator
+  - id: wavecode-ci-deploy-assumption-6
+    state: proven
+    statement: |
+      "GitVerse Actions не имеет self-hosted runner на angara-1 (verified: 0 workflow runs до merge, 1 run после с failure из-за missing secrets)" Evidence: "gitverse_actions_list total_count: 0 до push; после push 59694b6 — 1 run, status=failure, diagnosis='WAVECODE_DEPLOY_HOST not set'"
+    owner: human:operator
+  - id: wavecode-ci-deploy-assumption-7
+    state: proven
+    statement: |
+      "bin/deploy.sh idempotent: повторный запуск переписывает /var/lib/wavecode/dist/ тем же содержимым" Evidence: "deploy.sh:55-83 — `sudo cp -r dist/. dist/` + cleanup loop (drop stale hashed assets) + `sudo chown -R caddy:caddy`. Никаких side-effects вне /var/lib/wavecode/dist/"
+    owner: human:operator
+  - id: wavecode-ci-deploy-assumption-8
+    state: proven
+    statement: |
+      "Reference patterns в соседних репо (Genium-clean, angara-2-config) используют тот же SSH-deploy approach" Evidence: "~/Projects/Genium-clean/.gitverse/workflows/ci.yml (test-only), ~/Projects/angara-2-config/.gitea/workflows/deploy.yml (SSH на VPS + nixos-rebuild) — оба идут через secrets + SSH + remote command"
+    owner: human:operator
+  - id: wavecode-ci-deploy-assumption-9
+    state: proven
+    statement: |
+      "bin/deploy.sh: existing build+deploy script, использовался до этого packet'а" Evidence: "bin/deploy.sh history: 357b0b1, f204de7, fc5c25c — pre-existing script. AGENTS.md НЕ упоминает его до этого пакета, но git log + /var/lib/wavecode/dist/index.html Last-Modified показывают, что он регулярно вызывался"
+    owner: human:operator
+  - id: wavecode-ci-deploy-assumption-10
+    state: proven
+    statement: |
+      "Wavecode.kosov.online обслуживается Caddy с TLS на angara-1 (тот же хост, где живёт /var/lib/wavecode/dist/)" Evidence: "curl -I https://wavecode.kosov.online/ → Server: Caddy, Etag, Last-Modified обновляются при деплое. Caddy vhost в AngaraConfig (другой repo), но listener — angara-1 (тот же host где bin/deploy.sh работает)"
+    owner: human:operator
+risk:
+  declared_triggers:
+    - v1-to-v3-migration-loss
+  owner: human:operator
+relations:
+  addresses:
+    - wavecode-bootstrap-math-coding-3.3@1
+---

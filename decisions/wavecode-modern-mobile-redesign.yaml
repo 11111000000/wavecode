@@ -1,0 +1,115 @@
+---
+schema: math-coding/3.3
+id: wavecode-modern-mobile-redesign
+revision: 1
+state: active
+body_sha: "sha256:dc9a8e84ff69a92ab04b169f3c07dd07e89b99f3132bb59e8ee8ca1a64aa2a36"
+yaml_sha: "sha256:dc9a8e84ff69a92ab04b169f3c07dd07e89b99f3132bb59e8ee8ca1a64aa2a36"
+
+intent:|
+  Визуальный язык wavecode — «Synthwave Modern Terminal»: mobile-first
+  layout (Score всегда виден, AI через bottom-sheet, инструменты через
+  FAB-sheets, статус как LED-strip), палитра — spectrum amber + cyan +
+  magenta на amoled-black, углы 8-12px, шрифт Geist Sans + Geist Mono,
+  touch-таргеты ≥44×44 px, bottom-tab-bar с иконками, draggable
+  bottom-sheet для AI-диалога, big-slider с glow-thumb и value-tooltip.
+  Полная замена `ui/src/index.css` (≤350 строк) и 5-слоистая иерархия
+  (tokens / base / components / sheets / legacy) с `prefers-reduced-motion`
+  и `prefers-color-scheme: dark` как first-class. Пакет supersede-ит
+  `wavecode-redesign-repl-phosphor` (амбер-only, sharp corners, mono
+  полностью) — новая версия приоритезирует mobile UX и richness.
+commitment: |
+  Modern mobile UI + REPL-feel через богатую, но дисциплинированную
+  палитру: amber primary (как раньше), cyan для active audio,
+  magenta для record, slate/zinc для chrome. Score — единственная
+  full-screen сущность, остальное — bottom-sheet, FAB, tab-bar,
+  LED-strip. Шрифт Geist: Sans для body, Mono для data (cps, bpm,
+  score, code). 5 CSS-слоёв + components/{BottomSheet,TabBar,FAB,
+  BigSlider,LEDStrip,Toast,IconButton}.x.tsx = ~8 новых
+  компонентов; 12 старых мигрируют на новые классы инкрементально.
+  No emoji, no Phosphor-only amber, no sharp corners по умолчанию.
+counterexample: |
+  The strongest objection to this decision is captured in the `antithesis` field above: (1) «Mobile-first значит desktop потеряет в плотности». Возражение:
+antithesis: |
+  (1) «Mobile-first значит desktop потеряет в плотности». Возражение:
+  header collapses в 56px toolbar на desktop, AI-snap справа 480px,
+  но Score получает 100% viewport min-width 1024px; trade-off осознан.
+  (2) «Bottom-sheet с draggable snap — это 200 строк pointer-events
+  логики, которую легко сделать плохо». Возражение: snap реализован
+  на CSS `transform: translateY()` + JS только для deltaY tracking;
+  fallback без drag — tap по header, snap toggle. graceful degrade.
+  (3) «Geist Sans + Geist Mono = 2 HTTP-запроса к fonts.gstatic.com,
+  200KB gzipped, убьёт FCP». Решение: `font-display: swap` + subset
+  только латиница + кириллица, 60KB total. Проверено на
+  `fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500;600&display=swap`.
+  (4) «Trio amber+cyan+magenta = circus». Возражение: cyan используется
+  только для playing-state (active audio), magenta только для
+  record-state — semantic, не decoration. Idle UI = mono amber.
+  (5) «FAB + bottom-tab + bottom-sheet + side-drawer = UI kit, не
+  приложение». Решение: только 3 паттерна (bottom-tab, bottom-sheet,
+  FAB); side-drawer только на tablet+ для AI как alternative к sheet.
+  Modern mobile UI + REPL-feel через богатую, но дисциплинированную
+  палитру: amber primary (как раньше), cyan для active audio,
+  magenta для record, slate/zinc для chrome. Score — единственная
+  full-screen сущность, остальное — bottom-sheet, FAB, tab-bar,
+  LED-strip. Шрифт Geist: Sans для body, Mono для data (cps, bpm,
+  score, code). 5 CSS-слоёв + components/{BottomSheet,TabBar,FAB,
+  BigSlider,LEDStrip,Toast,IconButton}.x.tsx = ~8 новых
+  компонентов; 12 старых мигрируют на новые классы инкрементально.
+  No emoji, no Phosphor-only amber, no sharp corners по умолчанию.
+counterexample: |
+  The strongest objection to this decision is captured in the `antithesis` field above: (1) «Mobile-first значит desktop потеряет в плотности». Возражение:
+antithesis: |
+  (1) «Mobile-first значит desktop потеряет в плотности». Возражение:
+  header collapses в 56px toolbar на desktop, AI-snap справа 480px,
+  но Score получает 100% viewport min-width 1024px; trade-off осознан.
+  (2) «Bottom-sheet с draggable snap — это 200 строк pointer-events
+  логики, которую легко сделать плохо». Возражение: snap реализован
+  на CSS `transform: translateY()` + JS только для deltaY tracking;
+  fallback без drag — tap по header, snap toggle. graceful degrade.
+  (3) «Geist Sans + Geist Mono = 2 HTTP-запроса к fonts.gstatic.com,
+  200KB gzipped, убьёт FCP». Решение: `font-display: swap` + subset
+  только латиница + кириллица, 60KB total. Проверено на
+  `fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500;600&display=swap`.
+  (4) «Trio amber+cyan+magenta = circus». Возражение: cyan используется
+  только для playing-state (active audio), magenta только для
+  record-state — semantic, не decoration. Idle UI = mono amber.
+  (5) «FAB + bottom-tab + bottom-sheet + side-drawer = UI kit, не
+  приложение». Решение: только 3 паттерна (bottom-tab, bottom-sheet,
+  FAB); side-drawer только на tablet+ для AI как alternative к sheet.
+axiom_link:
+  - A4
+scope:
+  paths: []
+outcomes:
+  - id: wavecode-modern-mobile-redesign-outcome
+    statement: |
+      Визуальный язык wavecode — «Synthwave Modern Terminal»: mobile-first
+      layout (Score всегда виден, AI через bottom-sheet, инструменты через
+      FAB-sheets, статус как LED-strip), палитра — spectrum amber + cyan +
+      magenta на amoled-black, углы 8-12px, шрифт Geist Sans + Geist Mono,
+      touc
+obligations:
+  - id: wavecode-modern-mobile-redesign-kernel-validates
+    claim: |
+      The migrated decision file is structurally valid under the math-coding 3.3 schema; `mathc validate` exits 0 for `decisions/<id>.yaml` at HEAD.
+    acceptance:
+      all:
+        - verifier: "mathc validate"
+          result: pass
+  - id: wavecode-modern-mobile-redesign-witness-from-v1
+    claim: |
+      The original v1.0 packet applied on the recorded date in its `witness` file; this migration preserves that evidence as an `attestations/<id>-evidence.json` file.
+    acceptance:
+      all:
+        - verifier: "attestation-store-has-subject"
+          result: pass
+assumptions: []
+risk:
+  declared_triggers:
+    - v1-to-v3-migration-loss
+  owner: human:operator
+relations:
+  addresses:
+    - wavecode-bootstrap-math-coding-3.3@1
+---

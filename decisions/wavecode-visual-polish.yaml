@@ -1,0 +1,79 @@
+---
+schema: math-coding/3.3
+id: wavecode-visual-polish
+revision: 1
+state: draft
+body_sha: "sha256:836744b9378e177eb8891a53d36029a761a1c16cd20ce0296b6b3ecdf437ae06"
+yaml_sha: "sha256:836744b9378e177eb8891a53d36029a761a1c16cd20ce0296b6b3ecdf437ae06"
+
+intent:|
+  Visual polish pass wavecode: empty/loading states (ScorePanel
+  empty + audio loading skeleton), focus rings (глобальный
+  cyan-glow на всех focusable), touch targets 44×44 (wc-icon-btn,
+  wc-chip, mini-toolbar-btn), micro-interactions (press-shrink
+  0.95ms spring на :active), контраст-проверка через axe-core.
+commitment: |
+  5 файлов:
+counterexample: |
+  The strongest objection to this decision is captured in the `antithesis` field above: (1) «Press-shrink мешает accessibility — double-tap zoom».
+antithesis: |
+  (1) «Press-shrink мешает accessibility — double-tap zoom».
+  Возражение: shrink = scale transform, НЕ zoom. Не влияет
+  на iOS double-tap-to-zoom (который контролируется viewport
+  meta + touch-action).
+  (2) «axe-core — слишком строгий, false positives». Возражение:
+  тестируем только critical/serious (не moderate/minor).
+  Moderate можно отложить.
+  (3) «44px touch target — портит desktop look». Возражение:
+  desktop hit area может быть больше visual size; padding
+  решает без увеличения visual.
+  5 файлов:
+counterexample: |
+  The strongest objection to this decision is captured in the `antithesis` field above: (1) «Press-shrink мешает accessibility — double-tap zoom».
+antithesis: |
+  (1) «Press-shrink мешает accessibility — double-tap zoom».
+  Возражение: shrink = scale transform, НЕ zoom. Не влияет
+  на iOS double-tap-to-zoom (который контролируется viewport
+  meta + touch-action).
+  (2) «axe-core — слишком строгий, false positives». Возражение:
+  тестируем только critical/serious (не moderate/minor).
+  Moderate можно отложить.
+  (3) «44px touch target — портит desktop look». Возражение:
+  desktop hit area может быть больше visual size; padding
+  решает без увеличения visual.
+axiom_link:
+  - A1
+scope:
+  paths: []
+outcomes:
+  - id: wavecode-visual-polish-outcome
+    statement: |
+      Visual polish pass wavecode: empty/loading states (ScorePanel
+      empty + audio loading skeleton), focus rings (глобальный
+      cyan-glow на всех focusable), touch targets 44×44 (wc-icon-btn,
+      wc-chip, mini-toolbar-btn), micro-interactions (press-shrink
+      0.
+obligations:
+  - id: wavecode-visual-polish-kernel-validates
+    claim: |
+      The migrated decision file is structurally valid under the math-coding 3.3 schema; `mathc validate` exits 0 for `decisions/<id>.yaml` at HEAD.
+    acceptance:
+      all:
+        - verifier: "mathc validate"
+          result: pass
+  - id: wavecode-visual-polish-witness-from-v1
+    claim: |
+      The original v1.0 packet applied on the recorded date in its `witness` file; this migration preserves that evidence as an `attestations/<id>-evidence.json` file.
+    acceptance:
+      all:
+        - verifier: "attestation-store-has-subject"
+          result: pass
+assumptions: []
+risk:
+  declared_triggers:
+    - v1-to-v3-migration-loss
+  owner: human:operator
+relations:
+  addresses:
+    - wavecode-bootstrap-math-coding-3.3@1
+---

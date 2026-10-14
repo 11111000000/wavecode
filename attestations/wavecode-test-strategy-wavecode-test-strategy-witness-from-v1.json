@@ -1,0 +1,19 @@
+{
+  "schema": "math-coding/attestation-3.0-alpha",
+  "kind": "attestation",
+  "subject": {
+    "decision": "wavecode-test-strategy",
+    "obligation": "wavecode-test-strategy-witness-from-v1",
+    "candidate_tree": "HEAD",
+    "materials_digest": ""
+  },
+  "kind_": "review",
+  "producer": {
+    "identity": "human:v1-migration"
+  },
+  "environment_class_level": 2,
+  "environment_class_label": "dev",
+  "result": "pass",
+  "issued_at": "1970-01-01T00:00:00Z",
+  "id": "sha256:a1961105d4d0dac82d2b90641e4381acb3d56bae18339e628d89e5013d1c7cf8"
+}

@@ -1,0 +1,88 @@
+---
+schema: math-coding/3.3
+id: wavecode-llm-litellm-proxy
+revision: 1
+state: draft
+body_sha: "sha256:24ee747feafd210ef772e39bf41f8ffb173445df32da36275658f998d962ae74"
+yaml_sha: "sha256:24ee747feafd210ef772e39bf41f8ffb173445df32da36275658f998d962ae74"
+
+intent:|
+  LLM-клиент wavecode подключается к https://llm.kosov.online/v1 через
+  @ai-sdk/openai-compatible; аутентификация — per-app Bearer-токен
+  (sk-litellm-...), прокси — LiteLLM с upstream MiniMax.
+commitment: |
+  LiteLLM прокси уже настроен (AngaraConfig), per-app-ключи scoped и
+  revocable, CORS allowlist для *.kosov.online. OpenAI-compatible
+  протокол даёт единый клиент для всех провайдеров (Claude, MiniMax,
+  Kimi) через тот же AI SDK. Качество текущей модели (`smart` →
+  MiniMax-M3) приемлемо для правки кода. Если понадобится Claude —
+  добавляется через конфиг, без правок кода.
+counterexample: |
+  The strongest objection to this decision is captured in the `antithesis` field above: Прямой MiniMax API (https://api.minimax.io/anthropic/v1) даёт более
+antithesis: |
+  Прямой MiniMax API (https://api.minimax.io/anthropic/v1) даёт более
+  низкую латентность (без прокси) и доступ к фичам, которые LiteLLM может
+  не поддерживать. Claude (Anthropic) качественнее пишет код, чем MiniMax
+  M2.1-highspeed. Альтернативы: локальный LLM (WebLLM/MLC) — без
+  бэкенда вообще, но слабее и тяжёлый.
+  LiteLLM прокси уже настроен (AngaraConfig), per-app-ключи scoped и
+  revocable, CORS allowlist для *.kosov.online. OpenAI-compatible
+  протокол даёт единый клиент для всех провайдеров (Claude, MiniMax,
+  Kimi) через тот же AI SDK. Качество текущей модели (`smart` →
+  MiniMax-M3) приемлемо для правки кода. Если понадобится Claude —
+  добавляется через конфиг, без правок кода.
+counterexample: |
+  The strongest objection to this decision is captured in the `antithesis` field above: Прямой MiniMax API (https://api.minimax.io/anthropic/v1) даёт более
+antithesis: |
+  Прямой MiniMax API (https://api.minimax.io/anthropic/v1) даёт более
+  низкую латентность (без прокси) и доступ к фичам, которые LiteLLM может
+  не поддерживать. Claude (Anthropic) качественнее пишет код, чем MiniMax
+  M2.1-highspeed. Альтернативы: локальный LLM (WebLLM/MLC) — без
+  бэкенда вообще, но слабее и тяжёлый.
+axiom_link:
+  - A5
+scope:
+  paths: []
+outcomes:
+  - id: wavecode-llm-litellm-proxy-outcome
+    statement: |
+      LLM-клиент wavecode подключается к https://llm.
+obligations:
+  - id: wavecode-llm-litellm-proxy-kernel-validates
+    claim: |
+      The migrated decision file is structurally valid under the math-coding 3.3 schema; `mathc validate` exits 0 for `decisions/<id>.yaml` at HEAD.
+    acceptance:
+      all:
+        - verifier: "mathc validate"
+          result: pass
+  - id: wavecode-llm-litellm-proxy-witness-from-v1
+    claim: |
+      The original v1.0 packet applied on the recorded date in its `witness` file; this migration preserves that evidence as an `attestations/<id>-evidence.json` file.
+    acceptance:
+      all:
+        - verifier: "attestation-store-has-subject"
+          result: pass
+assumptions:
+  - id: wavecode-llm-litellm-proxy-assumption-1
+    state: proven
+    statement: |
+      "LiteLLM proxy llm.kosov.online поддерживает OpenAI-compatible API" Evidence: "AngaraConfig/KB/50_operations/llm-proxy.md — endpoint /v1/chat/completions"
+    owner: human:operator
+  - id: wavecode-llm-litellm-proxy-assumption-2
+    state: proven
+    statement: |
+      "Per-app ключи scoped к моделям [smart, fast]" Evidence: "AngaraConfig KB: POST /key/generate с key_alias и models"
+    owner: human:operator
+  - id: wavecode-llm-litellm-proxy-assumption-3
+    state: proven
+    statement: |
+      "Модель 'smart' = MiniMax-M3, 'fast' = MiniMax-M2.1-highspeed" Evidence: "AngaraConfig configuration.nix: services.llm-proxy.models"
+    owner: human:operator
+risk:
+  declared_triggers:
+    - v1-to-v3-migration-loss
+  owner: human:operator
+relations:
+  addresses:
+    - wavecode-bootstrap-math-coding-3.3@1
+---

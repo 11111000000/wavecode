@@ -1,0 +1,19 @@
+{
+  "schema": "math-coding/attestation-3.0-alpha",
+  "kind": "attestation",
+  "subject": {
+    "decision": "wavecode-sample-pack",
+    "obligation": "wavecode-sample-pack-witness-from-v1",
+    "candidate_tree": "HEAD",
+    "materials_digest": ""
+  },
+  "kind_": "review",
+  "producer": {
+    "identity": "human:v1-migration"
+  },
+  "environment_class_level": 2,
+  "environment_class_label": "dev",
+  "result": "pass",
+  "issued_at": "1970-01-01T00:00:00Z",
+  "id": "sha256:ad85705afa1c3cab184a02e4ddb0660730e2799b466e76741183a93c870486f0"
+}

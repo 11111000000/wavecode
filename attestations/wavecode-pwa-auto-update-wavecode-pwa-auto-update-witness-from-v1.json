@@ -1,0 +1,19 @@
+{
+  "schema": "math-coding/attestation-3.0-alpha",
+  "kind": "attestation",
+  "subject": {
+    "decision": "wavecode-pwa-auto-update",
+    "obligation": "wavecode-pwa-auto-update-witness-from-v1",
+    "candidate_tree": "HEAD",
+    "materials_digest": ""
+  },
+  "kind_": "observation",
+  "producer": {
+    "identity": "human:v1-migration"
+  },
+  "environment_class_level": 2,
+  "environment_class_label": "dev",
+  "result": "inconclusive",
+  "issued_at": "1970-01-01T00:00:00Z",
+  "id": "sha256:ffd26736684dbcbf772e00eac2b41f450f29203c214521e347b57811d451e2e4"
+}

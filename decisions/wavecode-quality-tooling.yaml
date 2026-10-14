@@ -1,0 +1,167 @@
+---
+schema: math-coding/3.3
+id: wavecode-quality-tooling
+revision: 1
+state: active
+body_sha: "sha256:ea21133afa76845cb0288139ec10fc736583ac5bb2bfba99bf2fa333cdd8941c"
+yaml_sha: "sha256:ea21133afa76845cb0288139ec10fc736583ac5bb2bfba99bf2fa333cdd8941c"
+
+intent:|
+  Two invariants are now machine-enforced on every `git commit`:
+
+  1. **Layering invariant**: `console.*` calls are forbidden in
+  `src/domain/**` and `src/application/**` (production code; tests
+  excluded). The architectural claim — that domain and application
+  are pure / effectful-but-typed, and only infrastructure and
+  presentation talk to the real `console` — becomes a unit-tested
+  ESLint rule rather than a code-review checklist item.
+
+  Mechanism:
+  - `ui/eslint.config.js` adds a `no-console: 'error'` override
+  scoped to `src/domain/**/*.ts` and `src/application/**/*.ts`,
+  plus an `off` override on `*.test.ts` siblings.
+  - `ui/src/application/useCases/llmEdit.ts:265` previously had a
+  `console.log('[wavecode/applyEdit] raw length:', …)` call —
+  this commit removes it (raw is already stashed on globalThis
+  via `__wavecodeLastRaw`, accessible via `getLastRawLLMResponse`),
+  with a comment explaining the routing: verbose logs flow
+  through `infrastructure/log` (Subagent 6), not `console.*`.
+
+  2. **Preset schema invariant**: every entry in `BUILTIN_PRESETS`
+  must be valid Strudel source — boot-time lint via
+  `validatePreset` (from feat/presets-decode-race, Phase 5) is
+  exposed as `npm run validate:presets` (root) and
+  `pnpm --dir ui run validate:presets`.
+
+  Mechanism:
+  - `scripts/validate-presets.ts`: dynamic-imports
+  `@strudel/transpiler` from `ui/node_modules`, runs
+  `validatePreset` against every preset, exits 1 if any preset
+  emits `warn`/`error` diagnostics.
+  - Falls back to a `new Function(preset.score)` syntactic smoke
+  test when the transpiler fails to load (Node without a DOM —
+  `@kabelsalat/web` requires a browser-only export).
+
+  3. **Pre-commit UX**: a single bash script runs typecheck +
+  vitest + lint:no-console + validate:presets in sequence.
+  Failures block the commit with a clear per-step message. No
+  Husky, no lint-staged — just `scripts/pre-commit` symlinked
+  into `.git/hooks/pre-commit`. ~5-7s end-to-end on a warm
+  `node_modules` cache.
+commitment: |
+  Three small moves, each scoped narrowly:
+counterexample: |
+  The strongest objection to this decision is captured in the `antithesis` field above: (1) «Add Husky + lint-staged for industry-standard pre-commit».
+antithesis: |
+  (1) «Add Husky + lint-staged for industry-standard pre-commit».
+  Rejected: Husky adds a runtime dep + a `node_modules/` link to
+  git plumbing. The project already uses pnpm — Husky's
+  auto-install hook interferes with our `.worktrees/` layout
+  (subagents see a half-installed hook). lint-staged would run on
+  staged files only, but the layering invariant is a
+  cross-cutting rule (a console in `domain/presets.ts` is a problem
+  no matter which 5 files you staged). Husky also tends to silently
+  skip with `--no-verify` — the explicit `ln -s` makes the hook
+  visible in `git status` only when the symlink is missing.
+  (2) «Write a custom ESLint rule for the layering invariant».
+  Rejected as scope creep: the built-in `no-console` rule is
+  sufficient — domain and application have no legitimate use of
+  the global `console` (tests inject `opts.console` into
+  `validatePreset`, so they don't need it either). The custom-
+  rule path adds a `RuleTester` dep + a 30-line plugin + tests,
+  for zero added semantic value.
+  (3) «Use Effect Logger (LayeredLogger) instead of ESLint». Tempting
+  but wrong axis: the goal is "domain/application have no side-
+  channel access to the global `console`", not "they use Effect
+  for logging". An Effect Logger would still let developers
+  write `Effect.log(...)` anywhere — fine for application, but
+  domain should be IO-free. ESLint catches the verboten call at
+  compile time, before any effect runs.
+  (4) «Make the pre-commit run only on staged files». Rejected:
+  typecheck + unit tests are designed to run against the full
+  tree because layering issues often surface as cross-file
+  regressions (e.g. domain imports something new that happens to
+  match a console.log pattern).
+  (5) «Add a `--strict` flag to validate-presets that requires
+  the real Strudel eval». Currently the script falls back to
+  `new Function()` when the transpiler can't load. The judgment
+  call: the script is useful in CI even without a DOM (catches
+  syntax errors), and the unit tests with mock transpilers cover
+  the real-eval paths (8 cases in `presets.test.ts`). Adding a
+  strict flag would let CI opt in, but the default stays
+  permissive.
+  Three small moves, each scoped narrowly:
+counterexample: |
+  The strongest objection to this decision is captured in the `antithesis` field above: (1) «Add Husky + lint-staged for industry-standard pre-commit».
+antithesis: |
+  (1) «Add Husky + lint-staged for industry-standard pre-commit».
+  Rejected: Husky adds a runtime dep + a `node_modules/` link to
+  git plumbing. The project already uses pnpm — Husky's
+  auto-install hook interferes with our `.worktrees/` layout
+  (subagents see a half-installed hook). lint-staged would run on
+  staged files only, but the layering invariant is a
+  cross-cutting rule (a console in `domain/presets.ts` is a problem
+  no matter which 5 files you staged). Husky also tends to silently
+  skip with `--no-verify` — the explicit `ln -s` makes the hook
+  visible in `git status` only when the symlink is missing.
+  (2) «Write a custom ESLint rule for the layering invariant».
+  Rejected as scope creep: the built-in `no-console` rule is
+  sufficient — domain and application have no legitimate use of
+  the global `console` (tests inject `opts.console` into
+  `validatePreset`, so they don't need it either). The custom-
+  rule path adds a `RuleTester` dep + a 30-line plugin + tests,
+  for zero added semantic value.
+  (3) «Use Effect Logger (LayeredLogger) instead of ESLint». Tempting
+  but wrong axis: the goal is "domain/application have no side-
+  channel access to the global `console`", not "they use Effect
+  for logging". An Effect Logger would still let developers
+  write `Effect.log(...)` anywhere — fine for application, but
+  domain should be IO-free. ESLint catches the verboten call at
+  compile time, before any effect runs.
+  (4) «Make the pre-commit run only on staged files». Rejected:
+  typecheck + unit tests are designed to run against the full
+  tree because layering issues often surface as cross-file
+  regressions (e.g. domain imports something new that happens to
+  match a console.log pattern).
+  (5) «Add a `--strict` flag to validate-presets that requires
+  the real Strudel eval». Currently the script falls back to
+  `new Function()` when the transpiler can't load. The judgment
+  call: the script is useful in CI even without a DOM (catches
+  syntax errors), and the unit tests with mock transpilers cover
+  the real-eval paths (8 cases in `presets.test.ts`). Adding a
+  strict flag would let CI opt in, but the default stays
+  permissive.
+axiom_link:
+  - A4
+scope:
+  paths: []
+outcomes:
+  - id: wavecode-quality-tooling-outcome
+    statement: |
+      Two invariants are now machine-enforced on every `git commit`:
+
+      1.
+obligations:
+  - id: wavecode-quality-tooling-kernel-validates
+    claim: |
+      The migrated decision file is structurally valid under the math-coding 3.3 schema; `mathc validate` exits 0 for `decisions/<id>.yaml` at HEAD.
+    acceptance:
+      all:
+        - verifier: "mathc validate"
+          result: pass
+  - id: wavecode-quality-tooling-witness-from-v1
+    claim: |
+      The original v1.0 packet applied on the recorded date in its `witness` file; this migration preserves that evidence as an `attestations/<id>-evidence.json` file.
+    acceptance:
+      all:
+        - verifier: "attestation-store-has-subject"
+          result: pass
+assumptions: []
+risk:
+  declared_triggers:
+    - v1-to-v3-migration-loss
+  owner: human:operator
+relations:
+  addresses:
+    - wavecode-bootstrap-math-coding-3.3@1
+---

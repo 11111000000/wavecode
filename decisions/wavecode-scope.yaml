@@ -1,0 +1,87 @@
+---
+schema: math-coding/3.3
+id: wavecode-scope
+revision: 1
+state: draft
+body_sha: "sha256:3defd05f4478a999d6783340205bcf0c442a1049cf547b360d52df0cbac77adb"
+yaml_sha: "sha256:3defd05f4478a999d6783340205bcf0c442a1049cf547b360d52df0cbac77adb"
+
+intent:|
+  wavecode — чистофронтовый браузерный SPA для live-coding музыки с
+  AI-агентом; не имеет серверных компонентов и не зависит от
+  ~/Projects/Composer/.
+commitment: |
+  Use case оператора — local live-coding в браузере, я сам себе
+  слушатель. Strudel+Web Audio покрывает 80% паттернов и синтеза.
+  Если позже понадобится backend (Icecast-стрим, SC-UGen'ы) — это
+  отдельный сервис, не Composer; пишется параллельно. Composer
+  остаётся backend-проектом в другом треде разработки и не
+  интегрируется с wavecode.
+counterexample: |
+  The strongest objection to this decision is captured in the `antithesis` field above: Чистофронтовый SPA теряет доступ к профессиональной Tidal+SuperDirt
+antithesis: |
+  Чистофронтовый SPA теряет доступ к профессиональной Tidal+SuperDirt
+  инфраструктуре (SC-UGen'ы, Dirt-Samples, Icecast-стрим публичным
+  слушателям, persistent-режим когда браузер закрыт). Strudel в браузере
+  менее зрелый, чем полный Tidal+SuperDirt. Если use case требует
+  публичного стрима или профессионального звука — нужен backend,
+  pure-frontend недостаточно.
+  Use case оператора — local live-coding в браузере, я сам себе
+  слушатель. Strudel+Web Audio покрывает 80% паттернов и синтеза.
+  Если позже понадобится backend (Icecast-стрим, SC-UGen'ы) — это
+  отдельный сервис, не Composer; пишется параллельно. Composer
+  остаётся backend-проектом в другом треде разработки и не
+  интегрируется с wavecode.
+counterexample: |
+  The strongest objection to this decision is captured in the `antithesis` field above: Чистофронтовый SPA теряет доступ к профессиональной Tidal+SuperDirt
+antithesis: |
+  Чистофронтовый SPA теряет доступ к профессиональной Tidal+SuperDirt
+  инфраструктуре (SC-UGen'ы, Dirt-Samples, Icecast-стрим публичным
+  слушателям, persistent-режим когда браузер закрыт). Strudel в браузере
+  менее зрелый, чем полный Tidal+SuperDirt. Если use case требует
+  публичного стрима или профессионального звука — нужен backend,
+  pure-frontend недостаточно.
+axiom_link:
+  - A3
+scope:
+  paths: []
+outcomes:
+  - id: wavecode-scope-outcome
+    statement: |
+      wavecode — чистофронтовый браузерный SPA для live-coding музыки с
+      AI-агентом; не имеет серверных компонентов и не зависит от
+      ~/Projects/Composer/.
+obligations:
+  - id: wavecode-scope-kernel-validates
+    claim: |
+      The migrated decision file is structurally valid under the math-coding 3.3 schema; `mathc validate` exits 0 for `decisions/<id>.yaml` at HEAD.
+    acceptance:
+      all:
+        - verifier: "mathc validate"
+          result: pass
+  - id: wavecode-scope-witness-from-v1
+    claim: |
+      The original v1.0 packet applied on the recorded date in its `witness` file; this migration preserves that evidence as an `attestations/<id>-evidence.json` file.
+    acceptance:
+      all:
+        - verifier: "attestation-store-has-subject"
+          result: pass
+assumptions:
+  - id: wavecode-scope-assumption-1
+    state: assumed
+    statement: |
+      "wavecode и Composer — разные проекты, без зависимости" Evidence: "operator-directive 2026-09-23 в opencode-сессии"
+    owner: human:operator
+  - id: wavecode-scope-assumption-2
+    state: assumed
+    statement: |
+      "use case — local live-coding в браузере, без публичного стрима" Evidence: "operator-directive 2026-09-23"
+    owner: human:operator
+risk:
+  declared_triggers:
+    - v1-to-v3-migration-loss
+  owner: human:operator
+relations:
+  addresses:
+    - wavecode-bootstrap-math-coding-3.3@1
+---

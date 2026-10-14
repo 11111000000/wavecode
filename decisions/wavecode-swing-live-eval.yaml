@@ -1,0 +1,159 @@
+---
+schema: math-coding/3.3
+id: wavecode-swing-live-eval
+revision: 1
+state: active
+body_sha: "sha256:eadccfe461259e27ac1f2cf4c377c6a9dd432fef9675509729b8374ede80d576"
+yaml_sha: "sha256:eadccfe461259e27ac1f2cf4c377c6a9dd432fef9675509729b8374ede80d576"
+
+intent:|
+  Swing-слайдер в TransportPanel реально влияет на звук во время
+  воспроизведения: при изменении `swingAmount` или `swingDivisor`
+  выполняется `audio.eval(evalWithTransport(score, transport))` с
+  тем же debounce 100ms что у cps. Re-eval запускается только
+  если `AudioContext.state === 'running'` (не будит звук от
+  простого движения слайдера) и только если обёртка реально
+  отличается от последней применённой (`amount` или `divisor`
+  изменились). Текущий пакет `wavecode-swing-cc` (applied) описывает
+  инфраструктуру (state, UI, wrap-функцию), но не закрывает триггер
+  re-eval — этот долг закрывается здесь, без изменения state-shape
+  и UI.
+commitment: |
+  `useTransportAudioSync` расширяется вторым `createEffect`,
+  подписанным на `swingAmount()` и `swingDivisor()` (из
+  `transportState`). Локальный memo `lastEvaluatedSwing:
+  { amount, divisor } | null` хранит последнее применённое
+  значение. На изменение:
+  1. Если новое совпадает с lastEvaluatedSwing → no-op (Solid
+  сам не пере-запустит эффект при равенстве, но защищаемся
+  от лишних вызовов после double-render / HMR).
+  2. Иначе — debounce 100ms, затем проверка
+  `__wavecodeAudioCtx.state === 'running'`. Если не running —
+  запоминаем новое значение (state persistence) но не eval'им.
+  3. Если running — вызываем новый helper
+  `reEvalScoreWithTransport()` который делает тот же
+  `injectMix + evalWithTransport` что `evalScore`, но без
+  `unlockAudioContext()` / `dispatch status: playing`. Если
+  eval падает — логируем, status не трогаем (юзер не нажимал
+  Play, мы не должны показывать баннер ошибки).
+  Тесты:
+  + `useTransportAudioSync.test.ts` — мокаем
+  `__wavecodeAudioCtx.state` (running/suspended) +
+  мокаем AudioEngine.eval через `vi.mock` AppLayer (или
+  прямой мок `globalThis.__wavecodeAudioCtx` + effect через
+  `installTransportAudioSync`).
+  + `audioActions.test.ts` — пополняем на `reEvalScoreWithTransport`.
+  State-shape: без изменений. UI без изменений. Migration
+  backward-compat: `swingAmount: 0` (default off) → на холодном
+  старте lastEvaluatedSwing=null, swing change с amount=0
+  пропустится по равенству с дефолтом.
+  Пакет-wavecode-swing-cc: остаётся applied как есть; это
+  не рефактор пакета — это закрытие долга по triggers.
+counterexample: |
+  The strongest objection to this decision is captured in the `antithesis` field above: (1) «cps уже подхватывается через setCps без re-eval, swing тоже
+antithesis: |
+  (1) «cps уже подхватывается через setCps без re-eval, swing тоже
+  должен через какой-то hot-swap». Возражение: Strudel API делит
+  режимы: `cps` это prop на репле (`repl.setCps(n)` — дешёвый
+  hot-swap), а `swing(...)` это оператор паттерна, требует полного
+  `repl.evaluate(snippet)`. Hot-swing не существует.
+  (2) «Re-eval каждый кадр — слайдер дёргается часто». Решение:
+  debounce 100ms в `useTransportAudioSync` (уже есть для cps),
+  плюс skip если ни amount ни divisor не изменились.
+  (3) «Re-eval с amount=0 → 0 при неактивном аудио запустит звук».
+  Решение: гейт по `__wavecodeAudioCtx.state === 'running'` —
+  не запускаем звук от простого движения слайдера. evalScore
+  (по кнопке Play) — единственная точка инициации звука.
+  (4) «Re-eval от slider при работающем Strudel вызовет glitch».
+  Возражение: да, каждый `repl.evaluate` кратко рестартует
+  scheduler — это фундаментальное свойство Strudel, не баг
+  нашего слоя. Пользователь явно тянет swing amount осознанно;
+  при дефолтном score без swing часть слайдера неактивна
+  (amount=0 → паттерн неизменен → re-eval технически
+  идемпотентен, но всё равно skip-аем по gate).
+  `useTransportAudioSync` расширяется вторым `createEffect`,
+  подписанным на `swingAmount()` и `swingDivisor()` (из
+  `transportState`). Локальный memo `lastEvaluatedSwing:
+  { amount, divisor } | null` хранит последнее применённое
+  значение. На изменение:
+  1. Если новое совпадает с lastEvaluatedSwing → no-op (Solid
+  сам не пере-запустит эффект при равенстве, но защищаемся
+  от лишних вызовов после double-render / HMR).
+  2. Иначе — debounce 100ms, затем проверка
+  `__wavecodeAudioCtx.state === 'running'`. Если не running —
+  запоминаем новое значение (state persistence) но не eval'им.
+  3. Если running — вызываем новый helper
+  `reEvalScoreWithTransport()` который делает тот же
+  `injectMix + evalWithTransport` что `evalScore`, но без
+  `unlockAudioContext()` / `dispatch status: playing`. Если
+  eval падает — логируем, status не трогаем (юзер не нажимал
+  Play, мы не должны показывать баннер ошибки).
+  Тесты:
+  + `useTransportAudioSync.test.ts` — мокаем
+  `__wavecodeAudioCtx.state` (running/suspended) +
+  мокаем AudioEngine.eval через `vi.mock` AppLayer (или
+  прямой мок `globalThis.__wavecodeAudioCtx` + effect через
+  `installTransportAudioSync`).
+  + `audioActions.test.ts` — пополняем на `reEvalScoreWithTransport`.
+  State-shape: без изменений. UI без изменений. Migration
+  backward-compat: `swingAmount: 0` (default off) → на холодном
+  старте lastEvaluatedSwing=null, swing change с amount=0
+  пропустится по равенству с дефолтом.
+  Пакет-wavecode-swing-cc: остаётся applied как есть; это
+  не рефактор пакета — это закрытие долга по triggers.
+counterexample: |
+  The strongest objection to this decision is captured in the `antithesis` field above: (1) «cps уже подхватывается через setCps без re-eval, swing тоже
+antithesis: |
+  (1) «cps уже подхватывается через setCps без re-eval, swing тоже
+  должен через какой-то hot-swap». Возражение: Strudel API делит
+  режимы: `cps` это prop на репле (`repl.setCps(n)` — дешёвый
+  hot-swap), а `swing(...)` это оператор паттерна, требует полного
+  `repl.evaluate(snippet)`. Hot-swing не существует.
+  (2) «Re-eval каждый кадр — слайдер дёргается часто». Решение:
+  debounce 100ms в `useTransportAudioSync` (уже есть для cps),
+  плюс skip если ни amount ни divisor не изменились.
+  (3) «Re-eval с amount=0 → 0 при неактивном аудио запустит звук».
+  Решение: гейт по `__wavecodeAudioCtx.state === 'running'` —
+  не запускаем звук от простого движения слайдера. evalScore
+  (по кнопке Play) — единственная точка инициации звука.
+  (4) «Re-eval от slider при работающем Strudel вызовет glitch».
+  Возражение: да, каждый `repl.evaluate` кратко рестартует
+  scheduler — это фундаментальное свойство Strudel, не баг
+  нашего слоя. Пользователь явно тянет swing amount осознанно;
+  при дефолтном score без swing часть слайдера неактивна
+  (amount=0 → паттерн неизменен → re-eval технически
+  идемпотентен, но всё равно skip-аем по gate).
+axiom_link:
+  - A2
+scope:
+  paths: []
+outcomes:
+  - id: wavecode-swing-live-eval-outcome
+    statement: |
+      Swing-слайдер в TransportPanel реально влияет на звук во время
+      воспроизведения: при изменении `swingAmount` или `swingDivisor`
+      выполняется `audio.
+obligations:
+  - id: wavecode-swing-live-eval-kernel-validates
+    claim: |
+      The migrated decision file is structurally valid under the math-coding 3.3 schema; `mathc validate` exits 0 for `decisions/<id>.yaml` at HEAD.
+    acceptance:
+      all:
+        - verifier: "mathc validate"
+          result: pass
+  - id: wavecode-swing-live-eval-witness-from-v1
+    claim: |
+      The original v1.0 packet applied on the recorded date in its `witness` file; this migration preserves that evidence as an `attestations/<id>-evidence.json` file.
+    acceptance:
+      all:
+        - verifier: "attestation-store-has-subject"
+          result: pass
+assumptions: []
+risk:
+  declared_triggers:
+    - v1-to-v3-migration-loss
+  owner: human:operator
+relations:
+  addresses:
+    - wavecode-bootstrap-math-coding-3.3@1
+---

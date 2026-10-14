@@ -1,0 +1,104 @@
+---
+schema: math-coding/3.3
+id: wavecode-multi-undo
+revision: 1
+state: active
+body_sha: "sha256:e2a18309f5165da47d54e98cccf8da84a122335080472ec564b3ada24e1d22dc"
+yaml_sha: "sha256:e2a18309f5165da47d54e98cccf8da84a122335080472ec564b3ada24e1d22dc"
+
+intent:|
+  `appStore.scorePrev: string` (одношаговый rollback из пакета
+  `rollback-and-retry`) retire и заменяется стеком `history: string[]`
+  (max 50) + `future: string[]` (max 50) — классический двусторонний
+  undo/redo. В шапке вместо `↶ Откатить` — две кнопки `↶ Undo` (или
+  иконка), `↷ Redo`. Keyboard shortcuts: `Ctrl+Z` undo, `Ctrl+Y` /
+  `Ctrl+Shift+Z` redo. `replaceScore` сначала сохраняет старый score в
+  history и clear future (как сейчас `scorePrev`), undo/redo
+  переставляют score в history/future и сразу `audio.eval(score)`.
+  При typing в editor дебаунс 600ms группирует соседние правки в одну
+  запись history (чтобы typing в «abcd» одним undo, не четырьмя).
+commitment: |
+  Двусторонний stack-based undo/redo — стандарт в Figma, VSCode,
+  Photoshop. Группировка по debounce. Persistence только current
+  score, history — volatile. `scorePrev` retire'd через
+  supersession связь в новом пакете. Keyboard shortcuts стандартны
+  для desktop; mobile — через long-press на Undo кнопке не нужно
+  (нет Ctrl на iPhone), возможно добавить undo-button-tap-streak
+  но это overhead — кнопка `↶` крупная, tap = undo, hold = redo
+  (alternative: двойная кнопка ↶↷).
+counterexample: |
+  The strongest objection to this decision is captured in the `antithesis` field above: (1) Multi-step undo даёт «paradox на каждом character press»: один
+antithesis: |
+  (1) Multi-step undo даёт «paradox на каждом character press»: один
+  символ = одна запись в history, undo отменяет одну букву, юзер
+  жмёт N раз. Решение: grouping внутри batch (600ms debounce или
+  final commit при stop typing 600ms). (2) 50 стеков × 10KB score =
+  500KB — IDB-снимок сохраняется целиком. Решение: IDB сохраняет
+  ТОЛЬКО текущий `score` (как сейчас), history держим in-memory в
+  appStore без persist. (3) Сценарий «юзер нажал Undo, потом что-то
+  напечатал — будущее стёрто, как в macOS finder» — это и есть
+  ожидаемое поведение, нужно явно задокументировать. (4) Backward
+  compat: `scorePrev` уже persist через `replaceScore` save
+  pattern — миграция существующих юзеров тривиальна (drop поле,
+  history пуст при load). (5) `rollback-and-retry` пакет уже
+  applied (sha 25e83e0) — retiring packet выглядит как «мы ошиблись».
+  Скорее — supersede-with (refinement): новый пакет
+  `wavecode-multi-undo` retire'ит `rollback-and-retry`.
+  Двусторонний stack-based undo/redo — стандарт в Figma, VSCode,
+  Photoshop. Группировка по debounce. Persistence только current
+  score, history — volatile. `scorePrev` retire'd через
+  supersession связь в новом пакете. Keyboard shortcuts стандартны
+  для desktop; mobile — через long-press на Undo кнопке не нужно
+  (нет Ctrl на iPhone), возможно добавить undo-button-tap-streak
+  но это overhead — кнопка `↶` крупная, tap = undo, hold = redo
+  (alternative: двойная кнопка ↶↷).
+counterexample: |
+  The strongest objection to this decision is captured in the `antithesis` field above: (1) Multi-step undo даёт «paradox на каждом character press»: один
+antithesis: |
+  (1) Multi-step undo даёт «paradox на каждом character press»: один
+  символ = одна запись в history, undo отменяет одну букву, юзер
+  жмёт N раз. Решение: grouping внутри batch (600ms debounce или
+  final commit при stop typing 600ms). (2) 50 стеков × 10KB score =
+  500KB — IDB-снимок сохраняется целиком. Решение: IDB сохраняет
+  ТОЛЬКО текущий `score` (как сейчас), history держим in-memory в
+  appStore без persist. (3) Сценарий «юзер нажал Undo, потом что-то
+  напечатал — будущее стёрто, как в macOS finder» — это и есть
+  ожидаемое поведение, нужно явно задокументировать. (4) Backward
+  compat: `scorePrev` уже persist через `replaceScore` save
+  pattern — миграция существующих юзеров тривиальна (drop поле,
+  history пуст при load). (5) `rollback-and-retry` пакет уже
+  applied (sha 25e83e0) — retiring packet выглядит как «мы ошиблись».
+  Скорее — supersede-with (refinement): новый пакет
+  `wavecode-multi-undo` retire'ит `rollback-and-retry`.
+axiom_link:
+  - A1
+scope:
+  paths: []
+outcomes:
+  - id: wavecode-multi-undo-outcome
+    statement: |
+      `appStore.
+obligations:
+  - id: wavecode-multi-undo-kernel-validates
+    claim: |
+      The migrated decision file is structurally valid under the math-coding 3.3 schema; `mathc validate` exits 0 for `decisions/<id>.yaml` at HEAD.
+    acceptance:
+      all:
+        - verifier: "mathc validate"
+          result: pass
+  - id: wavecode-multi-undo-witness-from-v1
+    claim: |
+      The original v1.0 packet applied on the recorded date in its `witness` file; this migration preserves that evidence as an `attestations/<id>-evidence.json` file.
+    acceptance:
+      all:
+        - verifier: "attestation-store-has-subject"
+          result: pass
+assumptions: []
+risk:
+  declared_triggers:
+    - v1-to-v3-migration-loss
+  owner: human:operator
+relations:
+  addresses:
+    - wavecode-bootstrap-math-coding-3.3@1
+---

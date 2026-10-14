@@ -1,0 +1,212 @@
+---
+schema: math-coding/3.3
+id: wavecode-mobile-fixed-h-and-toast-dedupe
+revision: 1
+state: draft
+body_sha: "sha256:764036fb4373864c1c076557a800f76d5ed9d0380ef76419c6e98f2931c9c821"
+yaml_sha: "sha256:764036fb4373864c1c076557a800f76d5ed9d0380ef76419c6e98f2931c9c821"
+
+intent:|
+  Два независимых фикса, оба про UX мелочи после браузерной
+  верификации на 412×900 mobile.
+
+  (1) **Editor first lines covered by controls-row** — на mobile
+  .app-body padding-top = 76px (оценка из wavecode-mobile-compact
+  как 32+44), но РЕАЛЬНО сумма фиксированных рядов сверху
+  = 159px (TopBar 56 + presetRow 36 + gap 8 + controlsRow 59).
+  .app-body content (cm-host) стартовал на y=132, тогда как
+  .app-controls-row закрывал y=100-159 — первые 27px редактора
+  (≈ 2 строки // Creep, stack()) были под fixed-row'ом и
+  некликабельны. Оценка 32+44 была неточной по двум причинам:
+  (a) .app-preset-row рендерится как 36px (32 minHeight + 2*2
+  padding из inline index.html rule), а не 32px; (b) у
+  .app-controls-row mobile @media rule с padding 4px+minHeight 44
+  стоит ВЫШЕ non-media rule в source и проигрывает по
+  source-order (specificity одинаковая, последний wins), и
+  браузер применяет non-media `padding: var(--space-xs) ...`
+  = 6+6 → controlsRow рендерится 59px вместо 52.
+
+  Фикс: новый токен `--app-top-fixed-h-mobile: 108px` в
+  tokens.css (108 = 159 − 56 + 5px buffer, captures реальную
+  сумму fixed-rows на mobile) и использование его в mobile
+  .app-body padding-top rule. Desktop padding-top formula
+  `calc(--preset-row-h + --controls-h)` = 96px не тронута.
+
+  (2) **Triple toasts on sample load** — SampleLoader эмитит
+  `wavecode:sample-progress` с status='loaded' на завершении
+  КАЖДОГО банка (piano 21/21, drums 49/49, synth 73/73). На
+  каждый Toast.tsx (строка 157) пушил info-toast → юзер видел
+  3 тоста подряд за 200ms. SampleLoader не накапливает total
+  across banks (эмитит per-bank loaded/total), а банк-нейм в
+  payload отсутствует — то есть «один тост на полную загрузку
+  всего» нельзя сделать простым условием `loaded === total`
+  (выполняется на каждом банке).
+
+  Фикс: settle-таймер (TOAST_SAMPLE_SETTLE_MS = 1500ms). На
+  каждый 'loaded' clearTimeout + setTimeout; финальный
+  pushToast случается через 1.5s после ПОСЛЕДНЕГО 'loaded'.
+  Settle 1.5s выбран потому что банки загружаются
+  последовательно через `registerBank → await samples →
+  await preloadAllBuffers` (см. SampleLoader.ts:589-617),
+  между завершениями обычно <100ms; 1.5s гарантированно
+  перекрывает burst, но визуально остаётся отзывчивым.
+  'error' status отменяет pending settle-таймер и пушит
+  warn-toast «частично загружено» сразу (race-safe).
+commitment: |
+  Один коммит + пакет + witness. CSS-only padding-top bump +
+  JS debounce в Toast.tsx. Никаких изменений в SampleLoader,
+  consoleStore, или в chain'е editor-max-sheet-half.
+counterexample: |
+  The strongest objection to this decision is captured in the `antithesis` field above: (1) «Просто увеличить padding-top до 100px». Возражение: 100px
+antithesis: |
+  (1) «Просто увеличить padding-top до 100px». Возражение: 100px
+  даёт body content top = 56+100 = 156, всё ещё 3px под
+  controlsRow.bottom = 159. 108 — минимум с 5px buffer, который
+  гарантированно работает при текущей rendered геометрии.
+  (2) «Заменить padding-top на calc(...) с токенами, чтобы
+  auto-adapt». Возражение: --controls-h: 52 и --preset-row-h: 44
+  не отражают rendered 59 и 36 (внутри @layer components rule
+  source-order баг ломает mobile @media override). Можно
+  синхронизировать токены с реальностью, но это отдельный
+  change-scope (source-order fix + token update + possible
+  desktop regression). Текущий фикс минимален и explicit:
+  один токен = одно число = один комментарий.
+  (3) «Toast debounce лучше делать в consoleStore». Возражение:
+  debounce специфичен для sample-load контекста (нужно
+  distinguish 'loaded'/'error'/'loading' branches). В
+  consoleStore debounce был бы generic и применился бы к
+  ВСЕМ pushToast'ам, что wrong (например, errors не должны
+  дедупиться). Toast.tsx — правильное место для контекст-
+  специфичной debounce логики.
+  (4) «1.5s settle — слишком долго, юзер может подумать что
+  ничего не произошло». Возражение: 1.5s — это settle TIME
+  (между событиями), не delay. Если все 3 банка загрузились
+  за 200ms (как обычно), юзер увидит 1 тост через 1.5s
+  после ПОСЛЕДНЕГО, итого ~1.7s после клика «Play». Для
+  медленного соединения (банки грузятся по 5-10s) — тост
+  появится через 1.5s после последнего, что ≤15s end-to-end
+  и приемлемо (SampleProgressBadge в TabBar всё это время
+  показывает прогресс).
+  (5) «Toast body показывает только последний банк (73/73),
+  misleading для юзера». Возражение: alternative — cumulative
+  total (21+49+73 = 143) — но это требует рефакторинга
+  SampleLoader event payload (добавить bank name + cumulative
+  state). 73/73 — pragmatic approximation: «последний/самый
+  большой банк загружен». Текст «73/73 готовы к воспроизведению»
+  не вводит в заблуждение (73 sample-файла действительно
+  готовы, остальные 92 тоже загружены в предыдущих банках).
+  Один коммит + пакет + witness. CSS-only padding-top bump +
+  JS debounce в Toast.tsx. Никаких изменений в SampleLoader,
+  consoleStore, или в chain'е editor-max-sheet-half.
+counterexample: |
+  The strongest objection to this decision is captured in the `antithesis` field above: (1) «Просто увеличить padding-top до 100px». Возражение: 100px
+antithesis: |
+  (1) «Просто увеличить padding-top до 100px». Возражение: 100px
+  даёт body content top = 56+100 = 156, всё ещё 3px под
+  controlsRow.bottom = 159. 108 — минимум с 5px buffer, который
+  гарантированно работает при текущей rendered геометрии.
+  (2) «Заменить padding-top на calc(...) с токенами, чтобы
+  auto-adapt». Возражение: --controls-h: 52 и --preset-row-h: 44
+  не отражают rendered 59 и 36 (внутри @layer components rule
+  source-order баг ломает mobile @media override). Можно
+  синхронизировать токены с реальностью, но это отдельный
+  change-scope (source-order fix + token update + possible
+  desktop regression). Текущий фикс минимален и explicit:
+  один токен = одно число = один комментарий.
+  (3) «Toast debounce лучше делать в consoleStore». Возражение:
+  debounce специфичен для sample-load контекста (нужно
+  distinguish 'loaded'/'error'/'loading' branches). В
+  consoleStore debounce был бы generic и применился бы к
+  ВСЕМ pushToast'ам, что wrong (например, errors не должны
+  дедупиться). Toast.tsx — правильное место для контекст-
+  специфичной debounce логики.
+  (4) «1.5s settle — слишком долго, юзер может подумать что
+  ничего не произошло». Возражение: 1.5s — это settle TIME
+  (между событиями), не delay. Если все 3 банка загрузились
+  за 200ms (как обычно), юзер увидит 1 тост через 1.5s
+  после ПОСЛЕДНЕГО, итого ~1.7s после клика «Play». Для
+  медленного соединения (банки грузятся по 5-10s) — тост
+  появится через 1.5s после последнего, что ≤15s end-to-end
+  и приемлемо (SampleProgressBadge в TabBar всё это время
+  показывает прогресс).
+  (5) «Toast body показывает только последний банк (73/73),
+  misleading для юзера». Возражение: alternative — cumulative
+  total (21+49+73 = 143) — но это требует рефакторинга
+  SampleLoader event payload (добавить bank name + cumulative
+  state). 73/73 — pragmatic approximation: «последний/самый
+  большой банк загружен». Текст «73/73 готовы к воспроизведению»
+  не вводит в заблуждение (73 sample-файла действительно
+  готовы, остальные 92 тоже загружены в предыдущих банках).
+axiom_link:
+  - A5
+scope:
+  paths: []
+outcomes:
+  - id: wavecode-mobile-fixed-h-and-toast-dedupe-outcome
+    statement: |
+      Два независимых фикса, оба про UX мелочи после браузерной
+      верификации на 412×900 mobile.
+obligations:
+  - id: wavecode-mobile-fixed-h-and-toast-dedupe-kernel-validates
+    claim: |
+      The migrated decision file is structurally valid under the math-coding 3.3 schema; `mathc validate` exits 0 for `decisions/<id>.yaml` at HEAD.
+    acceptance:
+      all:
+        - verifier: "mathc validate"
+          result: pass
+  - id: wavecode-mobile-fixed-h-and-toast-dedupe-witness-from-v1
+    claim: |
+      The original v1.0 packet applied on the recorded date in its `witness` file; this migration preserves that evidence as an `attestations/<id>-evidence.json` file.
+    acceptance:
+      all:
+        - verifier: "attestation-store-has-subject"
+          result: pass
+assumptions:
+  - id: wavecode-mobile-fixed-h-and-toast-dedupe-assumption-1
+    state: proven
+    statement: |
+      "Rendered .app-controls-row height = 59px на mobile, не 52px" Evidence: "playwright_browser_evaluate getBoundingClientRect на 412×900: controlsRow.bottom = 159, controlsRow.top = 100, height = 59. Computed padding: 6+6, не 4+4. CSS @media rule (max-width:720px) .app-controls-row { padding: 4px; } присутствует в components.css:3008-3011, но проигрывает non-media rule на строке 3018-3046 потому что source order: non-media идёт ПОСЛЕ @media, equal specificity → last wins. Token --controls-h: 52 (в tokens.css:131) тоже не отражает reality."
+    owner: human:operator
+  - id: wavecode-mobile-fixed-h-and-toast-dedupe-assumption-2
+    state: proven
+    statement: |
+      "Rendered .app-preset-row height = 36px на mobile, не 32px" Evidence: "playwright_browser_evaluate: presetRow.top = 56, bottom = 92, height = 36. Computed padding: 2+2 (mobile @media rule в components.css:3004-3007 + inline index.html rule). min-height 32 + padding 4 = 36."
+    owner: human:operator
+  - id: wavecode-mobile-fixed-h-and-toast-dedupe-assumption-3
+    state: proven
+    statement: |
+      "8px gap between presetRow (ends 92) and controlsRow (starts 100)" Evidence: "controlsRow.top = calc(var(--header-h) + var(--preset-row-h)) = 56 + 44 = 100 (--preset-row-h = 44px, см. tokens.css:130). Но presetRow actual = 36. Расхождение 8px → visual gap 8px."
+    owner: human:operator
+  - id: wavecode-mobile-fixed-h-and-toast-dedupe-assumption-4
+    state: proven
+    statement: |
+      "SampleLoader эмитит 3 'loaded' events для 3 банков (piano/drums/synth)" Evidence: "ui/src/infrastructure/audio/SampleLoader.ts:610 — `emit(state.loaded, state.total, 'loaded')` после каждого `await preloadAllBuffers`. state.total per-bank = 21/49/73. UI предыдущего поведения: 3 тоста «Сэмплы загружены N/N» подряд."
+    owner: human:operator
+  - id: wavecode-mobile-fixed-h-and-toast-dedupe-assumption-5
+    state: proven
+    statement: |
+      "vitest 5 pre-existing failures не от моих изменений" Evidence: "До изменений (baseline): 5 failed, 724 passed. После изменений: 5 failed, 724 passed. Failure list: uiState.test.ts setTab(mixer|status|step|piano) expects 'full' (получает 'half' после editor-max-sheet-half пакета, commit 1d51ee6) + loadStoredSheetHeight expects 340 (получает null — localStorage mock не инициализирован). Эти тесты — KNOWN issue из предыдущего пакета, не моя регрессия."
+    owner: human:operator
+  - id: wavecode-mobile-fixed-h-and-toast-dedupe-assumption-6
+    state: proven
+    statement: |
+      "Toast debounce тестом: 1 toast после 3 dispatched events" Evidence: "playwright_browser_evaluate dispatchEvent × 3 (21/21, 49/49, 73/73) → wait 2.2s → .toast-item count = 1, title «Сэмплы загружены», body «73/73 готовы к воспроизведению». До фикса было 3 тоста с bodies «21/21», «49/49», «73/73» соответственно."
+    owner: human:operator
+  - id: wavecode-mobile-fixed-h-and-toast-dedupe-assumption-7
+    state: proven
+    statement: |
+      "cm-host теперь полностью видим на mobile" Evidence: "playwright_browser_take_screenshot mobile-fixed-h-verify.jpeg: line 1 «// Creep (Radiohead) — G → B → C → Cm, indie-rock 4/4» и line 2 «stack(» обе полностью видимы сверху cm-host, нет overlap с controlsRow. До фикса screenshot показал бы обрезанную первую строку."
+    owner: human:operator
+  - id: wavecode-mobile-fixed-h-and-toast-dedupe-assumption-8
+    state: proven
+    statement: |
+      "Desktop padding-top формула не сломана" Evidence: "playwright_browser_evaluate на 1280×800: .app-body paddingTop = '96px' (calc(44+52)). Mobile @media rule — max-width:720px, не применяется. Desktop uses line 2621 `padding-top: calc(var(--preset-row-h) + var(--controls-h))` — без изменений."
+    owner: human:operator
+risk:
+  declared_triggers:
+    - v1-to-v3-migration-loss
+  owner: human:operator
+relations:
+  addresses:
+    - wavecode-bootstrap-math-coding-3.3@1
+---

@@ -1,0 +1,141 @@
+---
+schema: math-coding/3.3
+id: wavecode-transport-panel
+revision: 1
+state: active
+body_sha: "sha256:5eb170d565b39a6ea33b69be4a3f0425d6f6f24b1e2e42a433d7c6af527d53bf"
+yaml_sha: "sha256:5eb170d565b39a6ea33b69be4a3f0425d6f6f24b1e2e42a433d7c6af527d53bf"
+
+intent:|
+  В шапке wavecode, под `app-preset-row`, появляется slim «Transport» —
+  CPS-слайдер (range 0.05–2.0, default 0.5, step 0.01), цифровой
+  BPM-индикатор `120` (пересчёт 60·cps·2 при 4/4), кнопка swing (toggle
+  шлёт `.swing(0.5, 1/3)` через preprocessor при следующем eval), и узкая
+  RAF-playhead полоска под слайдером, бегущая за встроенным Cyclist
+  scheduler через `queryAnimationFrame`. Top-row `▶ Запуск / ■ Стоп` уже
+  есть и не трогается.
+commitment: |
+  Три уровня разделения: (a) `transportState` живёт в `presentation/state`
+  — cps, swing on/off; (b) `AudioEngine.setCps()` — новый метод
+  интерфейса, реализация в `LiveAudioEngine` зовёт
+  `webaudioRepl({cps: ...})` ИЛИ патчит существующий scheduler;
+  (c) playhead — RAF-цикл, читает `AudioEngine.getCycleProgress()` →
+  CSS-переменная `--playhead-x`, применяется transform без re-render.
+  Swing-toggle не пишет в score — пишет в `transportState.swing`,
+  применяется через `injectMix`-подобный preprocessor, идущий ПЕРЕД
+  `eval()`. ИИ-edit работает с чистым score, swing —
+  side-effect, прозрачен для LLM.
+counterexample: |
+  The strongest objection to this decision is captured in the `antithesis` field above: (1) Профи думают в BPM, не CPS — слайдер с BPM был бы естественнее, но
+antithesis: |
+  (1) Профи думают в BPM, не CPS — слайдер с BPM был бы естественнее, но
+  тот же параметр меняет оба. Делаем CPS на слайдере + пересчёт в BPM
+  рядом — профи видят «120 BPM», но крутят cps. (2) Swing через UI
+  всегда выглядит одинаково — Strudel `.swing(root, offset)` принимает
+  два аргумента (значение паттерна и доля бита). Фиксируем `.swing(0.5,
+  1/3)` (стандартный shuffle 16ths) как единственный пресет — extended
+  версия это отдельная задача. (3) Playhead через RAF полагается на
+  Web-Audio clock и не учитывает что Strudel Cyclist сам считает
+  `cyclePos` — двойная работа. Reuse: `webaudioRepl` создаёт
+  controllable scheduler; добавляем accessor `getCycleProgress()` к
+  `AudioEngine`-интерфейсу, не дублируем counter. (4) Swing ломает
+  ИИ-edit: ИИ правит score, swing внезапно добавляет свой .swing() к
+  правке — неконсистентно. Решается тем, что swing — отдельный
+  side-effect через preprocessor (ИИ видит чистый score, swing
+  применяется в `audio.eval` wrapper).
+  Три уровня разделения: (a) `transportState` живёт в `presentation/state`
+  — cps, swing on/off; (b) `AudioEngine.setCps()` — новый метод
+  интерфейса, реализация в `LiveAudioEngine` зовёт
+  `webaudioRepl({cps: ...})` ИЛИ патчит существующий scheduler;
+  (c) playhead — RAF-цикл, читает `AudioEngine.getCycleProgress()` →
+  CSS-переменная `--playhead-x`, применяется transform без re-render.
+  Swing-toggle не пишет в score — пишет в `transportState.swing`,
+  применяется через `injectMix`-подобный preprocessor, идущий ПЕРЕД
+  `eval()`. ИИ-edit работает с чистым score, swing —
+  side-effect, прозрачен для LLM.
+counterexample: |
+  The strongest objection to this decision is captured in the `antithesis` field above: (1) Профи думают в BPM, не CPS — слайдер с BPM был бы естественнее, но
+antithesis: |
+  (1) Профи думают в BPM, не CPS — слайдер с BPM был бы естественнее, но
+  тот же параметр меняет оба. Делаем CPS на слайдере + пересчёт в BPM
+  рядом — профи видят «120 BPM», но крутят cps. (2) Swing через UI
+  всегда выглядит одинаково — Strudel `.swing(root, offset)` принимает
+  два аргумента (значение паттерна и доля бита). Фиксируем `.swing(0.5,
+  1/3)` (стандартный shuffle 16ths) как единственный пресет — extended
+  версия это отдельная задача. (3) Playhead через RAF полагается на
+  Web-Audio clock и не учитывает что Strudel Cyclist сам считает
+  `cyclePos` — двойная работа. Reuse: `webaudioRepl` создаёт
+  controllable scheduler; добавляем accessor `getCycleProgress()` к
+  `AudioEngine`-интерфейсу, не дублируем counter. (4) Swing ломает
+  ИИ-edit: ИИ правит score, swing внезапно добавляет свой .swing() к
+  правке — неконсистентно. Решается тем, что swing — отдельный
+  side-effect через preprocessor (ИИ видит чистый score, swing
+  применяется в `audio.eval` wrapper).
+axiom_link:
+  - A1
+scope:
+  paths: []
+outcomes:
+  - id: wavecode-transport-panel-outcome
+    statement: |
+      В шапке wavecode, под `app-preset-row`, появляется slim «Transport» —
+      CPS-слайдер (range 0.
+obligations:
+  - id: wavecode-transport-panel-kernel-validates
+    claim: |
+      The migrated decision file is structurally valid under the math-coding 3.3 schema; `mathc validate` exits 0 for `decisions/<id>.yaml` at HEAD.
+    acceptance:
+      all:
+        - verifier: "mathc validate"
+          result: pass
+  - id: wavecode-transport-panel-witness-from-v1
+    claim: |
+      The original v1.0 packet applied on the recorded date in its `witness` file; this migration preserves that evidence as an `attestations/<id>-evidence.json` file.
+    acceptance:
+      all:
+        - verifier: "attestation-store-has-subject"
+          result: pass
+assumptions:
+  - id: wavecode-transport-panel-assumption-1
+    state: proven
+    statement: |
+      "CPS-slider удобнее BPM-slider потому что cps — это то, Evidence: "Strudel docs `setcps()` — единица измерения cycles/sec;
+    owner: human:operator
+  - id: wavecode-transport-panel-assumption-2
+    state: assumed
+    statement: |
+      "Cyclist scheduler имеет публичный/полу-публичный API Evidence: "Cyclist source — `state.startedAt`, `state.startCycle`,
+    owner: human:operator
+  - id: wavecode-transport-panel-assumption-3
+    state: proven
+    statement: |
+      "Strudel `.swing(rootValue, stepOffset)` — паттерн- Evidence: "Strudel docs Pattern API — `swing(value: pattern, skip:
+    owner: human:operator
+  - id: wavecode-transport-panel-assumption-4
+    state: proven
+    statement: |
+      "RAF + Web Audio clock дрифтуют если RAF задержан — Evidence: "MDN `requestAnimationFrame` callbacks — связаны с refresh
+    owner: human:operator
+  - id: wavecode-transport-panel-assumption-5
+    state: assumed
+    statement: |
+      "ИИ-edit видит raw score без transport-side-effects, Evidence: "system-prompt в `application/useCases/llmEdit.ts` уже
+    owner: human:operator
+  - id: wavecode-transport-panel-assumption-6
+    state: proven
+    statement: |
+      "CPS-swing через preprocessor не теряет score-validity Evidence: "App.tsx:80-92 `createEffect` autosave на
+    owner: human:operator
+  - id: wavecode-transport-panel-assumption-7
+    state: proven
+    statement: |
+      "Swing-clobber: если ИИ edit приходит при включённом Evidence: "Аналог `injectMix` (track-mixer пакет) — pure
+    owner: human:operator
+risk:
+  declared_triggers:
+    - v1-to-v3-migration-loss
+  owner: human:operator
+relations:
+  addresses:
+    - wavecode-bootstrap-math-coding-3.3@1
+---

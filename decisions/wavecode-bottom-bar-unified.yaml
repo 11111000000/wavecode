@@ -1,0 +1,116 @@
+---
+schema: math-coding/3.3
+id: wavecode-bottom-bar-unified
+revision: 1
+state: active
+body_sha: "sha256:cc9986bead42bffb90c63d991b267b3d9f08f3c4f60cd4780de246cf92290971"
+yaml_sha: "sha256:cc9986bead42bffb90c63d991b267b3d9f08f3c4f60cd4780de246cf92290971"
+
+intent:|
+  BottomToolstrip (отдельный fixed-bar над TabBar с 3 кнопками
+  step/piano/mixer) — архитектурный долг: на mobile-вьюпортах
+  `<639px` лейблы скрываются, иконки растворяются в тёмной теме,
+  z-index-конфликт с MiniNotationToolbar. Юзер не находил кнопки
+  в живой системе. Дизайн-интент — «всё в один нижний бар».
+
+  Сливаем toolstrip в TabBar: 6 табов = score, step, piano,
+  mixer, ai, status. BottomToolstrip удаляется. Каждый таб
+  дёргает setTab(id), который уже умеет открывать соответствующий
+  BottomSheet (chat→ai, mixer→mixer, status→status, score→close).
+  Расширяем setTab ветками step→step-sheet, piano→piano-sheet.
+  MIDI остаётся в ScorePanel (MidiIOButtons) — file I/O, не
+  bottom-sheet.
+
+  Layout на 360px-вьюпорте: 6 табов × 60px ≈ 360px — впритык
+  но влезает. Иконка 20px + label 11px (как сейчас), пэддинги
+  4px sides. Без горизонтального скролла. Гамбургер-меню или
+  overflow-scroll не вводим — юзер сказал «в бар», а не «в
+  overflow-меню».
+commitment: |
+  TabBar: 6 табов (Score, Step, Piano, Mixer, AI, Status).
+  setTab расширен: step→openKindSheet('step','full'),
+  piano→openKindSheet('piano','full'). TabId:
+  'score' | 'step' | 'piano' | 'mixer' | 'chat' | 'status'.
+  BottomToolstrip.tsx удалён. App.tsx не рендерит toolstrip.
+  CSS: блок `.wc-toolstrip*` удалён из components.css. midi
+  импорт/экспорт остаётся в ScorePanel (нижняя MidiIOButtons).
+counterexample: |
+  The strongest objection to this decision is captured in the `antithesis` field above: (1) «Оставить двухрядный (tabbar + toolstrip) — починить
+antithesis: |
+  (1) «Оставить двухрядный (tabbar + toolstrip) — починить
+  z-index/safe-bottom и иконки». Возражение: даже если
+  починить видимость, иконки 16px на тёмном фоне — это
+  discoverability-провал. Двухрядный макет уже отвергнут
+  юзером («не нахожу»).
+  (2) «Вынести step/piano/mixer в overflow-меню/гамбургер».
+  Возражение: 6 функций в один ряд — нормальная плотность
+  для мобильного bottom-nav (iOS/Android Material Design
+  допускают 3-5; 6 на грани но работает). Гамбургер прячет
+  фичи, юзер их уже потерял.
+  (3) «Mixer убрать — он редкий». Возражение: Mixer критичен
+  для M/S/gain; убирать — регресс. Все 6 в баре.
+  (4) «MIDI тоже в бар (7 табов)». Возражение: 7 табов
+  не влезают в 360px без скролла; MIDI — file I/O, естественнее
+  в ScorePanel как сейчас. Юзер спросил «где midi» — нашёл
+  бы в score-табе без проблем.
+  TabBar: 6 табов (Score, Step, Piano, Mixer, AI, Status).
+  setTab расширен: step→openKindSheet('step','full'),
+  piano→openKindSheet('piano','full'). TabId:
+  'score' | 'step' | 'piano' | 'mixer' | 'chat' | 'status'.
+  BottomToolstrip.tsx удалён. App.tsx не рендерит toolstrip.
+  CSS: блок `.wc-toolstrip*` удалён из components.css. midi
+  импорт/экспорт остаётся в ScorePanel (нижняя MidiIOButtons).
+counterexample: |
+  The strongest objection to this decision is captured in the `antithesis` field above: (1) «Оставить двухрядный (tabbar + toolstrip) — починить
+antithesis: |
+  (1) «Оставить двухрядный (tabbar + toolstrip) — починить
+  z-index/safe-bottom и иконки». Возражение: даже если
+  починить видимость, иконки 16px на тёмном фоне — это
+  discoverability-провал. Двухрядный макет уже отвергнут
+  юзером («не нахожу»).
+  (2) «Вынести step/piano/mixer в overflow-меню/гамбургер».
+  Возражение: 6 функций в один ряд — нормальная плотность
+  для мобильного bottom-nav (iOS/Android Material Design
+  допускают 3-5; 6 на грани но работает). Гамбургер прячет
+  фичи, юзер их уже потерял.
+  (3) «Mixer убрать — он редкий». Возражение: Mixer критичен
+  для M/S/gain; убирать — регресс. Все 6 в баре.
+  (4) «MIDI тоже в бар (7 табов)». Возражение: 7 табов
+  не влезают в 360px без скролла; MIDI — file I/O, естественнее
+  в ScorePanel как сейчас. Юзер спросил «где midi» — нашёл
+  бы в score-табе без проблем.
+axiom_link:
+  - A5
+scope:
+  paths: []
+outcomes:
+  - id: wavecode-bottom-bar-unified-outcome
+    statement: |
+      BottomToolstrip (отдельный fixed-bar над TabBar с 3 кнопками
+      step/piano/mixer) — архитектурный долг: на mobile-вьюпортах
+      `<639px` лейблы скрываются, иконки растворяются в тёмной теме,
+      z-index-конфликт с MiniNotationToolbar.
+obligations:
+  - id: wavecode-bottom-bar-unified-kernel-validates
+    claim: |
+      The migrated decision file is structurally valid under the math-coding 3.3 schema; `mathc validate` exits 0 for `decisions/<id>.yaml` at HEAD.
+    acceptance:
+      all:
+        - verifier: "mathc validate"
+          result: pass
+  - id: wavecode-bottom-bar-unified-witness-from-v1
+    claim: |
+      The original v1.0 packet applied on the recorded date in its `witness` file; this migration preserves that evidence as an `attestations/<id>-evidence.json` file.
+    acceptance:
+      all:
+        - verifier: "attestation-store-has-subject"
+          result: pass
+assumptions: []
+risk:
+  declared_triggers:
+    - v1-to-v3-migration-loss
+  owner: human:operator
+relations:
+  addresses:
+    - wavecode-bootstrap-math-coding-3.3@1
+---

@@ -1,0 +1,19 @@
+{
+  "schema": "math-coding/attestation-3.0-alpha",
+  "kind": "attestation",
+  "subject": {
+    "decision": "wavecode-step-grid-autoload-and-sync",
+    "obligation": "wavecode-step-grid-autoload-and-sync-witness-from-v1",
+    "candidate_tree": "HEAD",
+    "materials_digest": ""
+  },
+  "kind_": "observation",
+  "producer": {
+    "identity": "human:v1-migration"
+  },
+  "environment_class_level": 2,
+  "environment_class_label": "dev",
+  "result": "inconclusive",
+  "issued_at": "1970-01-01T00:00:00Z",
+  "id": "sha256:9aa0fe45931fd95685b929820537ef45224db4f48aa6e6120c724f099789f8ca"
+}
