@@ -1,15 +1,12 @@
-import { Compartment, EditorState, type Extension } from '@codemirror/state';
+import { EditorState } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
 import { basicSetup } from 'codemirror';
 import { oneDark } from '@codemirror/theme-one-dark';
 import { autocompletion } from '@codemirror/autocomplete';
-import { bracketMatching } from '@codemirror/language';
 import { createEffect, onCleanup, onMount, untrack } from 'solid-js';
 import { miniNotationHighlight } from '../editor/miniNotationHighlight';
 import { runtimeMiniHighlight } from '../editor/runtimeMiniHighlight';
 import { strudelCompletions } from '../editor/strudelCompletions';
-import { lispHighlight, lispHighlightStyles } from '../editor/lispHighlight';
-import { languageMode } from '../state/languageModeStore';
 import { flashDecorations } from '../state/pianoRecStore';
 
 export type CodeMirrorEditorApi = {
@@ -31,11 +28,6 @@ type Props = {
  *   - если props.value меняется извне (например, через agent edit),
  *     editor обновляется через dispatch(changes)
  *
- * Language mode:
- *   - Subscribes to `languageMode()`. On change, dispatches
- *     `lispCompartment.reconfigure(...)` so lispHighlight / bracketMatching
- *     appear or disappear without losing cursor position or doc content.
- *
  * Imperative handle: после mount вызывает props.onReady(api) с
  * функцией getView() — внешние компоненты (например, mini-toolbar)
  * могут диспатчить транзакции напрямую через view.dispatch.
@@ -47,7 +39,6 @@ type Props = {
 export function CodeMirrorEditor(props: Props) {
   let containerRef: HTMLDivElement | undefined;
   let view: EditorView | undefined;
-  const lispCompartment = new Compartment();
 
   onMount(() => {
     if (!containerRef) return;
@@ -59,8 +50,6 @@ export function CodeMirrorEditor(props: Props) {
         oneDark,
         miniNotationHighlight,
         runtimeMiniHighlight,
-        lispCompartment.of(buildLispExtensions()),
-        lispHighlightStyles,
         autocompletion({ override: [strudelCompletions] }),
         flashDecorations,
         EditorView.contentAttributes.of({
@@ -91,20 +80,6 @@ export function CodeMirrorEditor(props: Props) {
     }
   });
 
-  // Reconfigure lisp-related extensions when language mode changes.
-  // Compartment.reconfigure preserves cursor/selection/doc — only the
-  // extension set swaps. The lispHighlight plugin re-evaluates
-  // `languageMode()` on its next update pass.
-  createEffect(() => {
-    languageMode();
-    if (!view) return;
-    untrack(() =>
-      view!.dispatch({
-        effects: lispCompartment.reconfigure(buildLispExtensions()),
-      }),
-    );
-  });
-
   onCleanup(() => view?.destroy());
 
   return (
@@ -119,14 +94,3 @@ export function CodeMirrorEditor(props: Props) {
     />
   );
 }
-
-/**
- * Lisp-specific extension set, swapped via Compartment on mode change.
- * - Lisp mode: lispHighlight decoration + bracketMatching.
- * - JS mode: empty array (mini-notation highlight comes from
- *   `miniNotationHighlight`, already in the static extension list).
- */
-const buildLispExtensions = (): Extension[] => {
-  if (languageMode() !== 'lisp') return [];
-  return [bracketMatching(), lispHighlight(() => languageMode() === 'lisp')];
-};
