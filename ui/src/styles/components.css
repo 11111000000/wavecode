@@ -2998,9 +2998,22 @@ textarea.ai-textarea:focus-visible {
    * - preset-row: padding до 2px/8px, высота ~32px (select min-h
    *   control-h 32px сохраняется; tap-target = сам select).
    * - controls-row: padding 4px/12px, высота ~44px (Play + slider
-   *   + bpm влезают).
-   * Суммарно mobile fixed-ряды: 32 + 44 = 76px (desktop 96px).
-   * Это экономит 20px → +1 строка cm-content @ 10px/1.3. */
+   *   + bpm влезают). Замечание: фактическая rendered высота 59px
+   *   потому что mobile @media rule для .app-controls-row стоит
+   *   ВЫШЕ non-media rule в файле и проигрывает по source-order
+   *   (specificity одинаковая). Браузер применяет non-media
+   *   `padding: var(--space-xs) var(--space-md)` = 6+6 → 44+12+3
+   *   (content overflow) = 59px. Это side-bug, за пределами этого
+   *   пакета; обходим явным padding-top значением.
+   * Суммарно mobile fixed-ряды (фактически): 36 + 8 (gap) + 59 = 103px
+   * над .app-body, плюс сам .app-body top 56 = 159px от верха.
+   *
+   * wavecode-mobile-fixed-h-and-toast-dedupe: padding-top .app-body
+   * поднят с 76px до 108px (var --app-top-fixed-h-mobile, см.
+   * tokens.css) — 159 - 56 + buffer = 108. Раньше первые ~27px
+   * редактора были закрыты controlsRow'ом (cm-host начинался на
+   * y=132, controlsRow.bottom = 159 → первые 2 строки // Creep,
+   * stack() были под fixed-row'ом). */
   .app-preset-row {
     padding: 2px var(--space-sm);
     min-height: 32px;
@@ -3009,10 +3022,12 @@ textarea.ai-textarea:focus-visible {
     padding: 4px var(--space-sm);
     min-height: 44px;
   }
-  /* .app-body padding-top: на mobile уменьшен с desktop-формулы
-   * (96px) до 76px (32+44). */
+  /* .app-body padding-top: 76px → 108px. Формула для расчёта
+   * (от верха viewport): header 56 + presetRow 36 + gap 8 + 
+   * controlsRow 59 = 159. .app-body начинается на y=56, поэтому
+   * padding-top ≥ 159-56+buffer = 108. */
   .app-body {
-    padding-top: 76px !important;
+    padding-top: var(--app-top-fixed-h-mobile) !important;
   }
 }
 .app-controls-row {
