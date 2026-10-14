@@ -123,38 +123,26 @@ stack(
 | `"text"` | `"text"` | строка as-is, mini-notation в ней не парсится |
 | `rev` | `"rev"` | bare symbol → строковый литерал (для имён эффектов/сэмплов) |
 | `sawtooth` | `"sawtooth"` | то же |
+| `()` | `Pattern.empty()` | пустой список — sentinel "no pattern" |
 
-Цепочка модификаторов — через вложенность:
+**Method-chain правило** (финальная семантика, реализована в `emitter.ts`):
+
+Цепочка `.method(args)` допустима **только** когда:
+1. parent — single-pattern constructor (`s`, `note`, `n`, `range`, `run`, ...);
+2. arg — s-expression, head ∈ `KNOWN_METHODS` (включая `s`/`note`/`n`).
+
+Иначе arg — позиционный.
+
 ```lisp
-(note "a4" (slow 2) (gain 0.5))   →   note("a4").slow(2).gain(0.5)
+(note "a4" (slow 2) (gain 0.5))   →   note("a4").slow(2).gain(0.5)   ; chain: parent=note
+(n "[55,59,62]*2" (s "sawtooth") (gain 0.18))   →   n("[55,59,62]*2").s("sawtooth").gain(0.18)  ; chain: parent=n, (s ...) ∈ methods
+(stack (note "a4") (s "bd"))      →   stack(note("a4"), s("bd"))     ; positional: parent=stack
+(every 4 (jux rev) (s "bd"))      →   every(4, jux("rev"), s("bd"))  ; positional: parent=every
+(slow 2 (stack (note "a4") (s "bd")))  →  slow(2, stack(note("a4"), s("bd")))  ; chain on outer slow
 ```
-**Нюанс:** это не валидно для текущей грамматики (вложенные `(slow 2)` —
-отдельные аргументы для `note`, не методы). Пересмотренная семантика:
-модификатор **встраивается как dot-call** если аргумент — s-expression
-с именем-методом. Точнее:
 
-**Семантика v2 (принятая):**
-- `(head a b c)` — функция-вызов, аргументы — позиционные
-- `(head (mod1 v1)(mod2 v2))` — НЕ разбирается, это позиционные аргументы
-
-**Альтернатива: pipe-стиль через стек.** Если хотим chain — отдельная форма:
-```lisp
-(stack
-  (note "a4 b4 c5")
-  (.slow (note "a4 b4 c5") 2)
-  (.lpf (slow (note "a4 b4 c5") 2) 800))
-```
-Но это громоздко. Лучше:
-
-**Семантика v3 (рекомендую):** каждый аргумент-s-expression становится **dot-call** родителя, если он в позиции "method-like":
-```lisp
-(note "a4" (slow 2) (gain 0.4))
-→
-note("a4").slow(2).gain(0.4)
-```
-**Правило:** если s-expression в позиции аргумента и его head — известное Strudel-method имя (`slow`, `fast`, `gain`, `lpf`, `hpf`, `delay`, `room`, `speed`, `rev`, `jux`, `every`, `mask`, `struct`, `euclid`, `iter`, `chunk`, `off`, `range`, `_scope`), то это `.method` цепочка. Иначе — позиционный аргумент.
-
-Практический список известных методов пополняется по мере надобности; fallback — позиционный аргумент (если method неизвестен).
+Чтобы chain'нуть на stack — оборачиваем: `(slow 2 (stack ...))`.
+Альтернатива: pipe-форма — отдельный пакет (phase 2).
 
 ## Worked example
 
@@ -205,13 +193,14 @@ eval даёт тот же Strudel-pattern что `pair.js`.
 ## Open questions
 
 1. **Lisp-vs-arg для известных методов** — нужно ли явное `^method`
-   маркирование, или эвристика "head ∈ known-methods" ok?
+   маркирование, или эвристика "head ∈ known-methods" ok?  → **решено**:
+   эвристика + ограничение "parent — single-pattern constructor".
 2. **CodeMirror подсветка для s-expression** — парсер Lezer с уже
    существующим для JS, или отдельный для Lisp? Минимально: парные
-   скобки highlight + comment.
-3. **`'` (quote) в phase 1?** Скорее нет — pattern как data не нужен.
+   скобки highlight + comment. Phase 2.
+3. **`'` (quote) в phase 1?** — нет, pattern как data не нужен.
 4. **Decimal notation для slow/fast** — Strudel принимает дробные (`slow 0.5`),
-   парсер должен поддержать `0.5`, `-1.5`.
+   парсер поддерживает `0.5`, `-1.5`. **решено**.
 
 ## Phases
 
