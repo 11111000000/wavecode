@@ -1107,9 +1107,23 @@ textarea.wc-input {
   background: var(--surface-2);
   border: 1px solid var(--border);
   border-radius: var(--radius-pill);
+  /* (wavecode-piano-sample-picker) 8 instruments with labels can
+     exceed available toolbar width — allow horizontal scroll on
+     narrow viewports instead of wrapping into 2 rows. */
+  overflow-x: auto;
+  scrollbar-width: thin;
+  max-width: 100%;
+  -webkit-overflow-scrolling: touch;
 }
 .piano-inst-btn {
-  width: 28px;
+  /* (wavecode-piano-sample-picker) Buttons now host either a
+     short unicode glyph (△ ∿ ⊿ ⊓ for oscillator literals) or
+     a 4-5 char label ("Piano", "Casio", "Guitar", "Synth").
+     min-width 32px fits the label, max-width clamps to prevent
+     the selector from exploding horizontally when 8 buttons
+     are present. */
+  min-width: 32px;
+  max-width: 64px;
   height: 24px;
   display: inline-flex;
   align-items: center;
@@ -1119,13 +1133,17 @@ textarea.wc-input {
   border: 1px solid transparent;
   border-radius: var(--radius-pill);
   font-family: var(--font-mono);
-  font-size: var(--fs-md);
+  font-size: var(--fs-2xs);
+  font-weight: var(--fw-medium);
+  letter-spacing: 0;
+  text-transform: none;
   cursor: pointer;
   transition:
     color var(--dur-xs) var(--ease),
     background var(--dur-xs) var(--ease),
     border-color var(--dur-xs) var(--ease);
-  padding: 0;
+  padding: 0 var(--space-2xs);
+  white-space: nowrap;
 }
 .piano-inst-btn:hover { color: var(--fg); }
 .piano-inst-btn[data-active='true'] {

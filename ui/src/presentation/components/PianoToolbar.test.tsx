@@ -31,51 +31,87 @@ afterEach(() => {
   cleanup();
 });
 
-describe('PianoToolbar — instrument selector', () => {
-  it('renders 4 instrument buttons with the correct glyphs and titles', () => {
+describe('PianoToolbar — instrument selector (wavecode-piano-sample-picker)', () => {
+  it('renders 8 instrument buttons (4 sample + 4 oscillator)', () => {
     const { container } = render(() => <PianoToolbar />);
     const buttons = container.querySelectorAll<HTMLButtonElement>('.piano-inst-btn');
-    expect(buttons).toHaveLength(4);
-    expect(buttons[0]!.textContent).toBe('△');
-    expect(buttons[0]!.getAttribute('title')).toBe('triangle');
-    expect(buttons[1]!.textContent).toBe('∿');
-    expect(buttons[1]!.getAttribute('title')).toBe('sine');
-    expect(buttons[2]!.textContent).toBe('⊿');
-    expect(buttons[2]!.getAttribute('title')).toBe('sawtooth');
-    expect(buttons[3]!.textContent).toBe('⊓');
-    expect(buttons[3]!.getAttribute('title')).toBe('square');
+    expect(buttons).toHaveLength(8);
   });
 
-  it('default instrument (triangle) has data-active=true; others have false', () => {
+  it('first 4 buttons are sample labels (Piano, Casio, Guitar, Synth)', () => {
     const { container } = render(() => <PianoToolbar />);
     const buttons = container.querySelectorAll<HTMLButtonElement>('.piano-inst-btn');
-    expect(buttons[0]!.getAttribute('data-active')).toBe('true');
-    expect(buttons[1]!.getAttribute('data-active')).toBe('false');
-    expect(buttons[2]!.getAttribute('data-active')).toBe('false');
-    expect(buttons[3]!.getAttribute('data-active')).toBe('false');
+    expect(buttons[0]!.textContent).toBe('Piano');
+    expect(buttons[1]!.textContent).toBe('Casio');
+    expect(buttons[2]!.textContent).toBe('Guitar');
+    expect(buttons[3]!.textContent).toBe('Synth');
   });
 
-  it('clicking an instrument button sets the instrument signal + flips data-active', async () => {
+  it('last 4 buttons are oscillator glyphs (△ ∿ ⊿ ⊓)', () => {
+    const { container } = render(() => <PianoToolbar />);
+    const buttons = container.querySelectorAll<HTMLButtonElement>('.piano-inst-btn');
+    expect(buttons[4]!.textContent).toBe('△');
+    expect(buttons[5]!.textContent).toBe('∿');
+    expect(buttons[6]!.textContent).toBe('⊿');
+    expect(buttons[7]!.textContent).toBe('⊓');
+  });
+
+  it('each sample button has a data-instrument attribute matching its id', () => {
+    const { container } = render(() => <PianoToolbar />);
+    const buttons = container.querySelectorAll<HTMLButtonElement>('.piano-inst-btn');
+    expect(buttons[0]!.getAttribute('data-instrument')).toBe('piano');
+    expect(buttons[1]!.getAttribute('data-instrument')).toBe('casio');
+    expect(buttons[2]!.getAttribute('data-instrument')).toBe('guitar');
+    expect(buttons[3]!.getAttribute('data-instrument')).toBe('synth');
+  });
+
+  it('sample button title explains that REC writes s("<name>")', () => {
+    const { container } = render(() => <PianoToolbar />);
+    const buttons = container.querySelectorAll<HTMLButtonElement>('.piano-inst-btn');
+    expect(buttons[0]!.getAttribute('title')).toContain('s("piano")');
+    expect(buttons[1]!.getAttribute('title')).toContain('s("casio")');
+    expect(buttons[2]!.getAttribute('title')).toContain('s("guitar")');
+    expect(buttons[3]!.getAttribute('title')).toContain('s("synth")');
+  });
+
+  it('default instrument (triangle) is one of the last 4 buttons', () => {
+    const { container } = render(() => <PianoToolbar />);
+    const buttons = container.querySelectorAll<HTMLButtonElement>('.piano-inst-btn');
+    // The default 'triangle' is the 5th button (index 4).
+    expect(buttons[4]!.getAttribute('data-active')).toBe('true');
+    for (let i = 0; i < 8; i += 1) {
+      if (i !== 4) {
+        expect(buttons[i]!.getAttribute('data-active')).toBe('false');
+      }
+    }
+  });
+
+  it('clicking a sample button sets the instrument signal + flips data-active', async () => {
     const rec = await import('../state/pianoRecStore');
     const { container, getByLabelText } = render(() => <PianoToolbar />);
-    fireEvent.click(getByLabelText('Инструмент: sine') as HTMLButtonElement);
-    expect(rec.instrument()).toBe('sine');
-    // Re-query DOM after the signal change (Solid re-renders).
+    fireEvent.click(getByLabelText('Инструмент: Piano') as HTMLButtonElement);
+    expect(rec.instrument()).toBe('piano');
     const buttons = container.querySelectorAll<HTMLButtonElement>('.piano-inst-btn');
-    expect(buttons[1]!.getAttribute('data-active')).toBe('true');
-    expect(buttons[0]!.getAttribute('data-active')).toBe('false');
+    expect(buttons[0]!.getAttribute('data-active')).toBe('true');
+    expect(buttons[4]!.getAttribute('data-active')).toBe('false');
+  });
 
-    fireEvent.click(getByLabelText('Инструмент: sawtooth') as HTMLButtonElement);
-    expect(rec.instrument()).toBe('sawtooth');
-    const after = container.querySelectorAll<HTMLButtonElement>('.piano-inst-btn');
-    expect(after[2]!.getAttribute('data-active')).toBe('true');
+  it('clicking an oscillator button still works (regression)', async () => {
+    const rec = await import('../state/pianoRecStore');
+    const { container, getByLabelText } = render(() => <PianoToolbar />);
+    // Oscillator literals keep their unicode glyph as label
+    // (△ ∿ ⊿ ⊓), not a transliterated word — see INSTRUMENT_LABEL.
+    fireEvent.click(getByLabelText('Инструмент: ∿') as HTMLButtonElement);
+    expect(rec.instrument()).toBe('sine');
+    const buttons = container.querySelectorAll<HTMLButtonElement>('.piano-inst-btn');
+    expect(buttons[5]!.getAttribute('data-active')).toBe('true');
   });
 
   it('instrument setter preserves rec buffer (separate concerns)', async () => {
     const rec = await import('../state/pianoRecStore');
     rec.appendNote(60, 0, 100);
     const { getByLabelText } = render(() => <PianoToolbar />);
-    fireEvent.click(getByLabelText('Инструмент: square') as HTMLButtonElement);
+    fireEvent.click(getByLabelText('Инструмент: ⊓') as HTMLButtonElement);
     expect(rec.recBuffer()).toEqual([{ midi: 60, startMs: 0, endMs: 100 }]);
   });
 });
