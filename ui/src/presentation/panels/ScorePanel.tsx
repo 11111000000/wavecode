@@ -9,7 +9,6 @@ import {
 import { appStore, dispatch } from '../state/appStore';
 import { getDebug } from '~/infrastructure/audio/LiveAudioEngine';
 import { CodeMirrorEditor, type CodeMirrorEditorApi } from '../components/CodeMirrorEditor';
-import { LanguageToggle } from '../components/LanguageToggle';
 import { MiniNotationToolbar } from '../components/MiniNotationToolbar';
 import { PianoKeyboard } from '../components/PianoKeyboard';
 import {
@@ -236,16 +235,13 @@ export function ScorePanel() {
         </Show>
       </Show>
       <Suspense fallback={<div class="cm-host cm-host-fill cm-loading">загрузка редактора…</div>}>
-        <div class="score-editor-row">
-          <CodeMirrorEditor
-            value={appStore.score}
-            onChange={(v) => dispatch({ type: 'replaceScore', text: v })}
-            onReady={(api) => {
-              editorApi = api;
-            }}
-          />
-          <LanguageToggle />
-        </div>
+        <CodeMirrorEditor
+          value={appStore.score}
+          onChange={(v) => dispatch({ type: 'replaceScore', text: v })}
+          onReady={(api) => {
+            editorApi = api;
+          }}
+        />
       </Suspense>
 
       <div class="score-debug">
