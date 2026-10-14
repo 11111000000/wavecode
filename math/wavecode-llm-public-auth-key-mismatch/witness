@@ -4,31 +4,88 @@ kind: creation
 files:
   - math/wavecode-llm-public-auth-key-mismatch/packet.md
 cross_repo:
+  - repo: ~/Projects/wavecode
+    file: ui/.env.local
+    hunk: '+ sk-litellm- prefix in VITE_LLM_PROXY_KEY'
+    commit: 'live edit (gitignored)'
+  - repo: ~/Projects/wavecode
+    file: ui/src/infrastructure/llm/LiveLLMClient.ts
+    hunk: 'classifyLLMHttpError for actionable error messages'
+    commit: 43d66be
   - repo: ~/Projects/AngaraConfig
     file: services/llm-proxy.nix
-    hunk: '+ litellmAuthPatch derivation, ++ [ litellmAuthPatch ] в withPackages'
-    commit: pending
-    rebuild_kind: nixos-rebuild switch
-    rebuild_rc: pending
-    unit_restarted: llm-proxy-public.service
+    hunk: '+ litellmAuthPatch derivation; .override { makeWrapperArgs = [...] }'
+    commit: c9c13c7
+    status: REVERTED in 440525c (broke backoff import)
+  - repo: ~/Projects/AngaraConfig
+    file: services/llm-proxy/patches/auth_fail_closed.{py,pth}
+    hunk: '+ monkey-patch auth function for fail-closed behavior'
+    commit: c9c13c7
+    status: PATCH KEPT, Nix wiring disabled
+rebuilds:
+  - when: 2026-10-14 08:00
+    kind: nixos-rebuild switch
+    result: auth-fail-closed Nix expression compiled, but .override broke
+            Python wrapper. Public instance entered restart loop with
+            ImportError: No module named 'backoff'.
+  - when: 2026-10-14 ~08:25
+    kind: sudo systemctl restart llm-proxy-public
+    result: new wrapper binary, same error. Manual tests showed
+            NIX_PYTHONPATH not propagated through new C wrapper to
+            .litellm-wrapped's hardcoded site-packages list.
+  - when: 2026-10-14 ~08:39
+    kind: git revert + sudo nixos-rebuild switch
+    result: restored working `withPackages` form. Public instance
+            accepts requests again.
+final_state:
+  llm_proxy_public: active, accepting 200 OK on /v1/chat/completions
+  fail_closed_patch: NOT ACTIVE (known regression window)
+  bundle_key_matches_master: yes (verified 2026-10-14 ~08:01)
 notes: |
-  Applied as two separate commits (per the AI-agent auto-commit policy):
-  - wavecode (fix/llm-public-auth-key): 43d66be
-    "fix(llm): detect auth errors + deploy-time key match check"
-  - AngaraConfig (fix/llm-public-auth-fail-closed): c9c13c7
-    "fix(llm-proxy): fail-closed on missing master_key+DB"
+  Applied as four commits across two repos (per AI-agent auto-commit
+  policy):
+  - wavecode/fix/llm-public-auth-key:
+      43d66be fix(llm): detect auth errors + deploy-time key match check
+      1cb9ea1 docs(math): wavecode-llm-public-auth-key-mismatch packet
+  - AngaraConfig/fix/llm-public-auth-fail-closed:
+      c9c13c7 fix(llm-proxy): fail-closed on missing master_key+DB
+      5dcedc2 fix(llm-proxy): switch patch loader from .pth to sitecustomize.py
+      440525c fix(llm-proxy): revert .override makeWrapperArgs — broke backoff
 
-  This witness is created on the wavecode side because the bug
-  surfaced there (UI got 400). The actual security fix is in
-  AngaraConfig; the deploy-time check is in wavecode.
+  Live verification (2026-10-14, ~08:40):
+  - Curl OPTIONS https://llm.kosov.online/v1/chat/completions
+        -H 'Origin: https://wavecode.kosov.online'
+    → HTTP 200 with proper CORS headers (Allow-Origin matching request
+      Origin, Allow-Credentials: true, Allow-Headers: authorization).
+  - Curl POST with the bundle key
+    → HTTP 200, real LLM response (MiniMax-M2.7-highspeed, M3
+      family).
+  - Playwright e2e: navigate to /#/app, type "сделай быстрее в
+    два раза", click Применить
+    → "Применено и играет ✓", code updated to .fast(2).
+  - bin/check-llm-key.sh: ✓ matches.
 
-  Live verification (post-deploy):
-  - bin/check-llm-key.sh exits 0 with the wavecode .env.local
-    value matching LITELLM_MASTER_KEY on angara-1.
-  - Curl from outside: POST /v1/chat/completions with the bundle
-    key → 200, content from upstream.
-  - Curl with WRONG key → 400 no_db_connection (unchanged
-    behavior — the patch only changes what happens when both
-    master_key and prisma_client are None).
-  - SIGHUP reload → public instance returns 503 during the
-    config-reload window, instead of 200 with PROXY_ADMIN.
+  Known follow-up (NOT in this commit, tracked separately):
+  - Fail-closed patch (.pth/sitecustomize) is implemented but not
+    Nix-wired. The .override { makeWrapperArgs = ... } approach
+    switches the wrapper from a bash script to a C binary, which
+    stops propagating NIX_PYTHONPATH to .litellm-wrapped. So:
+      * Old bash wrapper: NIX_PYTHONPATH reached the wrapped script
+        and was used to populate site.addsitedir → backoff imported OK
+      * New C wrapper: NIX_PYTHONPATH set in env, but the wrapped
+        script only addCitedir's a hardcoded list → backoff missing
+    Workarounds for next attempt:
+      (a) Inject the patch module via an overlay that adds a .pth
+          to the ENV'S site-packages (i.e. the env's sitecustomize
+          must load the patch). This requires building a custom
+          python3 derivation that has the patch in its site-packages.
+      (b) Use Litellm's `--api-key` arg + a different LiteLLM
+          startup command (NOT the .litellm-wrapped script) so
+          NIX_PYTHONPATH works as expected.
+      (c) Skip fail-closed and document the 7-min SIGHUP race as
+          accepted risk. The `master_key` IS set in our config, so
+          the only failure mode is during config reload, and we
+          accept that brief window of unrestricted access.
+    Recommendation: (a). Add the patch to the main env's
+    site-packages via a Python overlay, not a separate
+    runCommand that the wrapper ignores.
