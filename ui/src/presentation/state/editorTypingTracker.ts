@@ -1,12 +1,12 @@
 import { createEffect, createRoot, onCleanup, untrack } from 'solid-js';
-import { appStore } from './appStore';
+import { getActiveScore } from './appStore';
 
 /**
  * Tracks score changes from manual typing and groups them into a single
  * undo checkpoint via commitHistoryCheckpoint.
  *
  * Behavior:
- *   - On every appStore.score change, restart a 600ms debounce timer.
+ *   - On every getActiveScore() change, restart a 600ms debounce timer.
  *   - When the timer fires (typing paused for 600ms), dispatch
  *     `commitHistoryCheckpoint` so the reducer collapses the most
  *     recent intermediate history entry.
@@ -25,10 +25,10 @@ export const TYPING_DEBOUNCE_MS = 600;
 export const installTypingTracker = (dispatch: (event: { readonly type: 'commitHistoryCheckpoint' }) => void): (() => void) => {
   const dispose = createRoot((disposeFn) => {
     let timer: ReturnType<typeof setTimeout> | undefined;
-    let lastScore = untrack(() => appStore.score);
+    let lastScore = untrack(() => getActiveScore());
 
     createEffect(() => {
-      const score = appStore.score;
+      const score = getActiveScore();
       if (score === lastScore) return;
       lastScore = score;
 

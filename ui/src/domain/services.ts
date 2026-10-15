@@ -1,5 +1,5 @@
 import { Context, type Effect } from 'effect';
-import type { LayerMix, Message } from './types';
+import type { LayerMix, Message, Track } from './types';
 import type { NoteEvent } from './midi/encoder';
 import type { LiveRecorderHandle } from '~/infrastructure/audio/AudioRecorder';
 import type {
@@ -144,12 +144,12 @@ export class AudioEngine extends Context.Tag('AudioEngine')<
 export class Repo extends Context.Tag('Repo')<
   Repo,
   {
-    readonly loadScore: () => Effect.Effect<string, never, never>;
-    readonly saveScore: (score: string) => Effect.Effect<void, never, never>;
-    readonly loadMessages: () => Effect.Effect<ReadonlyArray<Message>, never, never>;
-    readonly saveMessages: (
-      messages: ReadonlyArray<Message>,
-    ) => Effect.Effect<void, never, never>;
+    /** Load all persisted Tracks. Returns `[]` if no state saved. */
+    readonly loadTracks: () => Effect.Effect<ReadonlyArray<Track>, never, never>;
+    readonly saveTracks: (tracks: ReadonlyArray<Track>) => Effect.Effect<void, never, never>;
+    /** Load the persisted active Track id. Returns `null` if none. */
+    readonly loadActiveTrackId: () => Effect.Effect<string | null, never, never>;
+    readonly saveActiveTrackId: (id: string) => Effect.Effect<void, never, never>;
     /**
      * Load the persisted StepGrid state — mode, draft, and
      * lastCommitted grid. Reload restores user intent so a
@@ -161,6 +161,9 @@ export class Repo extends Context.Tag('Repo')<
     ) => Effect.Effect<void, never, never>;
   }
 >() {}
+
+// Re-export Message so existing import sites keep working.
+export type { Message };
 
 /**
  * Persisted StepGrid state. `null` from `loadGridState` means

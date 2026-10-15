@@ -1,0 +1,274 @@
+---
+schema: math-coding/3.3
+id: wavecode-dialog-sessions
+revision: 2
+state: active
+body_sha: "sha256:34740a9ebf7c0941f02fcf7900556902087895bcbeac19b49fcf26461fe522a7"
+yaml_sha: "sha256:34740a9ebf7c0941f02fcf7900556902087895bcbeac19b49fcf26461fe522a7"
+
+intent: |
+  Заменить single-composition модель (один `AppState.score` +
+  один `AppState.messages`) моделью **Track** — самостоятельной
+  единицей работы, в духе git worktree + AI-agent session:
+  каждый трек несёт собственный `score`, собственную историю
+  диалога с LLM и собственный жизненный цикл
+  (`draft → active → archived`). Активный трек определяет,
+  какой score виден в редакторе, какой eval'ится в audio
+  и какая история диалога отправляется в LLM. Переключение
+  трека — атомарный swap: audio.stop, загрузка нового
+  score в редактор, audio.eval нового score. Score
+  глобальным больше не существует; редактор/аудио/LLM
+  всегда работают с активным треком.
+
+axiom_link:
+  - A1
+  - A4
+
+commitment: |
+  1. `ui/src/domain/types.ts` определяет `Track`
+     (`id`, `title`, `state: 'draft'|'active'|'archived'`,
+     `score: Score`, `messages: ReadonlyArray<Message>`,
+     `createdAt`, `updatedAt`, `lastActiveAt`). `AppState`
+     теряет поля `score` и `messages`; получает
+     `tracks: ReadonlyArray<Track>` и `activeTrackId: string`.
+     Поле `score` в `Track` — единственный источник истины
+     для редактора/аудио/LLM.
+  2. Reducer (`ui/src/application/reducer.ts`) обрабатывает
+     события: `createTrack`, `switchTrack`, `archiveTrack`,
+     `restoreTrack`, `deleteTrack`, `renameTrack`,
+     `clearTrackDialog`. Старые `userMessage`,
+     `assistantMessage`, `replaceScore`, `editScore`,
+     `undoScore`, `redoScore`, `commitHistoryCheckpoint`,
+     `clearMessages` переписаны: они маршрутизируют
+     мутации в активный трек (`state.tracks.find(t =>
+     t.id === activeTrackId)`). `score`/`messages` на
+     верхнем уровне `AppState` больше нет.
+  3. `applyEdit` (`ui/src/application/useCases/llmEdit.ts`)
+     принимает `activeTrack: Track | undefined` и читает
+     историю только из него; в LLM уходят последние
+     N ≤ 20 сообщений именно этого трека. System prompt
+     остаётся глобальным (per-track prompt — вне scope).
+  4. `switchTrack` reducer event дополнительно через
+     side-effect (в `presentation/state/audioActions.ts`)
+     триггерит `audio.stop()` + `audio.eval(newScore)`.
+     Audio всегда синхронизирован с активным треком; нет
+     ситуации «score в редакторе X, играет Y».
+  5. `IDBRepo` (`ui/src/infrastructure/repo/IDBRepo.ts`)
+     переходит на ключи `wavecode-tracks-v1` и
+     `wavecode-active-track-id-v1`. Если в IDB есть
+     legacy `wavecode-score-v6` и/или
+     `wavecode-messages-v6`, они мигрируют в один
+     `Track { id: 'default', title: 'Главный', state:
+     'active', score: <legacy>, messages: <legacy> }` с
+     `activeTrackId = 'default'`. Старые ключи удаляются
+     через `del` после успешной записи нового состояния.
+  6. `AIEditPanel` (`ui/src/presentation/panels/AIEditPanel.tsx`)
+     рендерит Track selector (dropdown или горизонтальные
+     chips — выбирается в UI-эпике) с кнопками
+     «+ новый», «✎ переименовать», «🗑 очистить диалог»,
+     «⨯ удалить трек», «⏏ в архив», «↩ из архива».
+     Удаление последнего активного (`active` или `draft`)
+     трека запрещено с подсказкой «нельзя удалить
+     единственный трек — сначала создайте новый или
+     очистите диалог». Архивный трек нельзя удалить
+     (его можно только восстановить).
+  7. Старая кнопка «новая композиция» (`App.tsx onNew`)
+     больше не очищает score — она создаёт **новый
+     draft-трек** и переключается на него. Score
+     прежнего активного трека сохраняется в этом
+     треке (ничего не теряется).
+
+scope:
+  paths:
+    - "decisions/wavecode-dialog-sessions.yaml"
+    - "ui/src/domain/types.ts"
+    - "ui/src/domain/services.ts"
+    - "ui/src/application/reducer.ts"
+    - "ui/src/application/reducer.test.ts"
+    - "ui/src/application/useCases/llmEdit.ts"
+    - "ui/src/application/useCases/llmEdit.test.ts"
+    - "ui/src/infrastructure/repo/IDBRepo.ts"
+    - "ui/src/presentation/state/appStore.ts"
+    - "ui/src/presentation/state/useAutoSave.ts"
+    - "ui/src/presentation/state/useAppBootstrap.ts"
+    - "ui/src/presentation/state/audioActions.ts"
+    - "ui/src/presentation/panels/AIEditPanel.tsx"
+    - "ui/src/presentation/panels/HelloPanel.tsx"
+    - "ui/src/App.tsx"
+    - "ui/src/styles/components.css"
+
+outcomes:
+  - id: track-entity-and-state
+    statement: |
+      `ui/src/domain/types.ts` экспортирует `Track` со
+      всеми восемью полями и `TrackState =
+      'draft'|'active'|'archived'`; `AppState` содержит
+      `tracks: ReadonlyArray<Track>` и `activeTrackId:
+      string`; поля `score` и `messages` верхнего уровня
+      удалены.
+  - id: per-track-score-and-history
+    statement: |
+      `AppState.tracks[i].score` — единственное место
+      хранения score; `AppState.tracks[i].messages` —
+      единственное место истории диалога. `applyEdit`
+      берёт оба значения из `tracks.find(t => t.id ===
+      activeTrackId)`, не из глобального state.
+  - id: switch-track-auto-eval
+    statement: |
+      Событие `switchTrack` (через
+      `audioActions.applySwitchTrack` или эквивалентный
+      side-effect) выполняет `audio.stop()` +
+      `audio.eval(track.score)` атомарно; после успешного
+      `eval` в редакторе CodeMirror виден новый score.
+  - id: idb-migration
+    statement: |
+      `IDBRepo.loadTracks` поднимает legacy
+      `wavecode-score-v6` + `wavecode-messages-v6` в один
+      `Track{id:'default'}`; после записи нового
+      состояния старые ключи удаляются.
+  - id: ui-track-selector
+    statement: |
+      `AIEditPanel` рендерит Track selector с шестью
+      кнопками; список отрендеренных сообщений — это
+      `tracks[activeIdx].messages`, не глобальный массив.
+      В `HelloPanel` счётчик сообщений
+      `appStore.messages.length` заменён на
+      `tracks[activeIdx].messages.length`.
+  - id: last-track-cannot-delete
+    statement: |
+      Когда `tracks.filter(t => t.state !== 'archived')
+      .length === 1`, кнопка «удалить трек» отключена
+      с tooltip; reducer событие `deleteTrack` отвергает
+      удаление с сохранением state.
+
+obligations:
+  - id: kernel-validates
+    claim: |
+      Файл решения валиден под math-coding/3.3 schema;
+      `mathc validate decisions/wavecode-dialog-sessions.yaml`
+      возвращает exit 0.
+    acceptance:
+      all:
+        - verifier: mathc validate
+          result: pass
+  - id: unit-tests-green
+    claim: |
+      `reducer.test.ts` покрывает все новые события,
+      маршрутизацию в активный трек и отказ удаления
+      последнего; `llmEdit.test.ts` подтверждает, что
+      `applyEdit` забирает `score` и `history` только
+      из активного `Track`; оба vitest-сета зелёные.
+    acceptance:
+      all:
+        - verifier: ui-vitest-application
+          result: pass
+        - verifier: ui-vitest-infrastructure
+          result: pass
+  - id: ui-build-clean
+    claim: |
+      `pnpm -C ui run build` (vite + tsc strict) завершается
+      без ошибок типов; `pnpm -C ui run lint` без ошибок
+      для задействованных файлов.
+    acceptance:
+      all:
+        - verifier: ui-tsc-strict
+          result: pass
+        - verifier: ui-eslint
+          result: pass
+
+risk:
+  declared_triggers:
+    - idb-migration-corrupts-existing-user-score-or-history
+    - active-track-id-staleness-after-delete
+    - audio-eval-collision-during-rapid-track-switch
+    - llm-context-leaks-between-tracks
+    - undo-redo-stack-loses-context-when-switching-tracks
+    - track-state-machine-allows-illegal-transition
+  owner: human:operator
+
+counterexample: |
+  Сильнейшее возражение: «один проект — одна композиция;
+  worktree-метафора — overkill для браузерного
+  live-coding'а. Сложность state-машины и миграции IDB
+  не оправдана». Контраргумент: оператор явно
+  сформулировал use-case: «пользователи ведут несколько
+  направлений одновременно, и сейчас контексты
+  смешиваются». Это та же проблема, что и в
+  разработке ПО: без изоляции unit-ов работы
+  невозможно ни A/B, ни безопасный эксперимент. v1
+  модели (общий score, диалог per-track) решает
+  половину проблемы и оставляет score общим — а это
+  самый ценный контекст, и именно его оператор
+  хочет изолировать. Реальная стоимость Track-модели —
+  ~700 LoC плюс миграция IDB; обратно к single-композиции
+  откатиться стоит столько же, если потребуется.
+
+  Второе возражение: «на мобиле selector будет
+  неудобен». Контраргумент: selector делается
+  horizontal-scroll chips (как в tab-bar) — это
+  уже знакомый pattern в wavecode. Если UX
+  провалится, reversal `rework` под UI-полировку.
+
+antithesis: |
+  (1) «Оставить single-composition, дать
+  пользователю manual export/import score в виде
+  файла, плюс текстовое поле для заметки "в каком
+  направлении работаем"». Возражение: ручной
+  export/import не решает задачу «переключиться
+  обратно к состоянию 5 минут назад» — для этого
+  нужен undo или явный save. А undo без persistence
+  теряет работу при reload. Текстовое поле «в каком
+  направлении» — это подсказка LLM, а не изоляция
+  контекста; LLM всё равно видит чужой score и
+  путается.
+
+  (2) «Track = просто "name" + "score" + "messages",
+  без lifecycle». Возражение: без `state` нет
+  способа отличить «работаю над этим сейчас» от
+  «закончил вчера, оставил как reference». LLM-
+  промпт одинаков для активного и архивного
+  трека, но UI должен по-разному их показывать.
+  Draft-state дополнительно позволяет явно отметить
+  «идея, ещё не отправлено ни одного запроса» —
+  эта разница теряется без маркера.
+
+  (3) «Сделать Track только в памяти, без
+  persistence в IDB». Возражение: тогда reload
+  стирает всю работу — это и есть исходная
+  жалоба. Persistence обязательна.
+
+  (4) «Сделать switch-track без audio.stop+eval —
+  пусть юзер сам нажмёт play». Возражение: тогда
+  «активный трек» = «тот, чей score в редакторе»,
+  но «звучит» = «другой». Это самый
+  запутанный UX, который был раньше (когда
+  редактировали код во время play и слышали
+  старый). Авто-stop+eval устраняет этот класс
+  багов. Reversal: `rework` если юзеры будут
+  жаловаться на автоплей.
+
+  (5) «Делать по одному таску в kanban, с прогресс-
+  стримом». Возражение: оператор явно попросил
+  «одним PR, без kanban». math-coding/3.3
+  (этот файл) — audit-trail без отдельной
+  системы. Kanban-streaming избыточен для одного
+  PR.
+
+  (6) «Запустить parallel multi-agent (по одному
+  LLM на трек)». Возражение: за рамками этого
+  решения. Один активный трек = один LLM-stream.
+  Multi-agent добавим, если оператор попросит, в
+  отдельном решении.
+
+time:
+  estimate:
+    scale: wall-clock-minutes
+    value: 240
+    reference_class: feat/wavecode-step-grid-modes (M, ~120–180 мин) + расширение scope до state-машины и audio-sync (~+60 мин)
+    percentile: p80
+
+relations:
+  addresses:
+    - wavecode-bootstrap-math-coding-3.3@1
+  depends_on:
+    - wavecode-effect-ts-architecture@1

@@ -1,5 +1,5 @@
 import { Show, createSignal } from 'solid-js';
-import { appStore, dispatch } from '../state/appStore';
+import { dispatch, getActiveScore } from '../state/appStore';
 import {
   shareState,
   openShareModal,
@@ -60,7 +60,7 @@ export function ShareButton() {
   const onOpen = (): void => {
     setCopied(false);
     setError(null);
-    openShareModal(appStore.score);
+    openShareModal(getActiveScore());
   };
 
   const onClose = (): void => {

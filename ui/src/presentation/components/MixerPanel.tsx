@@ -1,5 +1,5 @@
 import { For, Show, createMemo } from 'solid-js';
-import { appStore, dispatch } from '../state/appStore';
+import { appStore, dispatch, getActiveScore } from '../state/appStore';
 import { parseStackTopLayers } from '~/domain/layers/parseStack';
 import { scheduleMixLive } from '../state/audioActions';
 
@@ -22,7 +22,7 @@ import { scheduleMixLive } from '../state/audioActions';
  * Пакет: `math/wavecode-mixer-live-update`.
  */
 export function MixerPanel() {
-  const layers = createMemo(() => parseStackTopLayers(appStore.score));
+  const layers = createMemo(() => parseStackTopLayers(getActiveScore()));
 
   // Reconcile mixer rows when the parsed stack size changes.
   // Use a reactive that fires on either signal but does NOT mutate score.

@@ -1,5 +1,5 @@
 import { createStore, produce } from 'solid-js/store';
-import { initialAppState, type AppState } from '~/domain/types';
+import { initialAppState, type AppState, type Message, type Track } from '~/domain/types';
 import { reduceAppEvent, type AppEvent } from '~/application/reducer';
 
 /**
@@ -16,3 +16,17 @@ export const dispatch = (event: AppEvent): void => {
     Object.assign(draft, next);
   }));
 };
+
+/**
+ * Convenience accessors for the active track. Callers should
+ * prefer these over `appStore.tracks.find(...)` so the
+ * active-track lookup pattern stays consistent.
+ */
+export const getActiveTrack = (): Track | undefined =>
+  appStore.tracks.find((t) => t.id === appStore.activeTrackId);
+
+export const getActiveScore = (): string =>
+  getActiveTrack()?.score ?? '';
+
+export const getActiveMessages = (): ReadonlyArray<Message> =>
+  getActiveTrack()?.messages ?? [];

@@ -95,7 +95,7 @@ export function TopBar(props: TopBarProps): JSX.Element {
           class="wc-icon-btn"
           data-tone="ghost"
           onClick={props.onRollback}
-          disabled={appStore.history.length === 0}
+          disabled={(appStore.undoStacks[appStore.activeTrackId]?.length ?? 0) === 0}
           aria-label="Отменить"
           title="Отменить (Ctrl+Z)"
         >
@@ -106,7 +106,7 @@ export function TopBar(props: TopBarProps): JSX.Element {
           class="wc-icon-btn"
           data-tone="ghost"
           onClick={props.onRedo}
-          disabled={appStore.future.length === 0}
+          disabled={true} // redo not supported in dialog-sessions v1
           aria-label="Повторить"
           title="Повторить (Ctrl+Y)"
         >

@@ -86,7 +86,8 @@ describe('selectedPreset — persist + hydrate', () => {
     const { hydrateSelectedPreset, getSelectedPresetId } = await import('./selectedPreset');
     const { dispatch: dispatchFresh, appStore: freshStore } = await import('./appStore');
     dispatchFresh({ type: 'replaceScore', text: 's("bd")' });
-    expect(freshStore.score).toBe('s("bd")');
+    const active = freshStore.tracks.find((t) => t.id === freshStore.activeTrackId);
+    expect(active?.score).toBe('s("bd")');
     hydrateSelectedPreset();
     // «правленый clean» — kept, not fallback to 'creep'.
     expect(getSelectedPresetId()).toBe('ambient-drone');
