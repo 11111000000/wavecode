@@ -1,6 +1,6 @@
 import { createSignal, Show, onCleanup, createMemo, For } from 'solid-js';
 import { Effect } from 'effect';
-import { dispatch, getActiveScore } from '../state/appStore';
+import { appStore, dispatch } from '../state/appStore';
 import { exportMidi } from '~/application/midi/exportMidi';
 import { importMidi } from '~/application/midi/importMidi';
 import { AppLayer } from '~/infrastructure/composition';
@@ -118,7 +118,7 @@ export function MidiIOButtons() {
     setWarnings([]);
     try {
       const result: MIDIExportResult = await Effect.runPromise(
-        exportMidi(getActiveScore(), {
+        exportMidi(appStore.score, {
           bpm: 120,
           cycles: cycles(),
         }).pipe(Effect.provide(AppLayer)),
@@ -137,7 +137,7 @@ export function MidiIOButtons() {
   };
 
   const handleExportText = (): void => {
-    triggerTextDownload(getActiveScore(), defaultTextName());
+    triggerTextDownload(appStore.score, defaultTextName());
   };
 
   const acceptAll = createMemo(() => `${MIDI_ACCEPT},${TEXT_ACCEPT}`);

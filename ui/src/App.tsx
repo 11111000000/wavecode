@@ -23,7 +23,6 @@ import {
 } from './presentation/state/selectedPreset';
 import { AppLayer } from '~/infrastructure/composition';
 import { Repo } from '~/domain/services';
-import { makeTrack } from '~/domain/types';
 import { useAppBootstrap } from './presentation/state/useAppBootstrap';
 import { useAutoSave } from './presentation/state/useAutoSave';
 import { TabBar } from './presentation/components/TabBar';
@@ -39,7 +38,7 @@ import { Landing } from './presentation/components/landing/Landing';
 const NEW_COMPOSITION_TEMPLATE = '// Начни новую композицию здесь\n';
 
 const confirmReset = (): boolean => window.confirm(
-  'Сбросить ВСЕ настройки и очистить локальное хранилище?\n(localStorage + IDB tracks/activeTrackId)',
+  'Сбросить ВСЕ настройки и очистить локальное хранилище?\n(localStorage + IDB score/messages)',
 );
 const onResetAll = (): void => {
   if (!confirmReset()) return;
@@ -48,16 +47,14 @@ const onResetAll = (): void => {
   void Effect.runPromise(
     Effect.gen(function* () {
       const repo = yield* Repo;
-      const now = Date.now();
-      const fresh = makeTrack({ id: 'default', title: 'Главный', state: 'active', now });
-      yield* repo.saveTracks([fresh]);
-      yield* repo.saveActiveTrackId(fresh.id);
+      yield* repo.saveScore('');
+      yield* repo.saveMessages([]);
     }).pipe(Effect.provide(AppLayer)),
   ).then(() => window.location.reload());
 };
 
 const confirmNew = (): boolean => window.confirm(
-  'Создать новую композицию?\nБудет добавлен новый черновик-трек; текущий трек останется в списке.',
+  'Создать новую композицию?\nТекущая партитура и история диалога сбросятся.',
 );
 
 /**
@@ -211,16 +208,8 @@ function AppShell(): JSX.Element {
         onNew={() => {
           if (!confirmNew()) return;
           void stopAudio();
-          // Create a fresh draft track and switch to it. The
-          // current track is preserved (not deleted or cleared).
-          const newId = `t-${Date.now().toString(36)}`;
-          dispatch({
-            type: 'createTrack',
-            id: newId,
-            title: 'Новая композиция',
-            state: 'draft',
-            score: NEW_COMPOSITION_TEMPLATE,
-          });
+          dispatch({ type: 'replaceScore', text: NEW_COMPOSITION_TEMPLATE });
+          dispatch({ type: 'clearMessages' });
           setSelectedPresetPersist('creep');
         }}
         onDeletePreset={() => {
@@ -256,9 +245,7 @@ function AppShell(): JSX.Element {
         onSavePreset={() => {
           const name = newPresetName().trim();
           if (!name) return;
-          const active = appStore.tracks.find((t) => t.id === appStore.activeTrackId);
-          const score = active?.score ?? '';
-          const preset = saveCustomPreset(name, score);
+          const preset = saveCustomPreset(name, appStore.score);
           setSelectedPresetPersist(preset.id);
           setShowSavePreset(false);
           setNewPresetName('');

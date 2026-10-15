@@ -99,7 +99,7 @@ afterEach(() => {
 
 // Import after mocks are registered.
 import { StepGrid } from './StepGrid';
-import { dispatch, getActiveScore } from '../state/appStore';
+import { appStore, dispatch } from '../state/appStore';
 
 const SAMPLE_BY_ROW = ['bd', 'sd', 'hh', 'cp'] as const;
 
@@ -147,14 +147,14 @@ describe('StepGrid — view mode (default)', () => {
   });
 
   it('tap a cell: previewSample called, no state change, score unchanged', () => {
-    const originalScore = getActiveScore();
+    const originalScore = appStore.score;
     render(() => <StepGrid />);
     tapCell(0, 0);
     expect(previewSampleSpy).toHaveBeenCalledTimes(1);
     expect(previewSampleSpy).toHaveBeenCalledWith('bd');
     expect(evalScoreSpy).not.toHaveBeenCalled();
     expect(scheduleGridEditSpy).not.toHaveBeenCalled();
-    expect(getActiveScore()).toBe(originalScore);
+    expect(appStore.score).toBe(originalScore);
     // Draft grid stays empty.
     expect(getDraftGrid().every((r) => r.every((c) => !c))).toBe(true);
   });
@@ -185,7 +185,7 @@ describe('StepGrid — sketch mode', () => {
   });
 
   it('sketch tap: previewSample + draft toggle, score unchanged', () => {
-    const originalScore = getActiveScore();
+    const originalScore = appStore.score;
     clearDraft();
     setModeDirect('sketch');
     setGridDirect(emptyGrid());
@@ -193,7 +193,7 @@ describe('StepGrid — sketch mode', () => {
     tapCell(0, 0);
     expect(previewSampleSpy).toHaveBeenCalledWith('bd');
     expect(getDraftGrid()[0]?.[0]).toBe(true);
-    expect(getActiveScore()).toBe(originalScore);
+    expect(appStore.score).toBe(originalScore);
     expect(evalScoreSpy).not.toHaveBeenCalled();
     expect(scheduleGridEditSpy).not.toHaveBeenCalled();
   });
@@ -206,7 +206,7 @@ describe('StepGrid — sketch mode', () => {
     const expected = gridToScore(getDraftGrid());
     render(() => <StepGrid />);
     clickCommit();
-    expect(getActiveScore()).toBe(expected);
+    expect(appStore.score).toBe(expected);
     expect(evalScoreSpy).toHaveBeenCalledTimes(1);
   });
 
@@ -233,9 +233,9 @@ describe('StepGrid — sketch mode', () => {
     setGridDirect(setCell(emptyGrid(), 0, 0, true));
     render(() => <StepGrid />);
     clickCommit();
-    expect(getActiveScore()).toMatch(/^stack\(/);
-    expect(getActiveScore()).toContain('note("c4")');
-    expect(getActiveScore()).toMatch(/s\("bd ~ ~ ~ ~ ~ ~ ~"\),/);
+    expect(appStore.score).toMatch(/^stack\(/);
+    expect(appStore.score).toContain('note("c4")');
+    expect(appStore.score).toMatch(/s\("bd ~ ~ ~ ~ ~ ~ ~"\),/);
     expect(evalScoreSpy).toHaveBeenCalledTimes(1);
   });
 
@@ -247,9 +247,9 @@ describe('StepGrid — sketch mode', () => {
     setGridDirect(setCell(emptyGrid(), 1, 0, true));
     render(() => <StepGrid />);
     clickCommit();
-    expect(getActiveScore()).toContain('note("c4")');
-    expect(getActiveScore()).toContain('s("hh hh")');
-    expect(getActiveScore()).toMatch(/s\("sd ~ ~ ~ ~ ~ ~ ~"\)/);
+    expect(appStore.score).toContain('note("c4")');
+    expect(appStore.score).toContain('s("hh hh")');
+    expect(appStore.score).toMatch(/s\("sd ~ ~ ~ ~ ~ ~ ~"\)/);
     expect(evalScoreSpy).toHaveBeenCalledTimes(1);
   });
 });
@@ -286,7 +286,7 @@ describe('StepGrid — edit mode', () => {
     expect(scheduleGridEditSpy).toHaveBeenCalledTimes(1);
     expect(evalScoreSpy).not.toHaveBeenCalled();
     // Score was mutated in place.
-    expect(getActiveScore()).toContain('s("bd ~ ~ ~ ~ ~ ~ ~")');
+    expect(appStore.score).toContain('s("bd ~ ~ ~ ~ ~ ~ ~")');
   });
 
   it('edit tap: no double-wrap (single stack(...) in result)', () => {
@@ -296,7 +296,7 @@ describe('StepGrid — edit mode', () => {
     dispatch({ type: 'replaceScore', text: score });
     render(() => <StepGrid />);
     tapCell(0, 0);
-    expect((getActiveScore().match(/stack\(/g) ?? []).length).toBe(1);
+    expect((appStore.score.match(/stack\(/g) ?? []).length).toBe(1);
   });
 
   it('edit tap preserves non-sample layers in mixed stack', () => {
@@ -306,8 +306,8 @@ describe('StepGrid — edit mode', () => {
     dispatch({ type: 'replaceScore', text: score });
     render(() => <StepGrid />);
     tapCell(1, 1);
-    expect(getActiveScore()).toContain('note("c4")');
-    expect(getActiveScore()).toContain('s("~ sd ~ ~ ~ ~ ~ ~")');
+    expect(appStore.score).toContain('note("c4")');
+    expect(appStore.score).toContain('s("~ sd ~ ~ ~ ~ ~ ~")');
   });
 });
 

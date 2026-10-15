@@ -1,5 +1,5 @@
 import { Effect } from 'effect';
-import { appStore, dispatch, getActiveScore } from '../state/appStore';
+import { dispatch, appStore } from '../state/appStore';
 import { AppLayer } from '~/infrastructure/composition';
 import { AudioEngine } from '~/domain/services';
 import type { LayerMix } from '~/domain/types';
@@ -106,7 +106,7 @@ export const scheduleMixLive = (
 };
 
 export const evalScore = async (overrideScore?: string): Promise<void> => {
-  const score = overrideScore ?? getActiveScore();
+  const score = overrideScore ?? appStore.score;
   if (!score.trim()) {
     dispatch({ type: 'audioStatusChange', status: 'error', error: 'score is empty' });
     return;
@@ -138,7 +138,7 @@ export const evalScore = async (overrideScore?: string): Promise<void> => {
  * показывать баннер ошибки здесь неуместно. Логируем и тихо выходим.
  */
 export const reEvalScoreWithTransport = async (): Promise<void> => {
-  const score = getActiveScore();
+  const score = appStore.score;
   if (!score.trim()) return;
   try {
     await runWrapAndEval(score, appStore.transportState, appStore.layerMix);

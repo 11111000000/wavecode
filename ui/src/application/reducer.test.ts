@@ -1,323 +1,170 @@
 import { describe, it, expect } from 'vitest';
-import { reduceAppEvent } from './reducer';
-import {
-  initialAppState,
-  makeLayerMix,
-  makeTrack,
-  TRACK_MESSAGES_LIMIT,
-  type AppState,
-  type LayerMix,
-  type Track,
-} from '~/domain/types';
+import { reduceAppEvent, type AppEvent } from './reducer';
+import { initialAppState, makeLayerMix, type AppState, HISTORY_LIMIT, type LayerMix } from '~/domain/types';
 
-const baseState = (): AppState => structuredClone(initialAppState);
-
-const withTrack = (
-  state: AppState,
-  track: Track,
-  active = true,
-): AppState => {
-  const tracks = [...state.tracks, track];
-  const undoStacks = { ...state.undoStacks, [track.id]: [] };
-  return {
-    ...state,
-    tracks,
-    activeTrackId: active ? track.id : state.activeTrackId,
-    undoStacks,
-  };
-};
-
-const activeTrack = (state: AppState): Track | undefined =>
-  state.tracks.find((t) => t.id === state.activeTrackId);
+const baseState = (): AppState => ({ ...initialAppState });
 
 const withLayerMix = (mix: ReadonlyArray<LayerMix>): AppState => ({
   ...baseState(),
   layerMix: mix,
 });
 
-describe('reduceAppEvent — Track lifecycle', () => {
-  it('createTrack adds a new track and makes it active', () => {
-    const start = baseState();
-    const next = reduceAppEvent(start, {
-      type: 'createTrack',
-      id: 't-1',
-      title: 'Эмбиент',
-      state: 'draft',
-    });
-    expect(next.tracks).toHaveLength(2);
-    expect(next.activeTrackId).toBe('t-1');
-    const t = next.tracks.find((x) => x.id === 't-1')!;
-    expect(t.title).toBe('Эмбиент');
-    expect(t.state).toBe('draft');
+describe('reduceAppEvent', () => {
+  it('userMessage appends a user message', () => {
+    const event: AppEvent = { type: 'userMessage', text: 'make it faster' };
+    const next = reduceAppEvent(baseState(), event);
+    expect(next.messages).toHaveLength(1);
+    expect(next.messages[0]).toMatchObject({ role: 'user', content: 'make it faster' });
   });
 
-  it('createTrack with duplicate id is a no-op', () => {
-    const start = baseState();
-    const next = reduceAppEvent(start, { type: 'createTrack', id: 'default', title: 'X' });
-    expect(next).toBe(start);
+  it('assistantMessage appends an assistant message', () => {
+    const event: AppEvent = { type: 'assistantMessage', text: 'stack(s("bd*4"))' };
+    const next = reduceAppEvent(baseState(), event);
+    expect(next.messages[0]).toMatchObject({ role: 'assistant' });
   });
 
-  it('createTrack seeds the new id with the supplied score', () => {
-    const next = reduceAppEvent(baseState(), {
-      type: 'createTrack',
-      id: 't-1',
-      title: 'X',
-      score: 'note("c4")',
-    });
-    const t = next.tracks.find((x) => x.id === 't-1')!;
-    expect(t.score).toBe('note("c4")');
-  });
-
-  it('switchTrack updates activeTrackId and lastActiveAt', () => {
-    const t0 = activeTrack(baseState())!;
-    const start = withTrack(baseState(), makeTrack({ id: 'a', title: 'A' }));
-    const before = Date.now();
-    const next = reduceAppEvent(start, { type: 'switchTrack', id: 'a' });
-    expect(next.activeTrackId).toBe('a');
-    const a = next.tracks.find((x) => x.id === 'a')!;
-    expect(a.lastActiveAt).toBeGreaterThanOrEqual(before);
-    void t0;
-  });
-
-  it('switchTrack to the same id is a no-op', () => {
-    const start = baseState();
-    const next = reduceAppEvent(start, { type: 'switchTrack', id: start.activeTrackId });
-    expect(next).toBe(start);
-  });
-
-  it('switchTrack to a non-existent id is a no-op', () => {
-    const next = reduceAppEvent(baseState(), { type: 'switchTrack', id: 'nope' });
-    expect(next.activeTrackId).toBe(baseState().activeTrackId);
-  });
-
-  it('archiveTrack sets state to archived on the active track', () => {
-    const next = reduceAppEvent(baseState(), { type: 'archiveTrack' });
-    const t = activeTrack(next)!;
-    expect(t.state).toBe('archived');
-  });
-
-  it('archiveTrack on an already-archived track is a no-op', () => {
-    const start = baseState();
-    const archived = reduceAppEvent(start, { type: 'archiveTrack' });
-    const again = reduceAppEvent(archived, { type: 'archiveTrack' });
-    expect(again).toBe(archived);
-  });
-
-  it('restoreTrack returns an archived track to active', () => {
-    const archived = reduceAppEvent(baseState(), { type: 'archiveTrack' });
-    const restored = reduceAppEvent(archived, { type: 'restoreTrack' });
-    expect(activeTrack(restored)!.state).toBe('active');
-  });
-
-  it('restoreTrack on an already-active track is a no-op', () => {
-    const start = baseState();
-    const next = reduceAppEvent(start, { type: 'restoreTrack' });
-    expect(next).toBe(start);
-  });
-
-  it('renameTrack updates the title (trimmed)', () => {
-    const next = reduceAppEvent(baseState(), {
-      type: 'renameTrack',
-      id: 'default',
-      title: '  Техно-черновик  ',
-    });
-    expect(activeTrack(next)!.title).toBe('Техно-черновик');
-  });
-
-  it('renameTrack with empty title is a no-op', () => {
-    const start = baseState();
-    const next = reduceAppEvent(start, {
-      type: 'renameTrack',
-      id: 'default',
-      title: '   ',
-    });
-    expect(next).toBe(start);
-  });
-
-  it('renameTrack with the same title is a no-op', () => {
-    const start = baseState();
-    const next = reduceAppEvent(start, {
-      type: 'renameTrack',
-      id: 'default',
-      title: activeTrack(start)!.title,
-    });
-    expect(next).toBe(start);
-  });
-
-  it('deleteTrack removes a non-active track', () => {
-    const start = withTrack(baseState(), makeTrack({ id: 'extra', title: 'X' }));
-    const next = reduceAppEvent(start, { type: 'deleteTrack', id: 'extra' });
-    expect(next.tracks.find((t) => t.id === 'extra')).toBeUndefined();
-    expect(next.activeTrackId).toBe('default');
-  });
-
-  it('deleteTrack refuses to remove the only non-archived track', () => {
-    const start = baseState();
-    const next = reduceAppEvent(start, { type: 'deleteTrack', id: 'default' });
-    expect(next).toBe(start);
-    expect(next.tracks).toHaveLength(1);
-  });
-
-  it('deleteTrack allows removing an archived track even if it is the only one', () => {
-    const archived = reduceAppEvent(baseState(), { type: 'archiveTrack' });
-    const next = reduceAppEvent(archived, { type: 'deleteTrack', id: 'default' });
-    expect(next.tracks).toHaveLength(0);
-  });
-
-  it('deleteTrack on the active track switches to a fallback', () => {
-    let state: AppState = baseState();
-    state = withTrack(state, makeTrack({ id: 'extra', title: 'X' }));
-    // Active is 'default'; add 'extra' and switch to it.
-    state = reduceAppEvent(state, { type: 'switchTrack', id: 'extra' });
-    expect(state.activeTrackId).toBe('extra');
-    const next = reduceAppEvent(state, { type: 'deleteTrack', id: 'extra' });
-    expect(next.tracks).toHaveLength(1);
-    expect(next.activeTrackId).toBe('default');
-  });
-
-  it('clearTrackDialog empties messages of the active track only', () => {
-    let state: AppState = baseState();
-    state = reduceAppEvent(state, { type: 'userMessage', text: 'hi' });
-    state = withTrack(state, makeTrack({ id: 'other', title: 'O' }));
-    state = reduceAppEvent(state, { type: 'switchTrack', id: 'other' });
-    state = reduceAppEvent(state, { type: 'userMessage', text: 'other-msg' });
-    // Switch back to default and clear its dialog.
-    state = reduceAppEvent(state, { type: 'switchTrack', id: 'default' });
-    const cleared = reduceAppEvent(state, { type: 'clearTrackDialog' });
-    expect(activeTrack(cleared)!.messages).toHaveLength(0);
-    const other = cleared.tracks.find((t) => t.id === 'other')!;
-    expect(other.messages).toHaveLength(1);
-  });
-});
-
-describe('reduceAppEvent — per-track mutations', () => {
-  it('userMessage appends to the active track', () => {
-    const next = reduceAppEvent(baseState(), { type: 'userMessage', text: 'make it faster' });
-    const t = activeTrack(next)!;
-    expect(t.messages).toHaveLength(1);
-    expect(t.messages[0]).toMatchObject({ role: 'user', content: 'make it faster' });
-  });
-
-  it('userMessage on a draft track promotes it to active', () => {
-    let state: AppState = baseState();
-    state = withTrack(state, makeTrack({ id: 'd', title: 'D', state: 'draft' }));
-    state = reduceAppEvent(state, { type: 'switchTrack', id: 'd' });
-    const next = reduceAppEvent(state, { type: 'userMessage', text: 'first!' });
-    const t = next.tracks.find((x) => x.id === 'd')!;
-    expect(t.state).toBe('active');
-    expect(t.messages).toHaveLength(1);
-  });
-
-  it('assistantMessage appends to the active track', () => {
-    const next = reduceAppEvent(baseState(), {
-      type: 'assistantMessage',
-      text: 'stack(s("bd*4"))',
-    });
-    const t = activeTrack(next)!;
-    expect(t.messages[0]).toMatchObject({ role: 'assistant' });
-  });
-
-  it('userMessage caps messages at TRACK_MESSAGES_LIMIT', () => {
-    let state: AppState = baseState();
-    for (let i = 0; i < TRACK_MESSAGES_LIMIT + 5; i++) {
-      state = reduceAppEvent(state, { type: 'userMessage', text: `m-${i}` });
-    }
-    const t = activeTrack(state)!;
-    expect(t.messages).toHaveLength(TRACK_MESSAGES_LIMIT);
-    expect(t.messages[0]!.content).toBe(`m-5`);
-    expect(t.messages[t.messages.length - 1]!.content).toBe(`m-${TRACK_MESSAGES_LIMIT + 4}`);
-  });
-
-  it('editScore applies the edit atomically on the active track', () => {
-    const start: AppState = {
-      ...baseState(),
-      tracks: [
-        makeTrack({ id: 'default', title: 'Главный', score: 'note("c4").s("sine")' }),
-      ],
-      activeTrackId: 'default',
-    };
+  it('editScore applies the edit atomically', () => {
+    const start: AppState = { ...baseState(), score: 'note("c4").s("sine")' };
     const next = reduceAppEvent(start, {
       type: 'editScore',
       oldText: 'c4',
       newText: 'e4',
     });
-    expect(activeTrack(next)!.score).toBe('note("e4").s("sine")');
+    expect(next.score).toBe('note("e4").s("sine")');
   });
 
-  it('replaceScore replaces the entire active track score', () => {
+  it('replaceScore replaces the entire score', () => {
     const next = reduceAppEvent(baseState(), { type: 'replaceScore', text: 'new score' });
-    expect(activeTrack(next)!.score).toBe('new score');
+    expect(next.score).toBe('new score');
   });
 
-  it('replaceScore snapshots the previous score into the track undo stack', () => {
-    const start: AppState = baseState();
-    const before = activeTrack(start)!.score;
-    const next = reduceAppEvent(start, { type: 'replaceScore', text: 'new score' });
-    const stack = next.undoStacks[next.activeTrackId] ?? [];
-    expect(stack[stack.length - 1]).toBe(before);
+  it('replaceScore snapshots previous score into history and clears future', () => {
+    const start: AppState = {
+      ...baseState(),
+      score: 'note("c4")',
+      history: ['prev-a'],
+      future: ['pending-redo'],
+    };
+    const next = reduceAppEvent(start, { type: 'replaceScore', text: 'note("e4")' });
+    expect(next.score).toBe('note("e4")');
+    expect(next.history).toEqual(['prev-a', 'note("c4")']);
+    expect(next.future).toEqual([]);
   });
 
   it('replaceScore with identical text is a no-op', () => {
-    const start: AppState = baseState();
-    const next = reduceAppEvent(start, {
-      type: 'replaceScore',
-      text: activeTrack(start)!.score,
-    });
+    const start: AppState = {
+      ...baseState(),
+      score: 'note("c4")',
+      history: ['prev-a'],
+    };
+    const next = reduceAppEvent(start, { type: 'replaceScore', text: 'note("c4")' });
     expect(next).toBe(start);
   });
 
-  it('undoScore pops the per-track undo stack and restores the previous score', () => {
+  it('history cap drops oldest entry when limit exceeded', () => {
     let state: AppState = baseState();
-    const original = activeTrack(state)!.score;
-    state = reduceAppEvent(state, { type: 'replaceScore', text: 'changed' });
-    expect(activeTrack(state)!.score).toBe('changed');
-    state = reduceAppEvent(state, { type: 'undoScore' });
-    expect(activeTrack(state)!.score).toBe(original);
+    const overflow = HISTORY_LIMIT + 5;
+    for (let i = 0; i < overflow; i++) {
+      state = reduceAppEvent(state, { type: 'replaceScore', text: `v${i}` });
+    }
+    expect(state.history.length).toBe(HISTORY_LIMIT);
+    expect(state.history[0]).toBe(`v${overflow - HISTORY_LIMIT - 1}`);
+    expect(state.score).toBe(`v${overflow - 1}`);
   });
 
-  it('undoScore is a no-op when the active track has no undo history', () => {
-    const start = baseState();
+  it('undoScore pops history and pushes current score into future', () => {
+    const start: AppState = {
+      ...baseState(),
+      score: 'note("e4")',
+      history: ['note("c4")'],
+    };
+    const next = reduceAppEvent(start, { type: 'undoScore' });
+    expect(next.score).toBe('note("c4")');
+    expect(next.history).toEqual([]);
+    expect(next.future).toEqual(['note("e4")']);
+  });
+
+  it('undoScore is a no-op when history is empty', () => {
+    const start: AppState = { ...baseState(), score: 'note("c4")' };
     const next = reduceAppEvent(start, { type: 'undoScore' });
     expect(next).toBe(start);
   });
 
-  it('commitHistoryCheckpoint merges with top by dropping the top entry', () => {
-    let state: AppState = baseState();
-    // Build a small undo stack on the active track.
-    for (let i = 0; i < 3; i++) {
-      state = reduceAppEvent(state, { type: 'replaceScore', text: `v-${i}` });
-    }
-    const stackBefore = (state.undoStacks[state.activeTrackId] ?? []).length;
-    expect(stackBefore).toBeGreaterThanOrEqual(2);
-    const next = reduceAppEvent(state, { type: 'commitHistoryCheckpoint' });
-    const stackAfter = next.undoStacks[state.activeTrackId] ?? [];
-    expect(stackAfter.length).toBe(stackBefore - 1);
-  });
-
-  it('commitHistoryCheckpoint is a no-op when undo stack has fewer than two entries', () => {
+  it('redoScore pops future and pushes current score into history', () => {
     const start: AppState = {
       ...baseState(),
-      undoStacks: { ...baseState().undoStacks, default: ['only-one'] },
+      score: 'note("c4")',
+      future: ['note("e4")'],
     };
+    const next = reduceAppEvent(start, { type: 'redoScore' });
+    expect(next.score).toBe('note("e4")');
+    expect(next.future).toEqual([]);
+    expect(next.history).toEqual(['note("c4")']);
+  });
+
+  it('redoScore is a no-op when future is empty', () => {
+    const start: AppState = { ...baseState(), score: 'note("c4")' };
+    const next = reduceAppEvent(start, { type: 'redoScore' });
+    expect(next).toBe(start);
+  });
+
+  it('undo/redo round-trip restores the original score', () => {
+    let state: AppState = { ...baseState(), score: 'note("c4")' };
+    state = reduceAppEvent(state, { type: 'replaceScore', text: 'note("e4")' });
+    state = reduceAppEvent(state, { type: 'undoScore' });
+    expect(state.score).toBe('note("c4")');
+    state = reduceAppEvent(state, { type: 'redoScore' });
+    expect(state.score).toBe('note("e4")');
+  });
+
+  it('a new replaceScore after undo clears the future', () => {
+    let state: AppState = { ...baseState(), score: 'a' };
+    state = reduceAppEvent(state, { type: 'replaceScore', text: 'b' });
+    state = reduceAppEvent(state, { type: 'undoScore' });
+    expect(state.future).toEqual(['b']);
+    state = reduceAppEvent(state, { type: 'replaceScore', text: 'c' });
+    expect(state.future).toEqual([]);
+    expect(state.score).toBe('c');
+    expect(state.history).toEqual(['a']);
+  });
+
+  it('commitHistoryCheckpoint merges with top by dropping the top entry', () => {
+    const start: AppState = {
+      ...baseState(),
+      score: 'd',
+      history: ['a', 'b', 'c'],
+    };
+    const next = reduceAppEvent(start, { type: 'commitHistoryCheckpoint' });
+    expect(next.history).toEqual(['a', 'b']);
+    expect(next.score).toBe('d');
+  });
+
+  it('commitHistoryCheckpoint is a no-op when history has fewer than two entries', () => {
+    const start: AppState = { ...baseState(), score: 'b', history: ['a'] };
     const next = reduceAppEvent(start, { type: 'commitHistoryCheckpoint' });
     expect(next).toBe(start);
   });
 
-  it('replaceScore on track A does not pollute the undo stack of track B', () => {
-    let state: AppState = baseState();
-    state = withTrack(state, makeTrack({ id: 'b', title: 'B' }));
-    // Re-activate the default track so replaceScore targets it.
-    state = reduceAppEvent(state, { type: 'switchTrack', id: 'default' });
-    const stackABefore = (state.undoStacks['default'] ?? []).length;
-    state = reduceAppEvent(state, { type: 'replaceScore', text: 'mut-A' });
-    const stackAAfter = (state.undoStacks['default'] ?? []).length;
-    const stackB = state.undoStacks['b'] ?? [];
-    expect(stackAAfter).toBe(stackABefore + 1);
-    expect(stackB).toHaveLength(0);
+  it('commitHistoryCheckpoint is a no-op when history is empty', () => {
+    const start: AppState = { ...baseState(), score: 'a' };
+    const next = reduceAppEvent(start, { type: 'commitHistoryCheckpoint' });
+    expect(next).toBe(start);
   });
-});
 
-describe('reduceAppEvent — side-channel status (unchanged)', () => {
+  it('clearMessages empties the message history but keeps the score', () => {
+    const withMessages: AppState = {
+      ...baseState(),
+      score: 'note("c4")',
+      messages: [
+        { id: '1', role: 'user', content: 'a', ts: 1 },
+        { id: '2', role: 'assistant', content: 'b', ts: 2 },
+      ],
+    };
+    const next = reduceAppEvent(withMessages, { type: 'clearMessages' });
+    expect(next.messages).toEqual([]);
+    expect(next.score).toBe('note("c4")');
+  });
+
   it('agentStatusChange updates agent.status', () => {
     const next = reduceAppEvent(baseState(), { type: 'agentStatusChange', status: 'streaming' });
     expect(next.agent.status).toBe('streaming');
@@ -329,9 +176,7 @@ describe('reduceAppEvent — side-channel status (unchanged)', () => {
     const b = reduceAppEvent(a, { type: 'audioStatusChange', status: 'playing' });
     expect(b.audio.lastError).toBeUndefined();
   });
-});
 
-describe('reduceAppEvent — mixer / transport (unchanged)', () => {
   it('setLayerGain updates gain for the targeted layer only', () => {
     const start = withLayerMix([makeLayerMix(0), makeLayerMix(1), makeLayerMix(2)]);
     const next = reduceAppEvent(start, { type: 'setLayerGain', index: 1, gain: 0.3 });
@@ -346,6 +191,8 @@ describe('reduceAppEvent — mixer / transport (unchanged)', () => {
     expect(over.layerMix[0]?.gain).toBe(1.5);
     const under = reduceAppEvent(over, { type: 'setLayerGain', index: 0, gain: -1 });
     expect(under.layerMix[0]?.gain).toBe(0);
+    const nan = reduceAppEvent(under, { type: 'setLayerGain', index: 0, gain: Number.NaN });
+    expect(nan.layerMix[0]?.gain).toBe(1);
   });
 
   it('setLayerGain is a no-op for out-of-range index', () => {
@@ -372,6 +219,9 @@ describe('reduceAppEvent — mixer / transport (unchanged)', () => {
     const start = withLayerMix([makeLayerMix(0)]);
     const next = reduceAppEvent(start, { type: 'setLayerCount', count: 3 });
     expect(next.layerMix).toHaveLength(3);
+    expect(next.layerMix[0]).toEqual(makeLayerMix(0));
+    expect(next.layerMix[1]).toEqual(makeLayerMix(1));
+    expect(next.layerMix[2]).toEqual(makeLayerMix(2));
   });
 
   it('setLayerCount preserves existing entries when shrinking', () => {
@@ -382,9 +232,16 @@ describe('reduceAppEvent — mixer / transport (unchanged)', () => {
     const next = reduceAppEvent(start, { type: 'setLayerCount', count: 1 });
     expect(next.layerMix).toHaveLength(1);
     expect(next.layerMix[0]?.gain).toBe(0.4);
+    expect(next.layerMix[0]?.muted).toBe(true);
   });
 
-  it('setCps updates transportState.cps but keeps swing', () => {
+  it('setLayerCount is a no-op when count equals current length', () => {
+    const start = withLayerMix([makeLayerMix(0), makeLayerMix(1)]);
+    const next = reduceAppEvent(start, { type: 'setLayerCount', count: 2 });
+    expect(next.layerMix).toBe(start.layerMix);
+  });
+
+  it('setCps updates transportState.cps but keeps swing and other fields', () => {
     const start: AppState = {
       ...baseState(),
       transportState: { cps: 0.5, swingAmount: 0.3, swingDivisor: '1/8' },
@@ -392,13 +249,47 @@ describe('reduceAppEvent — mixer / transport (unchanged)', () => {
     const next = reduceAppEvent(start, { type: 'setCps', cps: 1.25 });
     expect(next.transportState.cps).toBe(1.25);
     expect(next.transportState.swingAmount).toBe(0.3);
+    expect(next.transportState.swingDivisor).toBe('1/8');
+  });
+
+  it('setSwingAmount updates swingAmount but keeps cps and divisor', () => {
+    const start: AppState = {
+      ...baseState(),
+      transportState: { cps: 0.7, swingAmount: 0, swingDivisor: '1/16' },
+    };
+    const next = reduceAppEvent(start, { type: 'setSwingAmount', amount: 0.7 });
+    expect(next.transportState.swingAmount).toBe(0.7);
+    expect(next.transportState.cps).toBe(0.7);
+    expect(next.transportState.swingDivisor).toBe('1/16');
   });
 
   it('setSwingAmount clamps to [0, 1]', () => {
-    const start = baseState();
+    const start: AppState = baseState();
     const over = reduceAppEvent(start, { type: 'setSwingAmount', amount: 1.5 });
     expect(over.transportState.swingAmount).toBe(1);
     const under = reduceAppEvent(over, { type: 'setSwingAmount', amount: -0.3 });
     expect(under.transportState.swingAmount).toBe(0);
   });
+
+  it('setSwingDivisor updates divisor but keeps swingAmount', () => {
+    const start: AppState = {
+      ...baseState(),
+      transportState: { cps: 0.7, swingAmount: 0.5, swingDivisor: '1/4' },
+    };
+    const next = reduceAppEvent(start, { type: 'setSwingDivisor', divisor: '1/3' });
+    expect(next.transportState.swingDivisor).toBe('1/3');
+    expect(next.transportState.swingAmount).toBe(0.5);
+  });
+
+  it('setCps with the same value still produces a new state object (immutable)', () => {
+    const start: AppState = {
+      ...baseState(),
+      transportState: { cps: 0.5, swingAmount: 0, swingDivisor: '1/8' },
+    };
+    const next = reduceAppEvent(start, { type: 'setCps', cps: 0.5 });
+    expect(next).not.toBe(start);
+    expect(next.transportState).not.toBe(start.transportState);
+    expect(next.transportState.cps).toBe(0.5);
+  });
 });
+

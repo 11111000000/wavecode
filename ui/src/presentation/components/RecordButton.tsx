@@ -1,6 +1,6 @@
 import { Show, createSignal, onCleanup, createMemo } from 'solid-js';
 import { Effect } from 'effect';
-import { getActiveScore } from '../state/appStore';
+import { appStore } from '../state/appStore';
 import { AppLayer } from '~/infrastructure/composition';
 import { AudioEngine } from '~/domain/services';
 import type {
@@ -165,7 +165,7 @@ export function RecordButton() {
     setRenderProgress({ progress: 0, stage: 'compiling' });
     // Читаем сигналы вне Effect.gen, чтобы solid-js видел tracking.
     const cycles = renderCycles();
-    const score = getActiveScore();
+    const score = appStore.score;
     try {
       const result = await Effect.runPromise(
         Effect.gen(function* () {
@@ -278,7 +278,7 @@ export function RecordButton() {
                 type="button"
                 class="ctrl-btn-primary"
                 onClick={() => void handleRenderStart()}
-                disabled={renderBusy() || !getActiveScore().trim()}
+                disabled={renderBusy() || !appStore.score.trim()}
               >
                 {renderBusy() ? 'Рендер…' : '▶ Рендер'}
               </button>

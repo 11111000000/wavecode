@@ -15,7 +15,7 @@ import {
   isDraftClean,
 } from '../state/gridState';
 import { canEditGridLayer } from '~/application/useCases/editGridLayer';
-import { appStore, dispatch, getActiveScore } from '../state/appStore';
+import { dispatch, appStore } from '../state/appStore';
 import { evalScore, previewSample, scheduleGridEdit } from '../state/audioActions';
 import {
   GRID_COLS,
@@ -85,7 +85,7 @@ export function StepGrid() {
   // 4-s-layer top-level stack. Computed reactively so it updates as
   // the user edits the score.
   const editGate = createMemo(() => {
-    const ok = canEditGridLayer(getActiveScore());
+    const ok = canEditGridLayer(appStore.score);
     return {
       ok,
       reason: ok
@@ -117,9 +117,9 @@ export function StepGrid() {
     if (mode === 'edit') {
       // Edit: toggle the cell AND splice it into the live score via
       // editGridLayer, then hot-swap the scheduler (debounced 50ms).
-      // The current score from `getActiveScore()` is the source of
+      // The current score from `appStore.score` is the source of
       // truth — the scheduler will pick it up at the next lookahead.
-      const newScore = applyEditToLayer(getActiveScore());
+      const newScore = applyEditToLayer(appStore.score);
       if (newScore !== null) {
         dispatch({ type: 'replaceScore', text: newScore });
         scheduleGridEdit(newScore, appStore.layerMix);
@@ -138,13 +138,13 @@ export function StepGrid() {
     clearDraft();
     // Re-seed from current score in the new mode's default state.
     const m = getMode();
-    if (m === 'view') enterView(getActiveScore());
-    else if (m === 'sketch') enterSketch(getActiveScore());
-    else enterEdit(getActiveScore());
+    if (m === 'view') enterView(appStore.score);
+    else if (m === 'sketch') enterSketch(appStore.score);
+    else enterEdit(appStore.score);
   };
 
   const onCommit = (): void => {
-    const newScore = commitDraft(getActiveScore());
+    const newScore = commitDraft(appStore.score);
     if (newScore !== null) {
       dispatch({ type: 'replaceScore', text: newScore });
       void evalScore();
@@ -153,7 +153,7 @@ export function StepGrid() {
 
   const setMode = (next: 'view' | 'sketch' | 'edit'): void => {
     if (getMode() === next) return;
-    const score = getActiveScore();
+    const score = appStore.score;
     if (next === 'view') {
       enterView(score);
     } else if (next === 'sketch') {
@@ -332,7 +332,7 @@ export function StepGrid() {
               type="button"
               class="step-grid-btn step-grid-btn-primary"
               onClick={() => {
-                const newScore = commitDraft(getActiveScore());
+                const newScore = commitDraft(appStore.score);
                 if (newScore !== null) {
                   dispatch({ type: 'replaceScore', text: newScore });
                   void evalScore();
@@ -360,13 +360,13 @@ export function StepGrid() {
 export const syncGridFromScore = (): void => {
   const mode = getMode();
   if (mode === 'view') {
-    enterView(getActiveScore());
+    enterView(appStore.score);
   } else if (mode === 'sketch') {
     if (isDraftClean() && getDraftGrid().every((r) => r.every((c) => !c))) {
-      enterSketch(getActiveScore());
+      enterSketch(appStore.score);
     }
   } else {
-    const result = enterEdit(getActiveScore());
-    if (!result.ok) enterView(getActiveScore());
+    const result = enterEdit(appStore.score);
+    if (!result.ok) enterView(appStore.score);
   }
 };

@@ -1,17 +1,28 @@
-import { createSignal, Show, For, createEffect, onCleanup, createMemo } from 'solid-js';
+import { createSignal, Show, For, createEffect, onCleanup } from 'solid-js';
 import { Effect } from 'effect';
-import { dispatch, appStore, setAppStore } from '../state/appStore';
+import { dispatch, appStore } from '../state/appStore';
 import { AppLayer } from '~/infrastructure/composition';
 import { AudioEngine } from '~/domain/services';
 import { unlockAudioContext } from '~/infrastructure/audio/LiveAudioEngine';
-import {
-  applyEdit,
-  getLastRawLLMResponse,
-  type ActiveTrackSnapshot,
-} from '~/application/useCases/llmEdit';
+import { applyEdit, getLastRawLLMResponse, type DialogTurn } from '~/application/useCases/llmEdit';
 import { getLLMSettings } from '../state/llmSettings';
 import { LLMSettingsPopover } from '~/presentation/components/LLMSettingsPopover';
-import type { Role, Track } from '~/domain/types';
+import type { Role } from '~/domain/types';
+
+/**
+ * AI-редактор: пользователь пишет инструкцию на русском → LLM правит score → авто-eval.
+ *
+ * Layout: мессенджер-стиль.
+ *   ┌──────────────────────────────┐
+ *   │  история сообщений (скролл)  │
+ *   ├──────────────────────────────┤
+ *   │  статус (+ retry если err)   │
+ *   ├──────────────────────────────┤
+ *   │  textarea + Применить        │
+ *   │  + селекты модели/think      │
+ *   └──────────────────────────────┘
+ * При новом сообщении auto-scroll в конец.
+ */
 
 const roleLabel = (role: Role): string => {
   switch (role) {
@@ -23,35 +34,17 @@ const roleLabel = (role: Role): string => {
 
 type FailedRequest = { readonly text: string };
 
-const findActive = (): Track | undefined =>
-  appStore.tracks.find((t) => t.id === appStore.activeTrackId);
-
-const snapshotOf = (track: Track | undefined): ActiveTrackSnapshot | undefined =>
-  track
-    ? {
-        id: track.id,
-        score: track.score,
-        messages: track.messages.map((m) => ({ role: m.role, content: m.content })),
-      }
-    : undefined;
-
 export function AIEditPanel() {
   const [instruction, setInstruction] = createSignal('');
   const [busy, setBusy] = createSignal(false);
   const [status, setStatus] = createSignal<{ kind: 'idle' | 'ok' | 'err'; msg: string }>({ kind: 'idle', msg: '' });
   const [settings] = createSignal(getLLMSettings());
+  // Последний запрос, упавший с ошибкой. Нужен для кнопки «Попробовать
+  // исправить» — повторяет ровно тот же текст + текущие настройки модели/
+  // thinking. Очищается при успехе (новом или повторном).
   const [lastFailed, setLastFailed] = createSignal<FailedRequest | null>(null);
-  // Inline-rename UI: track id being edited + draft title.
-  const [renamingId, setRenamingId] = createSignal<string | null>(null);
-  const [renameDraft, setRenameDraft] = createSignal('');
 
   let messagesRef: HTMLDivElement | undefined;
-
-  const activeTrack = createMemo<Track | undefined>(findActive);
-  const activeMessages = createMemo(() => activeTrack()?.messages ?? []);
-  const nonArchivedCount = createMemo(
-    () => appStore.tracks.filter((t) => t.state !== 'archived').length,
-  );
 
   const submit = async (overrideText?: string): Promise<void> => {
     const text = (overrideText ?? instruction()).trim();
@@ -59,16 +52,14 @@ export function AIEditPanel() {
       setStatus({ kind: 'err', msg: 'Введи инструкцию' });
       return;
     }
-    const track = findActive();
-    if (!track) {
-      setStatus({ kind: 'err', msg: 'Нет активного трека' });
-      return;
-    }
     unlockAudioContext();
     setBusy(true);
     setStatus({ kind: 'idle', msg: 'Отправляю в ИИ…' });
 
-    const snapshot = snapshotOf(track);
+    const hist = appStore.messages.slice(-10).map((m): DialogTurn => ({
+      role: m.role === 'user' ? 'user' : 'assistant',
+      content: m.content,
+    }));
     const currentSettings = settings();
 
     let newScore: string;
@@ -76,8 +67,9 @@ export function AIEditPanel() {
       newScore = await Effect.runPromise(
         Effect.gen(function* () {
           return yield* applyEdit(
-            snapshot,
+            appStore.score,
             text,
+            hist,
             { status: appStore.audio.status, ...(appStore.audio.lastError ? { lastError: appStore.audio.lastError } : {}) },
             { model: currentSettings.model, thinking: currentSettings.thinking },
           );
@@ -111,6 +103,7 @@ export function AIEditPanel() {
     dispatch({ type: 'assistantMessage', text: newScore });
     dispatch({ type: 'userMessage', text });
     if (overrideText === undefined) {
+      // Retry: текст уже в textarea как instruction, не перезаписываем.
       setInstruction('');
     }
 
@@ -141,208 +134,33 @@ export function AIEditPanel() {
     void submit(f.text);
   };
 
-  // ── Track actions ─────────────────────────────────────────────
-  const onNewTrack = (): void => {
-    const id = `t-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
-    dispatch({
-      type: 'createTrack',
-      id,
-      title: `Трек ${appStore.tracks.length + 1}`,
-      state: 'draft',
-    });
-  };
-
-  const onSwitchTrack = (id: string): void => {
-    if (id === appStore.activeTrackId) return;
-    const target = appStore.tracks.find((t) => t.id === id);
-    if (!target) return;
-    dispatch({ type: 'switchTrack', id });
-    // Eval the new track's score (audio.stop + audio.eval
-    // happened in the reducer side-effect; but switchTrack is
-    // pure — we still need to drive the audio here).
-    void Effect.runPromise(
-      Effect.gen(function* () {
-        const audio = yield* AudioEngine;
-        yield* audio.stop();
-        yield* audio.eval(target.score);
-      }).pipe(Effect.provide(AppLayer)),
-    ).then(() => {
-      dispatch({ type: 'audioStatusChange', status: 'playing' });
-    }).catch((err: unknown) => {
-      const msg = err instanceof Error ? err.message : String(err);
-      dispatch({ type: 'audioStatusChange', status: 'error', error: msg });
-    });
-  };
-
-  const onStartRename = (id: string): void => {
-    const t = appStore.tracks.find((x) => x.id === id);
-    if (!t) return;
-    setRenamingId(id);
-    setRenameDraft(t.title);
-  };
-
-  const onCommitRename = (): void => {
-    const id = renamingId();
-    if (!id) return;
-    const title = renameDraft().trim();
-    if (title) {
-      dispatch({ type: 'renameTrack', id, title });
-    }
-    setRenamingId(null);
-    setRenameDraft('');
-  };
-
-  const onCancelRename = (): void => {
-    setRenamingId(null);
-    setRenameDraft('');
-  };
-
-  const onClearDialog = (): void => {
-    if (!window.confirm('Очистить диалог активного трека? Score останется без изменений.')) return;
-    dispatch({ type: 'clearTrackDialog' });
-  };
-
-  const onDeleteTrack = (id: string): void => {
-    const t = appStore.tracks.find((x) => x.id === id);
-    if (!t) return;
-    if (t.state !== 'archived' && nonArchivedCount() <= 1) {
-      window.alert('Нельзя удалить единственный активный/черновик-трек. Сначала создайте новый или очистите диалог.');
-      return;
-    }
-    const label = t.state === 'archived' ? 'удалить архивный трек' : 'удалить трек';
-    if (!window.confirm(`${label} «${t.title}»? Это действие необратимо.`)) return;
-    dispatch({ type: 'deleteTrack', id });
-  };
-
-  const onArchive = (): void => {
-    if (!window.confirm('Архивировать активный трек? История диалога и score сохранятся, но трек перестанет быть активным.')) return;
-    dispatch({ type: 'archiveTrack' });
-  };
-
-  const onRestore = (): void => {
-    dispatch({ type: 'restoreTrack' });
-  };
+  
 
   createEffect(() => {
-    void activeMessages().length;
+    // Следим за длиной истории: при изменении auto-scroll в конец.
+    void appStore.messages.length;
     if (messagesRef) {
       messagesRef.scrollTop = messagesRef.scrollHeight;
     }
   });
 
-  onCleanup(() => { /* effect self-disposes on unmount */ });
+  onCleanup(() => {
+    // nothing to clean — effect self-disposes on unmount
+  });
 
   return (
     <div class="ai-edit-panel-inner">
-      {/* Track selector */}
-      <div class="ai-track-selector" data-testid="track-selector">
-        <select
-          class="ai-track-select"
-          aria-label="Активный трек"
-          value={appStore.activeTrackId}
-          onChange={(e) => onSwitchTrack(e.currentTarget.value)}
-        >
-          <For each={appStore.tracks}>
-            {(t) => (
-              <option value={t.id}>
-                {t.state === 'archived' ? '⏏ ' : t.state === 'draft' ? '✎ ' : '▶ '}
-                {t.title}
-              </option>
-            )}
-          </For>
-        </select>
-        <button
-          type="button"
-          class="ai-track-btn"
-          title="Создать новый трек"
-          onClick={onNewTrack}
-          disabled={busy()}
-          data-testid="track-new"
-        >＋</button>
-        <Show when={renamingId() === null}>
-          <button
-            type="button"
-            class="ai-track-btn"
-            title="Переименовать активный трек"
-            onClick={() => onStartRename(appStore.activeTrackId)}
-            disabled={busy() || !activeTrack()}
-            data-testid="track-rename"
-          >✎</button>
-        </Show>
-        <Show when={renamingId() !== null}>
-          <input
-            class="ai-track-rename-input"
-            value={renameDraft()}
-            onInput={(e) => setRenameDraft(e.currentTarget.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') onCommitRename();
-              else if (e.key === 'Escape') onCancelRename();
-            }}
-            onBlur={onCommitRename}
-            autofocus
-            data-testid="track-rename-input"
-          />
-        </Show>
-        <button
-          type="button"
-          class="ai-track-btn"
-          title="Очистить диалог активного трека"
-          onClick={onClearDialog}
-          disabled={busy() || activeMessages().length === 0}
-          data-testid="track-clear"
-        >🗑</button>
-        <Show
-          when={activeTrack()?.state === 'archived'}
-          fallback={
-            <button
-              type="button"
-              class="ai-track-btn"
-              title="Архивировать активный трек"
-              onClick={onArchive}
-              disabled={busy() || !activeTrack()}
-              data-testid="track-archive"
-            >⏏</button>
-          }
-        >
-          <button
-            type="button"
-            class="ai-track-btn"
-            title="Восстановить из архива"
-            onClick={onRestore}
-            disabled={busy()}
-            data-testid="track-restore"
-          >↩</button>
-        </Show>
-        <button
-          type="button"
-          class="ai-track-btn ai-track-btn-danger"
-          title={
-            activeTrack()?.state !== 'archived' && nonArchivedCount() <= 1
-              ? 'Нельзя удалить единственный активный/черновик-трек'
-              : 'Удалить активный трек'
-          }
-          onClick={() => onDeleteTrack(appStore.activeTrackId)}
-          disabled={busy() || !activeTrack() || (activeTrack()?.state !== 'archived' && nonArchivedCount() <= 1)}
-          data-testid="track-delete"
-        >⨯</button>
-      </div>
-
-      {/* Messages */}
       <div class="ai-messages" ref={messagesRef}>
         <Show
-          when={activeMessages().length > 0}
+          when={appStore.messages.length > 0}
           fallback={
             <div class="ai-messages-empty">
-              <Show
-                when={activeTrack()}
-                fallback={<span>Нет активного трека. Создайте его кнопкой «＋» выше.</span>}
-              >
-                Здесь будет диалог с ИИ по треку «{activeTrack()?.title}». Напиши инструкцию внизу — например: «сделай быстрее в два раза», «добавь басов», «сделай техно-бит».
-              </Show>
+              Здесь будет диалог с ИИ. Напиши инструкцию внизу — например:
+              «сделай быстрее в два раза», «добавь басов», «сделай техно-бит».
             </div>
           }
         >
-          <For each={activeMessages()}>
+          <For each={appStore.messages}>
             {(m) => (
               <div class={`ai-message ai-message-${m.role}`}>
                 <div class="ai-message-meta">{roleLabel(m.role)}</div>
@@ -374,15 +192,17 @@ export function AIEditPanel() {
         <textarea
           aria-label="Инструкция для ИИ"
           data-ai-textarea
-          placeholder={activeTrack()?.state === 'archived' ? 'Трек в архиве — восстановите, чтобы отправлять инструкции' : 'Что сделать? Например: «сделай быстрее в два раза»'}
+          placeholder='Что сделать? Например: «сделай быстрее в два раза»'
           value={instruction()}
           onInput={(e) => setInstruction(e.currentTarget.value)}
           onKeyDown={(e) => {
             if (e.key !== 'Enter') return;
-            if (activeTrack()?.state === 'archived') return;
             const isTouchDevice =
               typeof window !== 'undefined' &&
               (('ontouchstart' in window) || (navigator.maxTouchPoints ?? 0) > 0);
+            // Mobile: Enter submits, Shift+Enter inserts newline (soft keyboards
+            // have no easy modifier-Enter path).
+            // Desktop: Ctrl/Cmd+Enter submits, plain Enter inserts newline.
             if (isTouchDevice) {
               if (e.shiftKey) return;
               if (e.isComposing) return;
@@ -395,7 +215,7 @@ export function AIEditPanel() {
           }}
           rows={2}
           class="ai-textarea"
-          disabled={busy() || activeTrack()?.state === 'archived'}
+          disabled={busy()}
         />
         <div class="ai-controls-row1">
           <LLMSettingsPopover />
@@ -403,7 +223,7 @@ export function AIEditPanel() {
             type="button"
             class="ai-apply-btn"
             onClick={() => void submit()}
-            disabled={busy() || activeTrack()?.state === 'archived'}
+            disabled={busy()}
           >
             {busy() ? '⏳ Применяю…' : '✦ Применить'}
           </button>
@@ -412,7 +232,3 @@ export function AIEditPanel() {
     </div>
   );
 }
-
-// Touch setAppStore export to avoid TS6133 in case future
-// refactors drop the dispatch import path.
-void setAppStore;
