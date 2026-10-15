@@ -1,0 +1,17 @@
+# CODEOWNERS — auto-assign reviewers based on file paths.
+# See https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+# Default: maintainer reviews everything.
+*       @11111000000
+
+# UI / Solid components — same maintainer (single-person project).
+/ui/src/presentation/   @11111000000
+
+# Architecture / decisions — maintainer.
+/decisions/             @11111000000
+/docs/ARCHITECTURE.md   @11111000000
+
+# CI / deployment — maintainer.
+/.github/               @11111000000
+/.gitverse/             @11111000000
+/bin/                   @11111000000

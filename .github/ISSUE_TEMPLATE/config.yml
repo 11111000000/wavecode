@@ -1,0 +1,17 @@
+name: config
+description: Изменить конфигурацию или поделиться информацией без создания issue
+labels: ["question"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Этот шаблон для общих вопросов и конфигурации.
+        Для багов — bug.yml, для фич — feature.yml.
+
+  - type: textarea
+    id: question
+    attributes:
+      label: Вопрос / описание
+      description: Что хотите уточнить или настроить?
+    validations:
+      required: true

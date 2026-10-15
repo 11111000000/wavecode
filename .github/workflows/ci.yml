@@ -1,0 +1,98 @@
+name: ci
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+# Cancel in-flight runs for the same branch on new push.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    name: typecheck + lint + unit
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.10'
+          cache: 'npm'
+          cache-dependency-path: ui/package-lock.json
+
+      - name: Install dependencies
+        working-directory: ui
+        run: npm ci
+
+      - name: Typecheck (tsc --noEmit)
+        working-directory: ui
+        run: npm run typecheck
+
+      - name: Lint (no-console in domain/application)
+        working-directory: ui
+        run: npm run lint:no-console
+
+      - name: Validate built-in presets
+        working-directory: ui
+        run: npm run validate:presets
+
+      - name: Unit tests (vitest)
+        working-directory: ui
+        run: npm run test:run
+
+  build:
+    name: production build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: quality
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.10'
+          cache: 'npm'
+          cache-dependency-path: ui/package-lock.json
+
+      - name: Install dependencies
+        working-directory: ui
+        run: npm ci
+
+      - name: Build (vite + tsc)
+        working-directory: ui
+        env:
+          # CI build uses placeholder; real LLM key is per-app, injected at deploy time.
+          VITE_LLM_PROXY_URL: https://llm.kosov.online/v1
+          VITE_LLM_PROXY_KEY: ci-placeholder-not-used-at-runtime
+        run: |
+          # Skip the prebuild key check in CI — it requires interactive prompt.
+          # Production deploy (GitVerse workflow) runs the real check.
+          npx vite build
+
+      - name: Upload build artefact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-dist
+          path: ui/dist
+          retention-days: 7
+
+  python-scripts:
+    name: python scripts (ruff)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/ruff-action@v1
+        with:
+          src: scripts
+          args: 'check'

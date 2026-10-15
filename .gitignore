@@ -38,6 +38,7 @@ playwright/.cache/
 __pycache__/
 *.pyc
 .pytest_cache/
+.ruff_cache/
 
 # mathc cache (per-session evaluation cache)
 .local/
