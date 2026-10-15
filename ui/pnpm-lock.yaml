@@ -42,8 +42,8 @@ importers:
         specifier: ^0.75.0
         version: 0.75.5(effect@3.22.2)
       '@effect/typeclass':
-        specifier: ^0.36.0
-        version: 0.36.0(effect@3.22.2)
+        specifier: ^0.41.0
+        version: 0.41.0(effect@3.22.2)
       '@lezer/common':
         specifier: ^1.2.0
         version: 1.5.3
@@ -730,10 +730,10 @@ packages:
     peerDependencies:
       effect: ^3.9.2
 
-  '@effect/typeclass@0.36.0':
-    resolution: {integrity: sha512-+8xYvX4tjD7gKwGYzOyFh90I+ptdXzoNHLQTSa8kGh/xOVZMIGYb0VgLoNHE02UsuVrB+JJJuBmKLdd5TeDTPg==}
+  '@effect/typeclass@0.41.0':
+    resolution: {integrity: sha512-Tsv94iDPUWgmz/JsYUh7awx5mmFukEJZB+duyzlLRlCHxNUz5LHBBzTaEfUPNMzAE1s8FTUSVwdPSpL0DznXKg==}
     peerDependencies:
-      effect: ^3.17.0
+      effect: ^3.22.0
 
   '@esbuild/aix-ppc64@0.21.5':
     resolution: {integrity: sha512-1SDgH6ZSPTlggy1yI6+Dbkiz8xzpHJEVAlF/AM1tHPLsf5STom9rwtjE4hKAF20FfXXNTFqEYXyJNWh1GiZedQ==}
@@ -3899,7 +3899,7 @@ snapshots:
       effect: 3.22.2
       fast-check: 3.23.2
 
-  '@effect/typeclass@0.36.0(effect@3.22.2)':
+  '@effect/typeclass@0.41.0(effect@3.22.2)':
     dependencies:
       effect: 3.22.2
 
