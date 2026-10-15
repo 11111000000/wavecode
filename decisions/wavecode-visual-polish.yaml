@@ -6,7 +6,7 @@ state: draft
 body_sha: "sha256:836744b9378e177eb8891a53d36029a761a1c16cd20ce0296b6b3ecdf437ae06"
 yaml_sha: "sha256:836744b9378e177eb8891a53d36029a761a1c16cd20ce0296b6b3ecdf437ae06"
 
-intent:|
+intent: |
   Visual polish pass wavecode: empty/loading states (ScorePanel
   empty + audio loading skeleton), focus rings (глобальный
   cyan-glow на всех focusable), touch targets 44×44 (wc-icon-btn,

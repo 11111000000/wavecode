@@ -6,7 +6,7 @@ state: active
 body_sha: "sha256:8009f65e08c6de7b1c49a2a31a0265fd8a320744edd5db64143364d649a7469c"
 yaml_sha: "sha256:8009f65e08c6de7b1c49a2a31a0265fd8a320744edd5db64143364d649a7469c"
 
-intent:|
+intent: |
   Play/Stop-кнопка в текущем master регрессировала визуально
   относительно synthesis пакета `math/wavecode-play-in-control`:
 

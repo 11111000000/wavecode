@@ -6,7 +6,7 @@ state: active
 body_sha: "sha256:b21c2550880033f69b16d28f835b70b79ca49ca2aced1c7d63e8fe2ade6ef7eb"
 yaml_sha: "sha256:b21c2550880033f69b16d28f835b70b79ca49ca2aced1c7d63e8fe2ade6ef7eb"
 
-intent:|
+intent: |
   В `ui/.env.local` лежит `VITE_LLM_PROXY_KEY` БЕЗ префикса `sk-litellm-`,
   а `LITELLM_MASTER_KEY` на angara-1 — С префиксом. `compare_digest` в
   `_user_api_key_auth_builder` (litellm 1.75.5) возвращает False →

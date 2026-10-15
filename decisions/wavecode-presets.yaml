@@ -6,7 +6,7 @@ state: draft
 body_sha: "sha256:65c294d055dd3e9c5ad22cfd03ceb01048af79c95b2f1a546b4cb86c922059f2"
 yaml_sha: "sha256:65c294d055dd3e9c5ad22cfd03ceb01048af79c95b2f1a546b4cb86c922059f2"
 
-intent:|
+intent: |
   В wavecode есть 8 встроенных пресетов (Creep, Seven Nation Army, Für Elise,
   Smoke on the Water, House of the Rising Sun, Let It Be-style, Wonderwall-style,
   Mary Had a Little Lamb) — зашитые как `BUILTIN_PRESETS: ReadonlyArray<Preset>`

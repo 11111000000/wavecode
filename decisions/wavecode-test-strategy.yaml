@@ -6,7 +6,7 @@ state: draft
 body_sha: "sha256:48eed01eb5d4df58f1b83bf305f37631157c2bc8f2f15042fd2019d67545134f"
 yaml_sha: "sha256:48eed01eb5d4df58f1b83bf305f37631157c2bc8f2f15042fd2019d67545134f"
 
-intent:|
+intent: |
   Тестовая стратегия wavecode — пирамида: много unit-тестов на domain
   и application (vitest), умеренно на infrastructure (vitest с моками),
   мало e2e на критичные user-flows (playwright).

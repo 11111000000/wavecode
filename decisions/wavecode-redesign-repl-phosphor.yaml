@@ -6,7 +6,7 @@ state: retired
 body_sha: "sha256:4cce1262b44f4bb14e59a47c23737e2c2396859d748ef22587c664181460a56d"
 yaml_sha: "sha256:4cce1262b44f4bb14e59a47c23737e2c2396859d748ef22587c664181460a56d"
 
-intent:|
+intent: |
   Визуальный язык wavecode — «REPL Phosphor»: моноширинный интерфейс в
   духе DEC VT220 / SGI IRIX с phosphor-amber палитрой на тёплом чёрном
   фоне, ASCII-волной как логотипом, block-cursor, двойными линиями

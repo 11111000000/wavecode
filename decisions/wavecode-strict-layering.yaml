@@ -6,7 +6,7 @@ state: draft
 body_sha: "sha256:7affb8d2d19d7b286eb8d10af619c5b17074b318eaa488879ca72c23b5d804d3"
 yaml_sha: "sha256:7affb8d2d19d7b286eb8d10af619c5b17074b318eaa488879ca72c23b5d804d3"
 
-intent:|
+intent: |
   Структурная целостность wavecode обеспечивается ESLint (flat config,
   v9) с правилом `no-restricted-imports` per-layer: domain не может
   импортить UI/audio/AI/DB; application не может импортить UI/audio/AI/DB;

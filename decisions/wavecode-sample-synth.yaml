@@ -6,7 +6,7 @@ state: active
 body_sha: "sha256:adf645447e68a8fe87824faefbba958bff0c49f7b437f7d247f61ca160725041"
 yaml_sha: "sha256:adf645447e68a8fe87824faefbba958bff0c49f7b437f7d247f61ca160725041"
 
-intent:|
+intent: |
   `public/samples/synth/` — 12 MP3 семплов analog synth (CC0 / public
   domain, ~1.3MB): 4 bass (c1/c2/e1/a1), 4 pad (c3/e3/g3/a3),
   2 lead (e4/g4), 1 strings (c4), 1 brass (c3). Источники — Freesound

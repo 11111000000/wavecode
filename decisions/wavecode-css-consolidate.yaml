@@ -6,7 +6,7 @@ state: active
 body_sha: "sha256:41e15348fc3f3e6b406c8996ad01f472be87ce8331b8b95f80d8a52565eca918"
 yaml_sha: "sha256:41e15348fc3f3e6b406c8996ad01f472be87ce8331b8b95f80d8a52565eca918"
 
-intent:|
+intent: |
   Текущий CSS разделен на 5 файлов + landing + index-orchestrator
   (`ui/src/styles/{tokens,base,components,sheets,icons,legacy,landing}.css`
   = 5507 строк), но `components.css` (2141) и `legacy.css` (1364)

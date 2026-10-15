@@ -6,7 +6,7 @@ state: draft
 body_sha: "sha256:f5da0a77e3b271e74b3f75a5dc638bd54c3c6f3e6a99d60e8ddb7de048836e12"
 yaml_sha: "sha256:f5da0a77e3b271e74b3f75a5dc638bd54c3c6f3e6a99d60e8ddb7de048836e12"
 
-intent:|
+intent: |
   App.tsx split: 530 строк god-component → 4 sub-components
   (TopBar, PresetRow, PanelsLayout, BottomSheets), App.tsx
   остаётся ~50 строк (composition + onMount). Заодно:

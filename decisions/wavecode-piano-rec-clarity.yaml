@@ -6,7 +6,7 @@ state: active
 body_sha: "sha256:0996d8165fe7a0647057c6844270d066edfbe8688f12694066de25490c8649ea"
 yaml_sha: "sha256:0996d8165fe7a0647057c6844270d066edfbe8688f12694066de25490c8649ea"
 
-intent:|
+intent: |
   REC-режим пианино в wavecode страдает от двух связанных дефектов
   UX, которые существуют с момента `wavecode-piano-modes-and-gain`:
 

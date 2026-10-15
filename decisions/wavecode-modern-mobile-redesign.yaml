@@ -6,7 +6,7 @@ state: active
 body_sha: "sha256:dc9a8e84ff69a92ab04b169f3c07dd07e89b99f3132bb59e8ee8ca1a64aa2a36"
 yaml_sha: "sha256:dc9a8e84ff69a92ab04b169f3c07dd07e89b99f3132bb59e8ee8ca1a64aa2a36"
 
-intent:|
+intent: |
   Визуальный язык wavecode — «Synthwave Modern Terminal»: mobile-first
   layout (Score всегда виден, AI через bottom-sheet, инструменты через
   FAB-sheets, статус как LED-strip), палитра — spectrum amber + cyan +

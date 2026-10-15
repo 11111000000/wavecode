@@ -6,7 +6,7 @@ state: active
 body_sha: "sha256:0b9da0660a08d466cc3cd9a7d012f22a01d811cef7e38237cff285f4a5d62985"
 yaml_sha: "sha256:0b9da0660a08d466cc3cd9a7d012f22a01d811cef7e38237cff285f4a5d62985"
 
-intent:|
+intent: |
   На экранах ≤720px (`window.matchMedia('(max-width: 720px)').matches`)
   при первой загрузке (no localStorage entry) — `scoreOpen=true,
   aiOpen=false, statusOpen=false`. Score-панель занимает весь

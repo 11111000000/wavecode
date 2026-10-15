@@ -6,7 +6,7 @@ state: active
 body_sha: "sha256:2149c1b151b3fd7db20bb4829c8f6f3641a5f0eadc199196a98197cb64202e4d"
 yaml_sha: "sha256:2149c1b151b3fd7db20bb4829c8f6f3641a5f0eadc199196a98197cb64202e4d"
 
-intent:|
+intent: |
   Три независимых бага в Strudel-стеке `@strudel/{core,tonal,webaudio}`
   коллапсируют в «захлёбывающийся UI»: в консоль летит ~10 logs/sec,
   а LLM-ответы оператора не доходят. Каждый корень — отдельный, фиксы

@@ -6,7 +6,7 @@ state: active
 body_sha: "sha256:fcf4f7b3e9bba5d0384577ba6b5e7630bc74ea26bcf58377abb1bb77afcf2afb"
 yaml_sha: "sha256:fcf4f7b3e9bba5d0384577ba6b5e7630bc74ea26bcf58377abb1bb77afcf2afb"
 
-intent:|
+intent: |
   На mobile (≤720px) BottomSheet (Mixer/AI/Status/Step/Piano) — это
   `position:fixed` overlay с z-sheet поверх ScorePanel, который при
   snap='full' закрывает ~90vh экрана, а при snap='half' физически

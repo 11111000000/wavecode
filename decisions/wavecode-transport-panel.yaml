@@ -6,7 +6,7 @@ state: active
 body_sha: "sha256:5eb170d565b39a6ea33b69be4a3f0425d6f6f24b1e2e42a433d7c6af527d53bf"
 yaml_sha: "sha256:5eb170d565b39a6ea33b69be4a3f0425d6f6f24b1e2e42a433d7c6af527d53bf"
 
-intent:|
+intent: |
   В шапке wavecode, под `app-preset-row`, появляется slim «Transport» —
   CPS-слайдер (range 0.05–2.0, default 0.5, step 0.01), цифровой
   BPM-индикатор `120` (пересчёт 60·cps·2 при 4/4), кнопка swing (toggle

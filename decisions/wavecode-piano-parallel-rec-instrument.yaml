@@ -6,7 +6,7 @@ state: active
 body_sha: "sha256:0ca8daad46b842a972c4932e111fcf4000577a63a2200786c9fb4a49e30520df"
 yaml_sha: "sha256:0ca8daad46b842a972c4932e111fcf4000577a63a2200786c9fb4a49e30520df"
 
-intent:|
+intent: |
   Piano-клавиатура играет ЧЕРЕЗ ОТДЕЛЬНЫЙ Web Audio synth
   (oscillator + gain + ADSR на каждую ноту) — НЕ через
   `AudioEngine.eval()`. Это гарантирует: (a) piano не
