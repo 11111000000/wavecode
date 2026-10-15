@@ -186,17 +186,17 @@ describe('uiState bottom-sheet sync', () => {
     expect(getKindSnap('step')).toBe('closed');
   });
 
-  it('setTab(mixer) opens mixer sheet at full', async () => {
+  it('setTab(mixer) opens mixer sheet at half', async () => {
     const { setTab, getKindSnap, getActiveTab } = await import('./uiState');
     setTab('mixer');
     expect(getActiveTab()).toBe('mixer');
-    expect(getKindSnap('mixer')).toBe('full');
+    expect(getKindSnap('mixer')).toBe('half');
   });
 
-  it('setTab(status) opens status sheet at full (not AI)', async () => {
+  it('setTab(status) opens status sheet at half (not AI)', async () => {
     const { setTab, getKindSnap } = await import('./uiState');
     setTab('status');
-    expect(getKindSnap('status')).toBe('full');
+    expect(getKindSnap('status')).toBe('half');
     expect(getKindSnap('ai')).toBe('closed');
   });
 
@@ -207,17 +207,17 @@ describe('uiState bottom-sheet sync', () => {
     expect(getKindSnap('mixer')).toBe('closed');
   });
 
-  it('setTab(step) opens step sheet at full', async () => {
+  it('setTab(step) opens step sheet at half', async () => {
     const { setTab, getKindSnap, getActiveTab } = await import('./uiState');
     setTab('step');
     expect(getActiveTab()).toBe('step');
-    expect(getKindSnap('step')).toBe('full');
+    expect(getKindSnap('step')).toBe('half');
   });
 
-  it('setTab(piano) opens piano sheet at full', async () => {
+  it('setTab(piano) opens piano sheet at half', async () => {
     const { setTab, getKindSnap } = await import('./uiState');
     setTab('piano');
-    expect(getKindSnap('piano')).toBe('full');
+    expect(getKindSnap('piano')).toBe('half');
   });
 });
 
@@ -270,10 +270,10 @@ describe('uiState sheetHeightPx (mobile split-pane drag-resize)', () => {
   });
 
   it('loadStoredSheetHeight restores from localStorage on module init', async () => {
-    localStorage.setItem('wavecode-mobile-sheet-h-v1', '340');
+    localStorage.setItem('wavecode-mobile-sheet-h-v1', '400');
     vi.resetModules();
     const s = await import('./uiState');
-    expect(s.getSheetHeightPx()).toBe(340);
+    expect(s.getSheetHeightPx()).toBe(400);
   });
 
   it('loadStoredSheetHeight ignores out-of-range persisted values', async () => {
