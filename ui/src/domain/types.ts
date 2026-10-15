@@ -45,7 +45,17 @@ export type AppState = {
   readonly score: Score;
   readonly history: ReadonlyArray<Score>;
   readonly future: ReadonlyArray<Score>;
-  readonly messages: ReadonlyArray<Message>;
+  /** Dialog messages per preset id. Each preset (built-in or
+   *  custom) has its own conversation thread with the LLM —
+   *  switching presets in the top-bar selector swaps the visible
+   *  thread and routes the next LLM call into the new thread.
+   *  Keys are `presetId` strings from `presetsStore`. */
+  readonly dialogs: Readonly<Record<string, ReadonlyArray<Message>>>;
+  /** Currently selected preset id. Source of truth for which
+   *  dialog thread is active. Mirrored to `localStorage` via
+   *  `selectedPreset.ts` (kept for backward compat) and to
+   *  IDB via `useAutoSave` for cross-tab/cross-session restore. */
+  readonly activePresetId: string;
   readonly agent: { readonly status: AgentStatus; readonly lastError?: string };
   readonly audio: { readonly status: AudioStatus; readonly lastError?: string };
   /** Side-state: mixer tracks for the top-level stack of `score`.
@@ -73,7 +83,8 @@ export const initialAppState: AppState = {
   ].join('\n'),
   history: [],
   future: [],
-  messages: [],
+  dialogs: { creep: [] },
+  activePresetId: 'creep',
   agent: { status: 'idle' },
   audio: { status: 'stopped' },
   layerMix: [],

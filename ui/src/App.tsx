@@ -48,7 +48,8 @@ const onResetAll = (): void => {
     Effect.gen(function* () {
       const repo = yield* Repo;
       yield* repo.saveScore('');
-      yield* repo.saveMessages([]);
+      yield* repo.saveDialogs({});
+      yield* repo.saveActivePresetId('creep');
     }).pipe(Effect.provide(AppLayer)),
   ).then(() => window.location.reload());
 };
@@ -237,6 +238,10 @@ function AppShell(): JSX.Element {
           const preset = getPreset(id);
           if (!preset) return;
           setSelectedPresetPersist(id);
+          // Switch the active dialog thread BEFORE replacing the
+          // score so any subsequent LLM call is routed to the
+          // new thread.
+          dispatch({ type: 'switchPreset', id });
           dispatch({ type: 'replaceScore', text: preset.score });
           void evalScore();
         }}
@@ -247,6 +252,8 @@ function AppShell(): JSX.Element {
           if (!name) return;
           const preset = saveCustomPreset(name, appStore.score);
           setSelectedPresetPersist(preset.id);
+          // Custom presets start with a fresh dialog thread.
+          dispatch({ type: 'switchPreset', id: preset.id });
           setShowSavePreset(false);
           setNewPresetName('');
         }}

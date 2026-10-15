@@ -13,14 +13,14 @@ describe('reduceAppEvent', () => {
   it('userMessage appends a user message', () => {
     const event: AppEvent = { type: 'userMessage', text: 'make it faster' };
     const next = reduceAppEvent(baseState(), event);
-    expect(next.messages).toHaveLength(1);
-    expect(next.messages[0]).toMatchObject({ role: 'user', content: 'make it faster' });
+    expect(next.dialogs['creep']).toHaveLength(1);
+    expect(next.dialogs['creep']![0]).toMatchObject({ role: 'user', content: 'make it faster' });
   });
 
   it('assistantMessage appends an assistant message', () => {
     const event: AppEvent = { type: 'assistantMessage', text: 'stack(s("bd*4"))' };
     const next = reduceAppEvent(baseState(), event);
-    expect(next.messages[0]).toMatchObject({ role: 'assistant' });
+    expect(next.dialogs['creep']![0]).toMatchObject({ role: 'assistant' });
   });
 
   it('editScore applies the edit atomically', () => {
@@ -151,18 +151,63 @@ describe('reduceAppEvent', () => {
     expect(next).toBe(start);
   });
 
-  it('clearMessages empties the message history but keeps the score', () => {
+  it('clearMessages empties the active preset dialog but keeps the score', () => {
     const withMessages: AppState = {
       ...baseState(),
       score: 'note("c4")',
-      messages: [
-        { id: '1', role: 'user', content: 'a', ts: 1 },
-        { id: '2', role: 'assistant', content: 'b', ts: 2 },
-      ],
+      dialogs: {
+        creep: [
+          { id: '1', role: 'user', content: 'a', ts: 1 },
+          { id: '2', role: 'assistant', content: 'b', ts: 2 },
+        ],
+        techno: [
+          { id: '3', role: 'user', content: 'other', ts: 3 },
+        ],
+      },
     };
     const next = reduceAppEvent(withMessages, { type: 'clearMessages' });
-    expect(next.messages).toEqual([]);
+    expect(next.dialogs['creep']).toEqual([]);
+    expect(next.dialogs['techno']).toHaveLength(1);
     expect(next.score).toBe('note("c4")');
+  });
+
+  it('switchPreset updates activePresetId and creates an empty thread if missing', () => {
+    const start = baseState();
+    const next = reduceAppEvent(start, { type: 'switchPreset', id: 'techno' });
+    expect(next.activePresetId).toBe('techno');
+    expect(next.dialogs['techno']).toEqual([]);
+  });
+
+  it('switchPreset preserves existing thread content for the new preset', () => {
+    const start: AppState = {
+      ...baseState(),
+      dialogs: {
+        creep: [],
+        techno: [
+          { id: '1', role: 'user', content: 'kick', ts: 1 },
+        ],
+      },
+    };
+    const next = reduceAppEvent(start, { type: 'switchPreset', id: 'techno' });
+    expect(next.activePresetId).toBe('techno');
+    expect(next.dialogs['techno']).toHaveLength(1);
+  });
+
+  it('switchPreset to the same id is a no-op', () => {
+    const start = baseState();
+    const next = reduceAppEvent(start, { type: 'switchPreset', id: start.activePresetId });
+    expect(next).toBe(start);
+  });
+
+  it('userMessage appends to the active preset dialog, not other presets', () => {
+    const start: AppState = {
+      ...baseState(),
+      dialogs: { creep: [], techno: [] },
+      activePresetId: 'techno',
+    };
+    const next = reduceAppEvent(start, { type: 'userMessage', text: 'hello' });
+    expect(next.dialogs['techno']).toHaveLength(1);
+    expect(next.dialogs['creep']).toHaveLength(0);
   });
 
   it('agentStatusChange updates agent.status', () => {

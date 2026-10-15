@@ -2,7 +2,7 @@ import { onMount, createSignal, onCleanup } from 'solid-js';
 import { Effect } from 'effect';
 import { AppLayer } from '~/infrastructure/composition';
 import { Repo } from '~/domain/services';
-import { dispatch } from './appStore';
+import { setAppStore, dispatch } from './appStore';
 import {
   setPendingShare, markIdbHasScore, startLoadingShared, finishLoadingShared, shareState,
 } from './shareState';
@@ -10,7 +10,7 @@ import { decodeSnippet } from '~/domain/urlCodec';
 import { installTransportAudioSync } from './useTransportAudioSync';
 import { ensureAudioLoaded, getAudioContextState } from '~/infrastructure/audio/LiveAudioEngine';
 import {
-  hydrateSelectedPreset, resetSelectedPreset,
+  hydrateSelectedPreset, resetSelectedPreset, setSelectedPresetPersist,
 } from './selectedPreset';
 import { useGridStateAutoSave } from './useGridStateAutoSave';
 import {
@@ -109,6 +109,31 @@ export const useAppBootstrap = (): AudioRuntime => {
   onMount(() => {
     installTransportAudioSync();
     void import('~/infrastructure/audio/SampleLoader').then((m) => m.loadAllSamples());
+
+    // Hydrate dialogs + activePresetId from IDB before the rest
+    // of the boot path, so the first user-visible state already
+    // reflects the persisted threads.
+    void Effect.runPromise(
+      Effect.gen(function* () {
+        const repo = yield* Repo;
+        const [dialogs, activeId] = yield* Effect.all([
+          repo.loadDialogs(),
+          repo.loadActivePresetId(),
+        ]);
+        setAppStore((prev) => ({
+          ...prev,
+          dialogs,
+          ...(activeId !== null ? { activePresetId: activeId } : {}),
+        }));
+        if (activeId !== null) {
+          // Keep the localStorage-backed signal in sync so other
+          // modules that read `getSelectedPresetId()` see the
+          // same id.
+          setSelectedPresetPersist(activeId);
+        }
+      }).pipe(Effect.provide(AppLayer)),
+    );
+
     restoreFromIdbOrShare();
     restoreGridState();
     useGridStateAutoSave();

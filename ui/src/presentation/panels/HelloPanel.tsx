@@ -14,7 +14,7 @@ export function HelloPanel() {
         <dt>партитура</dt>
         <dd>{appStore.score.length} симв.</dd>
         <dt>сообщения</dt>
-        <dd>{appStore.messages.length}</dd>
+        <dd>{(appStore.dialogs[appStore.activePresetId] ?? []).length}</dd>
         <Show when={appStore.audio.lastError}>
           <dt>ошибка аудио</dt>
           <dd class="status-error status-error-message">{appStore.audio.lastError}</dd>
