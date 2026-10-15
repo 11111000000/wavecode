@@ -6,7 +6,7 @@ state: active
 body_sha: "sha256:cc9986bead42bffb90c63d991b267b3d9f08f3c4f60cd4780de246cf92290971"
 yaml_sha: "sha256:cc9986bead42bffb90c63d991b267b3d9f08f3c4f60cd4780de246cf92290971"
 
-intent:|
+intent: |
   BottomToolstrip (отдельный fixed-bar над TabBar с 3 кнопками
   step/piano/mixer) — архитектурный долг: на mobile-вьюпортах
   `<639px` лейблы скрываются, иконки растворяются в тёмной теме,

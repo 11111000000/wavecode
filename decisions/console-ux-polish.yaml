@@ -6,7 +6,7 @@ state: active
 body_sha: "sha256:7fb1e35893d9f9eb7ff1262613f7654fb2735cfde8420b616adf3b985f48dcd3"
 yaml_sha: "sha256:7fb1e35893d9f9eb7ff1262613f7654fb2735cfde8420b616adf3b985f48dcd3"
 
-intent:|
+intent: |
   Three additive polishes to the Phase-1 console UX
   (`math/wavecode-debug-console`) land without restructuring it:
 

@@ -6,7 +6,7 @@ state: draft
 body_sha: "sha256:30e6a3759015dbf0cf5e776f826d966d9b3b55811d386805b19f018424804054"
 yaml_sha: "sha256:30e6a3759015dbf0cf5e776f826d966d9b3b55811d386805b19f018424804054"
 
-intent:|
+intent: |
   Piano CSS-scope + MiniNotationToolbar reactivity + toolbar visibility
   fix (4 файла, ~50 LoC diff). Устраняет 3 user-visible бага одним
   пакетом: чёрные клавиши выпадают из piano; toolbar-кнопки не

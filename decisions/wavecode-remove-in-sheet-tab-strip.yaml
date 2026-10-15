@@ -6,7 +6,7 @@ state: draft
 body_sha: "sha256:9c7f749319767b0565f89195543fb3da644151f59e96f1f8cf52be2ca13f309b"
 yaml_sha: "sha256:9c7f749319767b0565f89195543fb3da644151f59e96f1f8cf52be2ca13f309b"
 
-intent:|
+intent: |
   Удалить дублирующую полосу табов внутри BottomSheet (Mixer/AI/Status/
   Step/Piano) — это вторая навигация рядом с основной (TabBar внизу
   экрана), и на маленьких вьюпортах (≤720px) верхняя полоса

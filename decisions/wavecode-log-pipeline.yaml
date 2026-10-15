@@ -6,7 +6,7 @@ state: active
 body_sha: "sha256:774e7d78fe98b1a7b33c2cba9534fb29b16ffa007ec04ecec3aff3860dc9b007"
 yaml_sha: "sha256:774e7d78fe98b1a7b33c2cba9534fb29b16ffa007ec04ecec3aff3860dc9b007"
 
-intent:|
+intent: |
   The log surface in wavecode is split into three pure pieces so the
   console UIs (ConsoleButton / ConsoleSheet / Toast) can read from a
   single source of truth instead of three different chrome sinks:

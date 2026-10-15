@@ -6,7 +6,7 @@ state: active
 body_sha: "sha256:dd448edbd40ba428eae9c592a6a773ff22db1c761fff5857b906d74dd963f6c1"
 yaml_sha: "sha256:dd448edbd40ba428eae9c592a6a773ff22db1c761fff5857b906d74dd963f6c1"
 
-intent:|
+intent: |
   В wavecode появляется вкладка/панель `Visualize`: статичная
   SVG-карта всего цикла (нотные блоки по `startCycle` × `midi`,
   раскрашенные по layer/channel) + живой FFT-эквалайзер / time-domain

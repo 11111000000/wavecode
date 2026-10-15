@@ -6,7 +6,7 @@ state: active
 body_sha: "sha256:eef93c68e74117facf351b5bbda5bd436621a603275f1a5c1bbe8b38f960e95c"
 yaml_sha: "sha256:eef93c68e74117facf351b5bbda5bd436621a603275f1a5c1bbe8b38f960e95c"
 
-intent:|
+intent: |
   Production (`https://wavecode.kosov.online/`) деплоится вручную:
   оператор SSH-ит на angara-1 и запускает `bin/deploy.sh`, который
   делает pnpm install + pnpm build + sudo cp в

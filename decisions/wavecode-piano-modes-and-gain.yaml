@@ -6,7 +6,7 @@ state: active
 body_sha: "sha256:f965e72ff7725b0726ee8593804a5c779ac2b553ba89ae978caea2b66e0cc8be"
 yaml_sha: "sha256:f965e72ff7725b0726ee8593804a5c779ac2b553ba89ae978caea2b66e0cc8be"
 
-intent:|
+intent: |
   PianoKeyboard имеет 3 ортогональных пользовательских намерения,
   которые текущая реализация (`wavecode-piano-parallel-rec-instrument`)
   либо не поддерживает, либо поддерживает сломанно:

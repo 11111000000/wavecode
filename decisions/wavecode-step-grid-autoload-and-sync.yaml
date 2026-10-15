@@ -6,7 +6,7 @@ state: draft
 body_sha: "sha256:6187f6f284141977365be1818e6abf61fc524daae1c601419215d4f52bbc074b"
 yaml_sha: "sha256:6187f6f284141977365be1818e6abf61fc524daae1c601419215d4f52bbc074b"
 
-intent:|
+intent: |
   StepGrid открывается пустым даже когда в editor-score уже есть
   `s("bd …")`-ряды, и его playhead залипает на колонке 0 при
   первом eval, пока пользователь не дёрнет cps-слайдер.

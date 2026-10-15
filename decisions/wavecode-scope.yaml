@@ -6,7 +6,7 @@ state: draft
 body_sha: "sha256:3defd05f4478a999d6783340205bcf0c442a1049cf547b360d52df0cbac77adb"
 yaml_sha: "sha256:3defd05f4478a999d6783340205bcf0c442a1049cf547b360d52df0cbac77adb"
 
-intent:|
+intent: |
   wavecode — чистофронтовый браузерный SPA для live-coding музыки с
   AI-агентом; не имеет серверных компонентов и не зависит от
   ~/Projects/Composer/.

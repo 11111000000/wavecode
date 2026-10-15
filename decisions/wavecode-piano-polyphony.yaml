@@ -6,7 +6,7 @@ state: active
 body_sha: "sha256:c4e9bab227040af2db99328e977361cebdbcbe882a41aecdd51eda9aca24f9ea"
 yaml_sha: "sha256:c4e9bab227040af2db99328e977361cebdbcbe882a41aecdd51eda9aca24f9ea"
 
-intent:|
+intent: |
   `PianoKeyboard` plays ONE note at a time. That was fine for tap-on /
   tap-off, but the moment a user holds two keys (chord) — or WebMIDI
   receives a noteon that's still sustaining while another noteoff

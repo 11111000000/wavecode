@@ -6,7 +6,7 @@ state: draft
 body_sha: "sha256:11909f8ea2158f1f1a3e8e9b9c7d0ea4c7272f427a3899a60d2164d631af6e46"
 yaml_sha: "sha256:11909f8ea2158f1f1a3e8e9b9c7d0ea4c7272f427a3899a60d2164d631af6e46"
 
-intent:|
+intent: |
   В шапке справа от `↷ Redo` — кнопка `🔗 Поделиться`. На нажатие —
   score сериализуется через `lz-string.compressToEncodedURIComponent`
   (UTF-16 → base64-with-ASCII-safe custom alphabet), приклеивается к

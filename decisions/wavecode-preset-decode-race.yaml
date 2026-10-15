@@ -6,7 +6,7 @@ state: active
 body_sha: "sha256:00d14ba56eae05cfafac1dbc6badbde0b04131080655aef5a3ed1df32b4a411b"
 yaml_sha: "sha256:00d14ba56eae05cfafac1dbc6badbde0b04131080655aef5a3ed1df32b4a411b"
 
-intent:|
+intent: |
   Two independent correctness defects collapse into "no sound" once
   one is fixed and the surface becomes audible:
 

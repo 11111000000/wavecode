@@ -32,10 +32,11 @@
  */
 
 import { StateEffect, StateField, type Extension, type StateEffectType } from '@codemirror/state';
+import type {
+  EditorView} from '@codemirror/view';
 import {
   Decoration,
   type DecorationSet,
-  EditorView,
   ViewPlugin,
   type ViewUpdate,
 } from '@codemirror/view';

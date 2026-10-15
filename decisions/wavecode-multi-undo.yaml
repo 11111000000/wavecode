@@ -6,7 +6,7 @@ state: active
 body_sha: "sha256:e2a18309f5165da47d54e98cccf8da84a122335080472ec564b3ada24e1d22dc"
 yaml_sha: "sha256:e2a18309f5165da47d54e98cccf8da84a122335080472ec564b3ada24e1d22dc"
 
-intent:|
+intent: |
   `appStore.scorePrev: string` (одношаговый rollback из пакета
   `rollback-and-retry`) retire и заменяется стеком `history: string[]`
   (max 50) + `future: string[]` (max 50) — классический двусторонний

@@ -6,7 +6,7 @@ state: draft
 body_sha: "sha256:6a5dffb2bce802ecef299cde42234eeb4dab1670f90697a03d2b1961575ac1ab"
 yaml_sha: "sha256:6a5dffb2bce802ecef299cde42234eeb4dab1670f90697a03d2b1961575ac1ab"
 
-intent:|
+intent: |
   Mixer changes (gain / mute / solo) пушатся в живой Strudel-паттерн
   без ручного рестарта. На каждый `setLayerGain/toggleLayerMute/
   toggleLayerSolo` UI дёргает `AudioEngine.setLayerMix(layerMix)`,

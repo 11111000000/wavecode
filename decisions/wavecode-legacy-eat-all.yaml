@@ -6,7 +6,7 @@ state: active
 body_sha: "sha256:5f7bd0c3cfd41fc2ff5b0adae2f2707353b38c32aeb48cff35b14458c0b8b4d9"
 yaml_sha: "sha256:5f7bd0c3cfd41fc2ff5b0adae2f2707353b38c32aeb48cff35b14458c0b8b4d9"
 
-intent:|
+intent: |
   Финальный пакет legacy.css eating: 11 оставшихся секций за один
   раз, затем — удаление `legacy.css` целиком.
 

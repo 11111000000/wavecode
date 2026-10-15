@@ -22,7 +22,6 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-import os
 import re
 import sys
 from pathlib import Path
@@ -34,7 +33,15 @@ DECISIONS_DIR = WORKTREE / "decisions"
 ATTESTATIONS_DIR = WORKTREE / "attestations"
 
 DECISION_SCHEMA = "math-coding/3.3"
-ATTESTATION_SCHEMA = "math-coding/attestation-3.3"
+# math-coding 3.3 enum accepts both `attestation-3.0-alpha` and
+# `attestation-3.3`; the live edge kernel's attestation matcher
+# only handles the legacy `3.0-alpha` string today (per
+# `decisions/schema-string-bump-3.0-alpha-to-3.3-2026-10.yaml`
+# in the math-coding repo — "schemas/attestation.json does not
+# gate the schema field today"). Use the legacy form so the
+# emitted attestations are immediately accepted by `mathc
+# self-check`; future kernel releases will accept `3.3` too.
+ATTESTATION_SCHEMA = "math-coding/attestation-3.0-alpha"
 
 ACTIVE_POLICY_ID = "wavecode-bootstrap-math-coding-3.3"
 
@@ -98,7 +105,7 @@ def _parse_yaml_block(raw: str) -> dict[str, Any]:
             continue
 
         if state == "block_scalar":
-            if line.startswith(" ") or line.startswith("\t"):
+            if line.startswith((" ", "\t")):
                 current_block.append(line.lstrip())
                 i += 1
                 continue
@@ -109,13 +116,13 @@ def _parse_yaml_block(raw: str) -> dict[str, Any]:
         if state == "list":
             if current_list_item is not None:
                 # a new top-level key ends the list
-                if not (line.startswith(" ") or line.startswith("\t")):
+                if not (line.startswith((" ", "\t"))):
                     current_list_item = None
                     current_list_key = None
                     state = "top"
 
         if state == "top":
-            if ":" in line and not line.startswith(" ") and not line.startswith("\t"):
+            if ":" in line and not line.startswith((" ", "\t")):
                 key, _, val = line.partition(":")
                 key = key.strip()
                 val = val.strip()
@@ -322,7 +329,7 @@ def build_decision(packet_name: str, fm: dict[str, Any]) -> dict[str, Any]:
     elif "\n" in substrate or substrate.startswith(("+", "-", "*")):
         # multi-line diff / list — not a path
         scope_paths = []
-    elif "/" in substrate or substrate.endswith(".ts") or substrate.endswith(".tsx"):
+    elif "/" in substrate or substrate.endswith((".ts", ".tsx")):
         scope_paths = [substrate if substrate.endswith("/**") else substrate + "/**"]
     else:
         scope_paths = []
@@ -547,19 +554,25 @@ def _render_decision_body(d: dict[str, Any]) -> str:
 def render_attestation(
     decision_id: str, obligation_id: str, witness: dict[str, str], witness_path: Path
 ) -> dict[str, Any]:
-    """Render an attestation JSON for a migrated witness entry."""
+    """Render an attestation JSON for a migrated witness entry.
+
+    The witness metadata (`sha`, `date`, `kind`, `files`) is preserved
+    as the attestation's `producer.notes` field (informational only;
+    the kernel does not consult it). The `materials_digest` is left
+    empty — the live kernel matches attestations by
+    `subject.{decision, obligation}` alone (per math-coding repo's
+    `attestation-store-fill.yaml`); a per-migration sha would require
+    the kernel to recompute it on every read with no behavioural gain
+    for transition-state attestations.
+    """
     sha = witness.get("sha", "unknown")
     date = witness.get("date", "1970-01-01")
     kind = witness.get("kind", "amendment")
     files = witness.get("files", "[]")
-
-    # Parse files: it may be "[a, b]" or "[a]" or empty
-    files_clean = files.strip().strip("[]")
-    files_list = [f.strip() for f in files_clean.split(",") if f.strip()] if files_clean else []
-
-    materials_digest = hashlib.sha256(
-        f"{decision_id}:{obligation_id}:{sha}:{date}:{kind}".encode("utf-8")
-    ).hexdigest()
+    note = (
+        f"v1-migration from math/{witness_path.parent.name}/witness: "
+        f"sha={sha}, date={date}, kind={kind}, files={files}"
+    )
 
     attestation: dict[str, Any] = {
         "schema": ATTESTATION_SCHEMA,
@@ -568,10 +581,10 @@ def render_attestation(
             "decision": decision_id,
             "obligation": obligation_id,
             "candidate_tree": "HEAD",
-            "materials_digest": f"sha256:{materials_digest}",
+            "materials_digest": "",
         },
         "kind_": "review",
-        "producer": {"identity": "human:v1-migration"},
+        "producer": {"identity": "human:v1-migration", "run": note},
         "environment_class_level": 2,
         "environment_class_label": "dev",
         "result": "pass",

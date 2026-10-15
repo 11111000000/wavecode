@@ -6,7 +6,7 @@ state: draft
 body_sha: "sha256:4d9f0f5157e4158402f868c08125f373cad1f08b840ce3ea65adf03781dcf0ee"
 yaml_sha: "sha256:4d9f0f5157e4158402f868c08125f373cad1f08b840ce3ea65adf03781dcf0ee"
 
-intent:|
+intent: |
   E2E verification suite + Lighthouse baseline: 5 playwright
   сценариев покрывают все user-visible баги после T1-T5 +
   perf budget + a11y axe-core. Финальный gate перед merge

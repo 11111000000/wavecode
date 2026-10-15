@@ -6,7 +6,7 @@ state: active
 body_sha: "sha256:e4a66ac2b0ae244fe134542614235d6b75d9392e06fb88fa0e8d5cb068ce768b"
 yaml_sha: "sha256:e4a66ac2b0ae244fe134542614235d6b75d9392e06fb88fa0e8d5cb068ce768b"
 
-intent:|
+intent: |
   LLM-запросы возвращают 401:
   «Authentication Error, Malformed API Key passed in.
   Ensure Key has `Bearer ` prefix.»

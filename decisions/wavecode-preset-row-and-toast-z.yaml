@@ -6,7 +6,7 @@ state: draft
 body_sha: "sha256:a617d1efcadffcf61a3265d19b3241a525baf276374d3ff8caa7f8ca91a13571"
 yaml_sha: "sha256:a617d1efcadffcf61a3265d19b3241a525baf276374d3ff8caa7f8ca91a13571"
 
-intent:|
+intent: |
   Два визуальных дефекта, появившихся как побочный эффект
   `wavecode-transport-always-visible` (TransportPanel → `position:
   fixed` под TopBar):

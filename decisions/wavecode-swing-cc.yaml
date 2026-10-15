@@ -6,7 +6,7 @@ state: active
 body_sha: "sha256:5b192ec15d547890df7b4e0f7c465312745a26e9fc1173f76230690cb8b92a48"
 yaml_sha: "sha256:5b192ec15d547890df7b4e0f7c465312745a26e9fc1173f76230690cb8b92a48"
 
-intent:|
+intent: |
   Swing в Transport Panel расширяется с boolean toggle до полного
   amount/divisor control: `transportState.swingAmount: number` (0..1,
   default 0.5 для стандартного shuffle) + `transportState.swingDivisor`

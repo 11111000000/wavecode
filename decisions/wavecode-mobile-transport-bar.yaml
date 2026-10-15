@@ -6,7 +6,7 @@ state: draft
 body_sha: "sha256:b9d0dde165fcc9346c49e338cbc16d9a172ccfb396a61f4b8b65ad906331c3ee"
 yaml_sha: "sha256:b9d0dde165fcc9346c49e338cbc16d9a172ccfb396a61f4b8b65ad906331c3ee"
 
-intent:|
+intent: |
   Объединить `.app-preset-row` (выбор композиции) и `.app-controls-row`
   (Play/Stop + cps/swing/bpm) в ОДИН collapsible `.app-transport-bar`.
   На mobile (≤720px) default collapsed → 49px chrome (только strip с

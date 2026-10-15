@@ -380,7 +380,7 @@ describe('handleDecode — OfflineAudioContext lifecycle', () => {
     // within ONE Worker's lifetime.
     const sharedCache: Parameters<typeof handleDecode>[2] = { current: null, sampleRate: 0 };
     for (let i = 0; i < 3; i += 1) {
-      // eslint-disable-next-line no-await-in-loop
+       
       await handleDecode(
         { type: 'decode', id: i + 1, url: `/r${i}.mp3`, sampleRate: 44100 },
         {
@@ -412,7 +412,7 @@ describe('handleDecode — OfflineAudioContext lifecycle', () => {
       return fake as unknown as OfflineAudioContext;
     };
     // First decode at 44100.
-    // eslint-disable-next-line no-await-in-loop
+     
     await runHandleDecode(
       { type: 'decode', id: 1, url: '/a.mp3', sampleRate: 44100 },
       {
@@ -423,7 +423,7 @@ describe('handleDecode — OfflineAudioContext lifecycle', () => {
     );
     // Second decode at 48000 — must allocate a fresh ctx.
     use48 = true;
-    // eslint-disable-next-line no-await-in-loop
+     
     await runHandleDecode(
       { type: 'decode', id: 2, url: '/b.mp3', sampleRate: 48000 },
       {

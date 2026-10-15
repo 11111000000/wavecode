@@ -6,7 +6,7 @@ state: active
 body_sha: "sha256:0acfcdd2ec9f9254e0e3be0e74a5cf0967eba777e9d48c79f120ec8d9f74a8e0"
 yaml_sha: "sha256:0acfcdd2ec9f9254e0e3be0e74a5cf0967eba777e9d48c79f120ec8d9f74a8e0"
 
-intent:|
+intent: |
   В `.app-controls-row` справа от `▶ Запуск` появляется toggle
   `⏺ Запись`. В off — состояние «idle». На первое нажатие — две ветки:
   (1) «live» — `AudioContext.createMediaStreamDestination()` подключён

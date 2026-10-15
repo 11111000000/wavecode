@@ -6,7 +6,7 @@ state: active
 body_sha: "sha256:31058164be34e27e40be6b61a7553d5b0f800303b1e2adcb0a20f7f8746cb70b"
 yaml_sha: "sha256:31058164be34e27e40be6b61a7553d5b0f800303b1e2adcb0a20f7f8746cb70b"
 
-intent:|
+intent: |
   `public/samples/piano/` — 10 MP3 семплов Salamander Grand Piano v3
   (CC0 / public domain, ~720KB): A1, A2, A3, A4, C2, C3, C4, C5, C6, C7.
   Каждый ~50–110KB, mono/stereo 44.1kHz. Полный диапазон A1..C7

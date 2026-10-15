@@ -6,7 +6,7 @@ state: active
 body_sha: "sha256:10aba0c94c92276b4d545f87adbf78ccce5be99e4f3236cac5565e5e07862eb2"
 yaml_sha: "sha256:10aba0c94c92276b4d545f87adbf78ccce5be99e4f3236cac5565e5e07862eb2"
 
-intent:|
+intent: |
   В Score-панели между `.cm-host` и редактором — sticky toolbar
   `<div class="mini-toolbar">` с 14 крупными кнопок (button min 44×36px,
   font 16px monospace): `note(`, `s(`, `stack(`, `n(`, `<`, `>`,

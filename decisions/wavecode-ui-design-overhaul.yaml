@@ -6,7 +6,7 @@ state: draft
 body_sha: "sha256:8fba40ccc60d92693a0442cc15ce71c9c7ba9cdd36a1ca4b5035343823dc5025"
 yaml_sha: "sha256:8fba40ccc60d92693a0442cc15ce71c9c7ba9cdd36a1ca4b5035343823dc5025"
 
-intent:|
+intent: |
   UI-design overhaul wavecode: устранить рассогласование legacy.css с
   components.css (чёрные клавиши выпадают из piano), починить неработающие
   кнопки MiniNotationToolbar (editorApi — не-signal), вытащить toolbar из-под

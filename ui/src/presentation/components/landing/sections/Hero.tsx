@@ -1,4 +1,4 @@
-import { createSignal, type JSX } from 'solid-js';
+import { createSignal, type JSX, For } from 'solid-js';
 import { ArrowRight, ChevronDown } from '~/presentation/components/landing/icons';
 
 /**
@@ -89,7 +89,7 @@ export function Hero(): JSX.Element {
 
         <div class="l-hero__examples" role="group" aria-label="Быстрые примеры">
           <span class="l-hero__examples-label">Попробуй:</span>
-          {QUICK_EXAMPLES.map((ex) => (
+          <For each={QUICK_EXAMPLES}>{(ex) => (
             <button
               type="button"
               class="l-hero__chip"
@@ -97,7 +97,7 @@ export function Hero(): JSX.Element {
             >
               {ex.label}
             </button>
-          ))}
+          )}</For>
         </div>
 
         <div class="l-hero__ctas">

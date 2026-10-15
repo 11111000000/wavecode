@@ -6,7 +6,7 @@ state: active
 body_sha: "sha256:40e3bcd76f5e864a599064aeec753c6c0dba5b80112ec8c3b5a6da4a2d35deb2"
 yaml_sha: "sha256:40e3bcd76f5e864a599064aeec753c6c0dba5b80112ec8c3b5a6da4a2d35deb2"
 
-intent:|
+intent: |
   После `math/wavecode-css-consolidate` (cascade layers) cascade
   декларативен: components > legacy. Но ~120 классов всё ещё
   определены ТОЛЬКО в `legacy.css` — они живут в нижнем

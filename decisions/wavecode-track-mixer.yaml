@@ -6,7 +6,7 @@ state: active
 body_sha: "sha256:ad23245b2b4a798cf95f75e4d8240e393ea477c7b0f02aca36c7a50e3126331e"
 yaml_sha: "sha256:ad23245b2b4a798cf95f75e4d8240e393ea477c7b0f02aca36c7a50e3126331e"
 
-intent:|
+intent: |
   В Score-панели под редактором — collapsible `<details>` «🎛 Mixer»
   со списком слоёв партитуры. Каждый слой — строка `[M] [S] ──── ○ ── 0.5`
   (mute / solo / gain slider 0..1.5). Mixer side-state хранится в
