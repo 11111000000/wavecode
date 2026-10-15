@@ -2926,6 +2926,27 @@ button:not([disabled]):not(.no-shrink):active {
   border-top: 1px solid var(--border);
   background: var(--surface-1);
   padding-bottom: calc(var(--space-md) + var(--safe-bottom));
+  /* wavecode-ai-apply-above-tabbar: the submit button is the
+   * last interactive element in the messenger and must stay
+   * reachable. On desktop the sheet is a right-side drawer that
+   * already sits above the TabBar, so no extra reserve. On mobile
+   * the sheet ends at the viewport bottom and the TabBar
+   * (position:fixed; bottom:0; height: tabbar-h + safe-bottom)
+   * overlays its lower edge — without this padding the
+   * «✦ Применить» button sat at sheet_bottom − space-md and got
+   * covered by the TabBar (see bug report 2026-10-15). Content
+   * (.ai-messages) can scroll underneath the footer — that's the
+   * intentional messenger UX — but the action button has to remain
+   * visible. We add tabbar-h + safe-bottom only on viewports where
+   * the sheet is in-flow (≤720px). */
+}
+
+@media (max-width: 720px) {
+  .ai-footer {
+    padding-bottom: calc(
+      var(--space-md) + var(--tabbar-h) + var(--safe-bottom)
+    );
+  }
 }
 
 textarea.ai-textarea {
