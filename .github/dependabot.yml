@@ -1,0 +1,51 @@
+# Dependabot — keep dependencies and GitHub Actions up to date.
+# See https://docs.github.com/en/code-security/dependabot/dependabot-version-updates
+
+version: 2
+
+updates:
+  - package-ecosystem: 'npm'
+    directory: '/ui'
+    schedule:
+      interval: 'weekly'
+      day: 'monday'
+      time: '09:00'
+    open-pull-requests-limit: 5
+    groups:
+      # Bundle Strudel packages together — they share SemVer, easier to review.
+      strudel:
+        patterns:
+          - '@strudel/*'
+      # Solid.js + solid ecosystem.
+      solid:
+        patterns:
+          - 'solid-js'
+          - '@solidjs/*'
+      # Effect-TS core + platform + schema.
+      effect:
+        patterns:
+          - 'effect'
+          - '@effect/*'
+      # CodeMirror 6 (modular; bump all at once).
+      codemirror:
+        patterns:
+          - '@codemirror/*'
+          - '@lezer/*'
+          - 'codemirror'
+    ignore:
+      # Major version bumps need human review (we track these manually).
+      - dependency-name: '*'
+        update-types: ['version-update:semver-major']
+
+  - package-ecosystem: 'github-actions'
+    directory: '/'
+    schedule:
+      interval: 'weekly'
+      day: 'monday'
+      time: '09:00'
+    groups:
+      actions:
+        patterns:
+          - '*'
+    commit-message:
+      prefix: 'ci'

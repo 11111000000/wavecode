@@ -1,0 +1,62 @@
+name: Feature request
+description: Предложить улучшение в wavecode
+title: "[feat]: "
+labels: ["enhancement", "needs-triage"]
+assignees: []
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Опишите идею — что должно появиться, зачем, как вы это представляете.
+        Чем конкретнее use case, тем проще обсудить trade-offs.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Какую проблему решаем?
+      description: |
+        Что сейчас неудобно / невозможно? Кто целевой пользователь?
+      placeholder: |
+        Сейчас нельзя поделиться пресетом с другом — URL содержит весь score,
+        а пресет хочется сохранить отдельно.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Предлагаемое решение
+      description: |
+        Как вы видите реализацию? (опционально — общий черновик, не финальный дизайн)
+    validations:
+      required: false
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Альтернативы
+      description: |
+        Какие ещё подходы вы рассматривали? Почему они хуже?
+    validations:
+      required: false
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Дополнительный контекст
+      description: |
+        Скриншоты, ссылки на похожие фичи в других проектах,
+        обсуждения в issues / Discord и т.п.
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Чеклист
+      options:
+        - label: Я проверил, что такой фичи/issue ещё нет (включая закрытые)
+          required: true
+        - label: Я готов обсуждать детали в комментариях
+          required: false

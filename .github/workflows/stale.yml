@@ -1,0 +1,33 @@
+name: stale
+
+on:
+  schedule:
+    # Run weekly on Monday at 09:00 UTC.
+    - cron: '0 9 * * 1'
+  workflow_dispatch:
+
+permissions:
+  issues: write
+  pull-requests: write
+
+jobs:
+  stale:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/stale@v9
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          days-before-stale: 90
+          days-before-close: 14
+          stale-issue-message: |
+            Этот issue неактивен 90+ дней. Если проблема всё ещё актуальна —
+            пожалуйста, обновите репорт (комментарий с новой информацией сбрасывает таймер),
+            иначе он будет автоматически закрыт через 14 дней.
+          stale-pr-message: |
+            Этот PR неактивен 90+ дней. Если работа ещё в процессе —
+            пожалуйста, обновите ветку, иначе он будет автоматически закрыт через 14 дней.
+          close-issue-message: |
+            Закрыто из-за неактивности. Если проблема воспроизводится —
+            создайте новый issue с обновлённой информацией.
+          only-labels: 'stale,needs-info'
