@@ -6,7 +6,7 @@ import {
   onCleanup,
   onMount,
 } from 'solid-js';
-import { appStore, dispatch } from '../state/appStore';
+import { dispatch, getActiveScore } from '../state/appStore';
 import { getDebug } from '~/infrastructure/audio/LiveAudioEngine';
 import { CodeMirrorEditor, type CodeMirrorEditorApi } from '../components/CodeMirrorEditor';
 import { MiniNotationToolbar } from '../components/MiniNotationToolbar';
@@ -204,7 +204,7 @@ export function ScorePanel() {
 
   return (
     <div class="score-panel-inner">
-      <Show when={appStore.score.trim().length === 0}>
+      <Show when={getActiveScore().trim().length === 0}>
         <div class="score-empty-state" role="note" aria-label="Подсказки для старта">
           <p>Нажми ▶ чтобы запустить шаблон</p>
           <p>Открой Piano → tap для звука</p>
@@ -236,7 +236,7 @@ export function ScorePanel() {
       </Show>
       <Suspense fallback={<div class="cm-host cm-host-fill cm-loading">загрузка редактора…</div>}>
         <CodeMirrorEditor
-          value={appStore.score}
+          value={getActiveScore()}
           onChange={(v) => dispatch({ type: 'replaceScore', text: v })}
           onReady={(api) => {
             editorApi = api;

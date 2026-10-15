@@ -259,13 +259,13 @@ describe('PianoToolbar — ↑ apply button (wavecode-piano-modes-and-gain)', ()
 
   it('clicking apply dispatches replaceScore via applyToScore (orchestrator)', async () => {
     const rec = await import('../state/pianoRecStore');
-    const { appStore } = await import('../state/appStore');
+    const { getActiveScore } = await import('../state/appStore');
     if (!rec.recEnabled()) rec.toggleRec();
     rec.appendNote(60, 0, 100); // C4
     const { container } = render(() => <PianoToolbar />);
     const apply = container.querySelector<HTMLButtonElement>('.piano-apply-btn')!;
     fireEvent.click(apply);
-    expect(appStore.score).toContain('note("c4")');
+    expect(getActiveScore()).toContain('note("c4")');
     expect(rec.recBuffer()).toEqual([]); // buffer cleared after apply
   });
 });
@@ -329,7 +329,7 @@ describe('PianoToolbar — slot selector (wavecode-piano-rec-clarity)', () => {
 
   it('clicking apply with replace-score slot overwrites the score (no wrap)', async () => {
     const rec = await import('../state/pianoRecStore');
-    const { appStore, dispatch } = await import('../state/appStore');
+    const { dispatch, getActiveScore } = await import('../state/appStore');
     if (!rec.recEnabled()) rec.toggleRec();
     rec.setPianoSlot('replace-score');
     dispatch({ type: 'replaceScore', text: 's("hh*4")' });
@@ -337,13 +337,13 @@ describe('PianoToolbar — slot selector (wavecode-piano-rec-clarity)', () => {
     const { container } = render(() => <PianoToolbar />);
     const apply = container.querySelector<HTMLButtonElement>('.piano-apply-btn')!;
     fireEvent.click(apply);
-    expect(appStore.score).toContain('note("c4")');
-    expect(appStore.score).not.toContain('hh*4'); // destructive
+    expect(getActiveScore()).toContain('note("c4")');
+    expect(getActiveScore()).not.toContain('hh*4'); // destructive
   });
 
   it('clicking apply with at-cursor slot dispatches insert via editor API', async () => {
     const rec = await import('../state/pianoRecStore');
-    const { appStore, dispatch } = await import('../state/appStore');
+    const { dispatch, getActiveScore } = await import('../state/appStore');
     if (!rec.recEnabled()) rec.toggleRec();
     rec.setPianoSlot('at-cursor');
     dispatch({ type: 'replaceScore', text: 'note("e4")' });
@@ -374,8 +374,8 @@ describe('PianoToolbar — slot selector (wavecode-piano-rec-clarity)', () => {
     // Two dispatches: (1) the insert + (2) the flash-decoration effect.
     expect(dispatches.length).toBeGreaterThanOrEqual(1);
     // Editor's text was inserted in the fake view, NOT dispatched as
-    // a global replaceScore — `appStore.score` is unchanged.
-    expect(appStore.score).toBe('note("e4")');
+    // a global replaceScore — `getActiveScore()` is unchanged.
+    expect(getActiveScore()).toBe('note("e4")');
   });
 });
 

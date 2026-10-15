@@ -193,10 +193,12 @@ export const reduceAppEvent = (state: AppState, event: AppEvent): AppState => {
       const target = findTrack(state, event.id);
       if (!target) return state;
       // Refuse to leave the user with zero non-archived tracks.
-      if (nonArchivedCount(state.tracks) <= 1) return state;
-      // Refuse to delete the only archived track we could restore
-      // ... actually, archived tracks CAN be deleted freely; the
-      // guard above is only about non-archived.
+      // Archived tracks can be deleted freely — they're disposable
+      // history; the guard exists so a non-archived track can
+      // never be the last one standing.
+      if (target.state !== 'archived' && nonArchivedCount(state.tracks) <= 1) {
+        return state;
+      }
       const remaining = state.tracks.filter((t) => t.id !== event.id);
       const { [event.id]: _removed, ...undoStacks } = state.undoStacks;
       void _removed;

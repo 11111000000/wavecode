@@ -3,7 +3,7 @@ import { Effect } from 'effect';
 import { dispatch, appStore, setAppStore } from '../state/appStore';
 import { AppLayer } from '~/infrastructure/composition';
 import { AudioEngine } from '~/domain/services';
-import { unlockAudioContext, evalSnippet } from '~/infrastructure/audio/LiveAudioEngine';
+import { unlockAudioContext } from '~/infrastructure/audio/LiveAudioEngine';
 import {
   applyEdit,
   getLastRawLLMResponse,
@@ -115,7 +115,12 @@ export function AIEditPanel() {
     }
 
     try {
-      await evalSnippet(newScore);
+      await Effect.runPromise(
+        Effect.gen(function* () {
+          const audio = yield* AudioEngine;
+          yield* audio.eval(newScore);
+        }).pipe(Effect.provide(AppLayer)),
+      );
       dispatch({ type: 'audioStatusChange', status: 'playing' });
       setStatus({ kind: 'ok', msg: 'Применено и играет ✓' });
       setLastFailed(null);

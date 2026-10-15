@@ -3,7 +3,7 @@ import { EditorView, Decoration, type DecorationSet } from '@codemirror/view';
 import { StateEffect, StateField } from '@codemirror/state';
 import type { PianoInstrument } from '~/domain/music/notes';
 import { noteToneSnippet, noteNumberToName } from '~/domain/music/notes';
-import { dispatch, appStore } from './appStore';
+import { dispatch, getActiveScore } from './appStore';
 import type { CodeMirrorEditorApi } from '~/presentation/components/CodeMirrorEditor';
 
 /**
@@ -312,7 +312,7 @@ export const applyToScore = (): void => {
   }
 
   // append-stack
-  const newScore = stackAppend(appStore.score, snippet);
+  const newScore = stackAppend(getActiveScore(), snippet);
   dispatch({ type: 'replaceScore', text: newScore });
   setRecBuffer([]);
   // Flash the appended lines at the end of the new doc.
@@ -329,7 +329,7 @@ const flashAfterCommit = (): void => {
   const api = pianoEditorApi();
   if (!api) return;
   // After Solid's reactive graph finishes, the CodeMirror createEffect
-  // has already mirrored appStore.score → view.state.doc, so we can
+  // has already mirrored getActiveScore() → view.state.doc, so we can
   // flash [0, doc.length) right now. queueMicrotask is a defensive
   // hop that survives the rare case where CodeMirror batches updates
   // across multiple Solid ticks.

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { appStore, dispatch } from './appStore';
+import { appStore, dispatch, getActiveScore } from './appStore';
 
 /**
  * The pianoRecStore holds module-level Solid signals. Each test
@@ -22,7 +22,7 @@ beforeEach(async () => {
   if (s.pianoSlot() !== 'append-stack') s.setPianoSlot('append-stack');
   if (s.editorFocused()) s.setEditorFocused(false);
   s.setPianoEditorApi(undefined);
-  // Reset the appStore.score to '' so applyToScore tests don't leak
+  // Reset the getActiveScore() to '' so applyToScore tests don't leak
   // into each other. (Each test sets it explicitly via the `score`
   // signal setter below.)
   dispatch({ type: 'replaceScore', text: '' });
@@ -252,7 +252,7 @@ describe('pianoRecStore — commitSnippet (wavecode-piano-modes-and-gain)', () =
     s.appendNote(60, 0, 100);
     s.appendNote(64, 100, 200);
     s.applyToScore();
-    const after = appStore.score;
+    const after = getActiveScore();
     expect(after).toContain('.s("piano")');
     // No stack wrap on empty score — just two newlines.
     expect(after.split('\n').filter((l) => l.includes('s("piano")'))).toHaveLength(2);
@@ -313,9 +313,9 @@ describe('pianoRecStore — applyToScore (wavecode-piano-modes-and-gain)', () =>
   it('empty buffer → noop (no dispatch, score unchanged)', async () => {
     const s = await importStore();
     dispatch({ type: 'replaceScore', text: 's("hh*4")' });
-    const before = appStore.score;
+    const before = getActiveScore();
     s.applyToScore();
-    expect(appStore.score).toBe(before);
+    expect(getActiveScore()).toBe(before);
     expect(s.recBuffer()).toEqual([]);
   });
 
@@ -324,7 +324,7 @@ describe('pianoRecStore — applyToScore (wavecode-piano-modes-and-gain)', () =>
     dispatch({ type: 'replaceScore', text: '' });
     s.appendNote(60, 0, 100);
     s.applyToScore();
-    expect(appStore.score).toBe(
+    expect(getActiveScore()).toBe(
       'note("c4").s("triangle").attack(0.005).decay(0.4).sustain(0.1).gain(0.3)',
     );
     expect(s.recBuffer()).toEqual([]); // buffer cleared after apply
@@ -339,7 +339,7 @@ describe('pianoRecStore — applyToScore (wavecode-piano-modes-and-gain)', () =>
     s.appendNote(60, 0, 100);
     s.appendNote(64, 100, 200);
     s.applyToScore();
-    const after = appStore.score;
+    const after = getActiveScore();
     expect(after.startsWith('stack(')).toBe(true);
     expect((after.match(/\bstack\s*\(/g) ?? []).length).toBe(1); // exactly one stack wrap
     expect(after).toContain('note("e4 g4")');
@@ -353,7 +353,7 @@ describe('pianoRecStore — applyToScore (wavecode-piano-modes-and-gain)', () =>
     dispatch({ type: 'replaceScore', text: 's("hh*4")' });
     s.appendNote(60, 0, 100);
     s.applyToScore();
-    const after = appStore.score;
+    const after = getActiveScore();
     expect(after).toMatch(/^stack\(/);
     expect(after).toContain('s("hh*4")');
     expect(after).toContain('note("c4")');
@@ -365,11 +365,11 @@ describe('pianoRecStore — applyToScore (wavecode-piano-modes-and-gain)', () =>
     dispatch({ type: 'replaceScore', text: '' });
     s.appendNote(60, 0, 100); // first apply → c4
     s.applyToScore();
-    expect(appStore.score).toContain('note("c4")');
+    expect(getActiveScore()).toContain('note("c4")');
 
     s.appendNote(67, 100, 200); // second apply → g4
     s.applyToScore();
-    const after = appStore.score;
+    const after = getActiveScore();
     expect(after).toContain('note("c4")');
     expect(after).toContain('note("g4")');
     // 3 voices total: original c4 + original g4 + the second g4 (after splice
@@ -454,7 +454,7 @@ describe('pianoRecStore — applyToScore replace-score slot', () => {
     s.appendNote(60, 0, 100);
     s.appendNote(64, 100, 200);
     s.applyToScore();
-    const after = appStore.score;
+    const after = getActiveScore();
     // Two notes committed as-is; no stack wrap applied.
     expect(after).toContain('note("c4")');
     expect(after).toContain('note("e4")');
@@ -468,20 +468,22 @@ describe('pianoRecStore — applyToScore replace-score slot', () => {
     dispatch({ type: 'replaceScore', text: '' });
     s.appendNote(60, 0, 100);
     s.applyToScore();
-    expect(appStore.score).toContain('note("c4")');
+    expect(getActiveScore()).toContain('note("c4")');
   });
 
-  it('replace-score is destructive: history captures prior score', async () => {
+  it('replace-score is destructive: undo stack captures prior score', async () => {
     const s = await importStore();
     const priorScore = 's("hh*4")';
     dispatch({ type: 'replaceScore', text: priorScore });
-    const historyBefore = appStore.history.length;
+    const id = appStore.activeTrackId;
+    const historyBefore = (appStore.undoStacks[id] ?? []).length;
     s.setPianoSlot('replace-score');
     s.appendNote(60, 0, 100);
     s.applyToScore();
-    expect(appStore.score).not.toContain('hh*4');
-    expect(appStore.history.length).toBe(historyBefore + 1);
-    expect(appStore.history[appStore.history.length - 1]).toBe(priorScore);
+    expect(getActiveScore()).not.toContain('hh*4');
+    const stack = appStore.undoStacks[id] ?? [];
+    expect(stack.length).toBe(historyBefore + 1);
+    expect(stack[stack.length - 1]).toBe(priorScore);
   });
 });
 
@@ -544,7 +546,7 @@ describe('pianoRecStore — applyToScore at-cursor slot', () => {
       dispatch({ type: 'replaceScore', text: 'note("e4")' });
       s.appendNote(60, 0, 100);
       s.applyToScore();
-      expect(appStore.score).toBe('note("e4")'); // unchanged
+      expect(getActiveScore()).toBe('note("e4")'); // unchanged
       expect(s.recBuffer()).toHaveLength(1); // buffer preserved for retry
       expect(warnSpy).toHaveBeenCalledWith(
         expect.stringContaining('at-cursor slot requires editor API'),

@@ -5,7 +5,7 @@ import {
 import { Effect } from 'effect';
 import { AudioEngine } from '~/domain/services';
 import { AppLayer } from '~/infrastructure/composition';
-import { appStore } from '../state/appStore';
+import { getActiveScore } from '../state/appStore';
 import { getAnalyserNode, getDebug } from '~/infrastructure/audio/LiveAudioEngine';
 import type { NoteEvent } from '~/domain/midi/encoder';
 import {
@@ -70,7 +70,7 @@ export function VisualizerPanel(): JSX.Element {
   // Debounced compileAndQuery on score change.
   let compileTimer: number | undefined;
   createEffect(() => {
-    const score = appStore.score;
+    const score = getActiveScore();
     if (compileTimer !== undefined) window.clearTimeout(compileTimer);
     if (!score.trim()) {
       setEvents([]);
