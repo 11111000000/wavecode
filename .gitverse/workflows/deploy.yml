@@ -1,6 +1,34 @@
 # GitVerse Actions — auto-deploy на angara-1 (NixOS dev host, держит Caddy + /var/lib/wavecode/dist/).
 #
-# Триггеры:
+# ════════════════════════════════════════════════════════════════════════
+# STATUS: DISABLED (2026-10-15)
+# ════════════════════════════════════════════════════════════════════════
+#
+# Push-триггер (`on.push.branches: [master]`) закомментирован. workflow
+# никогда не стартует на push. Это временная мера, пока секреты для SSH
+# deploy не настроены (и не настраиваются — см. ниже).
+#
+# Деплой происходит ЛОКАЛЬНО на angara-1 через `bin/deploy.sh` (читает
+# /etc/secrets/llm-proxy/master.key, имеет sudo, копирует в
+# /var/lib/wavecode/dist/, Caddy подхватывает автоматически). CI-deploy
+# через GitVerse Actions — дубликат этого flow, который сейчас не нужен:
+#   - на GitVerse не настроены секреты WAVECODE_DEPLOY_{HOST,PORT,USER,SSH_KEY}
+#     (14 последовательных run-ов упали с `WAVECODE_DEPLOY_HOST not set`)
+#   - даже если настроить, дублировать локальный bin/deploy.sh через CI —
+#     лишний слой без выгоды, когда есть прямой shell на хосте
+#
+# Чтобы включить обратно:
+#   1. настроить секреты (см. таблицу ниже) в gitverse → Settings → Secrets
+#   2. раскомментировать блок `on: push / on: workflow_dispatch`
+#   3. протестировать через `workflow_dispatch` в UI GitVerse
+#   4. при желании добавить cron `*/10 * * * *` на angara-1, чтобы запускать
+#      `bin/deploy.sh` после `git pull` (полностью автономный flow без CI)
+#
+# ════════════════════════════════════════════════════════════════════════
+#
+# Оригинальное описание flow (для справки, пригодится при re-enable):
+#
+# Триггеры (когда включены):
 #   - push в master      → автодеплой (production)
 #   - workflow_dispatch  → ручной запуск (для отладки / hotfix)
 #
@@ -20,15 +48,17 @@
 #   WAVECODE_DEPLOY_SSH_KEY      — приватный ключ ed25519
 #                                  (public в ~/.ssh/authorized_keys на angara-1
 #                                  с command= ограничением)
-#
-# Без secrets workflow падает на первом SSH-шаге с понятной ошибкой.
 
 name: deploy
 
+# Push-триггер отключён 2026-10-15 — CI-deploy не используется.
+# Деплой идёт локально через bin/deploy.sh на angara-1.
+# Оставлен `workflow_dispatch` для редких случаев отладки CI-flow
+# (потребует настроенных secrets, иначе упадёт с тем же WAVECODE_DEPLOY_HOST not set).
 on:
-  push:
-    branches: [master]
-  workflow_dispatch:
+  # push:                                          # ← DISABLED
+  #   branches: [master]                           # ← DISABLED
+  workflow_dispatch:                               # manual only
 
 concurrency:
   group: wavecode-master-deploy
