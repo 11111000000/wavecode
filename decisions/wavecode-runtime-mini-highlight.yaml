@@ -6,7 +6,7 @@ state: active
 body_sha: "sha256:13f049429a9602d3ca0f31134acb84f37774ae985b1b7ee07be2e78800faedba"
 yaml_sha: "sha256:13f049429a9602d3ca0f31134acb84f37774ae985b1b7ee07be2e78800faedba"
 
-intent:|
+intent: |
   Runtime mini-notation highlight — «дирижёрский луч» поверх существующего
   статического `cm-mini-notation` подсветчика. Когда pattern играет, те
   самые sample'ы из `<bd sd hh>` / steps из `[a b c d]`, которые звучат

@@ -6,7 +6,7 @@ state: active
 body_sha: "sha256:c23ee5e2f65f6bfd6b231ee29c43b584e5c8db9a1e7762796e857c1927947897"
 yaml_sha: "sha256:c23ee5e2f65f6bfd6b231ee29c43b584e5c8db9a1e7762796e857c1927947897"
 
-intent:|
+intent: |
   Bottom-sheet router wavecode: единый источник истины — `snapsByKind`
   (per-kind sheet state). Tab-bar табы mixer/ai/status/score и шапочные
   toggle Step/Piano — все управляются через per-kind API

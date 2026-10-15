@@ -6,7 +6,7 @@ state: active
 body_sha: "sha256:c0545153830a8c32f574d464efa88f17a6d1b6a6fb3285d9feecab5d4d9ea7b9"
 yaml_sha: "sha256:c0545153830a8c32f574d464efa88f17a6d1b6a6fb3285d9feecab5d4d9ea7b9"
 
-intent:|
+intent: |
   Пресет-селектор в TransportBar показывает `'creep'` независимо от
   того, какая композиция реально восстанавливается из IDB. Юзер
   грузит пресет X, нажимает Play, перезагружает вкладку — играет X,

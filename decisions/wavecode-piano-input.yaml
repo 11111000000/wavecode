@@ -6,7 +6,7 @@ state: active
 body_sha: "sha256:16864ee7f4a210e97e440c56d3b762044e2d3e1b0dd133efa3cb06cfdab28626"
 yaml_sha: "sha256:16864ee7f4a210e97e440c56d3b762044e2d3e1b0dd133efa3cb06cfdab28626"
 
-intent:|
+intent: |
   В `.app-controls-row` появляется кнопка `🎹 Piano`. В on — над
   `<CodeMirrorEditor>` в `ScorePanel` рендерится `<PianoKeyboard />` —
   2-октавная on-screen клавиатура (24 клавиши: C3..B4), белая + чёрная

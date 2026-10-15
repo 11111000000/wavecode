@@ -6,7 +6,7 @@ state: active
 body_sha: "sha256:eadccfe461259e27ac1f2cf4c377c6a9dd432fef9675509729b8374ede80d576"
 yaml_sha: "sha256:eadccfe461259e27ac1f2cf4c377c6a9dd432fef9675509729b8374ede80d576"
 
-intent:|
+intent: |
   Swing-слайдер в TransportPanel реально влияет на звук во время
   воспроизведения: при изменении `swingAmount` или `swingDivisor`
   выполняется `audio.eval(evalWithTransport(score, transport))` с

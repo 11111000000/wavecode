@@ -6,7 +6,7 @@ state: active
 body_sha: "sha256:24cecae45b3a3d2b7f06108342c911a452d4620ac4851c36bb59526853861124"
 yaml_sha: "sha256:24cecae45b3a3d2b7f06108342c911a452d4620ac4851c36bb59526853861124"
 
-intent:|
+intent: |
   **Два связанных дефекта от недавней работы:**
 
   1. **Play panel исчезает под bottom-sheet.** Mobile-only

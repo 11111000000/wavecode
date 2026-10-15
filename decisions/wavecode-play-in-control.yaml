@@ -6,7 +6,7 @@ state: active
 body_sha: "sha256:426983647d1cf92211ca5af3e51ef4926a94c440000d733ba54cdd0a5b25d3d1"
 yaml_sha: "sha256:426983647d1cf92211ca5af3e51ef4926a94c440000d733ba54cdd0a5b25d3d1"
 
-intent:|
+intent: |
   Play/Stop-кнопка больше НЕ является fixed FAB — она
   живёт в `TransportPanel` (рядом с cps/BPM/swing) и
   семантически «принадлежит» Control-row. FAB полностью

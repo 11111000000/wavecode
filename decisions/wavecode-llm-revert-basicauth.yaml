@@ -6,7 +6,7 @@ state: active
 body_sha: "sha256:ad308247406b75133d86f0e96265b991fcfb72b9f128ed1248f0c46315475501"
 yaml_sha: "sha256:ad308247406b75133d86f0e96265b991fcfb72b9f128ed1248f0c46315475501"
 
-intent:|
+intent: |
   LLM-эндпоинт `llm.kosov.online` (LiteLLM public listener, 11436)
   идёт **без** basic-auth на Caddy-уровне: tier="public" (НЕ
   "public-auth"). Авторизация — двухуровневая:

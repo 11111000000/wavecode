@@ -6,7 +6,7 @@ state: draft
 body_sha: "sha256:73168c7c119a4cbf759810c68370aec2b50910351b82d8798a39bc95f5627b32"
 yaml_sha: "sha256:73168c7c119a4cbf759810c68370aec2b50910351b82d8798a39bc95f5627b32"
 
-intent:|
+intent: |
   Продолжение `wavecode-preset-row-and-toast-z`. Тот пакет перенёс
   toast-stack на top:safe-top, но **z-index остался 50** — а после
   его же фикса preset-row (z-sheet+13 = 53) и controls-row

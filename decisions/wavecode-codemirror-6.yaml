@@ -6,7 +6,7 @@ state: draft
 body_sha: "sha256:db75fe978d2ff8c49b8aef8f3ea03710cb2c76b0367f703fc000aeef98825fdf"
 yaml_sha: "sha256:db75fe978d2ff8c49b8aef8f3ea03710cb2c76b0367f703fc000aeef98825fdf"
 
-intent:|
+intent: |
   Редактор score в wavecode — CodeMirror 6 с кастомным расширением для
   Strudel mini-notation (highlight + completions).
 commitment: |

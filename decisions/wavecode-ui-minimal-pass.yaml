@@ -6,7 +6,7 @@ state: active
 body_sha: "sha256:e4260782b32059b8fdf5e634176ed1ef5e31e51fd07d13dcd0b66bdcab5577d8"
 yaml_sha: "sha256:e4260782b32059b8fdf5e634176ed1ef5e31e51fd07d13dcd0b66bdcab5577d8"
 
-intent:|
+intent: |
   Текущий `#/app` регрессировал по визуальному шуму относительно
   мокапа лендинга (`ui/src/presentation/components/landing/sections/EditorMockup.tsx`):
 

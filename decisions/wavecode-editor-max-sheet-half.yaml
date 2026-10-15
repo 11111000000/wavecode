@@ -6,7 +6,7 @@ state: draft
 body_sha: "sha256:5fe8c42106d21c9d2339259b636d96efc0ab4a640addaf5f0ac55e10095f4b2b"
 yaml_sha: "sha256:5fe8c42106d21c9d2339259b636d96efc0ab4a640addaf5f0ac55e10095f4b2b"
 
-intent:|
+intent: |
   Follow-up to `wavecode-mobile-compact` + `wavecode-toast-overhead`. Две
   правки, обе CSS-only, обе про мобильный split-pane.
 

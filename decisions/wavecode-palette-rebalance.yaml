@@ -6,7 +6,7 @@ state: active
 body_sha: "sha256:c078666dc4e3130b4df0727ecf24a3ba416776669acec9aa54ff8a3ab381e314"
 yaml_sha: "sha256:c078666dc4e3130b4df0727ecf24a3ba416776669acec9aa54ff8a3ab381e314"
 
-intent:|
+intent: |
   Текущая палитра wavecode — `#0a0a0e` + `--amber: #ffaa3b` +
   `--cyan: #5eead4` + `--magenta: #f472b6`. Амбер — primary tone
   для действий, focus, active-tab, brand-LED, button-fill (≈100

@@ -6,7 +6,7 @@ state: draft
 body_sha: "sha256:8ae9f8b66ff825f3d9ff0fb60edc4c17b62d4ea0ebde57f3a0e00de5ea9f3b06"
 yaml_sha: "sha256:8ae9f8b66ff825f3d9ff0fb60edc4c17b62d4ea0ebde57f3a0e00de5ea9f3b06"
 
-intent:|
+intent: |
   При загрузке `presetsStore` кастомные пресеты, чьё имя (lowercase,
   trimmed) совпадает с именем встроенного пресета, дропаются молча
   и localStorage перезаписывается. Защищает от shadow-кастома,

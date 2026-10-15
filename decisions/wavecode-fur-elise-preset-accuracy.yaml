@@ -6,7 +6,7 @@ state: draft
 body_sha: "sha256:1785f24088986a56c2451ee080c20dcb43d1e55ea7a3f54710ed2b5398bccf3f"
 yaml_sha: "sha256:1785f24088986a56c2451ee080c20dcb43d1e55ea7a3f54710ed2b5398bccf3f"
 
-intent:|
+intent: |
   Пресет Für Elise в `ui/src/domain/presets.ts` рендерит узнаваемую
   тему через (1) корректный ритм-контур мелодии (9 начальных нот
   E D# E D# E B D C A), (2) характерный бас A2/E2 чередующийся

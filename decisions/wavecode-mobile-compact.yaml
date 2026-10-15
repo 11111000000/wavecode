@@ -6,7 +6,7 @@ state: draft
 body_sha: "sha256:2e3454aebfcd092bab83ec0ad31a0c22f972e9590db0a4f15f00463a6abe0cb9"
 yaml_sha: "sha256:2e3454aebfcd092bab83ec0ad31a0c22f972e9590db0a4f15f00463a6abe0cb9"
 
-intent:|
+intent: |
   После `wavecode-toast-overhead-and-toolbar-toggle` редактор на
   mobile (412×900) стал видим (5-6 строк @ 11px), но юзер
   продолжает жаловаться: «редактор слишком сильно сплющивается»,

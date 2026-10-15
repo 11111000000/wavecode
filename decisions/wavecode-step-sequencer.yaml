@@ -6,7 +6,7 @@ state: active
 body_sha: "sha256:a716a918744ce742198e8f81b9587618ec2334d9236ed62f60ebb9767118b336"
 yaml_sha: "sha256:a716a918744ce742198e8f81b9587618ec2334d9236ed62f60ebb9767118b336"
 
-intent:|
+intent: |
   В шапке wavecode, рядом с `▶ Запуск`, появляется toggle `🎹 Step`. В on —
   над `CodeMirrorEditor` в `ScorePanel` рендерится `<StepGrid />` —
   8-колоночный × 4-строчный pad-grid (kick / snare / hat / clap →

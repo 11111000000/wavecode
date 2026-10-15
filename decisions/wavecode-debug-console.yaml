@@ -6,7 +6,7 @@ state: active
 body_sha: "sha256:2670d0c5a1053f85f7c42419b8469de4b637a8572ffe3bfe6f07e8361dd14b60"
 yaml_sha: "sha256:2670d0c5a1053f85f7c42419b8469de4b637a8572ffe3bfe6f07e8361dd14b60"
 
-intent:|
+intent: |
   Three observable UI surfaces share one log backend (`logger` from
   `math/wavecode-log-pipeline`):
 

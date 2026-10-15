@@ -6,7 +6,7 @@ state: active
 body_sha: "sha256:46ba04ceb1abb038c32edef30db0caacd4faa4b54c206000707cfdaf48c79ca7"
 yaml_sha: "sha256:46ba04ceb1abb038c32edef30db0caacd4faa4b54c206000707cfdaf48c79ca7"
 
-intent:|
+intent: |
   wavecode — installable PWA. `vite-plugin-pwa` включён в
   `vite.config.ts` с `registerType: 'autoUpdate'`, прекэш initial
   bundle (HTML, JS, CSS, fonts), runtime-кэш Strudel vendor-chunks

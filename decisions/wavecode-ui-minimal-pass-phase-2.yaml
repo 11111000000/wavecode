@@ -6,7 +6,7 @@ state: active
 body_sha: "sha256:343fd9945c6d02adbcbe2aad21529182b0844997cd515f0fa4516ebd447ce949"
 yaml_sha: "sha256:343fd9945c6d02adbcbe2aad21529182b0844997cd515f0fa4516ebd447ce949"
 
-intent:|
+intent: |
   Phase 1 (`math/wavecode-ui-minimal-pass`) убрал визуальный шум,
   но оставил две дыры:
 

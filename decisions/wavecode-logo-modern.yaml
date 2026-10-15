@@ -6,7 +6,7 @@ state: active
 body_sha: "sha256:a950615b0bc9eec4076cd56c6076185dd0a95a80f3b4fb153b26069604c4fab2"
 yaml_sha: "sha256:a950615b0bc9eec4076cd56c6076185dd0a95a80f3b4fb153b26069604c4fab2"
 
-intent:|
+intent: |
   Иконка сайта в трёх местах показывала «wc» вместо нового
   spectrum-логотипа:
 
