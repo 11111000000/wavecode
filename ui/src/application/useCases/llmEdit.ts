@@ -201,34 +201,50 @@ export type DialogTurn = {
 };
 
 /**
- * useCase: применить инструкцию пользователя к текущему score.
- * Принимает историю диалога — LLM получает её как messages array и помнит
- * контекст (например "это не Creep" или "я уже просил бас").
+ * Snapshot of the active Track for LLM-bound work. We pass the
+ * `score` and `messages` only — callers don't need the rest of
+ * the Track metadata at this layer.
+ */
+export type ActiveTrackSnapshot = {
+  readonly id: string;
+  readonly score: string;
+  readonly messages: ReadonlyArray<{ readonly role: 'user' | 'assistant' | 'system'; readonly content: string }>;
+};
+
+/**
+ * useCase: применить инструкцию пользователя к активному треку.
+ * Берёт `score` и историю диалога из `activeTrack`; в LLM
+ * уходит только этот контекст — другие треки не видны.
  */
 export const applyEdit = (
-  currentScore: string,
+  activeTrack: ActiveTrackSnapshot | undefined,
   instruction: string,
-  history: ReadonlyArray<DialogTurn> = [],
   audioState: { status: string; lastError?: string } = { status: 'unknown' },
   options: { model?: 'smart' | 'fast'; thinking?: 'low' | 'high' | 'off' } = {},
 ): Effect.Effect<string, Error | string, LLMClient> =>
   Effect.gen(function* () {
     const llm = yield* LLMClient;
 
-    // Build messages array: history + current request.
+    if (!activeTrack) {
+      return yield* Effect.fail('no-active-track');
+    }
+
+    // Build messages array: history of THIS track only + current request.
     // History ограничена до последних 10 turns чтобы не переполнять контекст.
-    const recentHistory = history.slice(-10);
+    const recentHistory = activeTrack.messages
+      .filter((m) => m.role === 'user' || m.role === 'assistant')
+      .slice(-10);
     const messages = [
-      ...recentHistory.map((t, i) => ({
+      ...recentHistory.map((m, i) => ({
         id: `hist-${i}`,
-        role: t.role,
-        content: t.content,
+        role: m.role,
+        content: m.content,
         ts: 0,
       })),
       {
         id: `user-${Date.now()}`,
         role: 'user' as const,
-        content: buildUserPrompt(currentScore, instruction, audioState),
+        content: buildUserPrompt(activeTrack.score, instruction, audioState),
         ts: Date.now(),
       },
     ];
