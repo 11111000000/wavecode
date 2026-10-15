@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from 'vitest';
 import { render, cleanup, waitFor } from '@solidjs/testing-library';
-import { ConsoleSheet } from './ConsoleSheet';
+import type { ConsoleSheet } from './ConsoleSheet';
 import type * as ConsoleStoreMod from './consoleStore';
 import type * as LoggerMod from '~/infrastructure/log';
 
