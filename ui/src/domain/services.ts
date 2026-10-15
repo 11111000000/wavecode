@@ -146,10 +146,22 @@ export class Repo extends Context.Tag('Repo')<
   {
     readonly loadScore: () => Effect.Effect<string, never, never>;
     readonly saveScore: (score: string) => Effect.Effect<void, never, never>;
-    readonly loadMessages: () => Effect.Effect<ReadonlyArray<Message>, never, never>;
-    readonly saveMessages: (
-      messages: ReadonlyArray<Message>,
+    /**
+     * Dialog threads, keyed by preset id. Each entry is the
+     * full conversation history for that preset. Switching
+     * presets swaps the visible thread; each thread persists
+     * independently across sessions.
+     */
+    readonly loadDialogs: () => Effect.Effect<
+      Readonly<Record<string, ReadonlyArray<Message>>>,
+      never,
+      never
+    >;
+    readonly saveDialogs: (
+      dialogs: Readonly<Record<string, ReadonlyArray<Message>>>,
     ) => Effect.Effect<void, never, never>;
+    readonly loadActivePresetId: () => Effect.Effect<string | null, never, never>;
+    readonly saveActivePresetId: (id: string) => Effect.Effect<void, never, never>;
     /**
      * Load the persisted StepGrid state — mode, draft, and
      * lastCommitted grid. Reload restores user intent so a

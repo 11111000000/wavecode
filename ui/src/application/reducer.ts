@@ -16,6 +16,7 @@ export type AppEvent =
   | { readonly type: 'redoScore' }
   | { readonly type: 'commitHistoryCheckpoint' }
   | { readonly type: 'clearMessages' }
+  | { readonly type: 'switchPreset'; readonly id: string }
   | { readonly type: 'agentStatusChange'; readonly status: AgentStatus; readonly error?: string }
   | { readonly type: 'audioStatusChange'; readonly status: AudioStatus; readonly error?: string }
   | { readonly type: 'setLayerGain'; readonly index: number; readonly gain: number }
@@ -38,6 +39,17 @@ const appendMessage = (
   ...messages,
   { id: newId(), role, content, ts: Date.now() },
 ];
+
+/** Append a message to the dialog thread of the given preset id. */
+const appendToDialog = (
+  dialogs: Readonly<Record<string, ReadonlyArray<Message>>>,
+  presetId: string,
+  role: Role,
+  content: string,
+): Readonly<Record<string, ReadonlyArray<Message>>> => ({
+  ...dialogs,
+  [presetId]: appendMessage(dialogs[presetId] ?? [], role, content),
+});
 
 const pushCapped = <T,>(arr: ReadonlyArray<T>, item: T, limit: number): ReadonlyArray<T> => {
   const next = [...arr, item];
@@ -65,10 +77,16 @@ const clampGain = (g: number): number => {
 export const reduceAppEvent = (state: AppState, event: AppEvent): AppState => {
   switch (event.type) {
     case 'userMessage':
-      return { ...state, messages: appendMessage(state.messages, 'user', event.text) };
+      return {
+        ...state,
+        dialogs: appendToDialog(state.dialogs, state.activePresetId, 'user', event.text),
+      };
 
     case 'assistantMessage':
-      return { ...state, messages: appendMessage(state.messages, 'assistant', event.text) };
+      return {
+        ...state,
+        dialogs: appendToDialog(state.dialogs, state.activePresetId, 'assistant', event.text),
+      };
 
     case 'editScore':
       return {
@@ -117,7 +135,23 @@ export const reduceAppEvent = (state: AppState, event: AppEvent): AppState => {
       };
 
     case 'clearMessages':
-      return { ...state, messages: [] };
+      return {
+        ...state,
+        dialogs: { ...state.dialogs, [state.activePresetId]: [] },
+      };
+
+    case 'switchPreset':
+      if (event.id === state.activePresetId) return state;
+      return {
+        ...state,
+        activePresetId: event.id,
+        // Ensure the new preset has a thread entry (empty array)
+        // so the UI can render an empty conversation without
+        // having to fall back to `?? []` everywhere.
+        dialogs: state.dialogs[event.id]
+          ? state.dialogs
+          : { ...state.dialogs, [event.id]: [] },
+      };
 
     case 'agentStatusChange':
       return {

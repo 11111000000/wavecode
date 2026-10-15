@@ -1,4 +1,4 @@
-import { createSignal, Show, For, createEffect, onCleanup } from 'solid-js';
+import { createSignal, Show, For, createEffect, onCleanup, createMemo } from 'solid-js';
 import { Effect } from 'effect';
 import { dispatch, appStore } from '../state/appStore';
 import { AppLayer } from '~/infrastructure/composition';
@@ -46,6 +46,11 @@ export function AIEditPanel() {
 
   let messagesRef: HTMLDivElement | undefined;
 
+  /** Messages of the active preset's dialog thread. */
+  const activeMessages = createMemo(
+    () => appStore.dialogs[appStore.activePresetId] ?? [],
+  );
+
   const submit = async (overrideText?: string): Promise<void> => {
     const text = (overrideText ?? instruction()).trim();
     if (!text) {
@@ -56,7 +61,7 @@ export function AIEditPanel() {
     setBusy(true);
     setStatus({ kind: 'idle', msg: 'Отправляю в ИИ…' });
 
-    const hist = appStore.messages.slice(-10).map((m): DialogTurn => ({
+    const hist = activeMessages().slice(-10).map((m): DialogTurn => ({
       role: m.role === 'user' ? 'user' : 'assistant',
       content: m.content,
     }));
@@ -138,7 +143,7 @@ export function AIEditPanel() {
 
   createEffect(() => {
     // Следим за длиной истории: при изменении auto-scroll в конец.
-    void appStore.messages.length;
+    void activeMessages().length;
     if (messagesRef) {
       messagesRef.scrollTop = messagesRef.scrollHeight;
     }
@@ -152,15 +157,15 @@ export function AIEditPanel() {
     <div class="ai-edit-panel-inner">
       <div class="ai-messages" ref={messagesRef}>
         <Show
-          when={appStore.messages.length > 0}
+          when={activeMessages().length > 0}
           fallback={
             <div class="ai-messages-empty">
-              Здесь будет диалог с ИИ. Напиши инструкцию внизу — например:
+              Здесь будет диалог с ИИ для выбранной композиции. Напиши инструкцию внизу — например:
               «сделай быстрее в два раза», «добавь басов», «сделай техно-бит».
             </div>
           }
         >
-          <For each={appStore.messages}>
+          <For each={activeMessages()}>
             {(m) => (
               <div class={`ai-message ai-message-${m.role}`}>
                 <div class="ai-message-meta">{roleLabel(m.role)}</div>
@@ -219,6 +224,19 @@ export function AIEditPanel() {
         />
         <div class="ai-controls-row1">
           <LLMSettingsPopover />
+          <button
+            type="button"
+            class="ai-clear-btn"
+            title="Очистить диалог текущей композиции (другие композиции не затрагиваются)"
+            onClick={() => {
+              if (activeMessages().length === 0) return;
+              if (window.confirm('Очистить диалог текущей композиции? История других композиций сохранится.')) {
+                dispatch({ type: 'clearMessages' });
+              }
+            }}
+            disabled={busy() || activeMessages().length === 0}
+            data-testid="ai-clear-btn"
+          >🗑 Очистить</button>
           <button
             type="button"
             class="ai-apply-btn"
