@@ -1,0 +1,17 @@
+wavecode
+Copyright 2026 Petr Kosov and the wavecode contributors
+
+This product includes software developed by third parties:
+
+- @strudel/* — MIT, https://codeberg.org/uzu/strudel
+- @codemirror/* — MIT, https://codemirror.net/
+- solid-js — MIT, https://www.solidjs.com/
+- effect — MIT, https://effect.website/
+- @tonejs/midi — MIT, https://github.com/Tonejs/Midi
+- idb-keyval — Apache-2.0, https://github.com/jakearchibald/idb-keyval
+- lz-string — MIT, https://github.com/pieroxy/lz-string
+- zod — MIT, https://zod.dev/
+
+Full license texts for the above are reproduced in their respective
+upstream repositories. wavecode itself is licensed under Apache-2.0
+(see LICENSE).
