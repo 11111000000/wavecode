@@ -6,7 +6,7 @@ state: draft
 body_sha: "sha256:403320f15ec3267eeba5eb5e9ae6336cee9e4e51f04b5ed94ee94026ac2f5b67"
 yaml_sha: "sha256:403320f15ec3267eeba5eb5e9ae6336cee9e4e51f04b5ed94ee94026ac2f5b67"
 
-intent:|
+intent: |
   UI-слой wavecode использует Solid.js 1.8 вместо React для достижения
   максимальной производительности и минимального потребления ресурсов
   в сценарии live-coding с LLM-стримом.

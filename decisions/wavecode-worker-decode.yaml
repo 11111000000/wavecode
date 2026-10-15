@@ -6,7 +6,7 @@ state: active
 body_sha: "sha256:930feae26918ab9bb6e60d4d17b0acffb5dcd8a276cb2317382fbb0319b1a9c9"
 yaml_sha: "sha256:930feae26918ab9bb6e60d4d17b0acffb5dcd8a276cb2317382fbb0319b1a9c9"
 
-intent:|
+intent: |
   Phase-3 root cause for the audio race that Phase 1 (withConcurrency)
   and Phase 2 (SW-cache pre-check) only partially addressed: every
   preload currently does `fetch().arrayBuffer().decodeAudioData()`

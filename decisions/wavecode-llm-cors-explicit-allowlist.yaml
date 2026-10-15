@@ -6,7 +6,7 @@ state: active
 body_sha: "sha256:18eecfdc191026a4d62ba12d4dec9c1e16ea7c937fbea392459d9d5e842c24f7"
 yaml_sha: "sha256:18eecfdc191026a4d62ba12d4dec9c1e16ea7c937fbea392459d9d5e842c24f7"
 
-intent:|
+intent: |
   Публичный LiteLLM (`llm-proxy-public.service` на 127.0.0.1:11436,
   vhost `llm.kosov.online` через Caddy) пускает preflight OPTIONS только
   от origins в `services.llm-proxy.publicInstance.corsAllowedOrigins`.

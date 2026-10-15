@@ -6,7 +6,7 @@ state: active
 body_sha: "sha256:b1ba6279d0903f3081def64e46ffad79c4952182a885179811d78327757d3a93"
 yaml_sha: "sha256:b1ba6279d0903f3081def64e46ffad79c4952182a885179811d78327757d3a93"
 
-intent:|
+intent: |
   StepGrid toolbar has three semantically-overloaded buttons
   (`↓ read score`, `↻ clear`, `↑ load & play`) and a tap-toggling
   4×8 grid that *looks* identical in every mode — but actually

@@ -6,7 +6,7 @@ state: draft
 body_sha: "sha256:865272bdbf055a234fe9140c10dff8e351a1916168087876cf979aadd0b5e959"
 yaml_sha: "sha256:865272bdbf055a234fe9140c10dff8e351a1916168087876cf979aadd0b5e959"
 
-intent:|
+intent: |
   В `ScorePanel` под редактором — пара кнопок «📥 Импорт» / «📤 Экспорт»:
   (1) текстовый round-trip — `.strudel.txt` / `.js` через `FileReader` +
   `Blob`, lossless, ровно тот же `Score = string`, что и в редакторе;

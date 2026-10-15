@@ -6,7 +6,7 @@ state: active
 body_sha: "sha256:c53eccc2091e2d92009b7ea15535042c2521d542800f1d026e5b06dc6641b819"
 yaml_sha: "sha256:c53eccc2091e2d92009b7ea15535042c2521d542800f1d026e5b06dc6641b819"
 
-intent:|
+intent: |
   `domain/presets.ts` расширяется с +8 жанровыми пресетами, всего 16:
   rock/pop/folk уже есть (8 шт.), добавляем:
   - **EDM 4-on-floor**: kick on every beat + supersaw bass + pluck lead + white noise hat

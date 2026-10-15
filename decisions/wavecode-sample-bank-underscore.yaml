@@ -6,7 +6,7 @@ state: active
 body_sha: "sha256:4f934572b15b8ff375f8381f7269fbc627216663d0a56aa0046d87349a512510"
 yaml_sha: "sha256:4f934572b15b8ff375f8381f7269fbc627216663d0a56aa0046d87349a512510"
 
-intent:|
+intent: |
   Three independent bugs collapsed into "samples don't play":
 
   1. **SampleLoader is a silent no-op.** `SampleLoader.ts` declared

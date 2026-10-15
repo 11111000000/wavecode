@@ -6,7 +6,7 @@ state: draft
 body_sha: "sha256:0df4533d9ec17ba55f3a173487aceaef48d21462673797a8d0fcb7b60de8bf2a"
 yaml_sha: "sha256:0df4533d9ec17ba55f3a173487aceaef48d21462673797a8d0fcb7b60de8bf2a"
 
-intent:|
+intent: |
   CodeMirror 6 в `presentation/components/CodeMirrorEditor.tsx` корректно
   принимает ввод с экранной клавиатуры и вставку из буфера на iOS Safari
   (iPhone / iPad), Android Chrome и desktop — для этого хост-`<div>` получает

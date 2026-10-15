@@ -1,0 +1,22 @@
+# ruff configuration for scripts/ — Python migration tool.
+#
+# The migrate-v1-packets.py script is a one-off migration utility, not
+# library code. The following lint rules are intentionally relaxed:
+#
+# - SIM102: collapsible-if. The YAML state machine inside
+#   _parse_yaml_block reads more naturally as nested if-elif
+#   (state = top | block_scalar | list) than as flat boolean
+#   conjunctions.
+# - PIE810: merge startswith((" ", "\t")) into a single call. Same
+#   rationale — the state machine has multiple "is indentation"
+#   checks where the tuple form is less readable than two
+#   lines.
+# - BLE001: blind-except. The migration top-level loop catches
+#   Exception on each packet so that one bad packet does not
+#   abort the 87-packet run; the exception is logged to errors[]
+#   and the loop continues.
+# - E501: line length. Long heredoc-style YAML emitted by
+#   render_decision_yaml is intentionally one-line-per-statement
+#   for diff-stability.
+[lint]
+per-file-ignores = { "migrate-v1-packets.py" = ["SIM102", "PIE810", "BLE001", "E501"] }

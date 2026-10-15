@@ -6,7 +6,7 @@ state: active
 body_sha: "sha256:09282bf6ebf0e8f72aa9fca7fbce5b0f81eb0076f97b1109ae9811a75030aa5f"
 yaml_sha: "sha256:09282bf6ebf0e8f72aa9fca7fbce5b0f81eb0076f97b1109ae9811a75030aa5f"
 
-intent:|
+intent: |
   Второй пакет legacy.css eating — **AI chat panel + collapsible
   panels** (lines 195-322, 324-496). Это ~300 строк legacy.css.
 

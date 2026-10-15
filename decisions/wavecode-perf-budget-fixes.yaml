@@ -6,7 +6,7 @@ state: draft
 body_sha: "sha256:4df9c72f16b975d2046d7a03eba7637065732b97f2dc00b13912e24b2b0fe249"
 yaml_sha: "sha256:4df9c72f16b975d2046d7a03eba7637065732b97f2dc00b13912e24b2b0fe249"
 
-intent:|
+intent: |
   Performance budget wavecode: 1.4MB JS bundle (CM + strudel + effect)
   + 60KB CSS, FCP 2.5s+ на throttled 4G. Реализуем 4 fix-а:
   (a) CSS variables для piano (убирает 14 inline-style объектов),

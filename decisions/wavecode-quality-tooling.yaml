@@ -6,7 +6,7 @@ state: active
 body_sha: "sha256:ea21133afa76845cb0288139ec10fc736583ac5bb2bfba99bf2fa333cdd8941c"
 yaml_sha: "sha256:ea21133afa76845cb0288139ec10fc736583ac5bb2bfba99bf2fa333cdd8941c"
 
-intent:|
+intent: |
   Two invariants are now machine-enforced on every `git commit`:
 
   1. **Layering invariant**: `console.*` calls are forbidden in

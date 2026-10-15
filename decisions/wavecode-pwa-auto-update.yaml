@@ -6,7 +6,7 @@ state: active
 body_sha: "sha256:e8ddabb8d128ead91e4d4b5652cda8c5d74d6ce3043053437d5cc4426de700bb"
 yaml_sha: "sha256:e8ddabb8d128ead91e4d4b5652cda8c5d74d6ce3043053437d5cc4426de700bb"
 
-intent:|
+intent: |
   После deploy пользователи продолжали работать на старом
   JS-бандле, пока не сделают hard reload (Ctrl+Shift+R) вручную.
   Симптом — 2026-10-13: LLM-фикс с правильным `sk-litellm-` префиксом

@@ -6,7 +6,7 @@ state: draft
 body_sha: "sha256:4acdfc0978a3a40f1c8b370f1343c4e1b76d225cd956cb0a87e0b5cb277b4e5f"
 yaml_sha: "sha256:4acdfc0978a3a40f1c8b370f1343c4e1b76d225cd956cb0a87e0b5cb277b4e5f"
 
-intent:|
+intent: |
   AI-primary layout wavecode: на desktop (≥1024px) AI-чат занимает
   доминирующую площадь viewport (≥60% высоты, ≥320px min),
   ScorePanel уходит в 360px collapsed drawer справа. На mobile —

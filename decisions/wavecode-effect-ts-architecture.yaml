@@ -6,7 +6,7 @@ state: draft
 body_sha: "sha256:71d3631241eb4cb1b008252af4743efa891a00c32cc47b84232c87d97d996553"
 yaml_sha: "sha256:71d3631241eb4cb1b008252af4743efa891a00c32cc47b84232c87d97d996553"
 
-intent:|
+intent: |
   Архитектурный рантайм wavecode — Effect-TS (3.x) с 4 слоями (domain,
   application, infrastructure, presentation) и Dependency Injection через
   Effect-Layer; domain-слой — чистые функции без побочных эффектов.

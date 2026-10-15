@@ -6,7 +6,7 @@ state: draft
 body_sha: "sha256:96e62f985136cce9167b683d348381abd06752db22588a198a728b46b10603dd"
 yaml_sha: "sha256:96e62f985136cce9167b683d348381abd06752db22588a198a728b46b10603dd"
 
-intent:|
+intent: |
   wavecode деплоится как статический SPA: `pnpm build` → ui/dist/ → любой
   static-host (Vercel, Cloudflare Pages, GitHub Pages, nginx). Без Nix-выходов,
   без контейнеров, без серверного процесса.

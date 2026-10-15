@@ -6,7 +6,7 @@ state: active
 body_sha: "sha256:4be1fa8ff9ce408fd26a990cde76791b638259bb52af0d01114e48db0ef9aaef"
 yaml_sha: "sha256:4be1fa8ff9ce408fd26a990cde76791b638259bb52af0d01114e48db0ef9aaef"
 
-intent:|
+intent: |
   Аудио в wavecode рендерится в браузере через @strudel/core + @strudel/webaudio
   (webaudioRepl + evaluate), без серверного TidalCycles+SuperDirt+Icecast и без
   интеграции с ~/Projects/Composer/.

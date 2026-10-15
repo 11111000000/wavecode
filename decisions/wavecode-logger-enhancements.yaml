@@ -6,7 +6,7 @@ state: active
 body_sha: "sha256:a252f585faf67bf38d7a195afcabfeb309726f6eedba1243306060ac01f6fac2"
 yaml_sha: "sha256:a252f585faf67bf38d7a195afcabfeb309726f6eedba1243306060ac01f6fac2"
 
-intent:|
+intent: |
   Three additive enhancements land on top of
   `math/wavecode-log-pipeline`'s L1 ring buffer without restructuring
   it. The L0 (cleanLogArgs) + L2 (wrapStrudelLogger) layers are

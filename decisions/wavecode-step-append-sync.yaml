@@ -6,7 +6,7 @@ state: active
 body_sha: "sha256:cc807dc5f39fa7f33d02f52447001ceae9e51c37a9c23002ff0537aece363930"
 yaml_sha: "sha256:cc807dc5f39fa7f33d02f52447001ceae9e51c37a9c23002ff0537aece363930"
 
-intent:|
+intent: |
   Step-секвенсер НЕ заменяет editor-score при tap на ячейку.
   Tap = однократный sonic preview (через Web Audio `OscillatorNode`
   с drum-тоно́м) БЕЗ `audio.eval` (никакого `repl.stop` /

@@ -6,7 +6,7 @@ state: draft
 body_sha: "sha256:24ee747feafd210ef772e39bf41f8ffb173445df32da36275658f998d962ae74"
 yaml_sha: "sha256:24ee747feafd210ef772e39bf41f8ffb173445df32da36275658f998d962ae74"
 
-intent:|
+intent: |
   LLM-клиент wavecode подключается к https://llm.kosov.online/v1 через
   @ai-sdk/openai-compatible; аутентификация — per-app Bearer-токен
   (sk-litellm-...), прокси — LiteLLM с upstream MiniMax.
