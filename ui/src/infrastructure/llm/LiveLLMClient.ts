@@ -4,7 +4,10 @@ import { LLMClient, type CompletionRequest, type CompletionChunk } from '~/domai
 /**
  * Live LLM client — raw fetch к llm.kosov.online (LiteLLM proxy, OpenAI-compatible).
  *
- * Models: "smart" (MiniMax-M3, code), "fast" (MiniMax-M2.1-highspeed, лёгкий).
+ * Models (через llm-proxy):
+ *   - "smart" → deepseek/deepseek-v4-pro (reasoning ON, 1M ctx, quality).
+ *   - "fast"  → deepseek/deepseek-flash (reasoning OFF через thinking=disabled,
+ *               non-reasoning mode, ~1.2-1.5s TTFB).
  *
  * LiteLLM может вернуть либо JSON, либо SSE. Парсим оба.
  */
@@ -32,20 +35,29 @@ const make = (deps: LiveLLMClientDeps): Context.Tag.Service<typeof LLMClient> =>
       const includeReasoning = thinkingRaw !== 'off';
       const reasoningEffort = thinkingRaw === 'high' ? 'high' : 'low';
 
-      // max_tokens must cover BOTH reasoning_content and message.content.
-      // MiniMax-M3 is a reasoning model (always emits reasoning_content even
-      // without reasoning_effort). With max_tokens=2000 the reasoning ate
-      // the whole budget and the user got an empty message.content
-      // ("ИИ вернул пустой ответ"). 16000 leaves headroom for both.
+      // max_tokens: 2000 хватает для типовых min-notation правок wavecode
+      // (1-2K токенов в коде + немного reasoning). Раньше стояло 16000 —
+      // это провоцировало reasoning-модели убегать в 20+ секунд пустых
+      // раздумий и приходить с finish_reason="length", content="" (см.
+      // KB: deepseek reasoning runaway на max_tokens=16000).
       const requestBody: Record<string, unknown> = {
         model: modelName,
         messages,
         stream: false,
         temperature: 0.3,
-        max_tokens: 16000,
+        max_tokens: 2000,
       };
       if (includeReasoning) {
         requestBody.reasoning_effort = reasoningEffort;
+      }
+
+      // Для fast отключаем reasoning через DeepSeek-специфичный параметр
+      // thinking: {type: "disabled"} — LiteLLM его нативно не знает, но
+      // пробрасывает в extra_body насквозь. Без этого fast = та же reasoning
+      // модель, что и smart, просто поменьше; TTFB одинаковый (~1.4s)
+      // и ответы часто приходят пустыми.
+      if (modelName === 'fast') {
+        requestBody.extra_body = { thinking: { type: 'disabled' } };
       }
 
       console.log('[llm] → request', {
