@@ -92,67 +92,6 @@ commits до 2026-10-14). Они отображены в `decisions/<id>.yaml`
 Старые пакеты — historical record, **не редактируются**; новые
 решения пишутся только в `decisions/`.
 
-## Kanban (agent-kanban) — ОБЯЗАТЕЛЬНО для всех AI-агентов
-
-**Все задачи по wavecode ведутся в агенте-канбане:**
-https://kanban.kosov.online (web UI, basicauth `admin:TempAdmin_2026!`)
-MCP endpoint: `https://kanban.kosov.online/mcp/`
-
-- **Project:** `wavecode` (id=1)
-- **Текущие задачи:** 4 in_progress (Paseo-миграция 2026-10-14) + 1 todo (PWA).
-  IDs 1-5 — см. https://kanban.kosov.online
-- **Skill:** `wavecode-kanban` (загружается on-demand через `skill()` tool —
-  см. [AngaraConfig/agents-commons/skills/wavecode-kanban.md](../AngaraConfig/agents-commons/skills/wavecode-kanban.md))
-
-### Auth: bearer token УЖЕ в env — НЕ ищи его в коде
-
-Paseo daemon получает `KANBAN_BEARER` из systemd
-`EnvironmentFile=/etc/opencode/opencode.env` (mode 0600, root:root,
-**НЕ в Git**). Все spawned opencode CLI процессы наследуют эту env
-переменную (проверено: `cat /proc/<opencode-pid>/environ | grep KANBAN`).
-
-В `OPENCODE_CONFIG_CONTENT` уже прописан reference
-`"Authorization": "Bearer {env:KANBAN_BEARER}"` — opencode CLI
-резолвит `{env:KANBAN_BEARER}` на старте через `getenv("KANBAN_BEARER")`.
-**Тебе НЕ нужно ничего нигде искать, читать, передавать.**
-
-- ❌ НЕ делай `echo $KANBAN_BEARER` (только в debug-случае и в pastebin/private log)
-- ❌ НЕ читай `/etc/opencode/opencode.env` или `/etc/secrets/agent-kanban/*`
-  из своих скриптов (нет необходимости, нарушает принцип least-privilege)
-- ❌ НЕ пиши токен в код, коммиты, комментарии, артефакты
-- ❌ НЕ добавляй `.env` файлы с токеном в репо
-
-Если MCP call возвращает `401 Unauthorized` / "no token" / "Missing API key":
-- Сначала проверь `echo $KANBAN_BEARER | head -c 8` (длина > 0 значит env OK)
-- Если пусто — это значит ты запущен НЕ через Paseo daemon (например,
-  локально вручную или через opencode-serve без `EnvironmentFile`)
-- Попроси пользователя перезапустить через Paseo UI
-
-**Перед началом работы:**
-1. Загрузить skill `wavecode-kanban` через `skill()` — там протокол claim →
-   post_progress → request_review/complete.
-2. Вызвать `mcp_kanban_get_next_task` (filter по project context) — найти
-   существующую задачу, иначе пользователь должен создать новую через UI.
-3. Если задача твоя — `mcp_kanban_claim_task`, иначе пользователь
-   переназначит или попросит оператора.
-
-**Во время работы:**
-- `mcp_kanban_post_progress` — каждый значимый шаг (diff, ошибка,
-  артефакт, статус-апдейт). Не молчи.
-- `mcp_kanban_post_artifact` — пути к файлам (UI рендерит ссылки).
-- `mcp_kanban_post_comment` — ответы на комментарии пользователя.
-
-**В конце:**
-- Работа завершена → `mcp_kanban_request_review` (НЕ complete).
-- Правки по review → `post_progress` + `request_review` снова.
-- После approve пользователем → `mcp_kanban_complete_task` со summary.
-
-**Запрещено:**
-- Молча работать без `post_progress` (оператор не видит прогресса).
-- `complete_task` до явного одобрения пользователем через UI.
-- Создавать задачи без явной просьбы (оператор добавляет через UI сам).
-- Логировать / выводить / коммитить bearer-токен (см. секцию Auth выше).
-
 ## Структура репозитория
 
 ```

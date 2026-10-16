@@ -1,0 +1,181 @@
+---
+schema: math-coding/3.3
+id: disable-kanban-2026-10
+revision: 1
+state: active
+body_sha: "sha256:3fe3f5d31c28ce5db1402ce014ec5815175387ddf07b71a90ade59da6be7c402"
+yaml_sha: "sha256:3fe3f5d31c28ce5db1402ce014ec5815175387ddf07b71a90ade59da6be7c402"
+
+intent: |
+  Stop using the agent-kanban MCP server (https://kanban.kosov.online)
+  as the workflow surface for AI-agent work in wavecode. AI agents
+  operating in this repo no longer claim / post_progress / request_review
+  / complete tasks via the kanban board by default. Direct user↔agent
+  conversation replaces the kanban-mediated task state machine.
+
+  This is a workflow-policy decision, not a code/architecture one: the
+  change touches `AGENTS.md` (instructions to agents) and adds this
+  decision file under `decisions/`. The kanban server, MCP endpoint,
+  bearer token, and `wavecode-kanban` skill all remain in place at the
+  server / operator level (in `~/Projects/AngaraConfig/`) but are
+  inactive for wavecode.
+
+commitment: |
+  1. `AGENTS.md` no longer contains a "Kanban (agent-kanban) — ОБЯЗАТЕЛЬНО
+     для всех AI-агентов" section, nor any project-instructions text
+     referring to `mcp_kanban_*`, `KANBAN_BEARER`, or the `wavecode-kanban`
+     skill (case-insensitive match against the project-instructions
+     section).
+  2. AI agents operating in this repo do not call `mcp_kanban_*` tools
+     by default. Calling them is permitted only on explicit per-task
+     user request ("use kanban for this task").
+  3. The `wavecode-kanban` skill is not loaded by default; it is loaded
+     only if the user explicitly asks the agent to use kanban.
+  4. Server-level kanban configuration (MCP server entry, bearer token,
+     kanban-nginx config) is left intact outside this repo's scope; the
+     disabling is purely a wavecode-side policy change.
+
+axiom_link:
+  - A0
+  - A3
+
+scope:
+  paths:
+    - "AGENTS.md"
+    - "decisions/disable-kanban-2026-10.yaml"
+  exclusions:
+    - ".worktrees/**"
+
+outcomes:
+  - id: agents-md-kanban-section-removed
+    statement: |
+      `grep -i 'kanban\|канбан' AGENTS.md` returns zero matches
+      in the project-instructions section of AGENTS.md at HEAD.
+      The server-wide AI-agent workflow sections inherited from
+      AngaraConfig (preceding the "Project-specific overrides"
+      marker) are out of scope for this outcome.
+  - id: no-default-kanban-mcp-calls
+    statement: |
+      AI agents operating in this repo do not invoke
+      `mcp_kanban_*` tools by default; the only documented
+      trigger for invoking them is an explicit user request.
+  - id: decision-traceable
+    statement: |
+      The disabling is recorded as `decisions/disable-kanban-2026-10.yaml`
+      under math-coding 3.3 so the rationale and reversal path are
+      kernel-checkable and not silently re-introduced.
+
+obligations:
+  - id: agents-md-kanban-grep-zero
+    claim: |
+      The project-instructions section of `AGENTS.md` contains zero
+      references to kanban / канбан / `mcp_kanban_` / `KANBAN_BEARER`
+      / `wavecode-kanban` (case-insensitive grep).
+    acceptance:
+      all:
+        - verifier: text-scan-agents-md-no-kanban
+          result: pass
+  - id: decision-kernel-validates
+    claim: |
+      `decisions/disable-kanban-2026-10.yaml` is structurally valid
+      under the math-coding 3.3 schema and `mathc validate` exits 0
+      for the file at HEAD.
+    acceptance:
+      all:
+        - verifier: mathc validate
+          result: pass
+
+assumptions:
+  - id: user-still-has-session-context
+    statement: |
+      The user (single operator on this repo) is present in the chat
+      session and can observe agent progress through the chat itself;
+      no cross-agent / cross-session kanban feed is required.
+  - id: git-remains-audit-trail
+    statement: |
+      Project history is preserved via git commits, branch names, and
+      `decisions/*.yaml` files; the audit trail kanban provided is
+      already redundant with the git workflow.
+
+risk:
+  declared_triggers:
+    - id: lost-cross-agent-visibility
+      description: |
+        Tasks that previously flowed through the kanban board become
+        invisible to other agents running concurrently in different
+        sessions. Mitigation: the kanban server and MCP tools remain
+        live; if visibility is needed, agents can opt-in on a per-task
+        basis when explicitly asked by the user.
+    - id: user-explicit-asks-kanban-mid-task
+      description: |
+        The user asks an agent mid-task to "post progress to kanban"
+        or "claim task #N". Mitigation: per commitment #2, agents may
+        call `mcp_kanban_*` on explicit per-task request without
+        re-enabling the default workflow.
+    - id: accidental-reintroduction
+      description: |
+        A future agent (or human) re-pastes the old kanban section
+        into AGENTS.md from a copy-paste source. Mitigation: this
+        decision file's `obligations[0]` provides a verifiable
+        constraint that rejects reintroduction without a new
+        decision (state transition `retired` → superseded).
+  owner: human:operator
+
+reversal:
+  - signal: user-explicitly-asks-to-re-enable-kanban
+    action: |
+      File a new decision (`decisions/re-enable-kanban-<date>.yaml`)
+      with `relations.supersedes: disable-kanban-2026-10@1`,
+      transition this decision's `state` to `superseded`, and
+      restore the AGENTS.md kanban section (or a successor).
+  - signal: kanban-removal-blocks-cross-session-workflow
+    action: |
+      Investigate; likely outcome is to scope kanban per-task rather
+      than revert wholesale. Update this decision via revision.
+
+counterexample: |
+  "The kanban board provided structured progress visibility that the
+  chat alone does not: every commit, error, and artifact was a discrete
+  post_progress event with a status timeline. Removing it loses that
+  structure for the operator."
+
+  Counterargument: the same structure is already available via git
+  (`git log --oneline -20`, `git diff`, branch names) and via the
+  `decisions/*.yaml` kernel. The chat-thread IS the session timeline;
+  the operator reads it. The kanban-mediated timeline was a parallel
+  write-log to a third system that required agents to remember to
+  post_progress at every step — a non-trivial compliance cost for a
+  single-operator solo project where the same information was already
+  in the chat and in git.
+
+antithesis: |
+  "Keep agent-kanban as the source of truth for AI-agent tasks in
+  wavecode. The post-progress / request-review / complete ritual
+  forces structured updates and gives a kanban.kosov.online URL
+  the operator can share."
+
+  Rejected because:
+  (a) The user explicitly asked to disable kanban in this repo;
+      user preference is the strongest signal here.
+  (b) For a single-operator solo project, the operator is the chat
+      session and already sees progress in real time without a
+      secondary write surface.
+  (c) The four-step ritual (claim → post_progress → request_review →
+      complete) added latency between commits and operator visibility
+      for no observable benefit.
+  (d) The kanban board still exists and can be opted into per-task;
+      this decision disables the default, not the capability.
+
+  Alternatives considered and rejected:
+  - "Keep kanban but make it optional in AGENTS.md." — equivalent
+    in outcome to this decision, but bloats AGENTS.md with a long
+    "use kanban IF user requests" section. Cleaner to default off.
+  - "Move kanban instructions to a separate skill file." — still
+    exposes agents to the workflow and re-introduces the same
+    compliance cost. Not worth it.
+
+relations:
+  addresses:
+    - wavecode-bootstrap-math-coding-3.3@1
+    - agent-auto-commit-policy-2026-10-14@1
+---
