@@ -11,10 +11,15 @@ import { getDebug } from '~/infrastructure/audio/LiveAudioEngine';
 import { CodeMirrorEditor, type CodeMirrorEditorApi } from '../components/CodeMirrorEditor';
 import { MiniNotationToolbar } from '../components/MiniNotationToolbar';
 import { PianoKeyboard } from '../components/PianoKeyboard';
+import { WhistlePanel } from '../components/WhistlePanel';
 import {
   setEditorFocused,
   setPianoEditorApi,
 } from '../state/pianoRecStore';
+import {
+  setWhistleEditorApi,
+  setWhistleEditorFocused,
+} from '../state/whistleStore';
 import {
   getKindSnap,
   hasOpenSheet,
@@ -151,17 +156,22 @@ export function ScorePanel() {
     if (!api) {
       setPianoEditorApi(undefined);
       setEditorFocused(false);
+      setWhistleEditorApi(undefined);
+      setWhistleEditorFocused(false);
       return;
     }
     setPianoEditorApi(api);
+    setWhistleEditorApi(api);
     const view = api.getView();
     if (!view) {
       setEditorFocused(false);
+      setWhistleEditorFocused(false);
       return;
     }
     const dom = view.contentDOM;
     const onFocus = (): void => {
       setEditorFocused(true);
+      setWhistleEditorFocused(true);
       // wavecode-mobile-split-pane polish (b): if a sheet is open at
       // 'full' (70vh) the editor is squeezed to ~200px — too small
       // for active editing. Auto-resize the sheet to 'half' (50vh)
@@ -180,11 +190,15 @@ export function ScorePanel() {
         }
       }
     };
-    const onBlur = (): void => setEditorFocused(false);
+    const onBlur = (): void => {
+      setEditorFocused(false);
+      setWhistleEditorFocused(false);
+    };
     // Capture initial state — if the editor was already focused when
     // we attached, surface that.
     if (dom.contains(document.activeElement) && document.activeElement === dom) {
       setEditorFocused(true);
+      setWhistleEditorFocused(true);
     }
     dom.addEventListener('focus', onFocus);
     dom.addEventListener('blur', onBlur);
@@ -192,7 +206,9 @@ export function ScorePanel() {
       dom.removeEventListener('focus', onFocus);
       dom.removeEventListener('blur', onBlur);
       setEditorFocused(false);
+      setWhistleEditorFocused(false);
       setPianoEditorApi(undefined);
+      setWhistleEditorApi(undefined);
     });
   });
 
@@ -272,6 +288,7 @@ export function ScorePanel() {
       <Show when={miniToolbarOpen()}>
         <MiniNotationToolbar editor={() => editorApi} />
       </Show>
+      <WhistlePanel />
     </div>
   );
 }

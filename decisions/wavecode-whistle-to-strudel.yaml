@@ -1,0 +1,171 @@
+---
+schema: math-coding/3.3
+id: wavecode-whistle-to-strudel
+revision: 1
+state: active
+body_sha: "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+yaml_sha: "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+
+axiom_link:
+  - A0
+  - A3
+
+intent: |
+  Добавить в wavecode `WhistlePanel` — live-инструмент транскрипции
+  насвистанной мелодии в Strudel-паттерн. User whistling → mic →
+  AnalyserNode → Web Worker (pitchy MPM) → Midi notes → preview-pill
+  → Insert/Replace/Append в редакторе. Реализуем на той же 4-слойной
+  архитектуре (domain / application / infrastructure / presentation),
+  что и остальные wavecode-фичи. YIN-pipeline отделён от UI через
+  чистую state-машину в `ui/src/domain/audio/whistle.ts` —
+  тестируется без Web Audio.
+
+commitment: |
+  1. Pipeline getUserMedia → AnalyserNode (fft=2048, latencyHint=interactive)
+     → Worker (pitchy MPM, single instance, clarityThreshold=0.9) →
+     preview-буфер AudioNote[] в whistleStore.
+  2. `ui/src/domain/audio/whistle.ts` — pure: `hzToMidi`, `feed(state, frame, tune?)`,
+     `closeOpenNote`, `notesToSnippet`. Тестируется 28 unit-тестами
+     без Web Audio (vitest, jsdom).
+  3. Solid-сигналы в `ui/src/presentation/state/whistleStore.ts`
+     (mirrors pianoRecStore shape): listening, state, error, previewNotes,
+     currentHz, slot ∈ {append-stack, replace-score, at-cursor},
+     instrument, editorFocused. Slot selector использует уже существующий
+     CodeMirrorEditorApi accessor (ScorePanel.onReady).
+  4. `ui/src/presentation/components/WhistlePanel.tsx` — inline
+     toolbar внизу ScorePanel: mic-button + Hz-meter + slot-row +
+     instrument-row + freeze/clear/apply + preview-pill + error-pill.
+  5. Snippet output: `note("${names.join(' ')}").s("${instrument}")`
+     (transcription, не loop). Slot selector решает куда: append в
+     stack, replace score, или insert at editor cursor.
+
+outcomes:
+  - id: pipeline-runs-in-browser
+    statement: |
+      В Chrome/desktop getUserMedia возвращает MediaStream; Worker
+      запускается; AnalyserNode fftTimeDomainData posts transfer zero-copy;
+      pipeline emits 1 frame каждые ~30ms при активном свисте.
+  - id: domain-tests-pass
+    statement: |
+      `npx vitest run src/domain/audio/whistle.test.ts` (28 тестов)
+      проходит зелёным; тесты cover Hz→Midi, note segmentation, snippet
+      generation, edge cases (silence, breath-noise, octave split).
+  - id: typecheck-clean
+    statement: |
+      `npx tsc --noEmit` проходит с zero errors при добавленных
+      `WhistleDetector.ts` + `whistleStore.ts` + `WhistlePanel.tsx` +
+      modified `ScorePanel.tsx` и `ui/package.json`.
+  - id: worker-pure-protocol
+    statement: |
+      `yinDetector.worker.ts` экспортирует pure функцию `handleYin(req,
+      deps, state?)` — тестируется без Worker global scope (vitest без jsdom
+      AudioContext).
+
+scope:
+  paths:
+    - "ui/src/domain/audio/whistle.ts"
+    - "ui/src/domain/audio/whistle.test.ts"
+    - "ui/src/infrastructure/audio/WhistleDetector.ts"
+    - "ui/src/infrastructure/audio/yinDetector.worker.ts"
+    - "ui/src/presentation/state/whistleStore.ts"
+    - "ui/src/presentation/components/WhistlePanel.tsx"
+    - "ui/src/presentation/panels/ScorePanel.tsx"
+    - "ui/src/styles/components.css"
+    - "ui/package.json"
+  exclusions:
+    - "ui/node_modules/**"
+    - "ui/dist/**"
+
+obligations:
+  - id: domain-tests-28-green
+    claim: |
+      `npx vitest run ui/src/domain/audio/whistle.test.ts` возвращает
+      exit 0 и reports 28 passed tests.
+    acceptance:
+      all:
+        - verifier: vitest-run-whistle-domain
+          result: pass
+  - id: typecheck-zero-errors
+    claim: |
+      `npx tsc --noEmit` в `ui/` возвращает exit 0 после изменений.
+    acceptance:
+      all:
+        - verifier: tsc-noemit-ui
+          result: pass
+  - id: worker-protocol-pure
+    claim: |
+      `ui/src/infrastructure/audio/yinDetector.worker.ts` экспортирует
+      `handleYin(req, deps, state?)` как pure функцию (deps — единственный
+      side-effect channel) и НЕ вызывает `self.addEventListener`
+      в module top-level при импорте в node-окружении (test-safe).
+    acceptance:
+      all:
+        - verifier: text-scan-worker-glue-guarded
+          result: pass
+  - id: store-no-direct-infra-imports
+    claim: |
+      `ui/src/presentation/state/whistleStore.ts` импортирует только
+      из `~/domain/audio/whistle` и `~/infrastructure/audio/WhistleDetector`
+      (манифестация 4-слойной архитектуры); presentation не зависит от
+      `@strudel/*`.
+    acceptance:
+      all:
+        - verifier: text-scan-store-imports-strudel-none
+          result: pass
+
+risk:
+  declared_triggers:
+    - browser-blocks-getUserMedia
+    - worker-load-fails-on-vite-build
+    - pitchy-clarity-too-strict-for-breathy-whistle
+    - mobile-ios-mic-permission-prompt-hangs
+    - score-text-too-long-after-many-whistles
+  owner: human:operator
+
+counterexample: |
+  «Whistling — это просто pitch detection; main-thread YIN достаточно,
+  Worker — overengineering». Counterargument: pitchy MPM на 2048-sample
+  буфере занимает ~5-10ms на слабом ноуте. На main thread это
+  конкурирует с RAF-loop'ом Visualizer (30Hz × 1k FFT) и Cyclist
+  scheduler lookaheads; мы наблюдали audio-glitches при включённом
+  Visualizer + tab in background. Worker через Transferable zero-copy
+  добавляет ~0ms latency при этом убирает конкуренцию за main thread.
+
+  «Strudel snippets с `note("c4 e4 g4")` без `.slow()` или `.every()`
+  проиграют ноты слишком быстро — это не музыка». Counterargument:
+  user picking free-form transcription explicitly asked for arbitrary
+  length (cycle-driven playback). Глобальный CPS scheduler
+  инхеритится от существующего snippet — пользователь контролирует
+  темп через встроенный Transport или явный `.slow(N)` wrapper,
+  который мы НЕ навязываем.
+
+antithesis: |
+  (1) «Whistling — слишком неточно для live-coding; лучше MIDI-клавиатура».
+  Возражение: целевой юзер НЕ имеет hardware MIDI; он работает в
+  браузере за ноутбуком без USB-контроллера. Mic input — strictly
+  complementary к существующему PianoKeyboard + WebMIDI. (2) «Just
+  ship LLM-based: whistle → audio buffer → llm → Strudel snippet».
+  Возражение: latency (3-10s) vs 60ms here. Качество LLM-transcription
+  сильно зависит от качества модели, тогда как MPM — deterministic
+  DSP. (3) «Можно использовать существующий `analyserNode` из
+  LiveAudioEngine». Возражение: тот analyserNode читает OUTPUT
+  Strudel (Speakers → analyser), а нам нужен INPUT с MIC. Разные
+  AudioSource — разные AnalyserNode по спеке Web Audio. (4) `pitchy`
+  — YIN, не McLeod — почему не YIN? Возражение: pitchy v4 by-default
+  предоставляет MPM, который переопределяет YIN под monophonic вокал;
+  мы используем тот API, который есть.
+
+  Three affordance surfaces (mic toggle / slot row / apply) вместо
+  одной «Press to whistle» кнопки:
+  - Slot selector позволяет пользователю выбирать append vs replace
+    vs cursor — без него destructive replace-score — единственный
+    affordance, и пользователь боится пользоваться фичей.
+  - Instrument selector (8 опций) важен: разные whistles просят разные
+    тембры (sine для мягкого, square для резкого).
+  - Three discrete-action row (freeze/clear/apply) — материал для
+    предсказуемого UX, в отличие от одной auto-commit кнопки.
+
+relations:
+  addresses:
+    - wavecode-piano-input@1
+    - wavecode-piano-rec-clarity@1

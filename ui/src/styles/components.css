@@ -4368,3 +4368,149 @@ textarea.ai-textarea:focus-visible {
   animation: visualizer-pulse 1.0s ease-in-out infinite;
 }
 
+/* ===========================================================================
+ *  WHISTLE PANEL (wavecode-whistle-to-strudel)
+ *  Live audio input → MIDI transcription → Strudel snippet. Inline toolbar
+ *  that lives below the editor in ScorePanel. Mirrors piano-toolbar's
+ *  visual language (data-active states, mic-pulse animation) so users with
+ *  the on-screen piano + this panel see consistent affordances.
+ * ========================================================================== */
+
+.whistle-panel {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-xs);
+  padding: var(--space-2xs) var(--space-xs);
+  margin-top: var(--space-xs);
+  border-top: 1px solid var(--surface-2);
+  font-family: var(--font-mono);
+  font-size: var(--fs-2xs);
+  color: var(--fg-dim);
+  letter-spacing: var(--ls-wide);
+  text-transform: lowercase;
+}
+.whistle-panel[data-state='streaming'] { color: var(--cyan); }
+.whistle-panel[data-state='errored']   { color: var(--magenta); }
+
+.whistle-mic-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border: 1px solid var(--surface-2);
+  border-radius: var(--radius-sm);
+  background: var(--surface-1);
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  transition: border-color 120ms var(--ease-out), color 120ms var(--ease-out);
+}
+.whistle-mic-btn:hover { color: var(--cyan); border-color: var(--cyan); }
+.whistle-mic-btn[data-listening='true'] {
+  color: var(--cyan);
+  border-color: var(--cyan);
+  animation: whistle-pulse 1.4s ease-in-out infinite;
+}
+@keyframes whistle-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 transparent; }
+  50%      { box-shadow: 0 0 6px 0 var(--cyan); }
+}
+
+.whistle-meter { color: var(--cyan); }
+
+.whistle-slot-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding-left: var(--space-2xs);
+  border-left: 1px solid var(--surface-2);
+}
+.whistle-slot-btn {
+  padding: 2px 8px;
+  border: 1px solid var(--surface-2);
+  border-radius: var(--radius-sm);
+  background: var(--surface-0);
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.whistle-slot-btn[data-active='true'] {
+  color: var(--cyan);
+  border-color: var(--cyan);
+  background: color-mix(in oklab, var(--cyan) 14%, var(--surface-0));
+}
+.whistle-slot-btn[disabled] {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.whistle-slot-label { opacity: 0.7; }
+
+.whistle-instrument-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding-left: var(--space-2xs);
+  border-left: 1px solid var(--surface-2);
+}
+.whistle-inst-btn {
+  padding: 2px 6px;
+  border: 1px solid var(--surface-2);
+  border-radius: var(--radius-xs);
+  background: var(--surface-0);
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  font-size: var(--fs-3xs);
+}
+.whistle-inst-btn[data-active='true'] {
+  color: var(--amber);
+  border-color: var(--amber);
+  background: color-mix(in oklab, var(--amber) 14%, var(--surface-0));
+}
+
+.whistle-action-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding-left: var(--space-2xs);
+  border-left: 1px solid var(--surface-2);
+}
+.whistle-action-btn {
+  padding: 3px 10px;
+  border: 1px solid var(--surface-2);
+  border-radius: var(--radius-sm);
+  background: var(--surface-1);
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.whistle-action-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.whistle-apply-btn[data-action='apply'] {
+  color: var(--cyan);
+  border-color: var(--cyan);
+}
+
+.whistle-preview-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 8px;
+  border: 1px solid var(--cyan);
+  border-radius: var(--radius-pill);
+  background: color-mix(in oklab, var(--cyan) 12%, var(--surface-0));
+  color: var(--cyan);
+  font-size: var(--fs-3xs);
+}
+
+.whistle-error-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border: 1px solid var(--magenta);
+  border-radius: var(--radius-pill);
+  background: color-mix(in oklab, var(--magenta) 10%, var(--surface-0));
+  color: var(--magenta);
+  font-size: var(--fs-3xs);
+}
+
