@@ -16,7 +16,14 @@ type LLMSettings = {
 const KEY = 'wavecode-llm-settings-v1';
 
 const defaults: LLMSettings = {
-  model: 'smart',
+  // 2026-10-16: default flipped smart → fast. На типовых applyEdit в wavecode
+  // (правки mini-notation, 1-2K tokens) fast с thinking=disabled даёт
+  // ~1.0-1.5s end-to-end с готовым ответом, тогда как smart (deepseek-v4-pro)
+  // даже с budget_tokens лимитами убегает в 3-21s reasoning на полный
+  // max_tokens budget и приходит с finish_reason='length', content=''.
+  // Юзер может переключиться на smart в UI для задач, где важнее качество
+  // рассуждений (coding, debugging), но дефолт = fast.
+  model: 'fast',
   thinking: 'low',
 };
 
