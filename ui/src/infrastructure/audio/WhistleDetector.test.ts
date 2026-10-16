@@ -99,6 +99,12 @@ const installStubs = (): void => {
   ): void => {
     clearTimeout(id as unknown as ReturnType<typeof setTimeout>);
   };
+  // Wipe the shared AudioContext global so each test starts with
+  // a clean slate — otherwise a previous test's
+  // `__wavecodeAudioCtx` write would be reused (causing the
+  // current detector to take the "shared" branch and skip its
+  // own AudioContext.close on stop).
+  delete (window as unknown as { __wavecodeAudioCtx?: unknown }).__wavecodeAudioCtx;
 };
 
 import {

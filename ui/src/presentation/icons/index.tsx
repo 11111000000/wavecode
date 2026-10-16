@@ -290,6 +290,15 @@ export const TabVisualizeIcon = (p: Props): JSX.Element => (
   </svg>
 );
 
+export const TabWhistleIcon = (p: Props): JSX.Element => (
+  <svg {...base(p.size ?? 18)} class={`wc-icon ${p.class ?? ''}`}>
+    <rect x="8" y="2" width="4" height="9" rx="2" />
+    <path d="M5 9 a3 3 0 0 0 3 3" />
+    <path d="M14 5 v4 a4 4 0 0 1 -4 4" />
+    <line x1="12" y1="13" x2="12" y2="15" />
+  </svg>
+);
+
 export const DragHandleIcon = (p: Props): JSX.Element => (
   <svg {...base(p.size ?? 24)} class={`wc-icon ${p.class ?? ''}`}>
     <line x1="8" y1="5" x2="8" y2="5.01" />

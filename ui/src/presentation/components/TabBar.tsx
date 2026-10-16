@@ -5,7 +5,7 @@ import {
 } from '../state/uiState';
 import {
   TabScoreIcon, TabStepIcon, TabPianoIcon, TabMixerIcon, TabChatIcon, TabStatusIcon,
-  TabVisualizeIcon,
+  TabVisualizeIcon, TabWhistleIcon,
 } from '../icons';
 import { SampleProgressBadge } from './SampleProgressBadge';
 
@@ -20,6 +20,7 @@ const ITEMS: Item[] = [
   { id: 'score',     label: 'Score',     icon: TabScoreIcon     },
   { id: 'step',      label: 'Step',      icon: TabStepIcon      },
   { id: 'piano',     label: 'Piano',     icon: TabPianoIcon     },
+  { id: 'whistle',   label: 'Whistle',   icon: TabWhistleIcon   },
   { id: 'visualize', label: 'Visualize', icon: TabVisualizeIcon },
   { id: 'mixer',     label: 'Mixer',     icon: TabMixerIcon     },
   { id: 'chat',      label: 'AI',        icon: TabChatIcon      },

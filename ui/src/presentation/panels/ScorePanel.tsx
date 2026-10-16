@@ -11,7 +11,6 @@ import { getDebug } from '~/infrastructure/audio/LiveAudioEngine';
 import { CodeMirrorEditor, type CodeMirrorEditorApi } from '../components/CodeMirrorEditor';
 import { MiniNotationToolbar } from '../components/MiniNotationToolbar';
 import { PianoKeyboard } from '../components/PianoKeyboard';
-import { WhistlePanel } from '../components/WhistlePanel';
 import {
   setEditorFocused,
   setPianoEditorApi,
@@ -19,8 +18,6 @@ import {
 import {
   setWhistleEditorApi,
   setWhistleEditorFocused,
-  whistleCollapsed,
-  toggleWhistleCollapsed,
 } from '../state/whistleStore';
 import {
   getKindSnap,
@@ -226,12 +223,12 @@ export function ScorePanel() {
         <div class="score-empty-state" role="note" aria-label="Подсказки для старта">
           <p>Нажми ▶ чтобы запустить шаблон</p>
           <p>Открой ▼ Piano → tap для звука</p>
-          <p>Открой ▼ Whistle → насвисти мелодию</p>
+          <p>Тапни Whistle внизу → насвисти мелодию</p>
           <p>Или напиши ИИ: "сделай бит"</p>
         </div>
       </Show>
-      <div class="score-tools-header">
-        <Show when={isDesktop()}>
+      <Show when={isDesktop()}>
+        <div class="score-piano-header">
           <button
             type="button"
             class="piano-toggle"
@@ -246,36 +243,12 @@ export function ScorePanel() {
             </span>
             <span class="piano-toggle__label">Piano</span>
           </button>
-        </Show>
-        <button
-          type="button"
-          class="whistle-toggle"
-          data-collapsed={whistleCollapsed() ? 'true' : 'false'}
-          aria-expanded={!whistleCollapsed()}
-          aria-controls="score-whistle-inline"
-          aria-label={whistleCollapsed() ? 'Развернуть свист' : 'Свернуть свист'}
-          title={whistleCollapsed()
-            ? 'Свистни в микрофон — мы распознаем высоту и превратим в Strudel'
-            : 'Скрыть панель свиста'}
-          onClick={() => toggleWhistleCollapsed()}
-        >
-          <span class="whistle-toggle__caret" aria-hidden="true">
-            {whistleCollapsed() ? '▶' : '▼'}
-          </span>
-          <span class="whistle-toggle__label">Whistle</span>
-        </button>
-      </div>
-      <Show when={isDesktop()}>
+        </div>
         <Show when={!pianoCollapsed()}>
           <div id="score-piano-inline" class="score-piano-inline">
             <PianoKeyboard variant="inline" />
           </div>
         </Show>
-      </Show>
-      <Show when={!whistleCollapsed()}>
-        <div id="score-whistle-inline" class="score-whistle-inline">
-          <WhistlePanel />
-        </div>
       </Show>
       <Suspense fallback={<div class="cm-host cm-host-fill cm-loading">загрузка редактора…</div>}>
         <CodeMirrorEditor

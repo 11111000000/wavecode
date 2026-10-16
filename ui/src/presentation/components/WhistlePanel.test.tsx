@@ -34,8 +34,6 @@ beforeEach(async () => {
   w.clearPreview();
   // Reset by reaching into whistleStore's onCleanup path
   await w.stopWhistle();
-  // Reset localStorage so test runs are deterministic
-  try { localStorage.removeItem('wavecode-whistle-collapse-v1'); } catch {}
 });
 
 afterEach(() => {

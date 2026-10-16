@@ -4397,36 +4397,11 @@ textarea.ai-textarea:focus-visible {
   flex-wrap: wrap;
 }
 
-.whistle-toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2xs);
-  height: 28px;
-  padding: 0 var(--space-sm);
-  background: transparent;
-  color: var(--fg-dim);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-pill);
-  font-family: var(--font-mono);
-  font-size: var(--fs-2xs);
-  font-weight: var(--fw-medium);
-  text-transform: uppercase;
-  letter-spacing: var(--ls-wide);
-  cursor: pointer;
-  transition:
-    color var(--dur-xs) var(--ease),
-    border-color var(--dur-xs) var(--ease);
-}
-.whistle-toggle:hover { color: var(--cyan); border-color: var(--cyan); }
-.whistle-toggle[data-collapsed='false'] {
-  color: var(--cyan);
-  border-color: var(--cyan);
-}
-.whistle-toggle__caret { font-size: 10px; }
-
-.score-whistle-inline {
-  background: var(--surface-1);
-  border-bottom: 1px solid var(--border);
+/* whistle-sheet-body — container inside the Whistle BottomSheet.
+ *  The WhistlePanel itself is mostly self-contained (flex-wrap), so
+ *  the wrapper just provides sane padding inside the sheet. */
+.whistle-sheet-body {
+  padding: var(--space-xs) var(--space-md) var(--space-md);
 }
 
 .whistle-panel {

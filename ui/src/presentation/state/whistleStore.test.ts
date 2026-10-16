@@ -23,7 +23,6 @@ const importStore = async () => await import('../state/whistleStore');
 
 beforeEach(() => {
   vi.resetModules();
-  try { localStorage.removeItem('wavecode-whistle-collapse-v1'); } catch {}
 });
 
 describe('whistleStore — initial state', () => {
@@ -41,11 +40,6 @@ describe('whistleStore — initial state', () => {
     const w = await importStore();
     expect(w.whistleSlot()).toBe('append-stack');
     expect(w.whistleInstrument()).toBe('piano');
-  });
-
-  it('whistleCollapsed defaults to true (closed by default — discoverability by toggle click)', async () => {
-    const w = await importStore();
-    expect(w.whistleCollapsed()).toBe(true);
   });
 
   it('editor API starts undefined, editor focused is false', async () => {
@@ -68,31 +62,6 @@ describe('whistleStore — setters', () => {
     const w = await importStore();
     w.setWhistleInstrument('triangle');
     expect(w.whistleInstrument()).toBe('triangle');
-  });
-
-  it('setWhistleCollapsed persists to localStorage', async () => {
-    const w = await importStore();
-    w.setWhistleCollapsed(false);
-    expect(w.whistleCollapsed()).toBe(false);
-    expect(localStorage.getItem('wavecode-whistle-collapse-v1')).toBe('false');
-    w.setWhistleCollapsed(true);
-    expect(localStorage.getItem('wavecode-whistle-collapse-v1')).toBe('true');
-  });
-
-  it('toggleWhistleCollapsed inverts and persists', async () => {
-    const w = await importStore();
-    expect(w.whistleCollapsed()).toBe(true);
-    w.toggleWhistleCollapsed();
-    expect(w.whistleCollapsed()).toBe(false);
-    expect(localStorage.getItem('wavecode-whistle-collapse-v1')).toBe('false');
-  });
-
-  it('setWhistleCollapsed restores from localStorage on next module import', async () => {
-    const w1 = await importStore();
-    w1.setWhistleCollapsed(false);
-    vi.resetModules();
-    const w2 = await importStore();
-    expect(w2.whistleCollapsed()).toBe(false);
   });
 
   it('setWhistleEditorApi and setWhistleEditorFocused update signals', async () => {

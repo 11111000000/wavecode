@@ -64,41 +64,6 @@ export const [whistleEditorApi, setWhistleEditorApi] = createSignal<
 >(undefined);
 export const [whistleEditorFocused, setWhistleEditorFocused] = createSignal(false);
 
-// wavecode-whistle-discoverability: the WhistlePanel lives behind a
-// `▼ Whistle` toggle (mirroring the Piano toggle pattern). Default
-// state is COLLAPSED on first visit — clicking the toggle is the
-// discoverability entry point. The user's preference is persisted
-// in localStorage so they don't have to re-expand every session.
-const WHISTLE_COLLAPSE_KEY = 'wavecode-whistle-collapse-v1';
-
-const readWhistleCollapsed = (): boolean => {
-  if (typeof localStorage === 'undefined') return true;
-  try {
-    const v = localStorage.getItem(WHISTLE_COLLAPSE_KEY);
-    if (v === 'false') return false;
-    if (v === 'true') return true;
-  } catch {
-    /* localStorage unavailable (private mode, SSR) — default closed */
-  }
-  return true;
-};
-
-export const [whistleCollapsed, setWhistleCollapsedSignal] = createSignal(readWhistleCollapsed());
-
-export const setWhistleCollapsed = (v: boolean): void => {
-  setWhistleCollapsedSignal(v);
-  if (typeof localStorage === 'undefined') return;
-  try {
-    localStorage.setItem(WHISTLE_COLLAPSE_KEY, String(v));
-  } catch {
-    /* silently no-op */
-  }
-};
-
-export const toggleWhistleCollapsed = (): void => {
-  setWhistleCollapsed(!whistleCollapsed());
-};
-
 // Live RMS (0..1) — separate from `whistleCurrentHz` so the meter can
 // show "the mic is hearing sound" even when there's no clear pitch.
 // Set by `onWhistleFrame`; cleared on `clearPreview` / `stopWhistle`.

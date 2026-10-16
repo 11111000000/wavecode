@@ -11,7 +11,10 @@ import YinWorker from './yinDetector.worker?worker';
  *   4. RAF loop: each frame grabs the latest time-domain data via
  *      `getFloatTimeDomainData`, posts it to the Worker (Transferable),
  *      receives a YIN frame, and forwards it to the caller.
- *   5. lifetime: stop() tears down tracks, ctx, worker, raf.
+ *   5. lifetime: stop() tears down tracks, our AnalyserNode, worker, raf.
+ *      Crucially we DO NOT close the shared AudioContext (we don't own it
+ *      when it was reused from `__wavecodeAudioCtx`); only the
+ *      WhistleDetector-owned contexts get closed.
  *
  * What's NOT here:
  *   - Note segmentation (lives in `domain/audio/whistle.ts`)
@@ -20,7 +23,7 @@ import YinWorker from './yinDetector.worker?worker';
  *
  * Why dedicated Worker
  * --------------------
- * Even on a modern laptop, pitchy's YIN on a 2048-sample buffer takes
+ * Even on a modern laptop, pitchy's MPM on a 2048-sample buffer takes
  * ~5-10ms. On the main thread that competes with audio scheduling and
  * Solid rendering — we've seen the Visualizer (~30Hz RAF, 1k FFT)
  * already hurting the scheduler when the tab loses focus. Moving YIN
@@ -36,18 +39,24 @@ import YinWorker from './yinDetector.worker?worker';
  * dominated by the FFT window). If we ever need sub-frame timing
  * (live spectrogram lag compensation) we'd move to AudioWorklet.
  *
- * Why no AudioContext reuse
- * -------------------------
- * The existing `LiveAudioEngine` has its own AudioContext (the one
- * Strudel/superdough owns). We need to read the microphone INSIDE the
- * same context or one built on the same physical device, because
- * the user's mic stream is a single source of truth. We build our own
- * AudioContext (browser-default sampleRate) for now; a future iteration
- * may want to share `getAnalyserNode()`'s context to centralise device
- * IO.
+ * Why share the AudioContext with LiveAudioEngine
+ * ------------------------------------------------
+ * `LiveAudioEngine.unlockAudioContext()` exposes a global
+ * `window.__wavecodeAudioCtx` — the SAME AudioContext that drives
+ * Strudel/superdough output. We reuse it for the input
+ * `MediaStreamSource` when present, so the user's mic input goes
+ * through the same audio graph root that handles output. Creating a
+ * separate `AudioContext` for input is allowed by the Web Audio spec
+ * but in some browsers (Safari/iOS in particular) it splits audio
+ * focus — the second context may not start reliably after a user
+ * gesture, and on ChromeOS it has been observed to suspend the
+ * first context. Sharing the context avoids both.
  *
- * Returned handle is single-use: start() once, stop() once. Re-using
- * after stop throws — the UI should call start() afresh.
+ * If the shared context is not present yet (Play never pressed), we
+ * create a fresh one. We DO close our own context in `stop()` when
+ * we created it, but NOT when we reused the shared one.
+ *
+ * Returned handle is single-use: start() once, stop() once.
  */
 
 export type WhistleStartOptions = {
@@ -131,6 +140,13 @@ export const startWhistleDetector = (
   let rafId: number | null = null;
   let worker: Worker | null = null;
   let stopped = false;
+  // Track whether we created the AudioContext ourselves (so we
+  // close it in stop()) or reused the global one (don't close —
+  // it's owned by LiveAudioEngine / Strudel).
+  let ownsAudioCtx = false;
+  // Track our own MediaStreamSource so we can disconnect it
+  // independently in stop() (the AnalyserNode is per-call too).
+  let mediaSource: MediaStreamAudioSourceNode | null = null;
 
   const fftSize = opts.fftSize ?? DEFAULT_FFT_SIZE;
   const clarityThreshold = opts.clarityThreshold ?? DEFAULT_CLARITY_THRESHOLD;
@@ -159,11 +175,27 @@ export const startWhistleDetector = (
       worker.terminate();
       worker = null;
     }
+    if (mediaSource !== null) {
+      try {
+        mediaSource.disconnect();
+      } catch {
+        /* already disconnected */
+      }
+      mediaSource = null;
+    }
+    if (analyser !== null) {
+      try {
+        analyser.disconnect();
+      } catch {
+        /* already disconnected */
+      }
+      analyser = null;
+    }
     if (stream !== null) {
       for (const track of stream.getTracks()) track.stop();
       stream = null;
     }
-    if (audioCtx !== null) {
+    if (audioCtx !== null && ownsAudioCtx) {
       try {
         await audioCtx.close();
       } catch {
@@ -171,7 +203,6 @@ export const startWhistleDetector = (
       }
       audioCtx = null;
     }
-    analyser = null;
     setState('idle');
   };
 
@@ -189,17 +220,32 @@ export const startWhistleDetector = (
       stream = micStream;
       setState('starting-audio');
 
-      const Ctor: typeof AudioContext =
-        typeof AudioContext !== 'undefined'
-          ? AudioContext
-          : (window as unknown as { webkitAudioContext: typeof AudioContext })
-              .webkitAudioContext;
-      const ctx = new Ctor({ latencyHint: 'interactive' });
+      // Reuse the global AudioContext from LiveAudioEngine if it's
+      // been created. Otherwise create our own (and remember to
+      // close it in stop()).
+      const win = window as unknown as { __wavecodeAudioCtx?: AudioContext };
+      const sharedCtx = win.__wavecodeAudioCtx ?? null;
+      let ctx: AudioContext;
+      if (sharedCtx !== null && sharedCtx.state !== 'closed') {
+        ctx = sharedCtx;
+        ownsAudioCtx = false;
+      } else {
+        const Ctor: typeof AudioContext =
+          typeof AudioContext !== 'undefined'
+            ? AudioContext
+            : (window as unknown as { webkitAudioContext: typeof AudioContext })
+                .webkitAudioContext;
+        ctx = new Ctor({ latencyHint: 'interactive' });
+        // Stash for any other code that reads the same global.
+        win.__wavecodeAudioCtx = ctx;
+        ownsAudioCtx = true;
+      }
       audioCtx = ctx;
       const src = ctx.createMediaStreamSource(micStream);
       const node = ctx.createAnalyser();
       node.fftSize = fftSize;
       analyser = node;
+      mediaSource = src;
       src.connect(node);
 
       worker = mkWorker();
