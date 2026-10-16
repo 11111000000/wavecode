@@ -5,6 +5,7 @@ import {
   whistleError,
   whistlePreviewNotes,
   whistleCurrentHz,
+  whistleCurrentRms,
   whistleSlot,
   whistleInstrument,
   whistleEditorFocused,
@@ -24,25 +25,25 @@ import {
 /**
  * WhistlePanel — inline live-transcription toolbar.
  *
- * Rendered next to (or below) `MiniNotationToolbar` inside `ScorePanel`.
- * Reads everything from `whistleStore` and routes user actions back
- * through it; no infrastructure imports here.
+ * Rendered inside `ScorePanel` once the user expands the `▼ Whistle`
+ * toggle. Mirrors PianoToolbar's affordance language so users with
+ * the on-screen piano + this panel see consistent controls.
  *
  * Six affordances:
  *   1. Mic toggle (`🎙` button) — starts/stops the detector. Label
  *      reflects detector phase (idle / requesting-mic / streaming /
  *      errored) so the user understands why nothing happens.
- *   2. Live Hz meter — tiny SVG arc that fills as `currentHz()` rises
- *      into the audible whistle range (~200-1500Hz). Mirrors the
- *      Visualizer's affordance-language but stays compact (24×24).
+ *   2. Dual meter — RMS bar (the mic is hearing sound) + Hz label
+ *      (the detected pitch). RMS is the "is this working" indicator;
+ *      Hz is the "what pitch is it reading" indicator. A user
+ *      humming without pitch sees RMS fill but Hz stay 0 — that
+ *      tells them mic is live but their input is non-tonal.
  *   3. Slot segmented control — `↵ stack` / `⟳ replace` / `⌖ cursor`.
  *      `⌖ cursor` is disabled when the editor isn't focused; tooltip
- *      tells the user to tap into the editor first. Mirrors
- *      PianoToolbar's slot selector exactly so users with two
- *      mental-models (piano + mic) don't have to relearn the verbs.
- *   4. Instrument selector — same 8 options as the piano (piano/...
- *      triangle/sine/sawtooth/square). The committed snippet uses
- *      `s("${instrument}")`.
+ *      tells the user to tap into the editor first. Each slot has a
+ *      full sentence in `title=` so the destructive/non-destructive
+ *      distinction is clear.
+ *   4. Instrument selector — same 8 options as the piano.
  *   5. Freeze / Clear / Apply row:
  *      - `❄ freeze` — forces the open note to close (commits any
  *        sustained note into the preview).
@@ -50,12 +51,12 @@ import {
  *      - `↑ apply` — visible only when preview is non-empty. Calls
  *        `applyToScore()` which dispatches via the active slot.
  *   6. Preview-pill — "● 5 нот: c4 e4 g4 e4 c4 → конец стека".
- *      Same shape as PianoToolbar's preview pill — keeps mobile
- *      BottomSheet parity.
  *
- * The MIDI-status / native error messaging is rendered inline (no
- * toasts) so the user can read what failed (mic-permission-timeout
- * is a common case; we emit the message verbatim).
+ * Error pill:
+ *   When `getUserMedia` rejects (PermissionDenied / NotAllowedError),
+ *   the browser doesn't render a "how to fix" UI; we surface the
+ *   raw error string + a "open browser settings" hint with the
+ *   correct per-browser link to the mic-permission page.
  */
 
 const INSTRUMENTS: ReadonlyArray<string> = [
@@ -82,21 +83,21 @@ const SLOTS: ReadonlyArray<{
 }> = [
   {
     id: 'append-stack',
-    ariaLabel: 'Слот: конец стека — дописать как слой',
-    titleEnabled: 'Записать в конец стека',
+    ariaLabel: 'Слот: дописать в конец стека — безопасный, не разрушает score',
+    titleEnabled: '↵ stack — дописать в конец существующего stack(...) (или обернуть оба).',
     titleDisabled: undefined,
   },
   {
     id: 'replace-score',
-    ariaLabel: 'Слот: заменить весь score',
-    titleEnabled: 'Заменить весь score — destructive',
+    ariaLabel: 'Слот: заменить весь score — destructive, отменяется undo',
+    titleEnabled: '⟳ replace — заменить весь score на новый snippet. Отменяется через Ctrl+Z.',
     titleDisabled: undefined,
   },
   {
     id: 'at-cursor',
-    ariaLabel: 'Слот: вставить в позицию курсора',
-    titleEnabled: 'Вставить в курсор',
-    titleDisabled: 'Курсор недоступен — кликните в редактор',
+    ariaLabel: 'Слот: вставить в позицию курсора — нужен фокус в редакторе',
+    titleEnabled: '⌖ cursor — вставить snippet в текущую позицию курсора в редакторе.',
+    titleDisabled: '⌖ cursor — сначала кликните в редактор (нужен фокус).',
   },
 ];
 
@@ -107,6 +108,28 @@ const STATE_LABEL: Record<string, string> = {
   streaming:        '● Слушаю',
   stopping:         '…стоп',
   errored:          '✕ ошибка',
+};
+
+/**
+ * Returns a per-browser link to the mic-permission page, or `null`
+ * when we can't infer the browser. The link is shown alongside the
+ * error-pill so the user can unblock themselves in one click.
+ *
+ * Chromium / Edge / Brave: `chrome://settings/content/microphone`
+ * Firefox:                 `about:preferences#privacy-microphone`
+ * Safari:                  no public URL — the user has to dig into
+ *                           Safari → Settings → Websites → Microphone.
+ */
+const micPermissionUrl = (): string | null => {
+  if (typeof navigator === 'undefined') return null;
+  const ua = navigator.userAgent;
+  if (/Edg\//.test(ua) || /OPR\//.test(ua) || /Chrome\//.test(ua) || /Brave\//.test(ua)) {
+    return 'chrome://settings/content/microphone';
+  }
+  if (/Firefox\//.test(ua)) {
+    return 'about:preferences#privacy-microphone';
+  }
+  return null;
 };
 
 export function WhistlePanel(): JSX.Element {
@@ -124,22 +147,42 @@ export function WhistlePanel(): JSX.Element {
       : (SLOTS.find((s) => s.id === slot)?.titleDisabled ?? '');
   };
 
+  const isMicPermissionError = (): boolean => {
+    const err = whistleError();
+    if (err === null) return false;
+    return /denied|permission|notallowed|mic-permission/i.test(err);
+  };
+
   return (
     <div class="whistle-panel" data-state={whistleState()}>
-      <button
-        type="button"
-        class="whistle-mic-btn"
-        data-listening={whistleListening()}
-        aria-pressed={whistleListening()}
-        aria-label={whistleListening() ? 'Остановить прослушивание микрофона' : 'Начать прослушивание микрофона'}
-        title={whistleListening() ? 'Остановить' : 'Свистни в микрофон → транскрипция в Strudel'}
-        onClick={onToggleMic}
-      >
-        <span class="whistle-mic-label">{STATE_LABEL[whistleState()] ?? '🎙'}</span>
-        <WhistleMeter />
-      </button>
+      <div class="whistle-row whistle-row-primary">
+        <button
+          type="button"
+          class="whistle-mic-btn"
+          data-listening={whistleListening()}
+          aria-pressed={whistleListening()}
+          aria-label={whistleListening() ? 'Остановить прослушивание микрофона' : 'Начать прослушивание микрофона'}
+          title={whistleListening() ? 'Остановить' : 'Свистни в микрофон → транскрипция в Strudel'}
+          onClick={onToggleMic}
+        >
+          <span class="whistle-mic-label">{STATE_LABEL[whistleState()] ?? '🎙'}</span>
+          <WhistleMeter />
+        </button>
+        <span class="whistle-hz-readout" aria-live="polite">
+          {(() => {
+            const hz = whistleCurrentHz();
+            const rms = whistleCurrentRms();
+            if (whistleState() === 'streaming' && rms < 0.005) {
+              return 'тихо — свисти громче';
+            }
+            if (hz === null) return '— Hz';
+            return `${Math.round(hz)} Hz`;
+          })()}
+        </span>
+      </div>
 
       <div class="whistle-slot-row" role="group" aria-label="Куда применить">
+        <span class="whistle-row-label">→</span>
         <For each={SLOTS}>
           {(s) => {
             const isActive = (): boolean => whistleSlot() === s.id;
@@ -166,6 +209,7 @@ export function WhistlePanel(): JSX.Element {
       </div>
 
       <div class="whistle-instrument-row" role="group" aria-label="Инструмент">
+        <span class="whistle-row-label">s(</span>
         <For each={INSTRUMENTS}>
           {(inst) => (
             <button
@@ -180,6 +224,7 @@ export function WhistlePanel(): JSX.Element {
             </button>
           )}
         </For>
+        <span class="whistle-row-label">)</span>
       </div>
 
       <div class="whistle-action-row">
@@ -239,6 +284,32 @@ export function WhistlePanel(): JSX.Element {
       <Show when={whistleError() !== null}>
         <span class="whistle-error-pill" role="alert">
           ✕ {whistleError()}
+          <Show when={isMicPermissionError()}>
+            <span class="whistle-error-hint">
+              {' '}—{' '}
+              {(() => {
+                const url = micPermissionUrl();
+                if (url === null) {
+                  return 'разрешите доступ к микрофону в настройках браузера';
+                }
+                return (
+                  <>
+                    <a
+                      href={url}
+                      target="_blank"
+                      rel="noreferrer"
+                      class="whistle-error-link"
+                    >
+                      разрешите в настройках браузера
+                    </a>
+                    <span class="whistle-error-paste-hint">
+                      {' '}(откройте эту ссылку вручную — браузер не открывает chrome:// автоматически)
+                    </span>
+                  </>
+                );
+              })()}
+            </span>
+          </Show>
         </span>
       </Show>
     </div>
@@ -246,32 +317,59 @@ export function WhistlePanel(): JSX.Element {
 }
 
 /**
- * Compact Hz meter — SVG arc, height proportional to current Hz on
- * the [100, 1500] range. Reads `whistleCurrentHz()` (set by
- * `onWhistleFrame` in the store). 24×24; matches the existing
- * Visualizer pill affordance-language so the user learns one motif.
+ * Dual meter: two stacked bars in the SVG.
+ *   - Outer bar (background): fixed full width, low opacity.
+ *   - Inner bar (foreground): width proportional to `whistleCurrentRms()`.
+ *     This is the "is the mic hearing sound" indicator — it fills
+ *     whenever the input is above the silence floor, regardless of
+ *     whether pitchy can lock a pitch.
+ *
+ * Pitch read-out (Hz) is rendered as a text label next to the
+ * button in the parent component, not in the SVG.
  */
 function WhistleMeter(): JSX.Element {
   const MIN_HZ = 100;
   const MAX_HZ = 1500;
-  const level = (): number => {
+  const hzLevel = (): number => {
     const hz = whistleCurrentHz();
     if (hz === null) return 0;
-    const clamped = Math.max(MIN_HZ, Math.min(MAX_HZ, hz));
-    return (clamped - MIN_HZ) / (MAX_HZ - MIN_HZ);
+    return Math.max(0, Math.min(1, (hz - MIN_HZ) / (MAX_HZ - MIN_HZ)));
   };
-  // Bar fills left-to-right; height 4px.
+  // RMS mapped 0..0.3 → 0..1 (clip to 1); 0.3 ≈ loud speech
+  const rmsLevel = (): number => {
+    const r = whistleCurrentRms();
+    return Math.max(0, Math.min(1, r / 0.3));
+  };
   return (
     <svg
       class="whistle-meter"
-      width="40"
-      height="6"
-      viewBox="0 0 40 6"
+      width="44"
+      height="14"
+      viewBox="0 0 44 14"
       aria-hidden="true"
       data-listening={whistleListening()}
     >
-      <rect x="0" y="2" width="40" height="2" rx="1" fill="currentColor" opacity="0.18" />
-      <rect x="0" y="2" width={40 * level()} height="2" rx="1" fill="currentColor" />
+      {/* RMS bar — top row */}
+      <rect x="0" y="1" width="44" height="3" rx="1" fill="currentColor" opacity="0.18" />
+      <rect
+        x="0"
+        y="1"
+        width={44 * rmsLevel()}
+        height="3"
+        rx="1"
+        fill="currentColor"
+        opacity="0.7"
+      />
+      {/* Hz bar — bottom row */}
+      <rect x="0" y="9" width="44" height="3" rx="1" fill="currentColor" opacity="0.18" />
+      <rect
+        x="0"
+        y="9"
+        width={44 * hzLevel()}
+        height="3"
+        rx="1"
+        fill="currentColor"
+      />
     </svg>
   );
 }

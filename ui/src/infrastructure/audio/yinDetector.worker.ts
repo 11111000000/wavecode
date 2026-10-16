@@ -140,7 +140,13 @@ export const handleYin = (
     const buf = req.buffer;
     const ts = req.timestampMs;
     const sr = req.sampleRate;
-    if (buf.length !== state.fftSize) {
+    // Ensure a detector exists for the incoming buffer size even
+    // without a prior 'configure' message — the default-state's
+    // fftSize (2048) happens to match a common buffer length, so
+    // the old `buf.length !== state.fftSize` guard silently skipped
+    // detector creation and replied with hz=null. Lazy creation on
+    // first 'sample' is the safer contract.
+    if (state.detector === null || state.detector.inputLength !== buf.length) {
       ensureDetector(state, buf.length);
     }
     if (state.detector === null) {

@@ -4370,20 +4370,71 @@ textarea.ai-textarea:focus-visible {
 
 /* ===========================================================================
  *  WHISTLE PANEL (wavecode-whistle-to-strudel)
- *  Live audio input → MIDI transcription → Strudel snippet. Inline toolbar
- *  that lives below the editor in ScorePanel. Mirrors piano-toolbar's
- *  visual language (data-active states, mic-pulse animation) so users with
- *  the on-screen piano + this panel see consistent affordances.
+ *  Live audio input → MIDI transcription → Strudel snippet. Lives behind
+ *  a `▼ Whistle` toggle in the score-tools-header (mirrors the Piano
+ *  toggle). When expanded, the panel renders below the editor and shows:
+ *    row 1: 🎙 mic button + dual meter (RMS / Hz) + Hz read-out
+ *    row 2: slot selector (append-stack / replace-score / at-cursor)
+ *    row 3: instrument selector (8 options)
+ *    row 4: freeze / clear / apply actions + preview-pill
+ *    row 5: error pill (if mic denied / not supported)
+ *
+ *  Mobile parity: the Whistle toggle is visible on both desktop and
+ *  mobile viewports (unlike Piano, which is desktop-only). The panel
+ *  wraps to multiple rows via flex-wrap.
+ *
+ *  Visual language: cyan accent matches the audio-active affordance;
+ *  amber for instrument selection (matches PianoToolbar).
  * ========================================================================== */
+
+.score-tools-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2xs);
+  padding: var(--space-2xs) var(--space-md);
+  background: var(--surface-1);
+  border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+
+.whistle-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2xs);
+  height: 28px;
+  padding: 0 var(--space-sm);
+  background: transparent;
+  color: var(--fg-dim);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  font-family: var(--font-mono);
+  font-size: var(--fs-2xs);
+  font-weight: var(--fw-medium);
+  text-transform: uppercase;
+  letter-spacing: var(--ls-wide);
+  cursor: pointer;
+  transition:
+    color var(--dur-xs) var(--ease),
+    border-color var(--dur-xs) var(--ease);
+}
+.whistle-toggle:hover { color: var(--cyan); border-color: var(--cyan); }
+.whistle-toggle[data-collapsed='false'] {
+  color: var(--cyan);
+  border-color: var(--cyan);
+}
+.whistle-toggle__caret { font-size: 10px; }
+
+.score-whistle-inline {
+  background: var(--surface-1);
+  border-bottom: 1px solid var(--border);
+}
 
 .whistle-panel {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: var(--space-xs);
-  padding: var(--space-2xs) var(--space-xs);
-  margin-top: var(--space-xs);
-  border-top: 1px solid var(--surface-2);
+  padding: var(--space-xs) var(--space-md);
   font-family: var(--font-mono);
   font-size: var(--fs-2xs);
   color: var(--fg-dim);
@@ -4392,6 +4443,21 @@ textarea.ai-textarea:focus-visible {
 }
 .whistle-panel[data-state='streaming'] { color: var(--cyan); }
 .whistle-panel[data-state='errored']   { color: var(--magenta); }
+
+.whistle-row {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2xs);
+}
+.whistle-row-primary {
+  flex: 1 1 auto;
+  min-width: 200px;
+}
+.whistle-row-label {
+  opacity: 0.5;
+  font-weight: var(--fw-medium);
+  margin: 0 2px;
+}
 
 .whistle-mic-btn {
   display: inline-flex;
@@ -4418,6 +4484,13 @@ textarea.ai-textarea:focus-visible {
 }
 
 .whistle-meter { color: var(--cyan); }
+
+.whistle-hz-readout {
+  font-variant-numeric: tabular-nums;
+  color: var(--fg);
+  min-width: 80px;
+  font-size: var(--fs-2xs);
+}
 
 .whistle-slot-row {
   display: inline-flex;
@@ -4506,11 +4579,27 @@ textarea.ai-textarea:focus-visible {
 .whistle-error-pill {
   display: inline-flex;
   align-items: center;
-  padding: 2px 8px;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 4px 10px;
   border: 1px solid var(--magenta);
-  border-radius: var(--radius-pill);
+  border-radius: var(--radius-sm);
   background: color-mix(in oklab, var(--magenta) 10%, var(--surface-0));
   color: var(--magenta);
+  font-size: var(--fs-3xs);
+  text-transform: none;
+  letter-spacing: 0;
+}
+.whistle-error-hint { color: var(--fg-dim); }
+.whistle-error-link {
+  color: var(--magenta);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  font-weight: var(--fw-medium);
+}
+.whistle-error-link:hover { color: var(--fg); }
+.whistle-error-paste-hint {
+  opacity: 0.6;
   font-size: var(--fs-3xs);
 }
 
