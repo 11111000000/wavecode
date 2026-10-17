@@ -3,6 +3,8 @@ import { EditorView, Decoration, type DecorationSet } from '@codemirror/view';
 import { StateEffect, StateField } from '@codemirror/state';
 import type { PianoInstrument } from '~/domain/music/notes';
 import { noteToneSnippet, noteNumberToName } from '~/domain/music/notes';
+import { appendToTopStack } from '~/domain/strudel';
+import { consoleStore } from '~/presentation/components/consoleStore';
 import { dispatch, appStore } from './appStore';
 import type { CodeMirrorEditorApi } from '~/presentation/components/CodeMirrorEditor';
 
@@ -207,8 +209,11 @@ export const commitSnippet = (
 };
 
 /**
- * Merge a freshly-committed snippet into the current editor score,
- * handling three cases:
+ * Merge a freshly-committed snippet into the current editor score.
+ *
+ * Delegates to the shared AST-backed `appendToTopStack`
+ * (`ui/src/domain/strudel/splice.ts`), replacing the hand-rolled
+ * paren-walker this module used to keep inline. Handles three cases:
  *
  *   1. empty editor                   → snippet verbatim
  *   2. editor already has top-level
@@ -218,35 +223,15 @@ export const commitSnippet = (
  *   3. editor has a single non-stack
  *      pattern (e.g. just `note(...)`) → wrap BOTH in a fresh `stack(...)`
  *
- * Paren-aware: skips comments and string literals when locating the
- * top-level `stack` open. See `gridState.appendGridToScore` for the
- * original version (this is the same algorithm adapted to operate on
- * raw snippet strings instead of synthesised grid rows).
+ * If the top-level `stack(` is unterminated (malformed score), the
+ * returned string is the original score unchanged — the caller
+ * (`applyToScore`) surfaces a warning and preserves the recording
+ * rather than emitting broken code. `appendToTopStack` signals this
+ * with `{ ok: false }`.
  */
 export const stackAppend = (currentScore: string, snippet: string): string => {
-  if (currentScore.trim() === '') return snippet;
-
-  const stackStart = findTopLevelStackAt(currentScore);
-  if (stackStart !== -1) {
-    let i = stackStart + 5; // 'stack'
-    i = skipWhitespaceAndComments(currentScore, i);
-    const openParen = i;
-    const closeIdx = findStackClose(currentScore, openParen + 1);
-    if (closeIdx !== -1) {
-      const head = currentScore.slice(0, closeIdx).replace(/\s+$/, '');
-      const tail = currentScore.slice(closeIdx);
-      const inner = snippet
-        .split('\n')
-        .map((l) => '  ' + l)
-        .join('\n');
-      const headNeedsComma = /,\s*$/.test(head);
-      return `${head}${headNeedsComma ? '' : ','}\n${inner}\n${tail}`;
-    }
-  }
-
-  // Non-stack score → wrap both in a fresh stack.
-  const trimmedCurrent = currentScore.trim();
-  return `stack(\n${trimmedCurrent},\n${snippet.split('\n').map((l) => '  ' + l).join('\n')}\n)`;
+  const result = appendToTopStack(currentScore, snippet);
+  return result.ok ? result.score : currentScore;
 };
 
 /**
@@ -312,8 +297,16 @@ export const applyToScore = (): void => {
   }
 
   // append-stack
-  const newScore = stackAppend(appStore.score, snippet);
-  dispatch({ type: 'replaceScore', text: newScore });
+  const result = appendToTopStack(appStore.score, snippet);
+  if (!result.ok) {
+    consoleStore.pushToast({
+      severity: 'warn',
+      title: 'Не удалось вставить запись',
+      body: 'В score незакрытая скобка stack(...) — исправьте синтаксис и повторите.',
+    });
+    return; // preserve the recording for retry
+  }
+  dispatch({ type: 'replaceScore', text: result.score });
   setRecBuffer([]);
   // Flash the appended lines at the end of the new doc.
   flashAfterCommit();
@@ -525,84 +518,4 @@ export const flashLastInsertRange = (view: EditorView): void => {
   const last = doc.length;
   if (last === 0) return;
   flashRange(view, 0, last);
-};
-
-// =========================================================================
-// Paren-aware scanner helpers — minimal subset of gridState.ts's helper
-// trio, kept inline because they're <50 lines combined and only used by
-// `stackAppend` from this module. Extracting them to a shared module
-// would add a file for no real reuse benefit.
-//
-// If a third stack-parser consumer appears (likely none), extract into
-// `presentation/state/stackParse.ts`.
-// =========================================================================
-
-const skipWhitespaceAndComments = (src: string, i: number): number => {
-  while (i < src.length) {
-    const ch = src[i];
-    if (ch === ' ' || ch === '\t' || ch === '\n' || ch === '\r') {
-      i += 1;
-      continue;
-    }
-    if (ch === '/' && src[i + 1] === '/') {
-      const nl = src.indexOf('\n', i);
-      i = nl === -1 ? src.length : nl + 1;
-      continue;
-    }
-    if (ch === '/' && src[i + 1] === '*') {
-      const close = src.indexOf('*/', i + 2);
-      i = close === -1 ? src.length : close + 2;
-      continue;
-    }
-    break;
-  }
-  return i;
-};
-
-const findTopLevelStackAt = (src: string): number => {
-  const i = skipWhitespaceAndComments(src, 0);
-  if (src.slice(i, i + 5) !== 'stack') return -1;
-  let j = i + 5;
-  j = skipWhitespaceAndComments(src, j);
-  if (src[j] !== '(') return -1;
-  // Require word-break after `(` (whitespace, comment, or close-paren) so
-  // we don't confuse `stackFollower(...)` for a real stack call.
-  const peek = src[j + 1];
-  if (
-    peek !== undefined
-    && peek !== ' '
-    && peek !== '\t'
-    && peek !== '\n'
-    && peek !== '\r'
-    && peek !== '/'
-    && peek !== ')'
-  ) {
-    return -1;
-  }
-  return i;
-};
-
-const findStackClose = (src: string, afterOpenParen: number): number => {
-  let depth = 1;
-  let inStr: '"' | "'" | '`' | null = null;
-  for (let i = afterOpenParen; i < src.length; i += 1) {
-    const ch = src[i];
-    if (inStr) {
-      if (ch === '\\') { i += 1; continue; }
-      if (ch === inStr) inStr = null;
-      continue;
-    }
-    if (ch === '"' || ch === "'" || ch === '`') { inStr = ch; continue; }
-    if (ch === '/' && src[i + 1] === '/') {
-      const nl = src.indexOf('\n', i);
-      i = nl === -1 ? src.length : nl;
-      continue;
-    }
-    if (ch === '(') depth += 1;
-    else if (ch === ')') {
-      depth -= 1;
-      if (depth === 0) return i;
-    }
-  }
-  return -1;
 };
