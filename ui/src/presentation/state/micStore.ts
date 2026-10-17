@@ -24,6 +24,7 @@ import {
 } from '~/domain/audio/transient';
 import { appendToTopStack } from '~/domain/strudel';
 import { consoleStore } from '~/presentation/components/consoleStore';
+import { logger } from '~/infrastructure/log';
 import { previewPillPayload as _pianoPillRef } from './pianoRecStore';
 
 /**
@@ -331,15 +332,19 @@ export const applyToScore = (): void => {
   if (slot === 'at-cursor') {
     const api = micEditorApi();
     if (api === undefined) {
-      console.warn(
-        'micStore.applyToScore: at-cursor slot requires editor API; no-op',
+      logger.push(
+        'warn',
+        ['micStore.applyToScore: at-cursor slot requires editor API; no-op'],
+        'micStore.applyToScore',
       );
       return;
     }
     const view = api.getView();
     if (view === undefined) {
-      console.warn(
-        'micStore.applyToScore: at-cursor slot requires EditorView; no-op',
+      logger.push(
+        'warn',
+        ['micStore.applyToScore: at-cursor slot requires EditorView; no-op'],
+        'micStore.applyToScore',
       );
       return;
     }

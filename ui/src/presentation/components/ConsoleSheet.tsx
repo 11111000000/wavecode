@@ -20,8 +20,8 @@
  *     браузера не стирает историю ошибок). Sink bump-ит сигнал →
  *     ConsoleSheet сразу отображает их.
  *   - Любая ошибка загрузки (IDB недоступен, payload corrupt) ловится
- *     и глушится через console.warn — sheet не должен крашиться из-за
- *     persistence-layer.
+ *     и глушится через logger.push('warn', ...) — sheet не должен
+ *     крашиться из-за persistence-layer.
  *
  * UI:
  *   - Mobile: bottom-sheet на 60vh / 90vh (через inline translateY).
@@ -137,12 +137,13 @@ export function ConsoleSheet(): JSX.Element {
         sinkTickSet((n) => n + 1);
       } catch (err) {
         try {
-          console.warn(
-            '[ConsoleSheet] failed to load persisted errors:',
-            err,
+          logger.push(
+            'warn',
+            ['[ConsoleSheet] failed to load persisted errors:', err],
+            'consoleSheet.bootRestore',
           );
         } catch {
-          /* logger.warn itself may be unavailable in some envs */
+          /* logger.push itself may be unavailable in some envs */
         }
       }
     })();
