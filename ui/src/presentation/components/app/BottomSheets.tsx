@@ -3,7 +3,7 @@ import { BottomSheet } from '~/presentation/components/BottomSheet';
 import { MixerPanel } from '~/presentation/components/MixerPanel';
 import { StepGrid } from '~/presentation/components/StepGrid';
 import { PianoKeyboard } from '~/presentation/components/PianoKeyboard';
-import { WhistlePanel } from '~/presentation/components/WhistlePanel';
+import { MicPanel } from '~/presentation/components/MicPanel';
 import { HelloPanel } from '~/presentation/panels/HelloPanel';
 import { AIEditPanel } from '~/presentation/panels/AIEditPanel';
 import { VisualizerPanel } from '~/presentation/panels/VisualizerPanel';
@@ -74,19 +74,19 @@ export function BottomSheets(_: BottomSheetsProps): JSX.Element {
         </BottomSheet>
       </Show>
 
-      {/* wavecode-whistle-to-strudel: rendered on BOTH viewports
+      {/* wavecode-mic-to-strudel: rendered on BOTH viewports
           (unlike piano which is desktop-only because it coexists with
-          the editor). Whistle is a brief interaction — user opens the
-          sheet, whistles, applies, closes — so covering the editor
+          the editor). Mic is a brief interaction — user opens the
+          sheet, makes sounds, applies, closes — so covering the editor
           is fine on both viewports. half-snap leaves the editor
           visible above for context. */}
       <BottomSheet
-        kind="whistle"
-        title="Whistle"
+        kind="mic"
+        title="Mic"
         subtitle="микрофон → Strudel"
       >
-        <div class="whistle-sheet-body">
-          <WhistlePanel />
+        <div class="mic-sheet-body">
+          <MicPanel />
         </div>
       </BottomSheet>
     </>

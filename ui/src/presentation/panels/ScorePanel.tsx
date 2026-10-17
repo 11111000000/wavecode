@@ -16,9 +16,9 @@ import {
   setPianoEditorApi,
 } from '../state/pianoRecStore';
 import {
-  setWhistleEditorApi,
-  setWhistleEditorFocused,
-} from '../state/whistleStore';
+  setMicEditorApi,
+  setMicEditorFocused,
+} from '../state/micStore';
 import {
   getKindSnap,
   hasOpenSheet,
@@ -155,22 +155,22 @@ export function ScorePanel() {
     if (!api) {
       setPianoEditorApi(undefined);
       setEditorFocused(false);
-      setWhistleEditorApi(undefined);
-      setWhistleEditorFocused(false);
+      setMicEditorApi(undefined);
+      setMicEditorFocused(false);
       return;
     }
     setPianoEditorApi(api);
-    setWhistleEditorApi(api);
+    setMicEditorApi(api);
     const view = api.getView();
     if (!view) {
       setEditorFocused(false);
-      setWhistleEditorFocused(false);
+      setMicEditorFocused(false);
       return;
     }
     const dom = view.contentDOM;
     const onFocus = (): void => {
       setEditorFocused(true);
-      setWhistleEditorFocused(true);
+      setMicEditorFocused(true);
       // wavecode-mobile-split-pane polish (b): if a sheet is open at
       // 'full' (70vh) the editor is squeezed to ~200px — too small
       // for active editing. Auto-resize the sheet to 'half' (50vh)
@@ -191,13 +191,13 @@ export function ScorePanel() {
     };
     const onBlur = (): void => {
       setEditorFocused(false);
-      setWhistleEditorFocused(false);
+      setMicEditorFocused(false);
     };
     // Capture initial state — if the editor was already focused when
     // we attached, surface that.
     if (dom.contains(document.activeElement) && document.activeElement === dom) {
       setEditorFocused(true);
-      setWhistleEditorFocused(true);
+      setMicEditorFocused(true);
     }
     dom.addEventListener('focus', onFocus);
     dom.addEventListener('blur', onBlur);
@@ -205,9 +205,9 @@ export function ScorePanel() {
       dom.removeEventListener('focus', onFocus);
       dom.removeEventListener('blur', onBlur);
       setEditorFocused(false);
-      setWhistleEditorFocused(false);
+      setMicEditorFocused(false);
       setPianoEditorApi(undefined);
-      setWhistleEditorApi(undefined);
+      setMicEditorApi(undefined);
     });
   });
 
@@ -223,7 +223,7 @@ export function ScorePanel() {
         <div class="score-empty-state" role="note" aria-label="Подсказки для старта">
           <p>Нажми ▶ чтобы запустить шаблон</p>
           <p>Открой ▼ Piano → tap для звука</p>
-          <p>Тапни Whistle внизу → насвисти мелодию</p>
+          <p>Тапни 🎤 Mic внизу → пой, свисти, играй мелодию</p>
           <p>Или напиши ИИ: "сделай бит"</p>
         </div>
       </Show>

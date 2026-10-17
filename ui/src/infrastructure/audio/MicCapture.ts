@@ -1,8 +1,8 @@
-import type { PitchFrame } from '~/domain/audio/whistle';
+import type { PitchFrame } from '~/domain/audio/micCapture';
 import YinWorker from './yinDetector.worker?worker';
 
 /**
- * WhistleDetector — main-thread orchestrator.
+ * MicCapture — main-thread orchestrator.
  *
  * Responsibilities (thin by design):
  *   1. getUserMedia({ audio: ... })
@@ -15,9 +15,9 @@ import YinWorker from './yinDetector.worker?worker';
  *      worker, raf, and the AudioContext WE created.
  *
  * What's NOT here:
- *   - Note segmentation (lives in `domain/audio/whistle.ts`)
- *   - Snippet generation (lives in `domain/audio/whistle.ts`)
- *   - Solid UI signals (lives in `presentation/state/whistleStore.ts`)
+ *   - Note segmentation (lives in `domain/audio/micCapture.ts`)
+ *   - Snippet generation (lives in `domain/audio/micCapture.ts`)
+ *   - Solid UI signals (lives in `presentation/state/micStore.ts`)
  *
  * Why dedicated Worker
  * --------------------
@@ -33,7 +33,7 @@ import YinWorker from './yinDetector.worker?worker';
  * `ScriptProcessorNode` is deprecated; `AudioWorklet` is the modern
  * equivalent but adds a "module-then-load-then-attach" dance and a
  * separate bundle. RAF + polled `getFloatTimeDomainData` is good enough
- * for whistle → note transcription (~30Hz update rate, ~42ms latency
+ * for vocal/whistle note transcription (~30Hz update rate, ~42ms latency
  * dominated by the FFT window). If we ever need sub-frame timing
  * (live spectrogram lag compensation) we'd move to AudioWorklet.
  *
@@ -43,7 +43,7 @@ import YinWorker from './yinDetector.worker?worker';
  * `window.__wavecodeAudioCtx` — the AudioContext that drives
  * Strudel/superdough output. We deliberately do NOT reuse it:
  *   - Sharing caused a regression where sample banks (drums, bass,
- *     piano) stopped playing after the whistle detector had stashed
+ *     piano) stopped playing after the mic detector had stashed
  *     its context first. The cause was that
  *     `LiveAudioEngine.unlockAudioContext` then short-circuited the
  *     analyser-tap install path (it only sets up the destination
@@ -59,16 +59,16 @@ import YinWorker from './yinDetector.worker?worker';
  * Returned handle is single-use: start() once, stop() once.
  */
 
-export type WhistleStartOptions = {
+export type MicStartOptions = {
   readonly onFrame: (frame: PitchFrame) => void;
-  readonly onStateChange?: (state: WhistleDetectorState) => void;
+  readonly onStateChange?: (state: MicCaptureState) => void;
   readonly onError?: (err: Error) => void;
   readonly fftSize?: number;          // default 2048
   readonly clarityThreshold?: number; // default 0.9
   readonly deviceId?: string | null;  // optional mic selection
 };
 
-export type WhistleDetectorState =
+export type MicCaptureState =
   | 'idle'
   | 'requesting-mic'
   | 'starting-audio'
@@ -76,8 +76,8 @@ export type WhistleDetectorState =
   | 'stopping'
   | 'errored';
 
-export type WhistleDetectorHandle = {
-  readonly getState: () => WhistleDetectorState;
+export type MicCaptureHandle = {
+  readonly getState: () => MicCaptureState;
   readonly stop: () => Promise<void>;
 };
 
@@ -89,7 +89,7 @@ const isMicCaptureSupported = (): boolean =>
   && typeof navigator.mediaDevices !== 'undefined'
   && typeof navigator.mediaDevices.getUserMedia === 'function';
 
-export const isWhistleSupported = isMicCaptureSupported;
+export const isMicSupported = isMicCaptureSupported;
 
 /**
  * Race getUserMedia against `timeoutMs` (default 5s). On timeout, throw
@@ -125,11 +125,11 @@ const mkWorker = (): Worker => {
   return w as unknown as Worker;
 };
 
-export const startWhistleDetector = (
-  opts: WhistleStartOptions,
-): WhistleDetectorHandle => {
-  let state: WhistleDetectorState = 'idle';
-  const setState = (next: WhistleDetectorState): void => {
+export const startMicDetector = (
+  opts: MicStartOptions,
+): MicCaptureHandle => {
+  let state: MicCaptureState = 'idle';
+  const setState = (next: MicCaptureState): void => {
     state = next;
     opts.onStateChange?.(next);
   };
@@ -258,7 +258,7 @@ export const startWhistleDetector = (
               : performance.now(),
           });
         } else if (data.type === 'error') {
-          opts.onError?.(new Error(`whistle-worker: ${data.message ?? 'unknown'}`));
+          opts.onError?.(new Error(`mic-worker: ${data.message ?? 'unknown'}`));
         }
       };
       worker.postMessage({

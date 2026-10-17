@@ -3,13 +3,13 @@
 import { PitchDetector } from 'pitchy';
 
 /**
- * Whistle pitch-detector Worker.
+ * Mic pitch-detector Worker.
  *
  * Why pitchy / McLeod Pitch Method
  * --------------------------------
  * `pitchy` (4.1 KB minified, MIT, zero runtime deps) wraps the McLeod
  * Pitch Method (MPM), which on monophonic input — a single human
- * whistle — outperforms the textbook YIN algorithm on noisy real
+ * text — outperforms the textbook YIN algorithm on noisy real
  * audio at the same latency budget. MPM returns `[pitch, clarity]`
  * where `clarity ∈ [0, 1]` measures NSDF peak height; we accept the
  * frame only when `clarity >= clarityThreshold`. Below that, MPM

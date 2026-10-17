@@ -2,26 +2,26 @@ import { createSignal, onCleanup } from 'solid-js';
 import { dispatch, appStore } from './appStore';
 import type { CodeMirrorEditorApi } from '~/presentation/components/CodeMirrorEditor';
 import {
-  initialWhistleState,
+  initialMicState,
   feed,
   closeOpenNote,
   notesToSnippet,
   DEFAULT_TUNE,
   type AudioNote,
-  type WhistleState,
+  type MicState,
   type PitchFrame,
-} from '~/domain/audio/whistle';
+} from '~/domain/audio/micCapture';
 import {
-  startWhistleDetector,
-  isWhistleSupported,
-  type WhistleDetectorHandle,
-  type WhistleDetectorState,
-} from '~/infrastructure/audio/WhistleDetector';
+  startMicDetector,
+  isMicSupported,
+  type MicCaptureHandle,
+  type MicCaptureState,
+} from '~/infrastructure/audio/MicCapture';
 import { previewPillPayload as _pianoPillRef } from './pianoRecStore';
 
 /**
- * whistleStore — presentation-layer signals + orchestrator for the
- * whistle-to-Strudel mic panel.
+ * micStore — presentation-layer signals + orchestrator for the
+ * mic-to-Strudel panel.
  *
  * What lives here (mirrors pianoRecStore's scope):
  *   1. Live detection state — listening on/off, mic permission,
@@ -33,8 +33,8 @@ import { previewPillPayload as _pianoPillRef } from './pianoRecStore';
  *      `append-stack` (splice into existing top-level `stack(...)`),
  *      `replace-score` (destructive), or `at-cursor` (CodeMirror insert).
  *      Mirror of pianoRecStore's three slots; lives here separately so
- *      the piano and whistle tools evolve independently.
- *   4. Editor API signal — `setWhistleEditorApi` is wired by
+ *      the piano and mic tools evolve independently.
+ *   4. Editor API signal — `setMicEditorApi` is wired by
  *      ScorePanel.onReady (mirroring `setPianoEditorApi`); needed for
  *      the `at-cursor` slot to insert at the active selection.
  *   5. Apply pipeline — `applyToScore` commits the buffer to a Strudel
@@ -45,34 +45,34 @@ import { previewPillPayload as _pianoPillRef } from './pianoRecStore';
  *   - NO inline worker / AudioContext (those live in infrastructure).
  *   - NO Strudel grammar knowledge (lives in domain).
  *   - Sharing piano's editorAPI signal would couple the two stores; we
- *     duplicate the signal so piano and whistle can move independently.
+ *     duplicate the signal so piano and mic can move independently.
  */
 
-export type WhistleSlot = 'append-stack' | 'replace-score' | 'at-cursor';
+export type MicSlot = 'append-stack' | 'replace-score' | 'at-cursor';
 
-export const [whistleListening, setWhistleListening] = createSignal(false);
-export const [whistleState, setWhistleStateSignal] = createSignal<WhistleDetectorState>('idle');
-export const [whistleError, setWhistleErrorSignal] = createSignal<string | null>(null);
-export const [whistlePreviewNotes, setWhistlePreviewNotes] = createSignal<
+export const [micListening, setMicListening] = createSignal(false);
+export const [micState, setMicStateSignal] = createSignal<MicCaptureState>('idle');
+export const [micError, setMicErrorSignal] = createSignal<string | null>(null);
+export const [micPreviewNotes, setMicPreviewNotes] = createSignal<
   ReadonlyArray<AudioNote>
 >([]);
-export const [whistleCurrentHz, setWhistleCurrentHz] = createSignal<number | null>(null);
-export const [whistleSlot, setWhistleSlotSignal] = createSignal<WhistleSlot>('append-stack');
-export const [whistleInstrument, setWhistleInstrumentSignal] = createSignal<string>('piano');
-export const [whistleEditorApi, setWhistleEditorApi] = createSignal<
+export const [micCurrentHz, setMicCurrentHz] = createSignal<number | null>(null);
+export const [micSlot, setMicSlotSignal] = createSignal<MicSlot>('append-stack');
+export const [micInstrument, setMicInstrumentSignal] = createSignal<string>('piano');
+export const [micEditorApi, setMicEditorApi] = createSignal<
   CodeMirrorEditorApi | undefined
 >(undefined);
-export const [whistleEditorFocused, setWhistleEditorFocused] = createSignal(false);
+export const [micEditorFocused, setMicEditorFocused] = createSignal(false);
 
-// Live RMS (0..1) — separate from `whistleCurrentHz` so the meter can
+// Live RMS (0..1) — separate from `micCurrentHz` so the meter can
 // show "the mic is hearing sound" even when there's no clear pitch.
-// Set by `onWhistleFrame`; cleared on `clearPreview` / `stopWhistle`.
-export const [whistleCurrentRms, setWhistleCurrentRms] = createSignal<number>(0);
+// Set by `onMicFrame`; cleared on `clearPreview` / `stopMic`.
+export const [micCurrentRms, setMicCurrentRms] = createSignal<number>(0);
 
-let segState: WhistleState = initialWhistleState();
-let detector: WhistleDetectorHandle | null = null;
+let segState: MicState = initialMicState();
+let detector: MicCaptureHandle | null = null;
 
-export const whistleSlotLabel = (slot: WhistleSlot): string => {
+export const micSlotLabel = (slot: MicSlot): string => {
   switch (slot) {
     case 'append-stack': return 'конец стека';
     case 'replace-score': return 'заменить score';
@@ -80,7 +80,7 @@ export const whistleSlotLabel = (slot: WhistleSlot): string => {
   }
 };
 
-export const whistleSlotGlyph = (slot: WhistleSlot): string => {
+export const micSlotGlyph = (slot: MicSlot): string => {
   switch (slot) {
     case 'append-stack': return '↵ stack';
     case 'replace-score': return '⟳ replace';
@@ -88,80 +88,80 @@ export const whistleSlotGlyph = (slot: WhistleSlot): string => {
   }
 };
 
-export const setWhistleSlot = (slot: WhistleSlot): void => {
-  setWhistleSlotSignal(slot);
+export const setMicSlot = (slot: MicSlot): void => {
+  setMicSlotSignal(slot);
 };
 
 const pushError = (err: Error): void => {
-  setWhistleErrorSignal(err.message);
+  setMicErrorSignal(err.message);
 };
 
 const resetSegState = (): void => {
-  segState = initialWhistleState();
-  setWhistlePreviewNotes([]);
-  setWhistleCurrentHz(null);
-  setWhistleCurrentRms(0);
+  segState = initialMicState();
+  setMicPreviewNotes([]);
+  setMicCurrentHz(null);
+  setMicCurrentRms(0);
 };
 
-const onWhistleFrame = (frame: PitchFrame): void => {
-  setWhistleCurrentHz(frame.hz);
-  setWhistleCurrentRms(frame.rms);
+const onMicFrame = (frame: PitchFrame): void => {
+  setMicCurrentHz(frame.hz);
+  setMicCurrentRms(frame.rms);
   segState = feed(segState, frame, DEFAULT_TUNE, frame.timestampMs);
-  setWhistlePreviewNotes(segState.notes);
+  setMicPreviewNotes(segState.notes);
 };
 
-export const startWhistle = (): void => {
-  if (whistleListening()) return;
-  if (!isWhistleSupported()) {
+export const startMic = (): void => {
+  if (micListening()) return;
+  if (!isMicSupported()) {
     pushError(new Error('Этот браузер не поддерживает микрофон (getUserMedia недоступен).'));
-    setWhistleStateSignal('errored');
+    setMicStateSignal('errored');
     return;
   }
   resetSegState();
-  setWhistleErrorSignal(null);
-  detector = startWhistleDetector({
-    onFrame: onWhistleFrame,
-    onStateChange: (s) => setWhistleStateSignal(s),
+  setMicErrorSignal(null);
+  detector = startMicDetector({
+    onFrame: onMicFrame,
+    onStateChange: (s) => setMicStateSignal(s),
     onError: (err) => {
       pushError(err);
-      setWhistleListening(false);
-      setWhistleStateSignal('errored');
+      setMicListening(false);
+      setMicStateSignal('errored');
     },
   });
-  setWhistleListening(true);
+  setMicListening(true);
 };
 
-export const stopWhistle = (): void => {
-  if (!whistleListening() && detector === null) return;
+export const stopMic = (): void => {
+  if (!micListening() && detector === null) return;
   if (detector !== null) {
     // Force-close any open note so the last leg stays in preview.
     segState = closeOpenNote(segState, performance.now());
-    setWhistlePreviewNotes(segState.notes);
+    setMicPreviewNotes(segState.notes);
     void detector.stop();
     detector = null;
   }
-  setWhistleListening(false);
-  setWhistleStateSignal('idle');
+  setMicListening(false);
+  setMicStateSignal('idle');
 };
 
 export const freezePreview = (): void => {
   segState = closeOpenNote(segState, performance.now());
-  setWhistlePreviewNotes(segState.notes);
+  setMicPreviewNotes(segState.notes);
 };
 
 export const clearPreview = (): void => {
   resetSegState();
 };
 
-export const toggleWhistleSlot = (): void => {
-  const order: ReadonlyArray<WhistleSlot> = ['append-stack', 'replace-score', 'at-cursor'];
-  const cur = whistleSlot();
+export const toggleMicSlot = (): void => {
+  const order: ReadonlyArray<MicSlot> = ['append-stack', 'replace-score', 'at-cursor'];
+  const cur = micSlot();
   const idx = order.indexOf(cur);
-  setWhistleSlot(order[(idx + 1) % order.length]!);
+  setMicSlot(order[(idx + 1) % order.length]!);
 };
 
-export const setWhistleInstrument = (s: string): void => {
-  setWhistleInstrumentSignal(s);
+export const setMicInstrument = (s: string): void => {
+  setMicInstrumentSignal(s);
 };
 
 /**
@@ -260,12 +260,12 @@ const findStackClose = (src: string, afterOpenParen: number): number => {
 };
 
 export const applyToScore = (): void => {
-  const buf = whistlePreviewNotes();
+  const buf = micPreviewNotes();
   if (buf.length === 0) return;
-  const snippet = notesToSnippet(buf, { instrument: whistleInstrument() });
+  const snippet = notesToSnippet(buf, { instrument: micInstrument() });
   if (snippet === null) return;
 
-  const slot = whistleSlot();
+  const slot = micSlot();
 
   if (slot === 'replace-score') {
     dispatch({ type: 'replaceScore', text: snippet });
@@ -274,17 +274,17 @@ export const applyToScore = (): void => {
   }
 
   if (slot === 'at-cursor') {
-    const api = whistleEditorApi();
+    const api = micEditorApi();
     if (api === undefined) {
       console.warn(
-        'whistleStore.applyToScore: at-cursor slot requires editor API; no-op',
+        'micStore.applyToScore: at-cursor slot requires editor API; no-op',
       );
       return;
     }
     const view = api.getView();
     if (view === undefined) {
       console.warn(
-        'whistleStore.applyToScore: at-cursor slot requires EditorView; no-op',
+        'micStore.applyToScore: at-cursor slot requires EditorView; no-op',
       );
       return;
     }
@@ -305,17 +305,17 @@ export const applyToScore = (): void => {
 
 /**
  * Compact preview-pill payload — count + first N note names + slot label.
- * Pure read of signals. Used by `WhistlePanel` to render the live
+ * Pure read of signals. Used by `MicPanel` to render the live
  * preview pill beside the mic button.
  */
 export const previewPillPayload = (): {
   count: number;
   firstNames: ReadonlyArray<string>;
   overflow: number;
-  slot: WhistleSlot;
+  slot: MicSlot;
   slotLabel: string;
 } | null => {
-  const buf = whistlePreviewNotes();
+  const buf = micPreviewNotes();
   if (buf.length === 0) return null;
   const PREVIEW_LIMIT = 6;
   const firstNames = buf.slice(0, PREVIEW_LIMIT).map((n) => {
@@ -328,8 +328,8 @@ export const previewPillPayload = (): {
     count: buf.length,
     firstNames,
     overflow: Math.max(0, buf.length - PREVIEW_LIMIT),
-    slot: whistleSlot(),
-    slotLabel: whistleSlotLabel(whistleSlot()),
+    slot: micSlot(),
+    slotLabel: micSlotLabel(micSlot()),
   };
 };
 
