@@ -147,3 +147,51 @@ describe('micStore — applyToScore (slot dispatching)', () => {
     void dispatch; // silence unused-import warning
   });
 });
+
+describe('micStore — mode selector (Phase 3)', () => {
+  it('default mode is "sustain"', async () => {
+    const w = await importStore();
+    expect(w.micMode()).toBe('sustain');
+  });
+
+  it('setMicMode("auto") updates the signal', async () => {
+    const w = await importStore();
+    w.setMicMode('auto');
+    expect(w.micMode()).toBe('auto');
+  });
+
+  it('setMicMode("transient") updates the signal', async () => {
+    const w = await importStore();
+    w.setMicMode('transient');
+    expect(w.micMode()).toBe('transient');
+  });
+
+  it('setMicMode while listening: stops + restarts the detector', async () => {
+    const w = await importStore();
+    // startMic() — the mock returns a handle whose getState()
+    // already reports 'streaming', so micListening flips on.
+    w.startMic();
+    expect(w.micListening()).toBe(true);
+    // Switch to auto: setMicMode restarts the detector.
+    w.setMicMode('auto');
+    expect(w.micMode()).toBe('auto');
+    expect(w.micListening()).toBe(true);
+    // Clean up.
+    w.stopMic();
+    expect(w.micListening()).toBe(false);
+  });
+
+  it('previewPillPayload returns null in auto mode when both buffers are empty', async () => {
+    const w = await importStore();
+    w.setMicMode('auto');
+    expect(w.previewPillPayload()).toBeNull();
+  });
+
+  it('micPrunedCount starts at 0 and is reset by clearPreview', async () => {
+    const w = await importStore();
+    expect(w.micPrunedCount()).toBe(0);
+    // clearPreview leaves it at 0.
+    w.clearPreview();
+    expect(w.micPrunedCount()).toBe(0);
+  });
+});

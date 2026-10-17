@@ -192,3 +192,43 @@ describe('MicPanel — error pill', () => {
     expect(container.querySelector('.mic-error-pill')).toBeNull();
   });
 });
+
+describe('MicPanel — mode selector (Phase 3)', () => {
+  it('renders 3 mode buttons: sustain, transient, auto', () => {
+    const { container } = render(() => <MicPanel />);
+    const btns = container.querySelectorAll<HTMLButtonElement>('.mic-mode-btn');
+    expect(btns).toHaveLength(3);
+    const ids = Array.from(btns).map((b) => b.getAttribute('data-mode'));
+    expect(ids).toEqual(['sustain', 'transient', 'auto']);
+  });
+
+  it('default mode is "sustain" — that button is data-active', () => {
+    const { container } = render(() => <MicPanel />);
+    const active = container.querySelectorAll<HTMLButtonElement>('.mic-mode-btn[data-active="true"]');
+    expect(active).toHaveLength(1);
+    expect(active[0]?.getAttribute('data-mode')).toBe('sustain');
+  });
+
+  it('clicking the auto mode button activates auto mode', async () => {
+    const w = await import('../state/micStore');
+    // Reset to default so the click has a deterministic prior state.
+    w.setMicMode('sustain');
+    expect(w.micMode()).toBe('sustain');
+    const { container } = render(() => <MicPanel />);
+    const autoBtn = container.querySelector<HTMLButtonElement>('[data-mode="auto"]')!;
+    expect(autoBtn).not.toBeNull();
+    fireEvent.click(autoBtn);
+    expect(w.micMode()).toBe('auto');
+    // And the button itself flips to data-active.
+    expect(autoBtn.getAttribute('data-active')).toBe('true');
+  });
+
+  it('the auto mode button has a title describing both pipelines', () => {
+    const { container } = render(() => <MicPanel />);
+    const autoBtn = container.querySelector<HTMLButtonElement>('[data-mode="auto"]')!;
+    const title = autoBtn.getAttribute('title') ?? '';
+    expect(title.toLowerCase()).toContain('parallel');
+    expect(title.toLowerCase()).toContain('sustain');
+    expect(title.toLowerCase()).toContain('drum');
+  });
+});

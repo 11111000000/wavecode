@@ -78,9 +78,11 @@ export const [micCurrentRms, setMicCurrentRms] = createSignal<number>(0);
 /**
  * Pipeline mode. 'sustain' (default) runs MPM pitch detection and
  * accumulates AudioNote[]. 'transient' runs onset detection (RMS
- * flux + spectral centroid) and accumulates Transient[]. The 'auto'
- * slot is reserved for Phase 3 (both pipelines in parallel with
- * per-frame classification).
+ * flux + spectral centroid) and accumulates Transient[]. 'auto'
+ * (Phase 3) runs BOTH in parallel from the same AnalyserNode —
+ * a pitched kick drum surfaces as both a `PitchFrame` and a
+ * `Transient` in the same tick. The preview pill shows the union;
+ * applyToScore stacks the two snippets.
  */
 export const [micMode, setMicModeSignal] = createSignal<MicMode>('sustain');
 export const setMicMode = (m: MicMode): void => {
@@ -96,8 +98,17 @@ export const setMicMode = (m: MicMode): void => {
   }
 };
 
-/** Detected transients (only populated in 'transient' mode). */
+/** Detected transients (populated in 'transient' AND 'auto' modes). */
 export const [micTransients, setMicTransients] = createSignal<ReadonlyArray<Transient>>([]);
+
+/**
+ * How many notes have been dropped from the sliding-window buffer
+ * (Phase 3 long-form display). The parallel domain work adds
+ * `notesPrunedCount` to `MicState`; we expose it here for the
+ * preview-pill ("● 4 нот: c4 e4 g4 e4 [+12]") and defensively
+ * default to 0 if the field hasn't landed yet.
+ */
+export const [micPrunedCount, setMicPrunedCount] = createSignal<number>(0);
 
 let segState: MicState = initialMicState();
 let detector: MicCaptureHandle | null = null;
@@ -132,6 +143,7 @@ const resetSegState = (): void => {
   setMicTransients([]);
   setMicCurrentHz(null);
   setMicCurrentRms(0);
+  setMicPrunedCount(0);
 };
 
 const onMicFrame = (frame: PitchFrame): void => {
@@ -139,6 +151,11 @@ const onMicFrame = (frame: PitchFrame): void => {
   setMicCurrentRms(frame.rms);
   segState = feed(segState, frame, DEFAULT_TUNE, frame.timestampMs);
   setMicPreviewNotes(segState.notes);
+  // Defensive: the parallel domain branch will add `notesPrunedCount`
+  // to MicState. Until that lands, we treat it as 0 (no opt chain →
+  // no false negative from the field's absence on the type).
+  const pruned = (segState as { notesPrunedCount?: number }).notesPrunedCount;
+  setMicPrunedCount(typeof pruned === 'number' ? pruned : 0);
 };
 
 const onMicTransient = (transient: Transient): void => {
@@ -308,6 +325,27 @@ export const applyToScore = (): void => {
     const buf = micTransients();
     if (buf.length === 0) return;
     snippet = transientsToSnippet(buf);
+  } else if (mode === 'auto') {
+    // Auto mode: stack the two snippets if both buffers produced
+    // something, otherwise commit whichever is non-empty. Mirrors
+    // pianoRecStore.stackAppend's pattern of "if there's existing
+    // content, splice; if not, emit verbatim".
+    const notesBuf = micPreviewNotes();
+    const transBuf = micTransients();
+    const notesSnippet = notesBuf.length === 0
+      ? null
+      : notesToSnippet(notesBuf, { instrument: micInstrument() });
+    const transSnippet = transBuf.length === 0
+      ? null
+      : transientsToSnippet(transBuf);
+    if (notesSnippet === null && transSnippet === null) return;
+    if (notesSnippet !== null && transSnippet !== null) {
+      // Both non-empty → stack the two. Don't indent to keep the
+      // output readable when the user is iterating on a small session.
+      snippet = `stack(\n  ${notesSnippet},\n  ${transSnippet}\n)`;
+    } else {
+      snippet = (notesSnippet ?? transSnippet) as string;
+    }
   } else {
     const buf = micPreviewNotes();
     if (buf.length === 0) return;
@@ -357,43 +395,82 @@ export const applyToScore = (): void => {
  * Compact preview-pill payload — count + first N note names + slot label.
  * Pure read of signals. Used by `MicPanel` to render the live
  * preview pill beside the mic button.
+ *
+ * Mode-specific behaviour:
+ *   - 'transient' → drum count + first 6 onset type shortcodes (bd/sd/...).
+ *   - 'auto'      → concatenated first N items with a leading kind
+ *                   marker so the user sees which pipeline produced
+ *                   what ("♪ c4 ♪ e4 ✦ bd ✦ sd …").
+ *   - 'sustain'   → note count + first 6 note names (c4 e4 g4 …).
+ *
+ * Returns null when there is nothing to preview.
  */
 export const previewPillPayload = (): {
   count: number;
   firstNames: ReadonlyArray<string>;
   overflow: number;
+  pruned: number;
   slot: MicSlot;
   slotLabel: string;
 } | null => {
-  // In transient mode show drum-count + first 6 onset types.
-  if (micMode() === 'transient') {
-    const buf = micTransients();
-    if (buf.length === 0) return null;
-    const PREVIEW_LIMIT = 6;
+  const mode = micMode();
+  const PREVIEW_LIMIT = 6;
+  const notesBuf = micPreviewNotes();
+  const transBuf = micTransients();
+
+  if (mode === 'transient') {
+    if (transBuf.length === 0) return null;
     const short = { kick: 'bd', snare: 'sd', hat: 'hh', click: 'cp' } as const;
-    const firstNames = buf.slice(0, PREVIEW_LIMIT).map((t) => short[t.type]);
+    const firstNames = transBuf.slice(0, PREVIEW_LIMIT).map((t) => `✦ ${short[t.type]}`);
     return {
-      count: buf.length,
+      count: transBuf.length,
       firstNames,
-      overflow: Math.max(0, buf.length - PREVIEW_LIMIT),
+      overflow: Math.max(0, transBuf.length - PREVIEW_LIMIT),
+      pruned: 0,
       slot: micSlot(),
       slotLabel: micSlotLabel(micSlot()),
     };
   }
-  // sustain mode (default): show note names as before
-  const buf = micPreviewNotes();
-  if (buf.length === 0) return null;
-  const PREVIEW_LIMIT = 6;
-  const firstNames = buf.slice(0, PREVIEW_LIMIT).map((n) => {
+
+  if (mode === 'auto') {
+    // Concatenate notes + transients, capped at PREVIEW_LIMIT, each
+    // prefixed with a kind marker (♪ for sustain, ✦ for diff) so the
+    // user can tell which pipeline fired.
+    const short = { kick: 'bd', snare: 'sd', hat: 'hh', click: 'cp' } as const;
+    const noteStrings = notesBuf.map((n) => {
+      const cls = ((n.midi % 12) + 12) % 12;
+      const oct = Math.floor(n.midi / 12) - 1;
+      const names = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+      return `♪ ${names[cls]}${oct}`;
+    });
+    const transStrings = transBuf.map((t) => `✦ ${short[t.type]}`);
+    const merged = [...noteStrings, ...transStrings];
+    if (merged.length === 0) return null;
+    const firstNames = merged.slice(0, PREVIEW_LIMIT);
+    const totalCount = notesBuf.length + transBuf.length;
+    return {
+      count: totalCount,
+      firstNames,
+      overflow: Math.max(0, merged.length - PREVIEW_LIMIT),
+      pruned: micPrunedCount(),
+      slot: micSlot(),
+      slotLabel: micSlotLabel(micSlot()),
+    };
+  }
+
+  // sustain (default)
+  if (notesBuf.length === 0) return null;
+  const firstNames = notesBuf.slice(0, PREVIEW_LIMIT).map((n) => {
     const cls = ((n.midi % 12) + 12) % 12;
     const oct = Math.floor(n.midi / 12) - 1;
     const names = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
     return `${names[cls]}${oct}`;
   });
   return {
-    count: buf.length,
+    count: notesBuf.length,
     firstNames,
-    overflow: Math.max(0, buf.length - PREVIEW_LIMIT),
+    overflow: Math.max(0, notesBuf.length - PREVIEW_LIMIT),
+    pruned: micPrunedCount(),
     slot: micSlot(),
     slotLabel: micSlotLabel(micSlot()),
   };
