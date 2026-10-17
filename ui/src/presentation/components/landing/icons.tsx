@@ -152,6 +152,20 @@ export const ArrowRight = (p: IconProps): JSX.Element => (
   </svg>
 );
 
+/* ─── PLAY / STOP affordances — for landing-page preset preview ─────── */
+
+export const PlayIcon = (p: IconProps): JSX.Element => (
+  <svg {...base(p.size ?? 14)} class={p.class}>
+    <path d="M7 5 L19 12 L7 19 Z" fill="currentColor" stroke="currentColor" stroke-width="1" stroke-linejoin="round" />
+  </svg>
+);
+
+export const StopIcon = (p: IconProps): JSX.Element => (
+  <svg {...base(p.size ?? 14)} class={p.class}>
+    <rect x="6" y="6" width="12" height="12" rx="1.5" fill="currentColor" stroke="currentColor" stroke-width="1" />
+  </svg>
+);
+
 export const ChevronDown = (p: IconProps): JSX.Element => (
   <svg {...base(p.size ?? 16)} class={p.class}>
     <path d="M6 9 L12 15 L18 9" />

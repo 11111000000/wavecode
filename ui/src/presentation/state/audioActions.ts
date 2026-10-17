@@ -5,6 +5,7 @@ import { AudioEngine } from '~/domain/services';
 import type { LayerMix } from '~/domain/types';
 import { injectMix } from '~/application/useCases/injectMix';
 import { evalWithTransport } from '~/application/useCases/evalWithTransport';
+import { getPreset } from './presetsStore';
 import {
   unlockAudioContext,
   testBeep,
@@ -182,6 +183,96 @@ export const stopAudio = async (): Promise<void> => {
       status: 'error',
       error: err instanceof Error ? err.message : String(err),
     });
+  }
+};
+
+/**
+ * Landing-page preset preview duration. Built-in presets are 1–4 cycles
+ * (~2–8 sec at cps=0.5 per `domain/presets.ts:22`), so 8 sec covers the
+ * shortest loop with margin and is short enough to keep the landing
+ * page snappy. The user can also tap the play button again to stop
+ * early; see `stopPreview` / `previewPreset`.
+ */
+export const PREVIEW_DURATION_MS = 8000;
+
+let previewTimer: ReturnType<typeof setTimeout> | null = null;
+
+/**
+ * Stop any in-flight preset preview (either auto-stop timer pending
+ * or audio actually playing). Safe to call when nothing is playing.
+ * No-op for `appStore` audio-status dispatch — preview state is owned
+ * by the landing component via the `playingPreviewId` signal.
+ */
+export const stopPreview = (): void => {
+  if (previewTimer !== null) {
+    clearTimeout(previewTimer);
+    previewTimer = null;
+  }
+  // Fire-and-forget — caller's signal flips to null on the next tick
+  // and the audio engine will already be muted. `stopAudio` would
+  // also flip the global audioStatus to 'stopped', which the editor
+  // (if mounted in another tab) might observe — we want preview to
+  // NOT touch that store state.
+  void Effect.runPromise(
+    Effect.gen(function* () {
+      const audio = yield* AudioEngine;
+      yield* audio.stop();
+    }).pipe(Effect.provide(AppLayer)),
+  ).catch(() => undefined);
+};
+
+/**
+ * Evaluate the given preset's score in the live audio engine as a
+ * short preview, stopping any preview already in flight first.
+ *
+ * Unlike `evalScore`, `previewPreset` does NOT write to `appStore`
+ * or dispatch `audioStatusChange` — the landing-page UI owns its own
+ * `playingPreviewId` signal and the editor must not see its score
+ * mutated by an off-route preview. See
+ * `decisions/wavecode-landing-preset-preview` for the full rationale.
+ *
+ * Auto-stops after `PREVIEW_DURATION_MS` so a forgotten tap does not
+ * keep playing in the background; the user can also tap the same
+ * button again (or another card's button) to stop earlier.
+ */
+export const previewPreset = async (presetId: string): Promise<void> => {
+  const preset = getPreset(presetId);
+  if (!preset) {
+    console.warn('[wavecode/landing] previewPreset: unknown preset', presetId);
+    return;
+  }
+  // Stop any prior preview so two cards cannot play simultaneously.
+  // Note: we call stopPreview BEFORE the new eval — if eval fails the
+  // user gets silence rather than the old preview continuing.
+  stopPreview();
+  // AudioContext must be unlocked inside the user-gesture handler;
+  // run it synchronously before any await.
+  unlockAudioContext();
+  try {
+    await Effect.runPromise(
+      Effect.gen(function* () {
+        const audio = yield* AudioEngine;
+        yield* audio.eval(preset.score);
+      }).pipe(Effect.provide(AppLayer)),
+    );
+    // Schedule the auto-stop AFTER a successful eval. If eval throws,
+    // no timer is armed and stopPreview() above has already cleared
+    // any leftover timer from a previous preview.
+    if (previewTimer !== null) clearTimeout(previewTimer);
+    previewTimer = setTimeout(() => {
+      previewTimer = null;
+      void Effect.runPromise(
+        Effect.gen(function* () {
+          const audio = yield* AudioEngine;
+          yield* audio.stop();
+        }).pipe(Effect.provide(AppLayer)),
+      ).catch(() => undefined);
+    }, PREVIEW_DURATION_MS);
+  } catch (err) {
+    // Silent: console only — landing-page UI shows its own error via
+    // the play/stop button not flipping to "playing".
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error('[wavecode/landing.previewPreset] eval failed:', msg);
   }
 };
 

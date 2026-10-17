@@ -1,0 +1,173 @@
+---
+schema: math-coding/3.3
+id: wavecode-landing-preset-preview
+revision: 1
+state: draft
+body_sha: "sha256:260d9ccb15367a15bead375e29056ef0f05b4a9cfc9ff4a6c770e7fc72456ef8"
+yaml_sha: "sha256:260d9ccb15367a15bead375e29056ef0f05b4a9cfc9ff4a6c770e7fc72456ef8"
+
+intent: |
+  Let landing-page visitors audition each built-in preset from
+  SnippetShowcase without navigating into the editor — a single
+  tap on a per-card play button evaluates a 1-cycle preview of the
+  preset's score and stops any in-flight preview from a sibling
+  card, so the marketing surface becomes self-explanatory without
+  inflating page complexity or duplicating audio wiring.
+
+commitment: |
+  Add `previewPreset(id)` and `stopPreview()` to
+  `ui/src/presentation/state/audioActions.ts`, render a 36×36
+  Play/Stop affordance in the bottom-right of each `.l-preset`
+  card via `ui/src/presentation/components/landing/sections/SnippetShowcase.tsx`,
+  and ship the supporting `.l-preset__play` styles plus the mathc-3.3
+  decision file. Behavior: tap-to-play invokes `LiveAudioEngine.eval`
+  with a 1-cycle shim of the preset's score, tap again stops,
+  tapping a second card while one is playing stops the first and
+  starts the second; the existing card-wide open-in-editor click is
+  preserved and the play button stops event propagation so it never
+  triggers navigation.
+
+scope:
+  paths:
+    - "ui/src/presentation/components/landing/sections/SnippetShowcase.tsx"
+    - "ui/src/presentation/components/landing/icons.tsx"
+    - "ui/src/styles/landing.css"
+    - "ui/src/presentation/state/audioActions.ts"
+    - "ui/src/presentation/state/audioActions.test.ts"
+    - "ui/tests/e2e/landing-preset-preview.spec.mjs"
+    - "decisions/wavecode-landing-preset-preview.yaml"
+  exclusions:
+    - "ui/src/domain/presets.ts"
+    - "ui/src/infrastructure/audio/LiveAudioEngine.ts"
+
+outcomes:
+  - id: per-card-play-stop-button
+    statement: |
+      Each `.l-preset` card in SnippetShowcase renders a circular
+      36×36 play/stop button in its bottom-right corner; tapping it
+      toggles preview audio for that preset without navigating to
+      `/#/app`.
+  - id: single-active-preview-invariants
+    statement: |
+      At most one preset preview is audible at any time; tapping a
+      different card's play button stops the previously-playing
+      preview before starting the new one.
+  - id: open-in-editor-unchanged
+    statement: |
+      The card-wide click target that opens the editor at
+      `/#/app?preset=<id>` continues to work; the play button uses
+      `event.stopPropagation()` so tapping it never routes to the
+      hash router.
+  - id: mathc-3-3-decision-recorded
+    statement: |
+      `decisions/wavecode-landing-preset-preview.yaml` validates
+      clean against `schemas/decision.json` via `mathc validate`
+      (exit 0, no `MC-*` rejects) and is filed under the
+      `wavecode-bootstrap-math-coding-3.3` active policy.
+
+obligations:
+  - id: kernel-validates-decision
+    claim: |
+      `mathc validate decisions/wavecode-landing-preset-preview.yaml`
+      exits 0 with zero `MC-*` rejects against the live tree.
+    acceptance:
+      all:
+        - verifier: mathc validate
+          result: pass
+  - id: unit-tests-for-preview-stop
+    claim: |
+      `npm run test:run` (vitest) passes for the new
+      `previewPreset` / `stopPreview` cases in
+      `ui/src/presentation/state/audioActions.test.ts`; the test
+      mocks `LiveAudioEngine` so it does NOT pull in the real
+      Strudel modules (per `LiveAudioEngine.ts:17-22` warning
+      against eager import).
+    acceptance:
+      all:
+        - verifier: vitest
+          result: pass
+  - id: typecheck-and-lint-pass
+    claim: |
+      `npm run typecheck` exits 0 and `npm run lint:no-console`
+      reports no new violations in the touched files.
+    acceptance:
+      all:
+        - verifier: tsc --noEmit
+          result: pass
+        - verifier: eslint src/domain src/application
+          result: pass
+  - id: presets-still-validate
+    claim: |
+      `npm run validate:presets` exits 0 (no regression in the
+      preset score corpus from the new truncation logic in
+      `previewPreset`).
+    acceptance:
+      all:
+        - verifier: scripts/validate-presets.ts
+          result: pass
+  - id: build-succeeds
+    claim: |
+      `npm run build` (vite + tsc) exits 0; bundle lands under
+      `ui/dist/` with a strudel-vendor chunk unchanged in
+      composition (we do not introduce a new heavy dependency).
+    acceptance:
+      all:
+        - verifier: vite build
+          result: pass
+  - id: mobile-hit-area
+    claim: |
+      On a 480px viewport the `.l-preset__play` button keeps a
+      hit area ≥ 44×44 CSS pixels (WCAG 2.5.5 / Apple HIG 44pt
+      minimum). The mobile breakpoint either enlarges the visible
+      button or extends a transparent pseudo-element tap area;
+      manual Safari iOS / Chrome Android verification is recorded
+      in the PR description before merge.
+    acceptance:
+      all:
+        - verifier: manual
+          result: pass
+
+risk:
+  declared_triggers:
+    - real-Strudel-modules-pulled-into-unit-tests
+    - audio-context-not-unlocked-on-mobile
+    - hash-router-fires-on-play-button
+    - multiple-previews-overlap-on-rapid-tap
+  owner: human:operator
+
+counterexample: |
+  "Spec'ing a separate short score per preset is too brittle —
+  presets drift and the preview stops representing the actual
+  score the user will see in the editor." Counter: the preview
+  reads `BUILTIN_PRESETS[<id>].score` (a single source of truth)
+  and only truncates to the first `cat([...])` section; if a
+  preset is restructured, the preview reflects the same source
+  the editor loads. A separate score file would duplicate
+  drift and break the promise that "what you hear is what you
+  edit".
+
+antithesis: |
+  "Don't ship per-card previews. Keep the landing page
+  click-to-open-only, push users into the editor where they
+  hit ▶ to hear anything. Adding audio to the marketing
+  surface inflates complexity, drags Strudel modules into the
+  landing bundle, and makes the page noisier for users who
+  only want to browse."
+
+  Rejected because: (a) the Strudel bundle is already
+  chunk-split via `manualChunks.strudel` (vite.config.ts:85)
+  and the landing route is the SPA entry — Strudel is loaded
+  on every route anyway. (b) Users who click a card, navigate
+  to the editor, hit ▶, then decide the genre is wrong burn
+  ~8 seconds of cycle on each discard. Per-card preview
+  turns "is this the right vibe?" into a 1-tap audition. (c)
+  The added wiring is ~80 lines + a single decision file; the
+  Strudel runtime, `unlockAudioContext`, and `LiveAudioEngine.eval`
+  already exist — we are only adding a new caller, not new
+  audio infrastructure.
+
+relations:
+  addresses:
+    - wavecode-bootstrap-math-coding-3.3@1
+  refines:
+    - wavecode-strudel-in-browser@1
