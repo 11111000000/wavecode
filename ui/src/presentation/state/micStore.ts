@@ -14,9 +14,14 @@ import {
 import {
   startMicDetector,
   isMicSupported,
+  type MicMode,
   type MicCaptureHandle,
   type MicCaptureState,
 } from '~/infrastructure/audio/MicCapture';
+import {
+  transientsToSnippet,
+  type Transient,
+} from '~/domain/audio/transient';
 import { previewPillPayload as _pianoPillRef } from './pianoRecStore';
 
 /**
@@ -49,6 +54,7 @@ import { previewPillPayload as _pianoPillRef } from './pianoRecStore';
  */
 
 export type MicSlot = 'append-stack' | 'replace-score' | 'at-cursor';
+export type { MicMode };
 
 export const [micListening, setMicListening] = createSignal(false);
 export const [micState, setMicStateSignal] = createSignal<MicCaptureState>('idle');
@@ -68,6 +74,30 @@ export const [micEditorFocused, setMicEditorFocused] = createSignal(false);
 // show "the mic is hearing sound" even when there's no clear pitch.
 // Set by `onMicFrame`; cleared on `clearPreview` / `stopMic`.
 export const [micCurrentRms, setMicCurrentRms] = createSignal<number>(0);
+
+/**
+ * Pipeline mode. 'sustain' (default) runs MPM pitch detection and
+ * accumulates AudioNote[]. 'transient' runs onset detection (RMS
+ * flux + spectral centroid) and accumulates Transient[]. The 'auto'
+ * slot is reserved for Phase 3 (both pipelines in parallel with
+ * per-frame classification).
+ */
+export const [micMode, setMicModeSignal] = createSignal<MicMode>('sustain');
+export const setMicMode = (m: MicMode): void => {
+  setMicModeSignal(m);
+  // Stop+restart so the detector runs the new pipeline. The
+  // preview buffer is cleared (the previous pipeline's output is
+  // no longer relevant after a mode switch).
+  if (micListening()) {
+    stopMic();
+    startMic();
+  } else {
+    clearPreview();
+  }
+};
+
+/** Detected transients (only populated in 'transient' mode). */
+export const [micTransients, setMicTransients] = createSignal<ReadonlyArray<Transient>>([]);
 
 let segState: MicState = initialMicState();
 let detector: MicCaptureHandle | null = null;
@@ -99,6 +129,7 @@ const pushError = (err: Error): void => {
 const resetSegState = (): void => {
   segState = initialMicState();
   setMicPreviewNotes([]);
+  setMicTransients([]);
   setMicCurrentHz(null);
   setMicCurrentRms(0);
 };
@@ -110,6 +141,14 @@ const onMicFrame = (frame: PitchFrame): void => {
   setMicPreviewNotes(segState.notes);
 };
 
+const onMicTransient = (transient: Transient): void => {
+  // Append the new onset to the existing buffer; the snippet is
+  // regenerated on apply (transientsToSnippet reads the full
+  // buffer at the moment of apply, so a 1-second-old onset is
+  // still part of the output if the user hasn't hit "clear").
+  setMicTransients([...micTransients(), transient]);
+};
+
 export const startMic = (): void => {
   if (micListening()) return;
   if (!isMicSupported()) {
@@ -119,8 +158,11 @@ export const startMic = (): void => {
   }
   resetSegState();
   setMicErrorSignal(null);
+  const mode = micMode();
   detector = startMicDetector({
+    mode,
     onFrame: onMicFrame,
+    onTransient: onMicTransient,
     onStateChange: (s) => setMicStateSignal(s),
     onError: (err) => {
       pushError(err);
@@ -260,9 +302,17 @@ const findStackClose = (src: string, afterOpenParen: number): number => {
 };
 
 export const applyToScore = (): void => {
-  const buf = micPreviewNotes();
-  if (buf.length === 0) return;
-  const snippet = notesToSnippet(buf, { instrument: micInstrument() });
+  const mode = micMode();
+  let snippet: string | null;
+  if (mode === 'transient') {
+    const buf = micTransients();
+    if (buf.length === 0) return;
+    snippet = transientsToSnippet(buf);
+  } else {
+    const buf = micPreviewNotes();
+    if (buf.length === 0) return;
+    snippet = notesToSnippet(buf, { instrument: micInstrument() });
+  }
   if (snippet === null) return;
 
   const slot = micSlot();
@@ -315,6 +365,22 @@ export const previewPillPayload = (): {
   slot: MicSlot;
   slotLabel: string;
 } | null => {
+  // In transient mode show drum-count + first 6 onset types.
+  if (micMode() === 'transient') {
+    const buf = micTransients();
+    if (buf.length === 0) return null;
+    const PREVIEW_LIMIT = 6;
+    const short = { kick: 'bd', snare: 'sd', hat: 'hh', click: 'cp' } as const;
+    const firstNames = buf.slice(0, PREVIEW_LIMIT).map((t) => short[t.type]);
+    return {
+      count: buf.length,
+      firstNames,
+      overflow: Math.max(0, buf.length - PREVIEW_LIMIT),
+      slot: micSlot(),
+      slotLabel: micSlotLabel(micSlot()),
+    };
+  }
+  // sustain mode (default): show note names as before
   const buf = micPreviewNotes();
   if (buf.length === 0) return null;
   const PREVIEW_LIMIT = 6;
