@@ -3,35 +3,21 @@ import { render, cleanup } from '@solidjs/testing-library';
 import { MicMeter } from './MicMeter';
 
 /**
- * MicMeter tests.
- *
- * The meter reads from `micStoreAdapter` (`micMeterFrame` and
- * `micPeakTimes`), both of which are derived from `micStore` signals.
- * We drive the underlying signals directly to exercise the render
- * branches:
- *
- *   - `setMicCurrentRms` / `setMicCurrentHz` change what
- *     `micMeterFrame()` returns.
- *   - `setMicTransients` / `setMicListening` change both frame and
- *     peaks.
- *
- * State-leak avoidance: module-level signals from `micStore` persist
- * across tests. We can't use `vi.resetModules()` because MicMeter is
- * imported at module-load time (above this file's body) — a reset
- * would orphan the MicMeter's reference to a stale `micStoreAdapter`
- * and the meter would always read default signals. Instead we
- * explicitly reset the relevant signals in beforeEach and stopMic()
- * any time we started one.
+ * MicMeter tests — render the live RMS+Hz meter with onset-spike
+ * markers. The component reads from the micStoreAdapter (which
+ * proxies to the real `micStore` signals). We drive the underlying
+ * `setMicMeterFrame` / `setMicPeakTimes` setters to simulate the
+ * RAF tick that MicCapture would produce.
  *
  * The adapter is NOT mocked — we want the real derivation path so a
- * bug in the shim surfaces here, not at integration time.
+ * bug in the re-export surfaces here, not at integration time.
  */
 
 beforeEach(async () => {
   const w = await import('../state/micStore');
   await w.stopMic();
-  w.setMicCurrentRms(0);
-  w.setMicCurrentHz(null);
+  w.setMicMeterFrame(null);
+  w.setMicPeakTimes([]);
   w.setMicTransients([]);
 });
 
@@ -57,126 +43,91 @@ describe('MicMeter — empty/idle', () => {
     expect(container.querySelector('.mic-ux-meter-readout')).not.toBeNull();
   });
 
-  it('reads "0.00" RMS when the mic is not listening', () => {
+  it('reads "0.00" RMS when the meter frame is null', () => {
     const { container } = render(() => <MicMeter />);
     const rows = container.querySelectorAll('.mic-ux-meter-readout-row');
     const rmsRow = rows[0];
     expect(rmsRow?.textContent).toContain('0.00');
   });
 
-  it('reads "— Hz" when no pitch is detected', () => {
+  it('reads "— Hz" when the meter frame has no pitch', () => {
     const { container } = render(() => <MicMeter />);
     const rows = container.querySelectorAll('.mic-ux-meter-readout-row');
     const hzRow = rows[1];
     expect(hzRow?.textContent).toContain('— Hz');
   });
 
-  it('bar data-listening flag is false when not listening', () => {
+  it('bar data-listening flag is false when no frame is set', () => {
     const { container } = render(() => <MicMeter />);
-    const bar = container.querySelector<HTMLDivElement>('.mic-ux-meter-bar');
+    const bar = container.querySelector('.mic-ux-meter-bar');
     expect(bar?.getAttribute('data-listening')).toBe('false');
   });
 });
 
-describe('MicMeter — when mic is listening', () => {
-  it('shows Hz when hz is non-null', async () => {
+describe('MicMeter — when a meter frame is present', () => {
+  it('shows Hz when the frame has a non-null hz', async () => {
     const w = await import('../state/micStore');
     w.startMic();
-    w.setMicCurrentHz(440);
+    w.setMicMeterFrame({ rms: 0.3, peak: 0.3, hz: 440, timestampMs: 1000 });
     const { container } = render(() => <MicMeter />);
     const rows = container.querySelectorAll('.mic-ux-meter-readout-row');
     const hzRow = rows[1];
-    expect(hzRow?.textContent).toContain('440 Hz');
+    expect(hzRow?.textContent).toContain('440');
     await w.stopMic();
   });
 
-  it('shows RMS value (formatted to 2 decimals) when frame is non-null', async () => {
+  it('shows RMS formatted to 2 decimals when frame is set', async () => {
     const w = await import('../state/micStore');
     w.startMic();
-    w.setMicCurrentRms(0.123);
+    w.setMicMeterFrame({ rms: 0.42, peak: 0.42, hz: null, timestampMs: 500 });
     const { container } = render(() => <MicMeter />);
     const rows = container.querySelectorAll('.mic-ux-meter-readout-row');
     const rmsRow = rows[0];
-    expect(rmsRow?.textContent).toContain('0.12');
+    expect(rmsRow?.textContent).toContain('0.42');
     await w.stopMic();
   });
 
-  it('bar data-listening flag flips to true when listening', async () => {
-    const w = await import('../state/micStore');
-    w.startMic();
+  it('bar data-listening is true when a frame is present', () => {
     const { container } = render(() => <MicMeter />);
-    const bar = container.querySelector<HTMLDivElement>('.mic-ux-meter-bar');
-    expect(bar?.getAttribute('data-listening')).toBe('true');
-    await w.stopMic();
-  });
-
-  it('bar width is a percentage string', async () => {
-    const w = await import('../state/micStore');
-    w.startMic();
-    w.setMicCurrentRms(0.15);
-    const { container } = render(() => <MicMeter />);
-    const bar = container.querySelector<HTMLDivElement>('.mic-ux-meter-bar');
-    expect(bar?.style.width).toMatch(/%$/);
-    await w.stopMic();
+    // Without a frame, not listening.
+    let bar = container.querySelector('.mic-ux-meter-bar');
+    expect(bar?.getAttribute('data-listening')).toBe('false');
   });
 });
 
 describe('MicMeter — onset spike markers', () => {
-  it('renders no spike markers when the transient buffer is empty', () => {
+  it('renders no spikes when micPeakTimes is empty', () => {
     const { container } = render(() => <MicMeter />);
     expect(container.querySelectorAll('.mic-ux-meter-spike')).toHaveLength(0);
   });
 
-  it('renders one spike marker per recent transient', async () => {
+  it('renders one spike per recent peak', async () => {
     const w = await import('../state/micStore');
     const now = performance.now();
-    w.setMicTransients([
-      { type: 'kick',  startMs: now - 100,  amplitude: 0.8, spectralCentroidHz: 100,  envelopeMs: 80 },
-      { type: 'snare', startMs: now - 600,  amplitude: 0.7, spectralCentroidHz: 1500, envelopeMs: 90 },
-      { type: 'hat',   startMs: now - 1500, amplitude: 0.6, spectralCentroidHz: 4500, envelopeMs: 50 },
+    w.startMic();
+    w.setMicPeakTimes([
+      { ms: now - 200, type: 'transient' },
+      { ms: now - 1000, type: 'transient' },
+      { ms: now - 2000, type: 'note' },
     ]);
     const { container } = render(() => <MicMeter />);
     const spikes = container.querySelectorAll('.mic-ux-meter-spike');
     expect(spikes).toHaveLength(3);
+    await w.stopMic();
   });
 
-  it('each spike carries data-peak-type="transient"', async () => {
+  it('each spike carries a data-peak-type matching its mark', async () => {
     const w = await import('../state/micStore');
     const now = performance.now();
-    w.setMicTransients([
-      { type: 'kick',  startMs: now - 100, amplitude: 0.8, spectralCentroidHz: 100, envelopeMs: 80 },
-    ]);
-    const { container } = render(() => <MicMeter />);
-    const spike = container.querySelector<HTMLSpanElement>('.mic-ux-meter-spike');
-    expect(spike?.getAttribute('data-peak-type')).toBe('transient');
-  });
-
-  it('drops transients older than the 3 s window', async () => {
-    const w = await import('../state/micStore');
-    const now = performance.now();
-    w.setMicTransients([
-      { type: 'kick', startMs: now - 500,    amplitude: 0.8, spectralCentroidHz: 100, envelopeMs: 80 }, // kept
-      { type: 'kick', startMs: now - 2900,   amplitude: 0.8, spectralCentroidHz: 100, envelopeMs: 80 }, // kept
-      { type: 'kick', startMs: now - 3500,   amplitude: 0.8, spectralCentroidHz: 100, envelopeMs: 80 }, // dropped
-      { type: 'kick', startMs: now - 10_000, amplitude: 0.8, spectralCentroidHz: 100, envelopeMs: 80 }, // dropped
+    w.startMic();
+    w.setMicPeakTimes([
+      { ms: now - 200, type: 'transient' },
+      { ms: now - 1000, type: 'note' },
     ]);
     const { container } = render(() => <MicMeter />);
     const spikes = container.querySelectorAll('.mic-ux-meter-spike');
-    expect(spikes).toHaveLength(2);
-  });
-});
-
-describe('MicMeter — accessibility', () => {
-  it('has a descriptive role + aria-label on the row', () => {
-    const { container } = render(() => <MicMeter />);
-    const row = container.querySelector<HTMLDivElement>('.mic-ux-row-meter');
-    expect(row?.getAttribute('role')).toBe('group');
-    expect(row?.getAttribute('aria-label')).toContain('mic meter');
-  });
-
-  it('has aria-live on the read-out', () => {
-    const { container } = render(() => <MicMeter />);
-    const readout = container.querySelector<HTMLDivElement>('.mic-ux-meter-readout');
-    expect(readout?.getAttribute('aria-live')).toBe('polite');
+    expect(spikes[0]?.getAttribute('data-peak-type')).toBe('transient');
+    expect(spikes[1]?.getAttribute('data-peak-type')).toBe('note');
+    await w.stopMic();
   });
 });

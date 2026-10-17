@@ -16,7 +16,7 @@ import {
   setMicInstrument,
   setMicSlot,
   type MicSlot,
-} from '../state/micStoreAdapter';
+} from '../state/micStore';
 import { evalScore, stopAudio } from '../state/audioActions';
 import { PianoRollPreview } from './PianoRollPreview';
 import { MicMeter } from './MicMeter';
