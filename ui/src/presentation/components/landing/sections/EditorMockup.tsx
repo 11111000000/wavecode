@@ -57,23 +57,21 @@ export function EditorMockup(): JSX.Element {
             <div class="l-mockup__panel">
               <div class="l-mockup__panel-head">score · creep.strudel</div>
               <pre class="l-mockup__code" aria-hidden="true">
-{`// Creep (Radiohead) — G → B → C → Cm, indie-rock 4/4
-stack(
-  // Bass: root notes
-  note("<g2 b2 c3 c3>").s("sawtooth").gain(0.4).lpf(300),
-  // Chord pad
-  note("<[55,59,62] [59,63,66] [60,64,67] [60,63,67]>")
-    .s("triangle").gain(0.2).lpf(1500),
-  // 8th-note arpeggio
-  n("<55 67 59 67 62 67 59 67>*2")
-    .s("sawtooth").gain(0.12).lpf(1500),
-  // Kick on 1 and 3
-  s("drums_bd ~ drums_bd ~").gain(0.5),
-  // Snare backbeat (2 and 4)
-  s("~ white ~ white").decay(.05).sustain(0).gain(0.22),
-  // 8th-note hihat
-  s("white*8").decay(.04).sustain(0).gain(0.15)
-)`}
+{`// Creep (Radiohead) — G → B → C → Cm, ~92 BPM
+cat(
+  // verse: clean arpeggio, один аккорд на такт
+  stack(
+    note("g3 b3 d4 b3 g3 b3 d4 b3")
+      .s("triangle").decay(.28).sustain(0).gain(0.16).room(.5),
+    note("g2").s("sawtooth").gain(0.3).lpf(300),
+  ),
+  stack(
+    note("f#3 b3 d#4 b3 f#3 b3 d#4 b3")
+      .s("triangle").decay(.28).sustain(0).gain(0.16).room(.5),
+    note("b2").s("sawtooth").gain(0.3).lpf(300),
+  ),
+  // … C, Cm, затем chorus: distorted triads + drums
+).slow(1.3)`}
               </pre>
             </div>
 

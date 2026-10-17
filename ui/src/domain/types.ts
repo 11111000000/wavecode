@@ -3,6 +3,12 @@
  * Это контракт между всеми слоями — изменение здесь затрагивает всё.
  */
 
+import { BUILTIN_PRESETS } from './presets';
+
+/** Дефолтный score = built-in `creep` (единый источник истины). */
+const creepScore: string =
+  BUILTIN_PRESETS.find((p) => p.id === 'creep')?.score ?? '';
+
 export type Score = string;
 
 export type Role = 'user' | 'assistant' | 'system';
@@ -67,20 +73,9 @@ export type AppState = {
 export const HISTORY_LIMIT = 50;
 
 export const initialAppState: AppState = {
-  // Дефолтный score при первом запуске (IDB пуст).
-  // Creep (Radiohead) — без .slow(2): 1 cycle = 2 sec на cps=0.5,
-  // chord changes по 0.5 сек = 120 BPM.
-  score: [
-    '// Creep (Radiohead) — G → B → C → Cm, indie-rock 4/4',
-    'stack(',
-    '  note("<g2 b2 c3 c3>").s("sawtooth").gain(0.4).lpf(300),',
-    '  note("<[55,59,62] [59,63,66] [60,64,67] [60,63,67]>").s("triangle").gain(0.2).lpf(1500),',
-    '  n("<55 67 59 67 62 67 59 67>*2").s("sawtooth").gain(0.12).lpf(1500),',
-    '  s("bd ~ sbd ~").gain(0.5),',
-    '  s("~ white ~ white").decay(.05).sustain(0).gain(0.22),',
-    '  s("white*8").decay(.04).sustain(0).gain(0.15)',
-    ')',
-  ].join('\n'),
+  // Дефолтный score при первом запуске (IDB пуст) — совпадает с
+  // built-in пресетом `creep` (single source of truth в presets.ts).
+  score: creepScore,
   history: [],
   future: [],
   dialogs: { creep: [] },
