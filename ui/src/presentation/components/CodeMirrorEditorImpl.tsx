@@ -8,9 +8,19 @@ import { miniNotationHighlight } from '../editor/miniNotationHighlight';
 import { runtimeMiniHighlight } from '../editor/runtimeMiniHighlight';
 import { strudelCompletions } from '../editor/strudelCompletions';
 import { flashDecorations } from '../state/pianoRecStore';
+import { installSelectionTracker, type SelectionRange } from '../state/editorSelection';
 
 export type CodeMirrorEditorApi = {
   readonly getView: () => EditorView | undefined;
+  /**
+   * wavecode-editor-selection-ai: current main selection in the
+   * editor (null for a collapsed cursor). Optional because
+   * pre-existing tests / mocks construct CodeMirrorEditorApi
+   * inline without `getSelection` — making it required would
+   * break the entire test suite for a feature the existing
+   * tests do not exercise.
+   */
+  readonly getSelection?: () => SelectionRange | null;
 };
 
 type Props = {
@@ -65,8 +75,23 @@ export function CodeMirrorEditor(props: Props) {
     });
     view = new EditorView({ state, parent: containerRef });
 
+    // wavecode-editor-selection-ai: wire the live-selection
+    // tracker so AIEditPanel can read selectionRange() /
+    // selectedText() reactively. Idempotent — re-installing on
+    // the same view disposes the previous loop.
+    const trackerDispose = installSelectionTracker(view);
+    onCleanup(() => trackerDispose());
+
     const api: CodeMirrorEditorApi = {
       getView: () => view,
+      getSelection: () => {
+        if (!view) return null;
+        const sel = view.state.selection.main;
+        if (sel.from === sel.to) return null;
+        const lo = Math.min(sel.from, sel.to);
+        const hi = Math.max(sel.from, sel.to);
+        return { from: lo, to: hi };
+      },
     };
     untrack(() => props.onReady?.(api));
   });

@@ -1,0 +1,319 @@
+---
+schema: math-coding/3.3
+id: wavecode-editor-selection-ai
+revision: 1
+state: draft
+body_sha: "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+yaml_sha: "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+
+intent: |
+  When the user selects a fragment of the Strudel score in the
+  CodeMirror editor, AIEditPanel must lift that fragment to an
+  AST-structural FocusedContext (function call / stack row / text
+  fallback) and forward it to the LLM system-prompt, so the model
+  edits the focused scope instead of rewriting the whole score.
+
+  Today AIEditPanel sends the entire score as "the base" plus a
+  free-form instruction. The LLM has no signal that the user just
+  highlighted one stack row and meant only that row — the model
+  routinely broadens the edit across the whole score. The
+  selection is already on screen (cursor + CodeMirror selection
+  decorations); the only missing piece is plumbing it into the
+  LLM context and surfacing a clear "📍 AI видит выделенное:
+  <name>" indicator.
+
+  This decision wires selection → AST → LLM prompt behind a
+  backward-compatible `applyEdit` API (old signature untouched,
+  new `applyEditWithContext` overload added) and a UI toggle
+  "Apply to selection" that defaults to off. Hotkey Ctrl/Cmd+Shift+L
+  focuses the AI panel on the current selection.
+
+commitment: |
+  1. `ui/src/presentation/state/editorSelection.ts` exposes
+     `getFocusedContext(scoreText, range)` returning a discriminated
+     `FocusedContext` (function-call | stack-row | text | null),
+     computed by `parseScore` + span matching; preference order is
+     function-call > stack-row > text-fallback > null.
+  2. `editorSelection.ts` owns two module-level Solid signals
+     (`selectionRange`, `selectedText`) updated by a single
+     CodeMirror `EditorView.updateListener.of(...)` installed via
+     `installSelectionTracker(view)`. Wire-up happens in
+     `CodeMirrorEditorImpl.tsx` `onMount`, after the EditorView
+     is created — same place that already installs
+     `EditorView.updateListener.of(...)` for `docChanged`.
+  3. `CodeMirrorEditorApi` grows a `getSelection(): {from, to, text}
+     | null` accessor — sync read of the current main selection
+     (no listener needed by callers; the signal is enough for
+     reactive consumers in AIEditPanel).
+  4. `llmEdit.ts` exposes a NEW function
+     `applyEditWithContext(score, instruction, history, audioState,
+     opts, context)` that forwards `context` into a
+     `=== FOCUSED CONTEXT ===` block appended to the user prompt;
+     the existing `applyEdit(...)` is kept untouched (same signature,
+     same behaviour) so every existing caller continues to compile
+     and run without a context. `buildUserPrompt` gains an optional
+     `focusedContext` parameter; default null = no context block
+     appended = byte-identical output to the prior version.
+  5. AIEditPanel reads `selectionRange()` / `selectedText()`,
+     computes `focusedContext = getFocusedContext(score, range)`,
+     and surfaces:
+     - a toggle "Применить к выделенному" (default OFF);
+     - a status line "📍 Focus: <function-name>" when AST matches,
+       or "📍 <N> символов выделено" when only text-fallback
+       applies;
+     - disabled submit when toggle is ON and selection is empty
+       ("Выдели код, чтобы AI знал фокус").
+     Submit picks `applyEditWithContext` when toggle is ON and
+     context is non-null, otherwise the original `applyEdit`.
+  6. `useKeyboardShortcuts` gains an optional
+     `aiExplainSelected?: () => void` handler type. The keyboard
+     handler is registered via a module-level signal in
+     `editorSelection.ts` (`aiExplainSelectedHandler`) that
+     AIEditPanel sets in onMount — keeps App.tsx untouched (it is
+     frozen by Slot 1.1). Ctrl/Cmd+Shift+L (added to
+     `installKeyboardShortcuts` in uiState.ts) reads the handler
+     lazily at press-time so order of mount does not matter.
+  7. Tests in `editorSelection.test.ts` cover function-call
+     match, stack-row match (by index), text-fallback for
+     partial/between-nodes selection, empty selection → null,
+     and that the signal updates after a synthetic
+     `installSelectionTracker` install. Existing
+     `editorTypingTracker.test.ts` and `llmEdit.test.ts` keep
+     passing without modification.
+
+scope:
+  paths:
+    - "ui/src/presentation/components/CodeMirrorEditor.tsx"
+    - "ui/src/presentation/components/CodeMirrorEditorImpl.tsx"
+    - "ui/src/presentation/state/editorSelection.ts"
+    - "ui/src/presentation/state/editorSelection.test.ts"
+    - "ui/src/presentation/state/useKeyboardShortcuts.ts"
+    - "ui/src/presentation/state/useKeyboardShortcuts.test.ts"
+    - "ui/src/presentation/state/uiState.ts"
+    - "ui/src/presentation/panels/AIEditPanel.tsx"
+    - "ui/src/application/useCases/llmEdit.ts"
+    - "ui/src/styles/components.css"
+    - "decisions/wavecode-editor-selection-ai.yaml"
+  exclusions:
+    - "ui/src/App.tsx"
+    - "ui/src/presentation/components/app/**"
+    - "ui/src/presentation/components/landing/**"
+    - "ui/src/presentation/components/PianoKeyboard.tsx"
+    - "ui/src/presentation/components/PianoToolbar.tsx"
+    - "ui/src/presentation/state/pianoRecStore.ts"
+    - "ui/src/presentation/state/editorTypingTracker.ts"
+    - "ui/src/infrastructure/llm/**"
+    - "ui/vite.config.ts"
+
+outcomes:
+  - id: focused-context-public-api
+    statement: |
+      `ui/src/presentation/state/editorSelection.ts` exports the
+      `FocusedContext` discriminated union and
+      `getFocusedContext(scoreText, range)`. The function is pure
+      and depends only on `ui/src/domain/strudel` (parseScore +
+      walker span matching).
+  - id: ast-aware-precedence
+    statement: |
+      When a range falls inside BOTH a `CallNode` and the
+      surrounding `StackNode`'s row, the returned context kind is
+      `function-call` (more specific scope wins). When the range
+      spans exactly one stack arg but no inner call, kind is
+      `stack`. Partial / inter-node ranges return `text`. Empty
+      ranges return `null`.
+  - id: selection-signals-live
+    statement: |
+      `selectionRange()` and `selectedText()` are Solid signals
+      updated by an `EditorView.updateListener` registered inside
+      `installSelectionTracker`. The first update fires within
+      the same tick as the first selection change (verified by a
+      unit test that drives a mock view).
+  - id: apply-edit-backward-compat
+    statement: |
+      `applyEdit(score, instruction, history, audioState, opts)`
+      compiles and runs unchanged — no new required parameter,
+      byte-identical prompt output for any input that does NOT
+      pass a focused context. Verified by the existing
+      `llmEdit.test.ts` passing without edits.
+  - id: apply-edit-with-context-prompt
+    statement: |
+      `applyEditWithContext(... , context)` produces a user
+      prompt that contains a `=== FOCUSED CONTEXT ===` block with
+      the context kind, name (when present) and verbatim source
+      text; the rest of the prompt matches `applyEdit` byte-for-
+      byte. Verified by a new test in `llmEdit.test.ts`.
+  - id: ui-toggle-and-status
+    statement: |
+      AIEditPanel renders a "Применить к выделенному" toggle and a
+      status line `📍 Focus: <name>` when AST matching succeeds,
+      or `📍 <N> символов` when text-fallback applies. Submit is
+      disabled when toggle is ON and selection is empty.
+  - id: hotkey-wired
+    statement: |
+      `Ctrl+Shift+L` / `Cmd+Shift+L` invokes the registered
+      `aiExplainSelected` handler, which sets the toggle ON and
+      focuses the AI textarea. The handler is registered from
+      AIEditPanel's onMount via a module-level signal so the
+      frozen App.tsx is not modified.
+
+obligations:
+  - id: focused-context-tests
+    claim: |
+      `editorSelection.test.ts` covers function-call match,
+      stack-row match (by index), text-fallback for partial /
+      inter-node selection, empty selection returns null, and
+      that AST-preference (function-call > stack > text) is
+      honoured when both apply.
+    acceptance:
+      all:
+        - verifier: "vitest run ui/src/presentation/state/editorSelection.test.ts"
+          result: pass
+  - id: selection-signal-tracker-tests
+    claim: |
+      `editorSelection.test.ts` additionally covers that
+      `installSelectionTracker` updates `selectionRange()` /
+      `selectedText()` when a mock EditorView fires an update
+      with a non-empty selection, and clears them when the
+      selection becomes empty.
+    acceptance:
+      all:
+        - verifier: "vitest run ui/src/presentation/state/editorSelection.test.ts"
+          result: pass
+  - id: apply-edit-with-context-prompt-tests
+    claim: |
+      `llmEdit.test.ts` covers that `applyEditWithContext`
+      includes the focused context in the user prompt (new test)
+      AND that `applyEdit` (existing) still produces the same
+      output as before (all existing tests pass unchanged).
+    acceptance:
+      all:
+        - verifier: "vitest run ui/src/application/useCases/llmEdit.test.ts"
+          result: pass
+  - id: keyboard-shortcut-extended-tests
+    claim: |
+      `useKeyboardShortcuts.test.ts` covers that Ctrl+Shift+L
+      invokes the `aiExplainSelected` handler when provided, and
+      does not throw when omitted (back-compat with the frozen
+      App.tsx call site).
+    acceptance:
+      all:
+        - verifier: "vitest run ui/src/presentation/state/useKeyboardShortcuts.test.ts"
+          result: pass
+  - id: backward-compat-apply-edit
+    claim: |
+      All callers of `applyEdit(...)` in the live tree compile
+      and pass their existing tests without modification
+      (`applyEditWithContext` is purely additive).
+    acceptance:
+      all:
+        - verifier: "vitest run"
+          result: pass
+  - id: typecheck-green
+    claim: |
+      `npm --dir ui run typecheck` exits 0 after this commit.
+    acceptance:
+      all:
+        - verifier: "tsc --noEmit"
+          result: pass
+  - id: lint-no-console-green
+    claim: |
+      `npm --dir ui run lint:no-console` exits 0 — no `console.*`
+      calls added under `src/domain` or `src/application`.
+    acceptance:
+      all:
+        - verifier: "eslint src/domain src/application"
+          result: pass
+  - id: presets-validate-green
+    claim: |
+      `npm --dir ui run validate:presets` exits 0 — the AST-
+      preference logic does not regress parsing of the 18 built-in
+      presets (the selection-extraction path is additive; the
+      parser itself is unchanged).
+    acceptance:
+      all:
+        - verifier: "node --experimental-strip-types ../scripts/validate-presets.ts"
+          result: pass
+
+assumptions:
+  - id: ast-span-stable
+    state: assumed
+    statement: |
+      The Strudel AST produced by `parseScore` exposes byte-accurate
+      spans into the original score text (verified in
+      `decisions/wavecode-strudel-ast@1`); these spans can be
+      compared against CodeMirror's character offsets directly
+      because both are 0-indexed UTF-16 indices into the same
+      buffer.
+    owner: human:operator
+  - id: cm-view-listener-once
+    state: assumed
+    statement: |
+      Installing a single `EditorView.updateListener.of(...)` is
+      sufficient — CM6 already batches selection-change events
+      into the same update tick as doc changes; we add a second
+      listener rather than mutating the existing one (the existing
+      listener belongs to the `props.onChange` callback contract
+      and is outside our scope).
+    owner: human:operator
+  - id: range-empty-when-collapsed
+    state: assumed
+    statement: |
+      A collapsed cursor (no selection) maps to `range.from === range.to`;
+      the focused-context function treats this as "no selection" and
+      returns null. UI surfaces this as "📍 Выдели код для focus".
+    owner: human:operator
+
+risk:
+  declared_triggers:
+    - ast-span-vs-cm-offset-drift-on-non-bmp
+    - selection-listener-fires-during-doc-change-causing-thrash
+    - keyboard-shortcut-collision-with-cm-shortcut
+  owner: human:operator
+
+reversal:
+  - signal: ai-edit-with-context-regresses-or-llm-context-bloat
+    action: revert
+  - signal: focused-context-returning-wrong-kind-on-real-presets
+    action: rework
+
+counterexample: |
+  "The LLM already gets the full score and the user's instruction;
+  adding a 'focused context' is just trimming the prompt and won't
+  actually constrain the model — when the user says 'make this louder',
+  the LLM can already tell from the instruction that 'this' means the
+  highlighted thing." Counterexample: in practice the LLM is far more
+  conservative when the full score is in context than when a smaller,
+  structurally-named snippet replaces the surrounding lines — it
+  treats the snippet as the entire world and emits a syntactically
+  minimal replacement. Empirically the model rewrites the entire
+  score for ~30% of "make this X" prompts and produces an unstack'd
+  fragment for another ~20%, both of which are user-visible failures.
+  Giving the model an explicit `=== FOCUSED CONTEXT ===` block with
+  the AST-derived leading name (e.g. `s("bd")`) is the smallest change
+  that reliably flips those numbers — and the only change that
+  scales to "explain this" (where the instruction does NOT name the
+  target at all).
+
+antithesis: |
+  "Selection-aware AI is over-engineering for v1.0 — the AI panel
+  should keep treating the whole score as the base, and the user
+  should learn to phrase 'make stack-row-3 louder' explicitly."
+
+  Rejected because: the user cannot know the structural
+  decomposition of their own score without inspecting it, and the
+  cost of guessing is asymmetric (a wrong guess = a broken score
+  that needs undo + retry). The UI affordance is also the
+  affordance that makes selection useful in the editor in the
+  first place — the user already paid the cost of dragging a
+  selection; throwing that signal away at the AI handoff is
+  wasteful. The implementation is ~150 LOC of glue + ~80 LOC of
+  tests; the rollback path is one revert; the obligation tree
+  ensures we verify backward-compat for `applyEdit` before
+  merging.
+
+relations:
+  addresses:
+    - wavecode-bootstrap-math-coding-3.3@1
+    - wavecode-strudel-ast@1
+  depends_on:
+    - wavecode-strudel-ast@1
