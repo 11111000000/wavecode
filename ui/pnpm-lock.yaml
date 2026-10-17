@@ -115,7 +115,7 @@ importers:
         specifier: ^0.8.0
         version: 0.8.10(solid-js@1.9.17)
       '@types/node':
-        specifier: ^22.0.0
+        specifier: ^22.20.5
         version: 22.20.5
       eslint:
         specifier: ^9.13.0
