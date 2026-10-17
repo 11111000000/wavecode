@@ -4,6 +4,7 @@ import {
   type Grid,
   GRID_ROWS,
 } from '~/domain/music/gridTypes';
+import { findTopStackOf, countSLayers } from '~/domain/strudel';
 import { parseStackTopLayers } from '~/domain/layers/parseStack';
 
 /**
@@ -58,13 +59,17 @@ const collectLayers = (score: string): ReadonlyArray<SampleLayer> => {
  * return `true` (the user has explicit consent by being in edit
  * mode), but `editGridLayer` only mutates the s-layers and
  * leaves the others alone.
+ *
+ * Implemented via the Strudel-score AST: the walker counts
+ * top-level `s(…)` rows structurally, so it cannot be fooled
+ * by `s("…")` substrings inside comments or string literals
+ * (the failure mode of the prior regex parser).
  */
 export const canEditGridLayer = (score: string): boolean => {
   if (score.trim() === '') return false;
-  const layers = collectLayers(score);
-  if (layers.length === 0) return false;
-  const sampleCount = layers.filter((l) => l.isSample).length;
-  return sampleCount === GRID_ROWS.length;
+  const stack = findTopStackOf(score);
+  if (!stack) return false;
+  return countSLayers(stack) === GRID_ROWS.length;
 };
 
 /**
