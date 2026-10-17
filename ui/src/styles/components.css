@@ -4369,9 +4369,9 @@ textarea.ai-textarea:focus-visible {
 }
 
 /* ===========================================================================
- *  WHISTLE PANEL (wavecode-whistle-to-strudel)
+ *  MIC PANEL (wavecode-mic-to-strudel)
  *  Live audio input → MIDI transcription → Strudel snippet. Lives behind
- *  a `▼ Whistle` toggle in the score-tools-header (mirrors the Piano
+ *  a `▼ Mic` toggle in the score-tools-header (mirrors the Piano
  *  toggle). When expanded, the panel renders below the editor and shows:
  *    row 1: 🎙 mic button + dual meter (RMS / Hz) + Hz read-out
  *    row 2: slot selector (append-stack / replace-score / at-cursor)
@@ -4379,7 +4379,7 @@ textarea.ai-textarea:focus-visible {
  *    row 4: freeze / clear / apply actions + preview-pill
  *    row 5: error pill (if mic denied / not supported)
  *
- *  Mobile parity: the Whistle toggle is visible on both desktop and
+ *  Mobile parity: the Mic toggle is visible on both desktop and
  *  mobile viewports (unlike Piano, which is desktop-only). The panel
  *  wraps to multiple rows via flex-wrap.
  *
@@ -4397,14 +4397,14 @@ textarea.ai-textarea:focus-visible {
   flex-wrap: wrap;
 }
 
-/* whistle-sheet-body — container inside the Whistle BottomSheet.
- *  The WhistlePanel itself is mostly self-contained (flex-wrap), so
+/* mic-sheet-body — container inside the Mic BottomSheet.
+ *  The MicPanel itself is mostly self-contained (flex-wrap), so
  *  the wrapper just provides sane padding inside the sheet. */
-.whistle-sheet-body {
+.mic-sheet-body {
   padding: var(--space-xs) var(--space-md) var(--space-md);
 }
 
-.whistle-panel {
+.mic-panel {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -4416,25 +4416,25 @@ textarea.ai-textarea:focus-visible {
   letter-spacing: var(--ls-wide);
   text-transform: lowercase;
 }
-.whistle-panel[data-state='streaming'] { color: var(--cyan); }
-.whistle-panel[data-state='errored']   { color: var(--magenta); }
+.mic-panel[data-state='streaming'] { color: var(--cyan); }
+.mic-panel[data-state='errored']   { color: var(--magenta); }
 
-.whistle-row {
+.mic-row {
   display: inline-flex;
   align-items: center;
   gap: var(--space-2xs);
 }
-.whistle-row-primary {
+.mic-row-primary {
   flex: 1 1 auto;
   min-width: 200px;
 }
-.whistle-row-label {
+.mic-row-label {
   opacity: 0.5;
   font-weight: var(--fw-medium);
   margin: 0 2px;
 }
 
-.whistle-mic-btn {
+.mic-mic-btn {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -4447,34 +4447,34 @@ textarea.ai-textarea:focus-visible {
   cursor: pointer;
   transition: border-color 120ms var(--ease-out), color 120ms var(--ease-out);
 }
-.whistle-mic-btn:hover { color: var(--cyan); border-color: var(--cyan); }
-.whistle-mic-btn[data-listening='true'] {
+.mic-mic-btn:hover { color: var(--cyan); border-color: var(--cyan); }
+.mic-mic-btn[data-listening='true'] {
   color: var(--cyan);
   border-color: var(--cyan);
-  animation: whistle-pulse 1.4s ease-in-out infinite;
+  animation: mic-pulse 1.4s ease-in-out infinite;
 }
-@keyframes whistle-pulse {
+@keyframes mic-pulse {
   0%, 100% { box-shadow: 0 0 0 0 transparent; }
   50%      { box-shadow: 0 0 6px 0 var(--cyan); }
 }
 
-.whistle-meter { color: var(--cyan); }
+.mic-meter { color: var(--cyan); }
 
-.whistle-hz-readout {
+.mic-hz-readout {
   font-variant-numeric: tabular-nums;
   color: var(--fg);
   min-width: 80px;
   font-size: var(--fs-2xs);
 }
 
-.whistle-slot-row {
+.mic-slot-row {
   display: inline-flex;
   align-items: center;
   gap: 4px;
   padding-left: var(--space-2xs);
   border-left: 1px solid var(--surface-2);
 }
-.whistle-slot-btn {
+.mic-slot-btn {
   padding: 2px 8px;
   border: 1px solid var(--surface-2);
   border-radius: var(--radius-sm);
@@ -4483,25 +4483,25 @@ textarea.ai-textarea:focus-visible {
   font: inherit;
   cursor: pointer;
 }
-.whistle-slot-btn[data-active='true'] {
+.mic-slot-btn[data-active='true'] {
   color: var(--cyan);
   border-color: var(--cyan);
   background: color-mix(in oklab, var(--cyan) 14%, var(--surface-0));
 }
-.whistle-slot-btn[disabled] {
+.mic-slot-btn[disabled] {
   opacity: 0.4;
   cursor: not-allowed;
 }
-.whistle-slot-label { opacity: 0.7; }
+.mic-slot-label { opacity: 0.7; }
 
-.whistle-instrument-row {
+.mic-instrument-row {
   display: inline-flex;
   align-items: center;
   gap: 3px;
   padding-left: var(--space-2xs);
   border-left: 1px solid var(--surface-2);
 }
-.whistle-inst-btn {
+.mic-inst-btn {
   padding: 2px 6px;
   border: 1px solid var(--surface-2);
   border-radius: var(--radius-xs);
@@ -4511,20 +4511,20 @@ textarea.ai-textarea:focus-visible {
   cursor: pointer;
   font-size: var(--fs-3xs);
 }
-.whistle-inst-btn[data-active='true'] {
+.mic-inst-btn[data-active='true'] {
   color: var(--amber);
   border-color: var(--amber);
   background: color-mix(in oklab, var(--amber) 14%, var(--surface-0));
 }
 
-.whistle-action-row {
+.mic-action-row {
   display: inline-flex;
   align-items: center;
   gap: 4px;
   padding-left: var(--space-2xs);
   border-left: 1px solid var(--surface-2);
 }
-.whistle-action-btn {
+.mic-action-btn {
   padding: 3px 10px;
   border: 1px solid var(--surface-2);
   border-radius: var(--radius-sm);
@@ -4533,13 +4533,13 @@ textarea.ai-textarea:focus-visible {
   font: inherit;
   cursor: pointer;
 }
-.whistle-action-btn:disabled { opacity: 0.4; cursor: not-allowed; }
-.whistle-apply-btn[data-action='apply'] {
+.mic-action-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.mic-apply-btn[data-action='apply'] {
   color: var(--cyan);
   border-color: var(--cyan);
 }
 
-.whistle-preview-pill {
+.mic-preview-pill {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -4551,7 +4551,7 @@ textarea.ai-textarea:focus-visible {
   font-size: var(--fs-3xs);
 }
 
-.whistle-error-pill {
+.mic-error-pill {
   display: inline-flex;
   align-items: center;
   flex-wrap: wrap;
@@ -4565,15 +4565,15 @@ textarea.ai-textarea:focus-visible {
   text-transform: none;
   letter-spacing: 0;
 }
-.whistle-error-hint { color: var(--fg-dim); }
-.whistle-error-link {
+.mic-error-hint { color: var(--fg-dim); }
+.mic-error-link {
   color: var(--magenta);
   text-decoration: underline;
   text-underline-offset: 2px;
   font-weight: var(--fw-medium);
 }
-.whistle-error-link:hover { color: var(--fg); }
-.whistle-error-paste-hint {
+.mic-error-link:hover { color: var(--fg); }
+.mic-error-paste-hint {
   opacity: 0.6;
   font-size: var(--fs-3xs);
 }

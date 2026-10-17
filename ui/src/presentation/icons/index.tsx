@@ -290,7 +290,7 @@ export const TabVisualizeIcon = (p: Props): JSX.Element => (
   </svg>
 );
 
-export const TabWhistleIcon = (p: Props): JSX.Element => (
+export const TabMicIcon = (p: Props): JSX.Element => (
   <svg {...base(p.size ?? 18)} class={`wc-icon ${p.class ?? ''}`}>
     <rect x="8" y="2" width="4" height="9" rx="2" />
     <path d="M5 9 a3 3 0 0 0 3 3" />

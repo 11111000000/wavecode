@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 /**
- * WhistleDetector acceptance tests.
+ * MicCapture acceptance tests.
  *
  * Strategy: replace the Vite `?worker` import with a stub Worker
  * class so we don't spin up a real worker in jsdom. The stub
@@ -14,8 +14,8 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
  *
  * What's NOT tested here:
  *   - The actual YIN algorithm (covered by yinDetector.worker.test.ts)
- *   - The note segmentation (covered by whistle.test.ts)
- *   - Solid signal updates (covered by whistleStore.test.ts)
+ *   - The note segmentation (covered by micCapture.test.ts)
+ *   - Solid signal updates (covered by micStore.test.ts)
  *
  * What's covered:
  *   - State transitions through the full lifecycle
@@ -24,7 +24,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
  *   - AudioContext close on stop()
  *   - MediaStream track stop on stop()
  *   - Cleanup ordering: raf cancelled before worker terminated
- *   - isWhistleSupported reflects the globalThis AudioContext/getUserMedia
+ *   - isMicSupported reflects the globalThis AudioContext/getUserMedia
  */
 
 type StubWorker = {
@@ -108,10 +108,10 @@ const installStubs = (): void => {
 };
 
 import {
-  startWhistleDetector,
-  isWhistleSupported,
-  type WhistleDetectorState,
-} from './WhistleDetector';
+  startMicDetector,
+  isMicSupported,
+  type MicCaptureState,
+} from './MicCapture';
 
 const waitFor = async <T>(fn: () => T, tries: number = 20): Promise<T> => {
   for (let i = 0; i < tries; i += 1) {
@@ -122,14 +122,14 @@ const waitFor = async <T>(fn: () => T, tries: number = 20): Promise<T> => {
   return fn();
 };
 
-describe('WhistleDetector', () => {
+describe('MicCapture', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    // Module-level state in `startWhistleDetector` is held in a
+    // Module-level state in `startMicDetector` is held in a
     // closure per call (let state, let stream, let worker, ...), so
     // vi.clearAllMocks doesn't reach the inner `setState` references.
     // We DO need to wipe the stubWorker's onmessage binding because
-    // each `startWhistleDetector` overwrites it on a shared object —
+    // each `startMicDetector` overwrites it on a shared object —
     // previous test callbacks would fire if not reset.
     stubWorker.postMessage.mockClear();
     stubWorker.terminate.mockClear();
@@ -145,23 +145,23 @@ describe('WhistleDetector', () => {
     vi.restoreAllMocks();
   });
 
-  it('isWhistleSupported returns true when AudioContext + getUserMedia exist', () => {
-    expect(isWhistleSupported()).toBe(true);
+  it('isMicSupported returns true when AudioContext + getUserMedia exist', () => {
+    expect(isMicSupported()).toBe(true);
   });
 
-  it('isWhistleSupported returns false when getUserMedia is missing', () => {
+  it('isMicSupported returns false when getUserMedia is missing', () => {
     const orig = navigator.mediaDevices;
     (navigator as unknown as { mediaDevices: undefined }).mediaDevices = undefined;
     try {
-      expect(isWhistleSupported()).toBe(false);
+      expect(isMicSupported()).toBe(false);
     } finally {
       (navigator as unknown as { mediaDevices: typeof orig }).mediaDevices = orig;
     }
   });
 
   it('transitions through state machine: idle → requesting-mic → starting-audio → streaming', async () => {
-    const states: WhistleDetectorState[] = [];
-    const handle = startWhistleDetector({
+    const states: MicCaptureState[] = [];
+    const handle = startMicDetector({
       onFrame: () => {},
       onStateChange: (s) => states.push(s),
     });
@@ -173,7 +173,7 @@ describe('WhistleDetector', () => {
   });
 
   it('configures worker with the analyser fftSize and AudioContext sampleRate', async () => {
-    const handle = startWhistleDetector({
+    const handle = startMicDetector({
       onFrame: () => {},
     });
     await waitFor(() => stubWorker.postMessage.mock.calls.length > 0);
@@ -190,7 +190,7 @@ describe('WhistleDetector', () => {
 
   it('forwards worker frame messages to onFrame callback', async () => {
     const frames: { hz: number | null; clarity: number; rms: number; timestampMs: number }[] = [];
-    const handle = startWhistleDetector({
+    const handle = startMicDetector({
       onFrame: (f) => frames.push(f),
     });
     await waitFor(() => stubWorker.onmessage !== null);
@@ -212,7 +212,7 @@ describe('WhistleDetector', () => {
 
   it('forwards worker error messages to onError callback', async () => {
     const errors: Error[] = [];
-    const handle = startWhistleDetector({
+    const handle = startMicDetector({
       onFrame: () => {},
       onError: (e) => errors.push(e),
     });
@@ -223,7 +223,7 @@ describe('WhistleDetector', () => {
       }),
     );
     expect(errors).toHaveLength(1);
-    expect(errors[0]?.message).toBe('whistle-worker: simulated failure');
+    expect(errors[0]?.message).toBe('mic-worker: simulated failure');
     await handle.stop();
   });
 
@@ -231,9 +231,9 @@ describe('WhistleDetector', () => {
     (navigator.mediaDevices.getUserMedia as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
       new Error('Permission denied'),
     );
-    const states: WhistleDetectorState[] = [];
+    const states: MicCaptureState[] = [];
     const errors: Error[] = [];
-    const handle = startWhistleDetector({
+    const handle = startMicDetector({
       onFrame: () => {},
       onStateChange: (s) => states.push(s),
       onError: (e) => errors.push(e),
@@ -249,7 +249,7 @@ describe('WhistleDetector', () => {
       new Promise(() => {}), // never resolves
     );
     const errors: Error[] = [];
-    const handle = startWhistleDetector({
+    const handle = startMicDetector({
       onFrame: () => {},
       onError: (e) => errors.push(e),
     });
@@ -262,7 +262,7 @@ describe('WhistleDetector', () => {
   });
 
   it('stop() terminates worker, closes AudioContext, and stops all tracks', async () => {
-    const handle = startWhistleDetector({
+    const handle = startMicDetector({
       onFrame: () => {},
     });
     await waitFor(() => stubWorker.postMessage.mock.calls.length > 0);
@@ -274,7 +274,7 @@ describe('WhistleDetector', () => {
   });
 
   it('stop() is idempotent', async () => {
-    const handle = startWhistleDetector({
+    const handle = startMicDetector({
       onFrame: () => {},
     });
     await waitFor(() => stubWorker.postMessage.mock.calls.length > 0);
@@ -284,7 +284,7 @@ describe('WhistleDetector', () => {
   });
 
   it('captures the configured fftSize on the analyser', async () => {
-    const handle = startWhistleDetector({
+    const handle = startMicDetector({
       onFrame: () => {},
       fftSize: 4096,
     });
@@ -294,7 +294,7 @@ describe('WhistleDetector', () => {
   });
 
   it('passes through custom clarityThreshold', async () => {
-    const handle = startWhistleDetector({
+    const handle = startMicDetector({
       onFrame: () => {},
       clarityThreshold: 0.75,
     });
