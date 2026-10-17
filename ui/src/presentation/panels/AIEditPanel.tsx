@@ -1,4 +1,4 @@
-import { createSignal, Show, For, createEffect, onCleanup, createMemo, batch } from 'solid-js';
+import { createSignal, Show, For, createEffect, onCleanup, createMemo, onMount, batch } from 'solid-js';
 import { Effect } from 'effect';
 import { dispatch, appStore } from '../state/appStore';
 import { AppLayer } from '~/infrastructure/composition';
@@ -8,11 +8,19 @@ import {
   applyEditStream,
   getLastRawLLMResponse,
   type DialogTurn,
+  type FocusedContextLike,
   type ApplyEditResult,
+  type ApplyEditCallbacks,
 } from '~/application/useCases/llmEdit';
 import { getLLMSettings } from '../state/llmSettings';
 import { LLMSettingsPopover } from '~/presentation/components/LLMSettingsPopover';
 import { logger } from '~/infrastructure/log';
+import {
+  selectionRange,
+  getFocusedContext,
+  registerAiExplainSelectedHandler,
+  type FocusedContext,
+} from '../state/editorSelection';
 import type { Role } from '~/domain/types';
 
 /**
@@ -27,18 +35,20 @@ import type { Role } from '~/domain/types';
  *   │  textarea + Применить        │
  *   │  + селекты модели/think      │
  *   └──────────────────────────────┘
+ * При новом сообщении auto-scroll в конец.
  *
- * Streaming + self-heal:
- *   - During streaming, a draft `assistant` message accumulates
- *     tokens as they arrive from `onToken`. The status pill reads
- *     "ИИ думает…" → "Применяю…".
- *   - On completion, the draft is replaced by the final assistant
- *     message (cleaned score). If `wasHealed` is true, the status
- *     pill says "Готово (сам исправил)" — the user sees a hint that
- *     the LLM's first attempt was broken and the self-heal retry
- *     salvaged it.
- *   - On hard failure (LLM error or self-heal budget exhausted),
- *     the existing `lastFailed` + manual retry button stays.
+ * wavecode-editor-selection-ai: AIEditPanel now reads the
+ * live CodeMirror selection (lifted to a module-level Solid
+ * signal in `editorSelection.ts`) and lifts it to an
+ * AST-structural `FocusedContext` via `getFocusedContext`. A
+ * toggle «Применить к выделенному» (default OFF) routes the
+ * next submit through `applyEditWithContext` instead of
+ * `applyEdit` — the model then sees a `=== FOCUSED CONTEXT ===`
+ * block in its user prompt and scopes its edit to that scope.
+ *
+ * Ctrl/Cmd+Shift+L (`aiExplainSelected` hotkey) sets the toggle
+ * ON, focuses the textarea, and pre-fills a friendly
+ * instruction so the user can just press Enter.
  */
 
 const roleLabel = (role: Role): string => {
@@ -68,27 +78,137 @@ type DraftAssistantMessage = {
   readonly text: string;
 };
 
+/**
+ * Map a `FocusedContext` to a short Russian label for the
+ * status line. Returns null when the context is null (no
+ * selection).
+ */
+const focusedContextLabel = (ctx: FocusedContext): string | null => {
+  if (ctx === null) return null;
+  if (ctx.kind === 'function-call') {
+    return `${ctx.name}(…)`;
+  }
+  if (ctx.kind === 'stack-row') {
+    return ctx.name
+      ? `строка ${ctx.index + 1} (${ctx.name})`
+      : `строка ${ctx.index + 1}`;
+  }
+  // text-fallback
+  return `${ctx.text.length} ${ctx.text.length === 1 ? 'символ' : 'символов'} выделено`;
+};
+
+const focusedContextToPrompt = (ctx: FocusedContext): FocusedContextLike | null => {
+  if (ctx === null) return null;
+  const base: FocusedContextLike = {
+    kind: ctx.kind,
+    text: ctx.text,
+  };
+  if (ctx.kind === 'function-call' || ctx.kind === 'stack-row') {
+    if (ctx.name !== null && ctx.name !== undefined) {
+      return { ...base, name: ctx.name };
+    }
+  }
+  return base;
+};
+
 export function AIEditPanel() {
   const [instruction, setInstruction] = createSignal('');
   const [busy, setBusy] = createSignal(false);
   const [status, setStatus] = createSignal<Status>({ kind: 'idle', msg: '' });
   const [settings] = createSignal(getLLMSettings());
+  // Последний запрос, упавший с ошибкой. Нужен для кнопки «Попробовать
+  // исправить» — повторяет ровно тот же текст + текущие настройки модели/
+  // thinking. Очищается при успехе (новом или повторном).
   const [lastFailed, setLastFailed] = createSignal<FailedRequest | null>(null);
-  // Live-updated by `onToken` callbacks so the user sees the LLM's
-  // output appear as the model emits it. Cleared on success/failure.
+  // wavecode-ai-streaming: draft assistant message that accumulates
+  // streaming tokens. Replaced by the real assistantMessage on success.
   const [draftAssistant, setDraftAssistant] = createSignal<DraftAssistantMessage | null>(null);
+  // wavecode-editor-selection-ai: «Применить к выделенному» toggle.
+  // Default OFF so the previous (non-context) behaviour is the
+  // user-visible default — toggling on is the explicit opt-in
+  // that changes how the next prompt is shaped.
+  const [applyToSelection, setApplyToSelection] = createSignal(false);
 
   let messagesRef: HTMLDivElement | undefined;
+  let textareaRef: HTMLTextAreaElement | undefined;
 
   /** Messages of the active preset's dialog thread. */
   const activeMessages = createMemo(
     () => appStore.dialogs[appStore.activePresetId] ?? [],
   );
 
+  // wavecode-editor-selection-ai: reactively compute the
+  // focused context from the current score text + the live
+  // selection range. Re-runs on every doc change or selection
+  // change.
+  const focusedContext = createMemo<FocusedContext>(() =>
+    getFocusedContext(appStore.score, selectionRange()),
+  );
+
+  // wavecode-editor-selection-ai: when the selection becomes
+  // empty (cursor collapsed or selection cleared), force the
+  // toggle off — the user can't apply to "no selection" and the
+  // disabled-when-empty submit would be confusing if the toggle
+  // were silently ON.
+  createEffect(() => {
+    const ctx = focusedContext();
+    if (ctx === null && applyToSelection()) {
+      setApplyToSelection(false);
+    }
+  });
+
+  // wavecode-editor-selection-ai: register the Ctrl/Cmd+Shift+L
+  // handler so App.tsx (frozen by Slot 1.1) does not need to be
+  // touched. The handler sets the toggle ON, focuses the
+  // textarea, and pre-fills a friendly instruction when the
+  // selection maps to an AST node. Lazy registration: the
+  // wrapper in `useKeyboardShortcuts.ts` reads this signal at
+  // press-time, so the order of mount does not matter.
+  onMount(() => {
+    const dispose = registerAiExplainSelectedHandler((): void => {
+      const ctx = focusedContext();
+      // Only meaningful when there's actually a selection.
+      if (ctx === null) {
+        setStatus({
+          kind: 'err',
+          msg: 'Выдели фрагмент в score, прежде чем просить ИИ объяснить выделенное.',
+        });
+        return;
+      }
+      setApplyToSelection(true);
+      // Pre-fill the textarea with a friendly default so the
+      // user can just press Enter to submit. Only do this when
+      // the textarea is empty — never overwrite a draft.
+      if (instruction().trim() === '') {
+        if (ctx.kind === 'function-call') {
+          setInstruction(`Объясни и при необходимости улучши ${ctx.name}(…) — что она делает и как её можно разнообразить?`);
+        } else if (ctx.kind === 'stack-row') {
+          setInstruction(`Объясни строку ${ctx.index + 1} и предложи вариацию (не меняя остальной score).`);
+        } else {
+          setInstruction(`Объясни выделенный фрагмент и предложи, как его улучшить.`);
+        }
+      }
+      // Focus the textarea on the next tick so Solid has
+      // finished rendering the new instruction.
+      window.setTimeout(() => {
+        textareaRef?.focus();
+      }, 0);
+    });
+    onCleanup(dispose);
+  });
+
   const submit = async (overrideText?: string): Promise<void> => {
     const text = (overrideText ?? instruction()).trim();
     if (!text) {
       setStatus({ kind: 'err', msg: 'Введи инструкцию' });
+      return;
+    }
+    // wavecode-editor-selection-ai: when the toggle is ON,
+    // require a non-null focused context. The submit button is
+    // disabled in this case but defend at the call boundary in
+    // case someone hits Enter on a stale textarea.
+    if (applyToSelection() && focusedContext() === null) {
+      setStatus({ kind: 'err', msg: 'Выдели код, чтобы ИИ знал фокус' });
       return;
     }
     unlockAudioContext();
@@ -103,6 +223,14 @@ export function AIEditPanel() {
       content: m.content,
     }));
     const currentSettings = settings();
+    const ctxForPrompt = applyToSelection() ? focusedContextToPrompt(focusedContext()) : null;
+    const streamCallbacks: ApplyEditCallbacks = {
+      onToken: (delta) => {
+        setDraftAssistant((prev) =>
+          prev ? { role: 'assistant', text: prev.text + delta } : prev,
+        );
+      },
+    };
 
     let result: ApplyEditResult;
     try {
@@ -114,13 +242,8 @@ export function AIEditPanel() {
             hist,
             { status: appStore.audio.status, ...(appStore.audio.lastError ? { lastError: appStore.audio.lastError } : {}) },
             { model: currentSettings.model, thinking: currentSettings.thinking },
-            {
-              onToken: (delta) => {
-                setDraftAssistant((prev) =>
-                  prev ? { role: 'assistant', text: prev.text + delta } : prev,
-                );
-              },
-            },
+            streamCallbacks,
+            ctxForPrompt,
           );
         }).pipe(Effect.provide(AppLayer)),
       );
@@ -162,7 +285,6 @@ export function AIEditPanel() {
       return;
     }
 
-    // Draft → final assistant message in the dialog thread.
     batch(() => {
       dispatch({ type: 'replaceScore', text: result.score });
       dispatch({ type: 'assistantMessage', text: result.score });
@@ -171,6 +293,11 @@ export function AIEditPanel() {
       if (overrideText === undefined) {
         // Retry: текст уже в textarea как instruction, не перезаписываем.
         setInstruction('');
+        // wavecode-editor-selection-ai: clear the toggle after a
+        // successful submit so the next instruction starts from a
+        // clean state — the selection may have moved or the user
+        // may want to apply to the WHOLE score next time.
+        setApplyToSelection(false);
       }
       setStatus({ kind: 'applying' });
     });
@@ -213,10 +340,21 @@ export function AIEditPanel() {
     void submit(f.text);
   };
 
+  // wavecode-editor-selection-ai: derive UI state from the
+  // focused context. The status line shows the AST-derived
+  // function/row name when matching succeeds; the submit
+  // button is disabled when the toggle is ON but the selection
+  // is empty.
+  const focusedLabel = createMemo(() => focusedContextLabel(focusedContext()));
+  const submitDisabled = createMemo(() => {
+    if (busy()) return true;
+    if (applyToSelection() && focusedContext() === null) return true;
+    return false;
+  });
+
   createEffect(() => {
     // Следим за длиной истории: при изменении auto-scroll в конец.
     void activeMessages().length;
-    void draftAssistant()?.text.length;
     if (messagesRef) {
       messagesRef.scrollTop = messagesRef.scrollHeight;
     }
@@ -230,11 +368,13 @@ export function AIEditPanel() {
     <div class="ai-edit-panel-inner">
       <div class="ai-messages" ref={messagesRef}>
         <Show
-          when={activeMessages().length > 0 || draftAssistant()}
+          when={activeMessages().length > 0}
           fallback={
             <div class="ai-messages-empty">
               Здесь будет диалог с ИИ для выбранной композиции. Напиши инструкцию внизу — например:
               «сделай быстрее в два раза», «добавь басов», «сделай техно-бит».
+              <br />
+              <small>Подсказка: выдели фрагмент в score (например, один ряд стека) и нажми Ctrl/Cmd+Shift+L — ИИ увидит только выделенное.</small>
             </div>
           }
         >
@@ -246,9 +386,9 @@ export function AIEditPanel() {
               </div>
             )}
           </For>
-          {/* Draft message: rendered while the LLM is streaming tokens
-              and discarded on completion (replaced by the real
-              assistantMessage dispatched to appStore). */}
+          {/* wavecode-ai-streaming: draft assistant message rendered
+              while tokens stream in. Replaced by the real
+              assistantMessage dispatched to appStore on completion. */}
           <Show when={draftAssistant()}>
             {(draft) => (
               <div class="ai-message ai-message-assistant ai-message-streaming">
@@ -281,8 +421,48 @@ export function AIEditPanel() {
         </div>
       </Show>
 
+      {/* wavecode-editor-selection-ai: selection status line.
+          Sits between the messages/status row and the textarea
+          so the user always sees what the AI will treat as the
+          "focused context" before they submit. Hides itself when
+          no selection exists (no signal noise in the default
+          state). */}
+      <Show when={focusedLabel() !== null || applyToSelection()}>
+        <div
+          class="ai-focus-row"
+          data-testid="ai-focus-row"
+          data-state={focusedContext() === null ? 'no-selection' : 'has-selection'}
+        >
+          <Show
+            when={focusedContext() !== null}
+            fallback={
+              <span class="ai-focus-empty">
+                Выдели код, чтобы ИИ знал фокус
+              </span>
+            }
+          >
+            <span class="ai-focus-glyph" aria-hidden="true">📍</span>
+            <span class="ai-focus-label">Focus: {focusedLabel()}</span>
+            <Show when={applyToSelection()}>
+              <span class="ai-focus-tag">применю к выделенному</span>
+            </Show>
+          </Show>
+          <label class="ai-focus-toggle" title="Применить правку только к выделенному фрагменту">
+            <input
+              type="checkbox"
+              data-testid="ai-focus-toggle"
+              checked={applyToSelection()}
+              disabled={focusedContext() === null}
+              onChange={(e) => setApplyToSelection(e.currentTarget.checked)}
+            />
+            <span>к выделенному</span>
+          </label>
+        </div>
+      </Show>
+
       <div class="ai-footer">
         <textarea
+          ref={textareaRef}
           aria-label="Инструкция для ИИ"
           data-ai-textarea
           placeholder='Что сделать? Например: «сделай быстрее в два раза»'
@@ -293,6 +473,9 @@ export function AIEditPanel() {
             const isTouchDevice =
               typeof window !== 'undefined' &&
               (('ontouchstart' in window) || (navigator.maxTouchPoints ?? 0) > 0);
+            // Mobile: Enter submits, Shift+Enter inserts newline (soft keyboards
+            // have no easy modifier-Enter path).
+            // Desktop: Ctrl/Cmd+Enter submits, plain Enter inserts newline.
             if (isTouchDevice) {
               if (e.shiftKey) return;
               if (e.isComposing) return;
@@ -326,8 +509,13 @@ export function AIEditPanel() {
             type="button"
             class="ai-apply-btn"
             onClick={() => void submit()}
-            disabled={busy()}
+            disabled={submitDisabled()}
             data-ai-apply-btn
+            title={
+              submitDisabled() && applyToSelection() && focusedContext() === null
+                ? 'Выдели код, чтобы ИИ знал фокус'
+                : 'Применить правку'
+            }
           >
             {applyButtonLabel(status(), busy())}
           </button>
@@ -336,7 +524,6 @@ export function AIEditPanel() {
     </div>
   );
 }
-
 const statusKind = (s: Status): 'idle' | 'ok' | 'err' | 'streaming' | 'applying' => s.kind;
 
 const statusMessage = (s: Status): string => {

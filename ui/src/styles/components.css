@@ -3029,6 +3029,76 @@ textarea.ai-textarea:focus-visible {
   background: var(--warn);
   color: var(--fg-inverse);
 }
+
+/* =========================================================================
+ *  wavecode-editor-selection-ai
+ *  Selection → focused-context status row in AIEditPanel. Sits
+ *  between the messages/status row and the textarea. Always
+ *  visible whenever a selection exists OR the «Применить к
+ *  выделенному» toggle is on (so the user can see the toggle
+ *  state when there's no selection — and the row tells them
+ *  why submit is disabled in that case).
+ * ========================================================================= */
+
+.ai-focus-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  flex-shrink: 0;
+  padding: var(--space-xs) var(--space-md);
+  border-top: 1px solid var(--border);
+  background: var(--surface-0);
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  color: var(--fg-dim);
+  min-height: 30px;
+}
+.ai-focus-row[data-state='no-selection'] {
+  color: var(--warn);
+}
+.ai-focus-glyph {
+  font-size: var(--fs-sm);
+  line-height: 1;
+}
+.ai-focus-label {
+  flex: 1 1 auto;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ai-focus-tag {
+  flex-shrink: 0;
+  padding: 2px var(--space-xs);
+  font-size: var(--fs-xs);
+  border-radius: var(--radius-sm);
+  background: var(--primary-soft);
+  color: var(--primary);
+  border: 1px solid var(--primary);
+  font-family: var(--font-sans);
+}
+.ai-focus-empty {
+  flex: 1 1 auto;
+  font-style: italic;
+}
+.ai-focus-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  flex-shrink: 0;
+  cursor: pointer;
+  font-family: var(--font-sans);
+  font-size: var(--fs-xs);
+  user-select: none;
+}
+.ai-focus-toggle input[type='checkbox'] {
+  margin: 0;
+  accent-color: var(--primary);
+  cursor: pointer;
+}
+.ai-focus-toggle input[type='checkbox']:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
 .ai-status-ok { color: var(--ok); }
 .ai-status-err { color: var(--err); }
 

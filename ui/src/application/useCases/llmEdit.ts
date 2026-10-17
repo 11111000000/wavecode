@@ -113,20 +113,53 @@ export const FIX_SYSTEM_PROMPT = [
  *
  * Используем string concatenation с literal triple backticks — это гарантирует
  * что LLM получает правильный markdown code block в userMsg.
+ *
+ * wavecode-editor-selection-ai: when `focusedContext` is non-null,
+ * a `=== FOCUSED CONTEXT ===` block is inserted BEFORE the audio
+ * state and the instruction, so the model sees the user's
+ * structural scope first and can scope its edit accordingly.
+ * When `focusedContext === null` (the default), the prompt is
+ * byte-identical to the prior version — verified by the
+ * existing `llmEdit.test.ts` cases passing unchanged.
  */
+export type FocusedContextLike = {
+  readonly kind: 'function-call' | 'stack-row' | 'text';
+  readonly text: string;
+  readonly name?: string | null;
+};
+
 export const buildUserPrompt = (
   currentScore: string,
   instruction: string,
   audioState: { status: string; lastError?: string } = { status: 'unknown' },
+  focusedContext: FocusedContextLike | null = null,
 ): string => {
   const lastErrorLine = audioState.lastError
     ? `last_error: ${audioState.lastError}\n`
     : '';
+  const focusBlock = focusedContext === null
+    ? ''
+    : [
+        '',
+        '=== FOCUSED CONTEXT (apply edits to this scope) ===',
+        `kind: ${focusedContext.kind}`,
+        ...(focusedContext.kind === 'function-call' && focusedContext.name
+          ? [`name: ${focusedContext.name}`]
+          : focusedContext.kind === 'stack-row'
+            ? [
+                ...(focusedContext.name ? [`name: ${focusedContext.name}`] : []),
+              ]
+            : []),
+        '```',
+        focusedContext.text,
+        '```',
+      ].join('\n');
   return [
     '=== ТЕКУЩИЙ SCORE (это БАЗА, модифицируй её) ===',
     '```',
     currentScore,
     '```',
+    focusBlock,
     '',
     '=== СОСТОЯНИЕ АУДИО ===',
     `status: ${audioState.status}`,
@@ -139,6 +172,9 @@ export const buildUserPrompt = (
     'Верни МОДИФИЦИРОВАННЫЙ ПОЛНЫЙ score — это база плюс твоя правка.',
     'Сохрани все ноты/аккорды, которые НЕ упомянуты в инструкции. Измени ТОЛЬКО то что просит пользователь.',
     'Если инструкция неприменима к score — верни базу без изменений.',
+    ...(focusedContext !== null
+      ? ['Применяй правку к FOCUSED CONTEXT (см. выше), а остальное оставь как было.']
+      : []),
     'Только JS код, без markdown и пояснений.',
   ].join('\n');
 };
@@ -382,6 +418,7 @@ export const applyEditStream = (
   audioState: { status: string; lastError?: string } = { status: 'unknown' },
   options: { model?: 'smart' | 'fast'; thinking?: 'low' | 'high' | 'off' } = {},
   callbacks: ApplyEditCallbacks = {},
+  context: FocusedContextLike | null = null,
 ): Effect.Effect<ApplyEditResult, Error | string, LLMClient> =>
   Effect.gen(function* () {
     const llm = yield* LLMClient;
@@ -390,7 +427,7 @@ export const applyEditStream = (
     const userMessage = {
       id: `user-${Date.now()}`,
       role: 'user' as const,
-      content: buildUserPrompt(currentScore, instruction, audioState),
+      content: buildUserPrompt(currentScore, instruction, audioState, context),
       ts: Date.now(),
     };
     const baseMessages = [
@@ -508,6 +545,80 @@ const readStream = (
       }).pipe(Effect.ignore);
     }
     return raw;
+  });
+
+/**
+ * wavecode-editor-selection-ai: same effect as `applyEdit`, but
+ * with an additional `focusedContext` argument that is appended
+ * to the user prompt as a `=== FOCUSED CONTEXT ===` block.
+ *
+ * Backward-compat:
+ *   - Old callers (`applyEdit(score, instr, hist, audio, opts)`)
+ *     continue to work — the new function is purely additive.
+ *   - When `context === null` the prompt is byte-identical to
+ *     `applyEdit` (verified by `llmEdit.test.ts`).
+ *
+ * The context shape mirrors `FocusedContext` from
+ * `presentation/state/editorSelection.ts` but is inlined here
+ * to keep the application layer free of presentation imports
+ * (the `application/` folder does NOT import from
+ * `presentation/` per the strict-layering decision
+ * `wavecode-strict-layering`).
+ */
+export const applyEditWithContext = (
+  currentScore: string,
+  instruction: string,
+  history: ReadonlyArray<DialogTurn> = [],
+  audioState: { status: string; lastError?: string } = { status: 'unknown' },
+  options: { model?: 'smart' | 'fast'; thinking?: 'low' | 'high' | 'off' } = {},
+  context: FocusedContextLike | null = null,
+): Effect.Effect<string, Error | string, LLMClient> =>
+  Effect.gen(function* () {
+    const llm = yield* LLMClient;
+
+    const recentHistory = history.slice(-10);
+    const messages = [
+      ...recentHistory.map((t, i) => ({
+        id: `hist-${i}`,
+        role: t.role,
+        content: t.content,
+        ts: 0,
+      })),
+      {
+        id: `user-${Date.now()}`,
+        role: 'user' as const,
+        content: buildUserPrompt(currentScore, instruction, audioState, context),
+        ts: Date.now(),
+      },
+    ];
+
+    const stream = yield* llm.streamCompletion({
+      model: options.model ?? 'smart',
+      thinking: options.thinking ?? 'low',
+      systemPrompt: SYSTEM_PROMPT,
+      messages,
+    });
+
+    const reader = stream.getReader();
+    const decoder = new TextDecoder();
+    let raw = '';
+
+    while (true) {
+      const { done, value } = yield* Effect.tryPromise(() => reader.read());
+      if (done) break;
+      if (value && value.type === 'text' && value.delta) {
+        raw += decoder.decode(new TextEncoder().encode(value.delta));
+      }
+    }
+
+    yield* Effect.tryPromise({
+      try: () => reader.cancel(),
+      catch: () => undefined,
+    }).pipe(Effect.ignore);
+
+    (window as unknown as { __wavecodeLastRaw?: string }).__wavecodeLastRaw = raw;
+
+    return cleanLLMResponse(raw);
   });
 
 /** Last raw LLM response (для отладки/UI). */

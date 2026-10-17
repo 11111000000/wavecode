@@ -400,6 +400,7 @@ export const closeStatusOverlay = (): void => {
 //   Ctrl+Shift+R  → toggle AI
 //   Ctrl+Shift+S  → toggle Status
 //   Ctrl+Shift+E  → toggle Score
+//   Ctrl+Shift+L  → AI focus on selection (wavecode-editor-selection-ai)
 //   Ctrl+Enter    → submit AI instruction
 //   Ctrl+Z        → undo score (when focus outside text input — see refs.undoScore)
 //   Ctrl+Y        → redo score
@@ -410,6 +411,7 @@ export const installKeyboardShortcuts = (refs: {
   undoScore: () => void;
   redoScore: () => void;
   openAdmin?: () => void;
+  aiExplainSelected?: () => void;
 }): void => {
   const handler = (e: KeyboardEvent) => {
     const mod = e.ctrlKey || e.metaKey;
@@ -447,6 +449,15 @@ export const installKeyboardShortcuts = (refs: {
     } else if (e.shiftKey && e.key.toLowerCase() === 'a') {
       e.preventDefault();
       refs.openAdmin?.();
+    } else if (e.shiftKey && e.key.toLowerCase() === 'l') {
+      // wavecode-editor-selection-ai: Ctrl/Cmd+Shift+L —
+      // hand off the current selection to the AI panel. The
+      // handler is registered by AIEditPanel via a module-level
+      // signal in editorSelection.ts because App.tsx is frozen
+      // by Slot 1.1 and the centralized keyboard handler
+      // cannot accept a new required prop without touching it.
+      e.preventDefault();
+      refs.aiExplainSelected?.();
     }
   };
   window.addEventListener('keydown', handler);
