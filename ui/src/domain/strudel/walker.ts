@@ -131,36 +131,44 @@ export const getStackArgs = (stack: StackNode): ReadonlyArray<{ readonly source:
 };
 
 /**
+ * Discriminated cause for `validateForEdit` returning `{ ok: false }`.
+ *
+ * Use this instead of a free-form `string` so the UI can render a
+ * different icon / copy per cause without `reason.startsWith('нет')`
+ * text comparisons. The numeric `layerCount` on the result still
+ * carries the exact count for `wrong-count` cases (the UI may want
+ * to show "у вас N, нужно 4").
+ */
+export type EditInvalidReason = 'empty' | 'no-top-stack' | 'wrong-count';
+
+/**
  * Result of `validateForEdit(score)` — drives the StepGrid
  * edit-mode pill state and the corresponding error message.
  */
 export type ValidateForEditResult = {
   readonly ok: boolean;
   readonly layerCount: number;
-  /** Human-readable reason; empty when `ok === true`. */
-  readonly reason: string;
+  /** Null when `ok === true`; otherwise a specific `EditInvalidReason`. */
+  readonly reason: EditInvalidReason | null;
 };
 
 /**
  * Edit-mode precondition: there is a top-level stack AND it
  * contains exactly 4 `s(…)` rows (matches the StepGrid's 4-row
  * drum-pad layout — see `ui/src/domain/music/gridTypes.ts`).
- *
- * Returns `{ ok: false, reason }` with a specific cause so the
- * UI can surface "не 4 sample-слоёв" / "нет stack(...)" / etc.
  */
 export const validateForEdit = (text: string): ValidateForEditResult => {
   const trimmed = text.trim();
   if (!trimmed) {
-    return { ok: false, layerCount: 0, reason: 'пустой score' };
+    return { ok: false, layerCount: 0, reason: 'empty' };
   }
   const stack = findTopStackOf(text);
   if (!stack) {
-    return { ok: false, layerCount: 0, reason: 'нет top-level stack(...)' };
+    return { ok: false, layerCount: 0, reason: 'no-top-stack' };
   }
   const sl = countSLayers(stack);
-  if (sl === 4) return { ok: true, layerCount: sl, reason: '' };
-  return { ok: false, layerCount: sl, reason: `sample-слоёв ${sl}, нужно 4` };
+  if (sl === 4) return { ok: true, layerCount: sl, reason: null };
+  return { ok: false, layerCount: sl, reason: 'wrong-count' };
 };
 
 /**
