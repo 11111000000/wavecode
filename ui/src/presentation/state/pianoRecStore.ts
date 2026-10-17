@@ -7,7 +7,14 @@ import { appendToTopStack } from '~/domain/strudel';
 import { consoleStore } from '~/presentation/components/consoleStore';
 import { logger } from '~/infrastructure/log';
 import { dispatch, appStore } from './appStore';
+import { evalScore } from './audioActions';
 import type { CodeMirrorEditorApi } from '~/presentation/components/CodeMirrorEditor';
+import {
+  pianoTranscribe,
+  formatTranscribeSummary,
+  TRANSCRIBE_DEFAULT_BPM,
+  type TranscribeSummary,
+} from '~/application/useCases/pianoTranscribe';
 
 /**
  * pianoRecStore — presentation-layer signals + orchestrators for the
@@ -403,6 +410,155 @@ export const previewPillPayload = (): {
     slot: pianoSlot(),
     slotLabel: pianoSlotLabel(pianoSlot()),
   };
+};
+
+// =========================================================================
+// wavecode-piano-transcribe — REC buffer → Strudel-score auto-transcription
+// =========================================================================
+//
+// Three signals + three actions that let PianoToolbar render a
+// `🎼 transcribe` button next to `↑ apply`:
+//
+//   - `transcribePreview` — the score + summary of the most recent
+//     transcription attempt. `null` when no preview is pending.
+//   - `transcribeBpm`     — BPM the toolbar binds to (a number
+//     input). Default 120.
+//   - `setTranscribeBpm`  — setter for the toolbar.
+//
+//   - `transcribe(bpm, inst)`     — reads the current rec buffer,
+//     runs `pianoTranscribe` (pure fn), populates `transcribePreview`.
+//     Empty buffer → preview stays `null` and the function is a no-op.
+//   - `applyTranscription()`      — dispatches `replaceScore` with the
+//     previewed score + calls `evalScore(score)` so the audio engine
+//     plays it immediately. Clears the rec buffer (mirroring
+//     `applyToScore`) AND the preview. No-op when no preview is pending.
+//   - `cancelTranscription()`     — clears `transcribePreview` without
+//     mutating the score. The buffer is preserved for retry.
+//
+// The toolbar renders the preview as a collapsible panel showing the
+// generated mini-notation + a Russian-language summary (e.g. «16 нот →
+// 4 столбца, 1 бит»). Apply/Cancel buttons live in the same panel.
+// =========================================================================
+
+/** Public shape of a pending transcription. The toolbar renders the
+ *  `score` inside a `<code>` element + the `summaryText` next to it. */
+export type TranscribePreview = {
+  readonly score: string;
+  readonly summary: TranscribeSummary;
+  readonly summaryText: string;
+  readonly bpm: number;
+  readonly instrument: PianoInstrument;
+};
+
+const [transcribePreviewSignal, setTranscribePreviewSignal] = createSignal<
+  TranscribePreview | null
+>(null);
+const [transcribeBpmSignal, setTranscribeBpmSignal] = createSignal<number>(
+  TRANSCRIBE_DEFAULT_BPM,
+);
+
+/** Reactive accessor for the current transcription preview.
+ *  `null` when no preview is pending. */
+export const transcribePreview = (): TranscribePreview | null =>
+  transcribePreviewSignal();
+
+/** Reactive accessor for the BPM the user has selected for the next
+ *  transcription. Default 120 (matches the global cps=0.5 default). */
+export const transcribeBpm = (): number => transcribeBpmSignal();
+
+/** Toolbar binds its BPM number-input to this setter. Accepts any
+ *  finite positive number; the transcription itself guards against
+ *  bpm <= 0 with a thrown Error. */
+export const setTranscribeBpm = (bpm: number): void => {
+  setTranscribeBpmSignal(Number.isFinite(bpm) && bpm > 0 ? bpm : TRANSCRIBE_DEFAULT_BPM);
+};
+
+/**
+ * Read the current rec buffer + selected instrument, run the pure
+ * `pianoTranscribe`, and store the result in `transcribePreview` so
+ * the toolbar can render it. No-op when the buffer is empty (the
+ * toolbar hides the preview panel in that case anyway).
+ *
+ * @param bpm  Beats per minute. Caller (toolbar) supplies the value
+ *             from `transcribeBpm()` or a derived default.
+ * @param instrument  Optional override; defaults to the current
+ *                    piano instrument selector. Always stored on the
+ *                    preview so Apply reapplies with the same timbre
+ *                    even if the user changes the selector between
+ *                    preview and apply.
+ */
+export const transcribe = (bpm: number, instOverride?: PianoInstrument): void => {
+  const buf = recBuffer();
+  if (buf.length === 0) {
+    setTranscribePreviewSignal(null);
+    return;
+  }
+  const inst = instOverride ?? instrument();
+  const result = pianoTranscribe(
+    buf.map((n) => ({ note: n.midi, startMs: n.startMs, endMs: n.endMs })),
+    { bpm, instrument: inst },
+  );
+  setTranscribePreviewSignal({
+    score: result.score,
+    summary: result.summary,
+    summaryText: formatTranscribeSummary(result.summary),
+    bpm,
+    instrument: inst,
+  });
+};
+
+/**
+ * Commit the currently-previed transcription to the editor and
+ * immediately play it. Mirrors `applyToScore`:
+ *   - dispatches `replaceScore` (so the editor reflects the new
+ *     score and CodeMirror's reactive effect mirrors it to the view)
+ *   - calls `evalScore(score)` so the audio engine picks it up
+ *     before the scheduler's next cycle
+ *   - clears the rec buffer on success
+ *   - clears `transcribePreview` so the panel hides
+ *
+ * No-op (with `console.warn`) when no preview is pending. On any
+ * thrown error during `evalScore`, the buffer is preserved so the
+ * user can retry without re-recording.
+ */
+export const applyTranscription = (): void => {
+  const preview = transcribePreviewSignal();
+  if (preview === null) {
+    console.warn(
+      'pianoRecStore.applyTranscription: no preview pending; no-op',
+    );
+    return;
+  }
+  if (preview.score === '') {
+    console.warn(
+      'pianoRecStore.applyTranscription: preview is empty; no-op',
+    );
+    setTranscribePreviewSignal(null);
+    return;
+  }
+  dispatch({ type: 'replaceScore', text: preview.score });
+  // evalScore is async — we don't await; the audio engine picks up
+  // the new pattern on its own scheduler tick. Wrapped in a catch
+  // so a transient error doesn't leave the buffer + preview
+  // stranded (mirrors `applyToScore` at-cursor warning pattern).
+  void evalScore(preview.score).catch((err: unknown) => {
+    console.warn(
+      'pianoRecStore.applyTranscription: evalScore failed',
+      err,
+    );
+  });
+  setRecBuffer([]);
+  setTranscribePreviewSignal(null);
+  flashAfterCommit();
+};
+
+/**
+ * Discard the current transcription preview without committing.
+ * The rec buffer is preserved so the user can adjust the BPM and
+ * retry. No-op when no preview is pending.
+ */
+export const cancelTranscription = (): void => {
+  setTranscribePreviewSignal(null);
 };
 
 // =========================================================================

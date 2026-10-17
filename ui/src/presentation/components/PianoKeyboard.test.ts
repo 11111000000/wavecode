@@ -650,6 +650,15 @@ describe('PianoKeyboard component (MIDI source attribution in status pill)', () 
       pianoSlotGlyph: (s: string): string => s,
       previewPillPayload: () => null,
       applyToScore: (): void => undefined,
+      // wavecode-piano-transcribe exports (post-feature) — the
+      // toolbar renders a `🎼 transcribe` button + preview panel,
+      // so the mock must provide no-op implementations for these.
+      transcribePreview: () => null,
+      transcribeBpm: () => 120,
+      setTranscribeBpm: (): void => undefined,
+      transcribe: (): void => undefined,
+      applyTranscription: (): void => undefined,
+      cancelTranscription: (): void => undefined,
       flashDecorations: { __placeholder: true } as never,
       setFlashDecorations: { __placeholder: true } as never,
       clearFlashDecorations: { __placeholder: true } as never,

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, cleanup, fireEvent } from '@solidjs/testing-library';
 import { PianoToolbar } from './PianoToolbar';
 
@@ -22,6 +22,12 @@ beforeEach(async () => {
   if (rec.pianoSlot() !== 'append-stack') rec.setPianoSlot('append-stack');
   rec.setEditorFocused(false);
   rec.setPianoEditorApi(undefined);
+  // Reset transcription state (wavecode-piano-transcribe): BPM
+  // back to default, preview cleared. Without this, the BPM
+  // signal leaks across tests and grid-width assertions on the
+  // generated mini-notation get the wrong cell boundaries.
+  rec.setTranscribeBpm(120);
+  rec.cancelTranscription();
   // Reset score so applyToScore tests start from empty editor.
   const { dispatch } = await import('../state/appStore');
   dispatch({ type: 'replaceScore', text: '' });
@@ -435,5 +441,151 @@ describe('PianoToolbar — preview-pill (wavecode-piano-rec-clarity)', () => {
     expect(applied).toBeTruthy();
     expect(applied!.getAttribute('data-applied')).toBe('true');
     expect(applied!.textContent).toMatch(/✓ Применено/);
+  });
+});
+
+// =========================================================================
+// wavecode-piano-transcribe — REC buffer → Strudel-score auto-transcription
+// =========================================================================
+
+describe('PianoToolbar — 🎼 transcribe button (wavecode-piano-transcribe)', () => {
+  it('is hidden when the rec buffer is empty', () => {
+    const { container } = render(() => <PianoToolbar />);
+    expect(container.querySelector('.piano-transcribe-btn')).toBeNull();
+  });
+
+  it('is visible when the buffer has at least one note (no REC required)', async () => {
+    const rec = await import('../state/pianoRecStore');
+    if (rec.recEnabled()) rec.toggleRec();
+    rec.appendNote(60, 0, 100);
+    const { container } = render(() => <PianoToolbar />);
+    expect(container.querySelector('.piano-transcribe-btn')).toBeTruthy();
+    expect(container.querySelector('.piano-transcribe-bpm')).toBeTruthy();
+  });
+
+  it('BPM input defaults to 120 and updates the signal on input', async () => {
+    const rec = await import('../state/pianoRecStore');
+    if (rec.recEnabled()) rec.toggleRec();
+    rec.appendNote(60, 0, 100);
+    expect(rec.transcribeBpm()).toBe(120);
+    rec.setTranscribeBpm(90);
+    const { container } = render(() => <PianoToolbar />);
+    const input = container.querySelector<HTMLInputElement>('.piano-transcribe-bpm__input')!;
+    expect(input.value).toBe('90');
+  });
+
+  it('clicking 🎼 transcribe populates the preview panel with mini-notation', async () => {
+    const rec = await import('../state/pianoRecStore');
+    if (!rec.recEnabled()) rec.toggleRec();
+    // 4 sixteenth notes at 120bpm → 4 columns, single-cat pattern.
+    rec.appendNote(60, 0, 100);
+    rec.appendNote(62, 125, 225);
+    rec.appendNote(64, 250, 350);
+    rec.appendNote(67, 375, 475);
+    const { container } = render(() => <PianoToolbar />);
+    const btn = container.querySelector<HTMLButtonElement>('.piano-transcribe-btn')!;
+    fireEvent.click(btn);
+    await new Promise((r) => setTimeout(r, 0));
+    const preview = container.querySelector<HTMLElement>('.piano-transcribe-preview');
+    expect(preview).toBeTruthy();
+    const score = container.querySelector<HTMLElement>('.piano-transcribe-preview__score');
+    expect(score!.textContent).toContain('note("<c4 d4 e4 g4>")');
+    expect(preview!.getAttribute('data-bpm')).toBe('120');
+    expect(preview!.getAttribute('data-valid')).toBe('true');
+  });
+
+  it('summary text reflects the recording (notes → columns, beats)', async () => {
+    const rec = await import('../state/pianoRecStore');
+    if (!rec.recEnabled()) rec.toggleRec();
+    rec.appendNote(60, 0, 100);
+    rec.appendNote(64, 0, 100);
+    rec.appendNote(67, 0, 100);
+    const { container } = render(() => <PianoToolbar />);
+    fireEvent.click(container.querySelector<HTMLButtonElement>('.piano-transcribe-btn')!);
+    await new Promise((r) => setTimeout(r, 0));
+    const summary = container.querySelector<HTMLElement>('.piano-transcribe-preview__summary');
+    // 3 ноты → 1 столбец, 1 бит
+    expect(summary!.textContent).toContain('3 ноты');
+    expect(summary!.textContent).toContain('1 столбец');
+    expect(summary!.textContent).toContain('1 бит');
+  });
+
+  it('Apply dispatches replaceScore with the previewed score + calls evalScore', async () => {
+    const rec = await import('../state/pianoRecStore');
+    const { appStore } = await import('../state/appStore');
+    // Spy on evalScore via the audioActions module
+    const audioActions = await import('../state/audioActions');
+    const evalSpy = vi.spyOn(audioActions, 'evalScore').mockResolvedValue(undefined);
+
+    if (!rec.recEnabled()) rec.toggleRec();
+    rec.appendNote(60, 0, 100);
+    rec.appendNote(64, 125, 225);
+    rec.appendNote(67, 250, 350);
+    const { container } = render(() => <PianoToolbar />);
+    fireEvent.click(container.querySelector<HTMLButtonElement>('.piano-transcribe-btn')!);
+    await new Promise((r) => setTimeout(r, 0));
+    const apply = container.querySelector<HTMLButtonElement>('.piano-transcribe-preview__apply')!;
+    fireEvent.click(apply);
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(appStore.score).toContain('note("<c4 e4 g4>")');
+    expect(evalSpy).toHaveBeenCalledTimes(1);
+    expect(evalSpy.mock.calls[0]![0]).toContain('note("<c4 e4 g4>")');
+    expect(rec.recBuffer()).toEqual([]); // buffer cleared
+    expect(rec.transcribePreview()).toBeNull(); // preview cleared
+    evalSpy.mockRestore();
+  });
+
+  it('Cancel clears the preview without dispatching replaceScore', async () => {
+    const rec = await import('../state/pianoRecStore');
+    const { appStore } = await import('../state/appStore');
+    const audioActions = await import('../state/audioActions');
+    const evalSpy = vi.spyOn(audioActions, 'evalScore').mockResolvedValue(undefined);
+
+    if (!rec.recEnabled()) rec.toggleRec();
+    rec.appendNote(60, 0, 100);
+    const { container } = render(() => <PianoToolbar />);
+    fireEvent.click(container.querySelector<HTMLButtonElement>('.piano-transcribe-btn')!);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(rec.transcribePreview()).not.toBeNull();
+    const before = appStore.score;
+    const cancel = container.querySelector<HTMLButtonElement>('.piano-transcribe-preview__cancel')!;
+    fireEvent.click(cancel);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(rec.transcribePreview()).toBeNull();
+    expect(appStore.score).toBe(before); // unchanged
+    expect(evalSpy).not.toHaveBeenCalled();
+    expect(rec.recBuffer().length).toBeGreaterThan(0); // buffer preserved
+    evalSpy.mockRestore();
+  });
+
+  it('preview panel disappears when the buffer is cleared (post-apply)', async () => {
+    const rec = await import('../state/pianoRecStore');
+    const audioActions = await import('../state/audioActions');
+    vi.spyOn(audioActions, 'evalScore').mockResolvedValue(undefined);
+
+    if (!rec.recEnabled()) rec.toggleRec();
+    rec.appendNote(60, 0, 100);
+    const { container } = render(() => <PianoToolbar />);
+    fireEvent.click(container.querySelector<HTMLButtonElement>('.piano-transcribe-btn')!);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(container.querySelector('.piano-transcribe-preview')).toBeTruthy();
+    fireEvent.click(container.querySelector<HTMLButtonElement>('.piano-transcribe-preview__apply')!);
+    await new Promise((r) => setTimeout(r, 0));
+    // After apply: buffer cleared, preview cleared → panel gone.
+    expect(container.querySelector('.piano-transcribe-preview')).toBeNull();
+  });
+
+  it('instrument name from store flows into the generated score (.s("triangle") default)', async () => {
+    const rec = await import('../state/pianoRecStore');
+    // Reset to triangle (the default instrument).
+    rec.setInstrument('triangle');
+    if (!rec.recEnabled()) rec.toggleRec();
+    rec.appendNote(60, 0, 100);
+    const { container } = render(() => <PianoToolbar />);
+    fireEvent.click(container.querySelector<HTMLButtonElement>('.piano-transcribe-btn')!);
+    await new Promise((r) => setTimeout(r, 0));
+    const score = container.querySelector<HTMLElement>('.piano-transcribe-preview__score');
+    expect(score!.textContent).toContain('.s("triangle")');
   });
 });
