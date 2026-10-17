@@ -1435,6 +1435,7 @@ body.wc-landing-active .wc-app {
 }
 
 .l-preset {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: var(--space-2xs);
@@ -1461,6 +1462,18 @@ body.wc-landing-active .wc-app {
 }
 .l-preset[data-tone='cyan']:hover    { border-color: var(--cyan); }
 .l-preset[data-tone='magenta']:hover { border-color: var(--magenta); }
+.l-preset[data-previewing='true'] {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 1px var(--primary-soft);
+}
+.l-preset[data-tone='cyan'][data-previewing='true'] {
+  border-color: var(--cyan);
+  box-shadow: 0 0 0 1px var(--cyan-soft);
+}
+.l-preset[data-tone='magenta'][data-previewing='true'] {
+  border-color: var(--magenta);
+  box-shadow: 0 0 0 1px var(--magenta-soft);
+}
 
 .l-preset__name {
   font-size: var(--fs-md);
@@ -1488,6 +1501,86 @@ body.wc-landing-active .wc-app {
 }
 .l-preset:hover .l-preset__cta {
   color: var(--primary);
+}
+
+/* ─── per-card preview play/stop button ────────────────────── */
+/* Круглая кнопка в правом нижнем углу карточки. 36×36 visible,
+   но pseudoscar + невидимый тап-расширитель добивает hit-area до
+   ≥44×44 на мобиле (WCAG 2.5.5 / Apple HIG 44pt minimum). */
+.l-preset__play {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--primary);
+  cursor: pointer;
+  transition: background var(--dur-sm) var(--ease),
+              border-color var(--dur-sm) var(--ease),
+              color var(--dur-sm) var(--ease),
+              transform var(--dur-xs) var(--ease),
+              box-shadow var(--dur-sm) var(--ease);
+  /* tap-target расширитель: невидимый pseudoscar +12px во все стороны,
+     чтобы hit-area была 36 + 2×12 = 60×60 (значительно выше 44×44).
+     pointer-events:auto на самом элементе, pseudoscar наследует. */
+  --play-tap-pad: 12px;
+}
+.l-preset__play::after {
+  content: '';
+  position: absolute;
+  inset: calc(-1 * var(--play-tap-pad));
+  border-radius: 50%;
+}
+.l-preset__play:hover {
+  background: var(--primary-soft);
+  border-color: var(--primary);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-glow-primary);
+}
+.l-preset__play:focus-visible {
+  outline: none;
+  border-color: var(--cyan);
+  box-shadow: 0 0 0 3px var(--cyan-soft);
+}
+.l-preset[data-tone='cyan'] .l-preset__play {
+  color: var(--cyan);
+}
+.l-preset[data-tone='cyan'] .l-preset__play:hover {
+  background: var(--cyan-soft);
+  border-color: var(--cyan);
+  box-shadow: var(--shadow-glow-cyan);
+}
+.l-preset[data-tone='magenta'] .l-preset__play {
+  color: var(--magenta);
+}
+.l-preset[data-tone='magenta'] .l-preset__play:hover {
+  background: var(--magenta-soft);
+  border-color: var(--magenta);
+  box-shadow: var(--shadow-glow-magenta);
+}
+.l-preset__play[data-playing='true'] {
+  background: var(--magenta);
+  border-color: var(--magenta);
+  color: var(--fg-inverse);
+  animation: l-preset-play-pulse 1.4s ease-in-out infinite;
+}
+.l-preset__play[data-playing='true']:hover {
+  background: var(--magenta);
+  border-color: var(--magenta);
+  color: var(--fg-inverse);
+}
+@keyframes l-preset-play-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 var(--magenta-glow, rgba(244, 114, 182, 0.45)); }
+  50%      { box-shadow: 0 0 0 6px transparent; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .l-preset__play[data-playing='true'] { animation: none; }
 }
 
 /* блок-пояснение под пресетами */

@@ -1,6 +1,8 @@
-import { For, type JSX } from 'solid-js';
+import { For, createSignal, type JSX } from 'solid-js';
 import { HERO_SNIPPET } from '../snippet';
 import { renderSnippet } from '../snippet';
+import { PlayIcon, StopIcon } from '../icons';
+import { previewPreset, stopPreview } from '../../../state/audioActions';
 
 type PresetItem = {
   readonly id: string;
@@ -21,16 +23,45 @@ const PRESETS: ReadonlyArray<PresetItem> = [
 /**
  * SnippetShowcase — подборка готовых мелодий, кликабельные.
  * Клик по карточке → /app?preset=<id> → редактор загружает score.
+ * Кнопка ▶ в углу карточки — превью пресета прямо на лендинге,
+ * без перехода в редактор; повторный тап / тап соседней карточки
+ * останавливает текущий preview (см. decisions/wavecode-landing-preset-preview).
  * Под каждой карточкой — жанр (простым языком) + кнопка «Открыть».
  * Сверху — большой snippet с подсветкой (тот же Creep) для понимания,
  * что за «код» имеется в виду.
  */
 export function SnippetShowcase(): JSX.Element {
+  const [playingPreviewId, setPlayingPreviewId] = createSignal<string | null>(null);
+
   const open = (id: string): void => {
     // Hash-router navigation (see Hero.tsx for full rationale).
     const target = `#/app?preset=${encodeURIComponent(id)}`;
     window.history.pushState(null, '', target);
     window.dispatchEvent(new HashChangeEvent('hashchange'));
+  };
+
+  const togglePreview = (id: string, e: MouseEvent): void => {
+    // The play button is INSIDE a card-wide click target that navigates
+    // to the editor. Without stopPropagation, every preview tap would
+    // also navigate to /#/app?preset=<id> — a regression from the
+    // intended UX where audition ≠ open.
+    e.stopPropagation();
+    if (playingPreviewId() === id) {
+      stopPreview();
+      setPlayingPreviewId(null);
+      return;
+    }
+    // New tap on a different card (or the first tap) — switch preview.
+    // previewPreset() internally calls stopPreview() first, so we don't
+    // need to clear `playingPreviewId()` before launching.
+    setPlayingPreviewId(id);
+    void previewPreset(id).then(() => {
+      // If the eval promise resolves AFTER the user already toggled to
+      // another preset, do not flip the signal back — the new card owns
+      // the playing state. Same if it rejects: leave signal as-is so
+      // the UI is consistent with what was clicked.
+      if (playingPreviewId() !== id) return;
+    });
   };
 
   return (
@@ -50,22 +81,44 @@ export function SnippetShowcase(): JSX.Element {
 
       <div class="l-presets" role="list">
         <For each={PRESETS}>
-          {(p) => (
-            <button
-              type="button"
-              class="l-preset"
-              data-tone={p.tone}
-              role="listitem"
-              aria-label={`Открыть пресет «${p.name}» в редакторе`}
-              onClick={() => open(p.id)}
-            >
-              <span class="l-preset__name">{p.name}</span>
-              <span class="l-preset__genre">{p.genre}</span>
-              <span class="l-preset__cta">
-                Открыть →
-              </span>
-            </button>
-          )}
+          {(p) => {
+            const isPlaying = (): boolean => playingPreviewId() === p.id;
+            return (
+              <button
+                type="button"
+                class="l-preset"
+                data-tone={p.tone}
+                data-previewing={isPlaying() ? 'true' : 'false'}
+                role="listitem"
+                aria-label={`Открыть пресет «${p.name}» в редакторе`}
+                onClick={() => open(p.id)}
+              >
+                <span class="l-preset__name">{p.name}</span>
+                <span class="l-preset__genre">{p.genre}</span>
+                <span class="l-preset__cta">
+                  Открыть →
+                </span>
+                <span
+                  class="l-preset__play"
+                  data-playing={isPlaying() ? 'true' : 'false'}
+                  role="button"
+                  tabindex="0"
+                  aria-label={isPlaying() ? `Остановить превью «${p.name}»` : `Послушать превью «${p.name}»`}
+                  aria-pressed={isPlaying() ? 'true' : 'false'}
+                  onClick={(e) => togglePreview(p.id, e)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      togglePreview(p.id, e as unknown as MouseEvent);
+                    }
+                  }}
+                >
+                  {isPlaying() ? <StopIcon size={12} /> : <PlayIcon size={12} />}
+                </span>
+              </button>
+            );
+          }}
         </For>
       </div>
 
