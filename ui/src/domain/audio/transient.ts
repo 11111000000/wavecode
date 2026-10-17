@@ -8,7 +8,7 @@
  *     → requestAnimationFrame poll
  *     → getFloatTimeDomainData + getByteFrequencyData
  *     → feedTransient(state, { timeDomain, freqDomain, sampleRate, ts })
- *     → Transient[] with type (kick / snare / hat / click) + timing
+ *     → Transient[] with type (kick / snare / hat / click) + timing + envelope
  *     → transientsToSnippet(transients) → Strudel `s("drums_bd*0.25").gain(0.5)`
  *
  * Co-exists with `micCapture.ts` (sustained-tone → MIDI notes). The two
@@ -25,7 +25,7 @@
  *
  * Glossary:
  *   - TransientFrame = one AnalyserNode read (time + freq + sample rate + ts)
- *   - Transient      = one detected onset with classification + amplitude + ts
+ *   - Transient      = one detected onset with classification + amplitude + ts + envelope
  *   - Tune           = thresholds (RMS-flux dB jump, refractory ms, etc.)
  */
 
@@ -50,6 +50,10 @@ export type Transient = {
   readonly amplitude: number;
   /** Spectral centroid (Hz) — used to derive the type. */
   readonly spectralCentroidHz: number;
+  /** Approximate decay time (ms). Time from onset until RMS first
+   *  falls to 37% (= 1/e) of the peak, capped at 1_000 ms. 0 means
+   *  never measured (transient fired but no follow-up frames yet). */
+  readonly envelopeMs: number;
 };
 
 export type TransientTune = {
@@ -85,12 +89,23 @@ export type TransientState = {
   readonly lastOnsetMs: number | null;
   /** Previous frame's RMS dB; needed to compute dB/dt across frames. */
   readonly prevRmsDb: number | null;
+  /** Most recent onset: t=0 for the in-flight envelope measurement. */
+  readonly pendingOnsetMs: number | null;
+  /** Highest RMS seen since the most recent onset. Updated if a
+   *  post-onset frame exceeds the previous peak. */
+  readonly pendingPeakRms: number | null;
+  /** Frame.timestampMs at which RMS first dropped to 37% of the peak.
+   *  null = envelope measurement still in progress. */
+  readonly pendingDecayTimeMs: number | null;
 };
 
 export const initialTransientState = (): TransientState => ({
   transients: [],
   lastOnsetMs: null,
   prevRmsDb: null,
+  pendingOnsetMs: null,
+  pendingPeakRms: null,
+  pendingDecayTimeMs: null,
 });
 
 /** Compute RMS of [-1, 1] samples. */
@@ -158,15 +173,82 @@ export const DEFAULT_INSTRUMENT_MAP: Readonly<Record<OnsetType, string>> = {
   click: 'drums_cp',
 };
 
+/** RMS ratio that defines "the decay point": 1/e ≈ 36.8%. A frame
+ *  whose RMS drops below this fraction of the post-onset peak is the
+ *  point we record as the envelope's decay time. */
+const ENVELOPE_DECAY_FRAC = 1 / Math.E;
+/** Sanity cap on envelopeMs so a stuck-open mic can't generate an
+ *  absurd value. 1 second is well above any natural drum envelope. */
+const ENVELOPE_MAX_MS = 1000;
+
+/**
+ * Track envelope measurement for any pending (post-onset) transient.
+ * Either updates the peak if a louder frame arrives, finalizes the
+ * envelope if RMS dropped to 37% of peak, or leaves state untouched.
+ * Must run BEFORE the onset check so two onsets in adjacent frames
+ * don't conflate envelope measurement.
+ */
+const trackEnvelope = (
+  state: TransientState,
+  rms: number,
+  frameTimestampMs: number,
+): TransientState => {
+  if (
+    state.pendingOnsetMs === null
+    || state.pendingDecayTimeMs !== null
+    || state.pendingPeakRms === null
+  ) {
+    return state;
+  }
+  if (
+    rms > state.pendingPeakRms
+    && frameTimestampMs - state.pendingOnsetMs <= ENVELOPE_MAX_MS
+  ) {
+    return { ...state, pendingPeakRms: rms };
+  }
+  if (rms < state.pendingPeakRms * ENVELOPE_DECAY_FRAC) {
+    const decayMs = Math.min(
+      ENVELOPE_MAX_MS,
+      frameTimestampMs - state.pendingOnsetMs,
+    );
+    const last = state.transients[state.transients.length - 1];
+    if (last === undefined) {
+      return {
+        ...state,
+        pendingOnsetMs: null,
+        pendingPeakRms: null,
+        pendingDecayTimeMs: frameTimestampMs,
+      };
+    }
+    return {
+      ...state,
+      transients: [
+        ...state.transients.slice(0, -1),
+        { ...last, envelopeMs: decayMs },
+      ],
+      pendingOnsetMs: null,
+      pendingPeakRms: null,
+      pendingDecayTimeMs: frameTimestampMs,
+    };
+  }
+  return state;
+};
+
 /**
  * Append-style state transition. Returns a NEW TransientState.
  *
  *   1. Compute frame's RMS (dBFS) and spectral centroid (Hz).
- *   2. If frame is below silenceDb → no onset, just update prevRmsDb.
- *   3. Compute flux = rmsDb - prevRmsDb. If flux > rmsFluxDb AND
+ *   2. If there's a pending envelope from a previous onset, either
+ *      track (new peak) or finalize (RMS dropped to 37% of peak).
+ *      This runs BEFORE the onset check so adjacent onsets don't
+ *      co-mingle their envelope measurement.
+ *   3. If frame is below silenceDb → no onset, just update prevRmsDb.
+ *   4. Compute flux = rmsDb - prevRmsDb. If flux > rmsFluxDb AND
  *      we're outside the refractory window after the last onset →
- *      fire a new Transient of the classified type.
- *   4. Otherwise just update prevRmsDb.
+ *      fire a new Transient of the classified type. Any leftover
+ *      pending envelope (previous transient whose decay never got
+ *      recorded) is finalized at frame.timestampMs.
+ *   5. Otherwise just update prevRmsDb.
  */
 export const feedTransient = (
   state: TransientState,
@@ -177,19 +259,40 @@ export const feedTransient = (
   const rmsDb = rmsToDb(rms);
   const centroidHz = computeCentroidHz(frame.freqDomain, frame.sampleRate);
 
+  const tracked = trackEnvelope(state, rms, frame.timestampMs);
+
   if (rmsDb < tune.silenceDb) {
-    return { ...state, prevRmsDb: rmsDb };
+    return { ...tracked, prevRmsDb: rmsDb };
   }
 
-  const prevRmsDb = state.prevRmsDb;
+  const prevRmsDb = tracked.prevRmsDb;
   const fluxDb = prevRmsDb === null ? 0 : rmsDb - prevRmsDb;
-  const lastOnsetMs = state.lastOnsetMs;
+  const lastOnsetMs = tracked.lastOnsetMs;
   const refractoryOk = lastOnsetMs === null
     || frame.timestampMs - lastOnsetMs > tune.minTransMs;
   const isOnset = fluxDb > tune.rmsFluxDb && refractoryOk;
 
   if (!isOnset) {
-    return { ...state, prevRmsDb: rmsDb };
+    return { ...tracked, prevRmsDb: rmsDb };
+  }
+
+  // Onset fires: finalize any leftover pending envelope from the
+  // previous transient (decay never observed in prior frames), then
+  // append a new transient with envelopeMs=0 (will be updated as
+  // post-onset frames come in).
+  let transients = tracked.transients;
+  if (tracked.pendingOnsetMs !== null && tracked.pendingDecayTimeMs === null) {
+    const decayMs = Math.min(
+      ENVELOPE_MAX_MS,
+      frame.timestampMs - tracked.pendingOnsetMs,
+    );
+    const last = transients[transients.length - 1];
+    if (last !== undefined) {
+      transients = [
+        ...transients.slice(0, -1),
+        { ...last, envelopeMs: decayMs },
+      ];
+    }
   }
 
   const type = classifyOnset(centroidHz, tune);
@@ -198,11 +301,15 @@ export const feedTransient = (
     startMs: frame.timestampMs,
     amplitude: rms,
     spectralCentroidHz: centroidHz,
+    envelopeMs: 0,
   };
   return {
-    transients: [...state.transients, next],
+    transients: [...transients, next],
     lastOnsetMs: frame.timestampMs,
     prevRmsDb: rmsDb,
+    pendingPeakRms: rms,
+    pendingOnsetMs: frame.timestampMs,
+    pendingDecayTimeMs: null,
   };
 };
 
@@ -216,12 +323,12 @@ export const closeOpenTransient = (state: TransientState): TransientState => sta
  * Output structure (one `s(...)` per distinct onset type, stacked):
  *
  *   transientsToSnippet([
- *     { type: 'kick',  startMs: 0,    ... },
- *     { type: 'snare', startMs: 250,  ... },
- *     { type: 'kick',  startMs: 500,  ... },
- *     { type: 'snare', startMs: 750,  ... },
+ *     { type: 'kick',  startMs: 0,    envelopeMs: 100 },
+ *     { type: 'snare', startMs: 250,  envelopeMs: 80 },
+ *     { type: 'kick',  startMs: 500,  envelopeMs: 90 },
+ *     { type: 'snare', startMs: 750,  envelopeMs: 70 },
  *   ])
- *   → 'stack(\n  s("drums_bd ~ drums_bd ~"),\n  s("~ drums_sd ~ drums_sd")\n)'
+ *   → 'stack(\n  s("drums_bd ~ drums_bd ~").decay(0.090),\n  s("~ drums_sd ~ drums_sd").decay(0.080)\n)'
  *
  * Pattern construction:
  *   - Normalize times to a single cycle starting at the first transient
@@ -230,6 +337,9 @@ export const closeOpenTransient = (state: TransientState): TransientState => sta
  *   - For each type, build a 16-step pattern with the right samples
  *     at the quantized positions and '~' elsewhere.
  *   - Wrap each in `s("…")`, join with `stack(…)`.
+ *   - Wrap the whole result with `.decay(N)` where N = max envelopeMs
+ *     in the buffer / 1000 seconds (skipped when no envelope was
+ *     measured — envelopeMs === 0).
  *
  * If there's only one type, skip the `stack` wrap and emit the bare
  * `s("…")` — looks cleaner in the editor.
@@ -267,6 +377,13 @@ export const transientsToSnippet = (
     layers.push(`s("${pattern.join(' ')}")`);
   }
   if (layers.length === 0) return null;
-  if (layers.length === 1) return layers[0]!;
-  return `stack(\n  ${layers.join(',\n  ')}\n)`;
+  let body: string;
+  if (layers.length === 1) body = layers[0]!;
+  else body = `stack(\n  ${layers.join(',\n  ')}\n)`;
+
+  const maxEnvelope = transients.reduce((acc, t) => Math.max(acc, t.envelopeMs), 0);
+  if (maxEnvelope > 0) {
+    body = `${body}.decay(${(maxEnvelope / 1000).toFixed(3)})`;
+  }
+  return body;
 };

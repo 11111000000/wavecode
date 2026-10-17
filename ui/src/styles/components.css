@@ -4488,6 +4488,24 @@ textarea.ai-textarea:focus-visible {
   border-color: var(--cyan);
   background: color-mix(in oklab, var(--cyan) 14%, var(--surface-0));
 }
+/* Auto-mode (both pipelines) — distinguish with the brand violet
+ * + a soft gradient so users can tell at a glance that it's the
+ * combined mode, not just another cyan button. */
+.mic-mode-btn[data-mode='auto'] {
+  border-style: dashed;
+  border-color: var(--primary);
+  color: var(--primary);
+}
+.mic-mode-btn[data-mode='auto'][data-active='true'] {
+  color: var(--primary);
+  border-color: var(--primary);
+  border-style: solid;
+  background: linear-gradient(
+    90deg,
+    color-mix(in oklab, var(--cyan) 14%, var(--surface-0)),
+    color-mix(in oklab, var(--primary) 18%, var(--surface-0))
+  );
+}
 
 .mic-slot-row {
   display: inline-flex;

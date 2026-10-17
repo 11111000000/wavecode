@@ -52,6 +52,8 @@ vi.mock('./yinDetector.worker?worker', () => ({
 type StubAnalyser = {
   fftSize: number;
   getFloatTimeDomainData: ReturnType<typeof vi.fn>;
+  getByteFrequencyData: ReturnType<typeof vi.fn>;
+  frequencyBinCount: number;
   context: StubAudioContext;
 };
 
@@ -67,6 +69,8 @@ type StubAudioContext = {
 const stubAnalyser: StubAnalyser = {
   fftSize: 0,
   getFloatTimeDomainData: vi.fn(),
+  getByteFrequencyData: vi.fn(),
+  frequencyBinCount: 1024,
   context: undefined as unknown as StubAudioContext,
 };
 const stubAudioContext: StubAudioContext = {
@@ -135,6 +139,7 @@ describe('MicCapture', () => {
     stubWorker.terminate.mockClear();
     stubWorker.onmessage = null;
     stubAnalyser.getFloatTimeDomainData.mockReset();
+    stubAnalyser.getByteFrequencyData.mockReset();
     stubAnalyser.fftSize = 0;
     stubMediaStreamTrack.stop.mockClear();
     stubAudioContext.close.mockClear();
@@ -304,6 +309,66 @@ describe('MicCapture', () => {
     );
     const msg = configureCall![0] as { clarityThreshold: number };
     expect(msg.clarityThreshold).toBe(0.75);
+    await handle.stop();
+  });
+
+  it("mode='auto' spawns the MPM worker AND reads freq data for transients", async () => {
+    const handle = startMicDetector({
+      mode: 'auto',
+      onFrame: () => {},
+      onTransient: () => {},
+    });
+    // Wait for streaming; the worker.configure and the analyser setup
+    // must have happened.
+    await waitFor(() => stubWorker.postMessage.mock.calls.length > 0);
+    const configureCall = stubWorker.postMessage.mock.calls.find(
+      (c) => (c[0] as { type?: string }).type === 'configure',
+    );
+    expect(configureCall).toBeDefined();
+    // And at least one 'sample' frame should have been queued.
+    const sampleCall = stubWorker.postMessage.mock.calls.find(
+      (c) => (c[0] as { type?: string }).type === 'sample',
+    );
+    expect(sampleCall).toBeDefined();
+    // And the analyser.getByteFrequencyData should have been called
+    // (auto runs the in-thread transient pipeline on the same read).
+    await waitFor(() => stubAnalyser.getByteFrequencyData.mock.calls.length > 0);
+    expect(stubAnalyser.getByteFrequencyData).toHaveBeenCalled();
+    await handle.stop();
+  });
+
+  it("mode='auto' surfaces worker frames via onFrame callback", async () => {
+    const frames: { hz: number | null }[] = [];
+    const handle = startMicDetector({
+      mode: 'auto',
+      onFrame: (f) => frames.push(f),
+      onTransient: () => {},
+    });
+    await waitFor(() => stubWorker.onmessage !== null);
+    stubWorker.onmessage!(
+      new MessageEvent('message', {
+        data: { type: 'frame', hz: 440, clarity: 0.95, rms: 0.3, timestampMs: 1000 },
+      }),
+    );
+    expect(frames).toHaveLength(1);
+    expect(frames[0]?.hz).toBe(440);
+    await handle.stop();
+  });
+
+  it("mode='transient' does NOT spawn the MPM worker", async () => {
+    const handle = startMicDetector({
+      mode: 'transient',
+      onTransient: () => {},
+    });
+    // Wait for streaming phase to be entered (state setter fires).
+    await waitFor(() =>
+      stubAnalyser.getByteFrequencyData.mock.calls.length > 0,
+    );
+    // No 'configure' message should have been posted (no worker).
+    const configureCall = stubWorker.postMessage.mock.calls.find(
+      (c) => (c[0] as { type?: string }).type === 'configure',
+    );
+    expect(configureCall).toBeUndefined();
     await handle.stop();
   });
 });

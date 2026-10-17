@@ -189,6 +189,7 @@ export function MicPanel(): JSX.Element {
         <For each={[
           { id: 'sustain' as MicMode, label: '♪ sustain', title: 'Pitch (голос, свист, скрипка) → MIDI ноты' },
           { id: 'transient' as MicMode, label: '✦ transient', title: 'Onset (стук, щелчок, хлопок) → drum pattern' },
+          { id: 'auto' as MicMode, label: '◆ auto', title: 'Both pipelines in parallel: sustain notes + drum onsets. Apply stacks both snippets.' },
         ]}>
           {(m) => (
             <button
@@ -292,6 +293,7 @@ export function MicPanel(): JSX.Element {
         {(() => {
           const p = previewPillPayload();
           if (p === null) return null;
+          const prunedSuffix = p.pruned > 0 ? ` [+${p.pruned}]` : '';
           return (
             <span
               class="mic-preview-pill"
@@ -300,7 +302,7 @@ export function MicPanel(): JSX.Element {
               aria-label={`Preview: ${p.count} нот, целевой слот: ${p.slotLabel}`}
             >
               ● {p.count} нот: {p.firstNames.join(' ')}
-              {p.overflow > 0 ? ` +${p.overflow}` : ''} → {p.slotLabel}
+              {p.overflow > 0 ? ` +${p.overflow}` : ''}{prunedSuffix} → {p.slotLabel}
             </span>
           );
         })()}

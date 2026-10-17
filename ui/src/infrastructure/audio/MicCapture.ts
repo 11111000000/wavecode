@@ -61,15 +61,21 @@ import YinWorker from './yinDetector.worker?worker';
  * Returned handle is single-use: start() once, stop() once.
  */
 
-export type MicMode = 'sustain' | 'transient';
+export type MicMode = 'sustain' | 'transient' | 'auto';
 
 export type MicStartOptions = {
   /**
-   * Which pipeline runs in the RAF tick. Defaults to 'sustain' (the
-   * original MPM-pitch-detection path). 'transient' detects percussive
-   * onsets in the main thread via RMS flux + spectral centroid and
-   * emits via `onTransient` (does NOT spawn the MPM worker — wasted
-   * 5-10ms/frame for a path that doesn't use it).
+   * Which pipeline runs in the RAF tick.
+   *   - 'sustain'   (default) — MPM worker, emits via `onFrame`. Best
+   *                  for voice / whistle / violin.
+   *   - 'transient' — in-thread onset detector, emits via `onTransient`.
+   *                  Does NOT spawn the MPM worker (saves 5-10ms/frame).
+   *                  Best for drums / claps / clicks.
+   *   - 'auto'      — runs BOTH pipelines in parallel from the same
+   *                  AnalyserNode. A frame where a pitched kick fires
+   *                  surfaces BOTH via `onFrame` (sustain side) AND
+   *                  `onTransient` (percussion side) in the same tick.
+   *                  The caller decides how to render / apply them.
    */
   readonly mode?: MicMode;
   readonly onFrame?: (frame: PitchFrame) => void;
@@ -252,7 +258,11 @@ export const startMicDetector = (
       mediaSource = src;
       src.connect(node);
 
-      if (mode === 'sustain') {
+      if (mode === 'sustain' || mode === 'auto') {
+        // Both 'sustain' and 'auto' need the MPM worker for pitch
+        // detection. 'auto' additionally runs the transient pipeline
+        // in-thread (see the tick function below); both run on the
+        // same AnalyserNode reads.
         worker = mkWorker();
         worker.onmessage = (ev: MessageEvent): void => {
           const data = ev.data as {
@@ -294,7 +304,28 @@ export const startMicDetector = (
         analyser.getFloatTimeDomainData(sendBuf);
         const sampleTs = audioCtx.currentTime * 1000;
 
-        if (mode === 'sustain') {
+        if (mode === 'transient') {
+          // Pure percussive: no MPM worker — feed time + freq straight
+          // into the in-process transient detector.
+          analyser.getByteFrequencyData(freqBuf);
+          const frame: TransientFrame = {
+            timeDomain: sendBuf,
+            freqDomain: freqBuf,
+            sampleRate,
+            timestampMs: sampleTs,
+          };
+          const next = feedTransient(transientState, frame);
+          // If a new onset was detected, surface it.
+          if (next.transients.length > transientState.transients.length) {
+            const newest = next.transients[next.transients.length - 1]!;
+            opts.onTransient?.(newest);
+          }
+          transientState = next;
+        } else {
+          // 'sustain' AND 'auto' both run the MPM worker. In 'auto'
+          // we ALSO run the in-thread transient detector on the same
+          // AnalyserNode read, so both callbacks may fire on the same
+          // tick (e.g. a pitched kick drum).
           if (worker === null) return;
           const buf = new Float32Array(sendBuf);
           try {
@@ -313,23 +344,21 @@ export const startMicDetector = (
               timestampMs: sampleTs,
             }, [fresh.buffer]);
           }
-        } else {
-          // mode === 'transient': no MPM worker — feed time + freq
-          // straight into the in-process transient detector.
-          analyser.getByteFrequencyData(freqBuf);
-          const frame: TransientFrame = {
-            timeDomain: sendBuf,
-            freqDomain: freqBuf,
-            sampleRate,
-            timestampMs: sampleTs,
-          };
-          const next = feedTransient(transientState, frame);
-          // If a new onset was detected, surface it.
-          if (next.transients.length > transientState.transients.length) {
-            const newest = next.transients[next.transients.length - 1]!;
-            opts.onTransient?.(newest);
+          if (mode === 'auto') {
+            analyser.getByteFrequencyData(freqBuf);
+            const frame: TransientFrame = {
+              timeDomain: sendBuf,
+              freqDomain: freqBuf,
+              sampleRate,
+              timestampMs: sampleTs,
+            };
+            const next = feedTransient(transientState, frame);
+            if (next.transients.length > transientState.transients.length) {
+              const newest = next.transients[next.transients.length - 1]!;
+              opts.onTransient?.(newest);
+            }
+            transientState = next;
           }
-          transientState = next;
         }
         rafId = requestAnimationFrame(tick);
       };
