@@ -166,7 +166,7 @@ npm run build               # → ui/dist/
 wavecode/
 ├── README.md              этот файл (RU)
 ├── README.en.md           English version
-├── AGENTS.md              протокол для AI-агентов (math-coding, kanban, git)
+├── AGENTS.md              протокол для AI-агентов (math-coding, git)
 ├── LICENSE                Apache-2.0
 ├── NOTICE                 third-party attributions
 ├── CONTRIBUTING.md        как контрибутить

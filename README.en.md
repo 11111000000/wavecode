@@ -166,7 +166,7 @@ Full traceability — every decision is captured as a YAML in `decisions/` under
 wavecode/
 ├── README.md              this file (EN) — translation
 ├── README.en.md           this file
-├── AGENTS.md              AI-agent protocol (math-coding, kanban, git)
+├── AGENTS.md              AI-agent protocol (math-coding, git)
 ├── LICENSE                Apache-2.0
 ├── NOTICE                 third-party attributions
 ├── CONTRIBUTING.md        how to contribute
