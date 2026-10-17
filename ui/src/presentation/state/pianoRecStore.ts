@@ -5,6 +5,7 @@ import type { PianoInstrument } from '~/domain/music/notes';
 import { noteToneSnippet, noteNumberToName } from '~/domain/music/notes';
 import { appendToTopStack } from '~/domain/strudel';
 import { consoleStore } from '~/presentation/components/consoleStore';
+import { logger } from '~/infrastructure/log';
 import { dispatch, appStore } from './appStore';
 import type { CodeMirrorEditorApi } from '~/presentation/components/CodeMirrorEditor';
 
@@ -246,7 +247,7 @@ export const stackAppend = (currentScore: string, snippet: string): string => {
  *                       park cursor after the snippet, scroll into
  *                       view. Requires `pianoEditorApi` to have been
  *                       wired by ScorePanel.onReady. No-op with a
- *                       `console.warn` if the editor is unavailable
+ *                       `logger.warn` if the editor is unavailable
  *                       (caller should disable the button — see
  *                       `editorFocused`).
  *
@@ -274,15 +275,19 @@ export const applyToScore = (): void => {
   if (slot === 'at-cursor') {
     const api = pianoEditorApi();
     if (!api) {
-      console.warn(
-        'pianoRecStore.applyToScore: at-cursor slot requires editor API; no-op',
+      logger.push(
+        'warn',
+        ['pianoRecStore.applyToScore: at-cursor slot requires editor API; no-op'],
+        'pianoRecStore.applyToScore',
       );
       return;
     }
     const view = api.getView();
     if (!view) {
-      console.warn(
-        'pianoRecStore.applyToScore: at-cursor slot requires EditorView; no-op',
+      logger.push(
+        'warn',
+        ['pianoRecStore.applyToScore: at-cursor slot requires EditorView; no-op'],
+        'pianoRecStore.applyToScore',
       );
       return;
     }

@@ -7,6 +7,7 @@ import { unlockAudioContext } from '~/infrastructure/audio/LiveAudioEngine';
 import { applyEdit, getLastRawLLMResponse, type DialogTurn } from '~/application/useCases/llmEdit';
 import { getLLMSettings } from '../state/llmSettings';
 import { LLMSettingsPopover } from '~/presentation/components/LLMSettingsPopover';
+import { logger } from '~/infrastructure/log';
 import type { Role } from '~/domain/types';
 
 /**
@@ -82,7 +83,11 @@ export function AIEditPanel() {
       );
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      console.error('[AIEditPanel] LLM error:', msg, err);
+      logger.push(
+        'error',
+        ['[AIEditPanel] LLM error:', msg, err],
+        'AIEditPanel.submit',
+      );
       setStatus({ kind: 'err', msg: `LLM ошибка: ${msg}` });
       setLastFailed({ text });
       setBusy(false);
@@ -91,7 +96,11 @@ export function AIEditPanel() {
 
     if (!newScore || !newScore.trim()) {
       const raw = getLastRawLLMResponse();
-      console.warn('[AIEditPanel] LLM returned empty after cleaning. Raw response:', JSON.stringify(raw));
+      logger.push(
+        'warn',
+        ['[AIEditPanel] LLM returned empty after cleaning. Raw response:', JSON.stringify(raw)],
+        'AIEditPanel.submit',
+      );
       const preview = raw.length > 200 ? `${raw.slice(0, 200)}…` : raw;
       setStatus({
         kind: 'err',
@@ -124,7 +133,11 @@ export function AIEditPanel() {
       setLastFailed(null);
     } catch (audioErr) {
       const msg = audioErr instanceof Error ? audioErr.message : String(audioErr);
-      console.error('[AIEditPanel] audio eval error:', msg);
+      logger.push(
+        'error',
+        ['[AIEditPanel] audio eval error:', msg],
+        'AIEditPanel.submit',
+      );
       dispatch({ type: 'audioStatusChange', status: 'error', error: msg });
       setStatus({ kind: 'err', msg: `ИИ ответил, но ошибка аудио: ${msg}` });
       setLastFailed({ text });

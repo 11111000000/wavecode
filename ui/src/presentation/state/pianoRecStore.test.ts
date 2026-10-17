@@ -537,7 +537,8 @@ describe('pianoRecStore — applyToScore at-cursor slot', () => {
 
   it('without editor API → no-op (warn, buffer preserved)', async () => {
     const s = await importStore();
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const { logger } = await import('~/infrastructure/log');
+    const pushSpy = vi.spyOn(logger, 'push').mockImplementation(() => {});
     try {
       s.setPianoSlot('at-cursor');
       s.setPianoEditorApi(undefined);
@@ -546,11 +547,15 @@ describe('pianoRecStore — applyToScore at-cursor slot', () => {
       s.applyToScore();
       expect(appStore.score).toBe('note("e4")'); // unchanged
       expect(s.recBuffer()).toHaveLength(1); // buffer preserved for retry
-      expect(warnSpy).toHaveBeenCalledWith(
-        expect.stringContaining('at-cursor slot requires editor API'),
+      expect(pushSpy).toHaveBeenCalledWith(
+        'warn',
+        expect.arrayContaining([
+          expect.stringContaining('at-cursor slot requires editor API'),
+        ]),
+        'pianoRecStore.applyToScore',
       );
     } finally {
-      warnSpy.mockRestore();
+      pushSpy.mockRestore();
     }
   });
 

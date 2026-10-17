@@ -10,6 +10,7 @@ import {
   unlockAudioContext,
   testBeep,
 } from '~/infrastructure/audio/LiveAudioEngine';
+import { logger } from '~/infrastructure/log';
 
 /**
  * Аудио-действия — общие для всех компонентов (header кнопки, etc).
@@ -145,7 +146,11 @@ export const reEvalScoreWithTransport = async (): Promise<void> => {
     await runWrapAndEval(score, appStore.transportState, appStore.layerMix);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    console.error('[wavecode/audioActions.reEvalScoreWithTransport]', msg, err);
+    logger.push(
+      'error',
+      ['[wavecode/audioActions.reEvalScoreWithTransport]', msg, err],
+      'audioActions.reEvalScoreWithTransport',
+    );
   }
 };
 
@@ -238,7 +243,11 @@ export const stopPreview = (): void => {
 export const previewPreset = async (presetId: string): Promise<void> => {
   const preset = getPreset(presetId);
   if (!preset) {
-    console.warn('[wavecode/landing] previewPreset: unknown preset', presetId);
+    logger.push(
+      'warn',
+      ['[wavecode/landing] previewPreset: unknown preset', presetId],
+      'audioActions.previewPreset',
+    );
     return;
   }
   // Stop any prior preview so two cards cannot play simultaneously.
@@ -269,10 +278,14 @@ export const previewPreset = async (presetId: string): Promise<void> => {
       ).catch(() => undefined);
     }, PREVIEW_DURATION_MS);
   } catch (err) {
-    // Silent: console only — landing-page UI shows its own error via
+    // Silent: log only — landing-page UI shows its own error via
     // the play/stop button not flipping to "playing".
     const msg = err instanceof Error ? err.message : String(err);
-    console.error('[wavecode/landing.previewPreset] eval failed:', msg);
+    logger.push(
+      'error',
+      ['[wavecode/landing.previewPreset] eval failed:', msg],
+      'audioActions.previewPreset',
+    );
   }
 };
 
