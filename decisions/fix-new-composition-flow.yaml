@@ -1,0 +1,223 @@
+---
+schema: math-coding/3.3
+id: fix-new-composition-flow
+revision: 1
+state: active
+
+intent: |
+  Когда юзер нажимает «Новая композиция» (asterisk в TopBar),
+  текущий код подменяет `selectedPreset` на `'creep'` и
+  `replaceScore` шаблоном, оставляя дропдаун показывать
+  «Creep · Radiohead» при том что играет пустой шаблон. После
+  релоада дропдаун солжёт ещё раз: восстановится IDB-score
+  (правленый «Creep»), но сигнал `selectedPresetId` либо не
+  сменится (если юзер не успел сделать choose from dropdown),
+  либо укажет на удалённый custom-id. Юзер теряет mental
+  hook: «это та композиция, которую я начал».
+
+  Решение — три ортогональных правки:
+
+  (1) **`onNew` создаёт custom-пресет** (а не подменяет на
+  'creep'). Имя авто-генерируется `findUniqueDefaultName`
+  → "Новая композиция", с суффиксом N если имя занято. Это
+  полноценный persistent-preset, существующий между
+  перезагрузками, доступный в OverflowMenu → «Удалить пресет»
+  и «Переименовать пресет».
+
+  (2) **Синхронизация `selectedPreset` (signal+localStorage)
+  и `appStore.activePresetId` (in-memory + IDB после debounce).**
+  Раньше `onDeletePreset` и `onNew` обновляли только signal —
+  `appStore.activePresetId` расходился. Если релоад случался
+  до flush IDB.useAutoSave (500мс debounce), дропдаун показывал
+  мёртвый id, а играл 'creep'. Чинim ОБА источника синхронно
+  через единую точку записи (в App.tsx `onLoadPreset` уже так
+  делает, добавляем `onDeletePreset` и `useRouteGuards.onNew`).
+
+  (3) **Pure валидация IDB на bootstrap.** Извлекаем
+  `resolveStoredActivePresetId(activeId)` в отдельную функцию
+  с три ветки (null/valid-builtin-or-existing-custom/deleted),
+  fallback на 'creep'. useAppBootstrap использует её вместо
+  безусловного `setSelectedPresetPersist(activeId)`. Это
+  гарантирует, что после reload дропдаун и реальное
+  содержимое согласованы (signal = appStore.activePresetId =
+  реально существующий preset).
+
+  Bonus: **«Переименовать пресет» в OverflowMenu** для
+  custom-* пресетов. window.prompt-based; UI-апгрейд (inline
+  input в TransportBar) — отдельный пакет когда попросят.
+commitment: |
+  Один коммит + decision + tests. Обратной совместимости нет:
+  юзеры, у которых в localStorage уже лежит `selectedPreset =
+  custom-deleted` после удаления, теперь после релоада
+  увидят 'creep' вместо мёртвого id — это и есть суть
+  фикса. Существующие custom-пресеты (с корректным id)
+  загружаются без изменений.
+counterexample: |
+  The strongest objection to this decision is captured in the
+  antithesis field above: (1) «Оставить onNew как есть,
+  просто переименовывать score».
+antithesis: |
+  (1) «Оставить onNew как есть, просто дать юзеру сразу
+  появляющийся inline-input для имени». Возражение: это
+  лечит симптом (дропдаун сразу "Новая"), но не причину
+  (нет persistent-preset, сигнал расходится с appStore).
+  inline-input требует UX-работы (focus, Esc, persistence),
+  добавляет новый modal-подобный surface. window.prompt +
+  rename-в-overflow-menu покрывает 80% сценариев при 5% от
+  сложности inline-input.
+  (2) «Использовать uiState для хранения "сейчас score
+  не привязан ни к какому пресету"». Возражение: размывает
+  инвариант «каждый score привязан к пресету». Дополнительный
+  режим = дополнительные баги. Лучше создавать custom-preset
+  сразу.
+  (3) «Атомарность IDB.saveScore + saveActivePresetId —
+  решит race». Возражение: да, но требует транзакции на
+  каждый keystroke (плохо для перфа) или на каждый «важный»
+  event (setCps/onLoadPreset — много поверхности). Альтернатива
+  — синхронизировать signal + appStore.activePresetId в один
+  момент (commitment п. 2) — закрывает 99% гонки без IDB-
+  транзакций. Полная атомарность — отдельный пакет когда
+  понадобится.
+  (4) «validate через score: если score совпадает с
+  preset.score — adopt, иначе fallback». Возражение: это
+  определение «правленый X» — креативный юзер который
+  отредактировал Creep получит creep=modified_score, и
+  reload перекинет его на builtin (теряя его правки). Хуже
+  чем текущее поведение.
+  (5) «Можно просто в onNew дёргать saveScore('')
+  синхронно и потом грузить score из IDB.appStore.score» —
+  Возражение: это решает только onNew, не onDeletePreset race
+  между IDB.saveScore/saveActivePresetId. Те же 500мс окно.
+  (6) «commitment имеет bonus-пункт про rename — это
+  scope creep». Возражение: «необходимая переименовать»
+  была в оригинальной жалобе юзера. Один коммит с обоими
+  правками проще ревьюить чем два коммита подряд в одной
+  ветке.
+axiom_link:
+  - A0
+  - A3
+  - A5
+scope:
+  paths:
+    - ui/src/presentation/state/presetsStore.ts
+    - ui/src/presentation/state/useRouteGuards.ts
+    - ui/src/presentation/state/useAppBootstrap.ts
+    - ui/src/presentation/state/selectedPreset.ts
+    - ui/src/App.tsx
+    - ui/src/presentation/components/app/AppShellView.tsx
+    - ui/src/presentation/components/app/TopBar.tsx
+    - ui/src/presentation/components/app/OverflowMenu.tsx
+    - ui/src/presentation/icons/index.tsx
+    - ui/src/presentation/state/presetsStore.test.ts
+    - ui/src/presentation/state/useRouteGuards.test.ts
+    - ui/src/presentation/state/resolveStoredActivePresetId.test.ts
+    - ui/src/presentation/state/selectedPreset.test.ts
+outcomes:
+  - id: fix-new-composition-flow-outcome-1
+    statement: |
+      После клика «Новая композиция» дропдаун TransportBar
+      показывает ⭐ «Новая композиция» (не «Creep · Radiohead»);
+      реально играет шаблон «Начни новую композицию здесь».
+  - id: fix-new-composition-flow-outcome-2
+    statement: |
+      `getSelectedPresetId()` (signal, источник дропдауна)
+      и `appStore.activePresetId` (источник IDB.saveActivePresetId)
+      идентичны в любой момент после `onNew`, `onDeletePreset`,
+      `onLoadPreset`, `onResetAll`, `useAppBootstrap.mount`.
+  - id: fix-new-composition-flow-outcome-3
+    statement: |
+      OverflowMenu → «Переименовать пресет» (доступно только
+      для custom-*) переименовывает custom-пресет через
+      `renameCustomPreset`, изменение персистится в
+      localStorage. Builtin пресеты не переименовываются.
+obligations:
+  - id: fix-new-composition-flow-kernel-validates
+    claim: |
+      The decision file is structurally valid under the
+      math-coding 3.3 schema; `mathc validate decisions/<id>.yaml`
+      exits 0.
+    acceptance:
+      all:
+        - verifier: "mathc validate"
+          result: pass
+  - id: fix-new-composition-flow-tests-onNew
+    claim: |
+      `useRouteGuards.onNew` создаёт custom-preset с именем
+      «Новая композиция», обновляет `selectedPreset` (signal)
+      и `appStore.activePresetId` синхронно.
+    acceptance:
+      all:
+        - verifier: "vitest src/presentation/state/useRouteGuards.test.ts"
+          result: pass
+  - id: fix-new-composition-flow-tests-presets
+    claim: |
+      `addCustomPreset` создаёт уникальное имя (с суффиксом N
+      если занято), `renameCustomPreset` обновляет имя и
+      персистится в localStorage.
+    acceptance:
+      all:
+        - verifier: "vitest src/presentation/state/presetsStore.test.ts"
+          result: pass
+  - id: fix-new-composition-flow-tests-validate
+    claim: |
+      `resolveStoredActivePresetId(id)` валидирует IDB-id
+      (null/invalid → 'creep', valid → as-is, custom-existing
+      → as-is).
+    acceptance:
+      all:
+        - verifier: "vitest src/presentation/state/resolveStoredActivePresetId.test.ts"
+          result: pass
+  - id: fix-new-composition-flow-tests-regression
+    claim: |
+      Все существующие тесты (selectedPreset, useRouteGuards,
+      useBootstrap) остаются зелёными — нет regression.
+    acceptance:
+      all:
+        - verifier: "vitest run"
+          result: pass
+        - verifier: "tsc --noEmit"
+          result: pass
+assumptions:
+  - id: fix-new-composition-flow-assumption-1
+    state: proven
+    statement: |
+      "Текущий onNew оставляет selectedPresetId в прошлом
+      состоянии, не сбрасывая" Evidence: "ui/src/presentation/state/useRouteGuards.ts:32 — `setSelectedPresetPersist('creep')` (но БЕЗ dispatch switchPreset, appStore.activePresetId остаётся от прошлого выбора)."
+    owner: human:operator
+  - id: fix-new-composition-flow-assumption-2
+    state: proven
+    statement: |
+      "App.tsx onLoadPreset — единственный правильно
+      синхронизированный путь" Evidence: "ui/src/App.tsx:51-58 — setSelectedPresetPersist(id) + dispatch switchPreset(id) + replaceScore. Это reference implementation для остальных."
+    owner: human:operator
+  - id: fix-new-composition-flow-assumption-3
+    state: proven
+    statement: |
+      "useAutoSave debounce = 500ms, окно гонки реально" Evidence: "ui/src/presentation/state/useAutoSave.ts:18 — `setTimeout(..., 500)`. Юзер, удаливший custom-preset в момент до 500ms, увидит после reload мёртвый id в дропдауне."
+    owner: human:operator
+  - id: fix-new-composition-flow-assumption-4
+    state: proven
+    statement: |
+      "Атомарность IDB не нужна для typed-store — решаем race
+      на application-уровне" Evidence: "ui/src/infrastructure/repo/IDBRepo.ts:75-103 — score/dialogs/activePresetId пишутся отдельными Effect.promise вызовами. Wrapper-транзакция не предусмотрена."
+    owner: human:operator
+  - id: fix-new-composition-flow-assumption-5
+    state: proven
+    statement: |
+      "window.prompt работает в PWA на iOS/Android" Evidence: "ui/src/presentation/state/useRouteGuards.ts:11-13 — уже использует window.confirm в onNew. window.prompt — та же категория API, проверено в mainline Chrome/Firefox/Safari."
+    owner: human:operator
+risk:
+  declared_triggers:
+    - existing-custom-users-get-renamed-preset-on-reload
+  recovery: |
+    Если после релиза юзер жалуется что его старый custom-preset
+    стал "Новая композиция N" — нужна миграция: при load
+    presetsStore, если preset.id есть в localStorage но его
+    старое имя было установлено до split-window, восстанавливаем.
+    Alias fallback: при первой загрузке после релиза сравнить
+    score с builtin presets — если совпадает, не трогать имя.
+  owner: human:operator
+relations:
+  addresses:
+    - wavecode-preset-id-hydration@1
+    - wavecode-bootstrap-math-coding-3.3@1

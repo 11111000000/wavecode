@@ -143,4 +143,85 @@ describe('presetsStore', () => {
     expect(stored.some((p) => p.id === 'custom-stale')).toBe(false);
     expect(stored.some((p) => p.id === 'custom-fresh')).toBe(true);
   });
+
+  it('addCustomPreset creates a custom preset with default name "Новая композиция"', async () => {
+    const { addCustomPreset, allPresets } = await import('./presetsStore');
+    const { NEW_COMPOSITION_DEFAULT_NAME } = await import('./presetsStore');
+    const created = addCustomPreset('s("bd*4")');
+    expect(created.custom).toBe(true);
+    expect(created.id).toMatch(/^custom-/);
+    expect(created.name).toBe(NEW_COMPOSITION_DEFAULT_NAME);
+    expect(created.score).toBe('s("bd*4")');
+    expect(allPresets().some((p) => p.id === created.id)).toBe(true);
+  });
+
+  it('addCustomPreset appends a numeric suffix when the bare name is taken', async () => {
+    const { addCustomPreset, saveCustomPreset } = await import('./presetsStore');
+    const { NEW_COMPOSITION_DEFAULT_NAME } = await import('./presetsStore');
+    const first = addCustomPreset('s("bd")');
+    expect(first.name).toBe(NEW_COMPOSITION_DEFAULT_NAME);
+
+    // Занимаем вручную "Новая композиция 2"
+    saveCustomPreset(`${NEW_COMPOSITION_DEFAULT_NAME} 2`, 's("sd")');
+    const third = addCustomPreset('s("hh")');
+    expect(third.name).toBe(`${NEW_COMPOSITION_DEFAULT_NAME} 3`);
+  });
+
+  it('addCustomPreset increments the suffix until it finds a free slot', async () => {
+    const { addCustomPreset, saveCustomPreset } = await import('./presetsStore');
+    const { NEW_COMPOSITION_DEFAULT_NAME } = await import('./presetsStore');
+    addCustomPreset('s("bd")');                           // "Новая композиция"
+    saveCustomPreset(`${NEW_COMPOSITION_DEFAULT_NAME} 2`, 's("sd")');
+    saveCustomPreset(`${NEW_COMPOSITION_DEFAULT_NAME} 3`, 's("hh")');
+    const created = addCustomPreset('s("cp")');
+    expect(created.name).toBe(`${NEW_COMPOSITION_DEFAULT_NAME} 4`);
+  });
+
+  it('addCustomPreset is case-insensitive about taken names', async () => {
+    const { addCustomPreset, saveCustomPreset } = await import('./presetsStore');
+    const { NEW_COMPOSITION_DEFAULT_NAME } = await import('./presetsStore');
+    saveCustomPreset(`${NEW_COMPOSITION_DEFAULT_NAME.toUpperCase()}`, 's("bd")');
+    const created = addCustomPreset('s("sd")');
+    // "НОВАЯ КОМПОЗИЦИЯ" уже занята → ожидаем "Новая композиция 2"
+    expect(created.name).toBe(`${NEW_COMPOSITION_DEFAULT_NAME} 2`);
+  });
+
+  it('renameCustomPreset updates name + persists to localStorage', async () => {
+    const { addCustomPreset, renameCustomPreset, getPreset, allPresets } = await import('./presetsStore');
+    const created = addCustomPreset('s("bd")');
+    const ok = renameCustomPreset(created.id, 'My Sketch');
+    expect(ok).toBe(true);
+    expect(getPreset(created.id)?.name).toBe('My Sketch');
+    expect(allPresets().find((p) => p.id === created.id)?.name).toBe('My Sketch');
+
+    const raw = localStorage.getItem('wavecode-custom-presets-v1');
+    const stored = JSON.parse(raw!) as Array<{ id: string; name: string }>;
+    expect(stored.find((p) => p.id === created.id)?.name).toBe('My Sketch');
+  });
+
+  it('renameCustomPreset trims whitespace and rejects empty names', async () => {
+    const { addCustomPreset, renameCustomPreset, getPreset } = await import('./presetsStore');
+    const created = addCustomPreset('s("bd")');
+    expect(renameCustomPreset(created.id, '   ')).toBe(false);
+    expect(renameCustomPreset(created.id, '  Padded  ')).toBe(true);
+    expect(getPreset(created.id)?.name).toBe('Padded');
+  });
+
+  it('renameCustomPreset is a no-op for unknown ids', async () => {
+    const { renameCustomPreset, allPresets } = await import('./presetsStore');
+    const beforeCount = allPresets().length;
+    expect(renameCustomPreset('custom-does-not-exist', 'Anything')).toBe(false);
+    expect(allPresets().length).toBe(beforeCount);
+  });
+
+  it('renameCustomPreset does not write when the name is identical (no-op cheap path)', async () => {
+    const { addCustomPreset, renameCustomPreset } = await import('./presetsStore');
+    const created = addCustomPreset('s("bd")');
+    // Identical name → returns true (UI may use to close the prompt)
+    expect(renameCustomPreset(created.id, created.name)).toBe(true);
+    // localStorage unchanged in terms of content (still just one entry)
+    const raw = localStorage.getItem('wavecode-custom-presets-v1');
+    const stored = JSON.parse(raw!) as Array<{ id: string }>;
+    expect(stored.filter((p) => p.id === created.id)).toHaveLength(1);
+  });
 });

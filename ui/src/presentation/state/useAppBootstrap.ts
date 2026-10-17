@@ -11,6 +11,7 @@ import { installTransportAudioSync } from './useTransportAudioSync';
 import { ensureAudioLoaded, getAudioContextState } from '~/infrastructure/audio/LiveAudioEngine';
 import {
   hydrateSelectedPreset, resetSelectedPreset, setSelectedPresetPersist,
+  resolveStoredActivePresetId,
 } from './selectedPreset';
 import { useGridStateAutoSave } from './useGridStateAutoSave';
 import {
@@ -120,17 +121,17 @@ export const useAppBootstrap = (): AudioRuntime => {
           repo.loadDialogs(),
           repo.loadActivePresetId(),
         ]);
+        // IDB.activePresetId может быть устаревшим custom-id, который
+        // удалили (см. decisions/fix-new-composition-flow.yaml). Фолбэк
+        // в ОБА места (signal + appStore.activePresetId) синхронно —
+        // иначе dropdown солжёт (покажет мёртвый id, а играет 'creep').
+        const validActiveId = resolveStoredActivePresetId(activeId);
         setAppStore((prev) => ({
           ...prev,
           dialogs,
-          ...(activeId !== null ? { activePresetId: activeId } : {}),
+          activePresetId: validActiveId,
         }));
-        if (activeId !== null) {
-          // Keep the localStorage-backed signal in sync so other
-          // modules that read `getSelectedPresetId()` see the
-          // same id.
-          setSelectedPresetPersist(activeId);
-        }
+        setSelectedPresetPersist(validActiveId);
       }).pipe(Effect.provide(AppLayer)),
     );
 

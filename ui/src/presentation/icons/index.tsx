@@ -74,6 +74,13 @@ export const TrashIcon = (p: Props): JSX.Element => (
   </svg>
 );
 
+export const PencilIcon = (p: Props): JSX.Element => (
+  <svg {...base(p.size ?? 14)} class={`wc-icon ${p.class ?? ''}`}>
+    <path d="M2 14 L4 12 L11 5 L13 7 L6 14 Z" />
+    <path d="M9 7 L11 5 L13 7" />
+  </svg>
+);
+
 export const ShareIcon = (p: Props): JSX.Element => (
   <svg {...base(p.size ?? 14)} class={`wc-icon ${p.class ?? ''}`}>
     <circle cx="4" cy="8" r="2" />
