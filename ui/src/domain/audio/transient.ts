@@ -33,9 +33,9 @@ export type OnsetType = 'kick' | 'snare' | 'hat' | 'click';
 
 export type TransientFrame = {
   /** Time-domain samples in [-1, 1]. Float32Array from getFloatTimeDomainData. */
-  readonly timeDomain: ReadonlyArray<number>;
+  readonly timeDomain: ArrayLike<number>;
   /** Frequency-domain magnitudes [0, 255]. Uint8Array from getByteFrequencyData. */
-  readonly freqDomain: ReadonlyArray<number>;
+  readonly freqDomain: ArrayLike<number>;
   /** AudioContext.sampleRate at capture time. */
   readonly sampleRate: number;
   /** AudioContext.currentTime in ms (used for the snippet's time-stamps). */
@@ -94,7 +94,7 @@ export const initialTransientState = (): TransientState => ({
 });
 
 /** Compute RMS of [-1, 1] samples. */
-export const computeRms = (samples: ReadonlyArray<number>): number => {
+export const computeRms = (samples: ArrayLike<number>): number => {
   if (samples.length === 0) return 0;
   let sum = 0;
   for (let i = 0; i < samples.length; i += 1) {
@@ -116,7 +116,7 @@ export const rmsToDb = (rms: number): number => {
  * Bin `i` corresponds to frequency `i * sampleRate / (2 * N)`.
  */
 export const computeCentroidHz = (
-  freqs: ReadonlyArray<number>,
+  freqs: ArrayLike<number>,
   sampleRate: number,
 ): number => {
   if (freqs.length === 0 || sampleRate <= 0) return 0;

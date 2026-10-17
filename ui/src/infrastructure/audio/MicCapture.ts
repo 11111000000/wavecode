@@ -1,4 +1,6 @@
 import type { PitchFrame } from '~/domain/audio/micCapture';
+import type { Transient, TransientFrame, TransientState } from '~/domain/audio/transient';
+import { feedTransient, initialTransientState } from '~/domain/audio/transient';
 import YinWorker from './yinDetector.worker?worker';
 
 /**
@@ -59,8 +61,19 @@ import YinWorker from './yinDetector.worker?worker';
  * Returned handle is single-use: start() once, stop() once.
  */
 
+export type MicMode = 'sustain' | 'transient';
+
 export type MicStartOptions = {
-  readonly onFrame: (frame: PitchFrame) => void;
+  /**
+   * Which pipeline runs in the RAF tick. Defaults to 'sustain' (the
+   * original MPM-pitch-detection path). 'transient' detects percussive
+   * onsets in the main thread via RMS flux + spectral centroid and
+   * emits via `onTransient` (does NOT spawn the MPM worker — wasted
+   * 5-10ms/frame for a path that doesn't use it).
+   */
+  readonly mode?: MicMode;
+  readonly onFrame?: (frame: PitchFrame) => void;
+  readonly onTransient?: (transient: Transient) => void;
   readonly onStateChange?: (state: MicCaptureState) => void;
   readonly onError?: (err: Error) => void;
   readonly fftSize?: number;          // default 2048
@@ -150,6 +163,7 @@ export const startMicDetector = (
 
   const fftSize = opts.fftSize ?? DEFAULT_FFT_SIZE;
   const clarityThreshold = opts.clarityThreshold ?? DEFAULT_CLARITY_THRESHOLD;
+  const mode: MicMode = opts.mode ?? 'sustain';
   const audioConstraints: MediaStreamConstraints = {
     audio: {
       echoCancellation: false,
@@ -238,61 +252,84 @@ export const startMicDetector = (
       mediaSource = src;
       src.connect(node);
 
-      worker = mkWorker();
-      worker.onmessage = (ev: MessageEvent): void => {
-        const data = ev.data as {
-          type?: string;
-          hz?: number | null;
-          clarity?: number;
-          rms?: number;
-          timestampMs?: number;
-          message?: string;
+      if (mode === 'sustain') {
+        worker = mkWorker();
+        worker.onmessage = (ev: MessageEvent): void => {
+          const data = ev.data as {
+            type?: string;
+            hz?: number | null;
+            clarity?: number;
+            rms?: number;
+            timestampMs?: number;
+            message?: string;
+          };
+          if (data.type === 'frame') {
+            opts.onFrame?.({
+              hz: typeof data.hz === 'number' ? data.hz : null,
+              clarity: typeof data.clarity === 'number' ? data.clarity : 0,
+              rms: typeof data.rms === 'number' ? data.rms : 0,
+              timestampMs: typeof data.timestampMs === 'number'
+                ? data.timestampMs
+                : performance.now(),
+            });
+          } else if (data.type === 'error') {
+            opts.onError?.(new Error(`mic-worker: ${data.message ?? 'unknown'}`));
+          }
         };
-        if (data.type === 'frame') {
-          opts.onFrame({
-            hz: typeof data.hz === 'number' ? data.hz : null,
-            clarity: typeof data.clarity === 'number' ? data.clarity : 0,
-            rms: typeof data.rms === 'number' ? data.rms : 0,
-            timestampMs: typeof data.timestampMs === 'number'
-              ? data.timestampMs
-              : performance.now(),
-          });
-        } else if (data.type === 'error') {
-          opts.onError?.(new Error(`mic-worker: ${data.message ?? 'unknown'}`));
-        }
-      };
-      worker.postMessage({
-        type: 'configure',
-        fftSize,
-        sampleRate: ctx.sampleRate,
-        clarityThreshold,
-      });
+        worker.postMessage({
+          type: 'configure',
+          fftSize,
+          sampleRate: ctx.sampleRate,
+          clarityThreshold,
+        });
+      }
       setState('streaming');
 
       const sendBuf = new Float32Array(fftSize);
+      const freqBuf = new Uint8Array(analyser.frequencyBinCount);
       const sampleRate = ctx.sampleRate;
+      let transientState: TransientState = initialTransientState();
       const tick = (): void => {
-        if (stopped || analyser === null || audioCtx === null || worker === null) return;
+        if (stopped || analyser === null || audioCtx === null) return;
         analyser.getFloatTimeDomainData(sendBuf);
         const sampleTs = audioCtx.currentTime * 1000;
-        const buf = new Float32Array(sendBuf);
-        try {
-          worker.postMessage({
-            type: 'sample',
-            buffer: buf,
+
+        if (mode === 'sustain') {
+          if (worker === null) return;
+          const buf = new Float32Array(sendBuf);
+          try {
+            worker.postMessage({
+              type: 'sample',
+              buffer: buf,
+              sampleRate,
+              timestampMs: sampleTs,
+            }, [buf.buffer]);
+          } catch {
+            const fresh = new Float32Array(sendBuf);
+            worker.postMessage({
+              type: 'sample',
+              buffer: fresh,
+              sampleRate,
+              timestampMs: sampleTs,
+            }, [fresh.buffer]);
+          }
+        } else {
+          // mode === 'transient': no MPM worker — feed time + freq
+          // straight into the in-process transient detector.
+          analyser.getByteFrequencyData(freqBuf);
+          const frame: TransientFrame = {
+            timeDomain: sendBuf,
+            freqDomain: freqBuf,
             sampleRate,
             timestampMs: sampleTs,
-          }, [buf.buffer]);
-        } catch {
-          // Buffer may have been detached by a prior frame's transfer;
-          // rebuild from the live analyser buffer and re-post.
-          const fresh = new Float32Array(sendBuf);
-          worker.postMessage({
-            type: 'sample',
-            buffer: fresh,
-            sampleRate,
-            timestampMs: sampleTs,
-          }, [fresh.buffer]);
+          };
+          const next = feedTransient(transientState, frame);
+          // If a new onset was detected, surface it.
+          if (next.transients.length > transientState.transients.length) {
+            const newest = next.transients[next.transients.length - 1]!;
+            opts.onTransient?.(newest);
+          }
+          transientState = next;
         }
         rafId = requestAnimationFrame(tick);
       };
