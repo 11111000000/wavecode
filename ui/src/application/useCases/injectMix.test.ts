@@ -139,45 +139,32 @@ describe('injectMix', () => {
     expect(out).toBe('stack(s("a").gain(0), s("b").gain(0))');
   });
 
-  it('handles the Creep preset end-to-end', () => {
+  it('handles the Creep preset intro section end-to-end (3 layers, no kit)', () => {
     const creep = [
-      '// Creep (Radiohead) — G → B → C → Cm, indie-rock с Hendrix-style аранжировкой',
-      'stack(',
-      '  // Chord pad — voicing() берёт chord-name → Tonal/Chord-symbol, даёт правильную инверсию',
-      '  chord("<G B C Cm>").voicing().s("triangle").gain(0.18).lpf(1500).room(.3),',
-      '  // Acoustic guitar arpeggio — sawtooth + slight shape() эмулирует string',
-      '  note("<g3 b3 d4 b3 c4 b3 c4 ees4 / e3 g3 c4 g3 e3 g3 c4 g3>").s("sawtooth").shape(0.3).gain(0.12).lpf(2500).room(.4),',
-      '  // Bass — root notes, G2/B2/C3/C3',
-      '  note("<g2 b2 c3 c3>").s("sawtooth").gain(0.4).lpf(300),',
-      '  // Acoustic kit: kick на 1/3, snare backbeat, 8th-note hihat',
-      '  s("drums_bd ~ drums_bd ~").gain(0.55),',
-      '  s("~ drums_sd ~ drums_sd").gain(0.28),',
-      '  s("drums_hh*8").decay(.04).sustain(0).gain(0.15)',
-      ')',
+      '// Creep (Radiohead) — multi-section: intro/verse/chorus/outro, total ~8 sec',
+      'cat([',
+      '  // ===== Section 1: INTRO (cycle 1) — clean arpeggio + bass only =====',
+      '  stack(',
+      '    chord("<G B C Cm>").voicing().s("triangle").gain(0.16).lpf(1500).room(.5),',
+      '    note("<g3 b3 d4 b3 c4 b3 ees4 d4>").s("sawtooth").shape(0.3).gain(0.10).lpf(2500).room(.4),',
+      '    note("<g2 b2 c3 c3>").s("sawtooth").gain(0.35).lpf(300)',
+      '  ),',
+      '])',
     ].join('\n');
-    const mix6: ReadonlyArray<LayerMix> = [
+    const mix3: ReadonlyArray<LayerMix> = [
       mix(0, { gain: 0.8 }),
       mix(1, { gain: 0.6 }),
       mix(2, { gain: 0.4 }),
-      mix(3, { gain: 1.0 }),
-      mix(4, { gain: 0.5, muted: true }),
-      mix(5, { gain: 0.7 }),
     ];
-    const out = injectMix(creep, mix6);
+    const out = injectMix(creep, mix3);
     // Each layer's last numeric .gain() is replaced.
-    // Layer 0 (chord pad) — `.gain(0.18)` replaced with `.gain(0.8)`
-    expect(out).toContain('chord("<G B C Cm>").voicing().s("triangle").gain(0.8).lpf(1500).room(.3)');
-    // Layer 1 (arpeggio) — `.gain(0.12)` replaced with `.gain(0.6)`
-    expect(out).toContain('.gain(0.6).lpf(2500)');
-    // Layer 2 (bass) — `.gain(0.4)` kept (mix asked for 0.4 too)
+    // Layer 0 (chord pad) — `.gain(0.16)` replaced with `.gain(0.8)`
+    expect(out).toContain('chord("<G B C Cm>").voicing().s("triangle").gain(0.8).lpf(1500).room(.5)');
+    // Layer 1 (arpeggio) — `.gain(0.10)` replaced with `.gain(0.6)`
+    expect(out).toContain('note("<g3 b3 d4 b3 c4 b3 ees4 d4>").s("sawtooth").shape(0.3).gain(0.6).lpf(2500).room(.4)');
+    // Layer 2 (bass) — `.gain(0.35)` replaced with `.gain(0.4)`
     expect(out).toContain('note("<g2 b2 c3 c3>").s("sawtooth").gain(0.4).lpf(300)');
-    // Layer 3 (kick) — `.gain(0.55)` replaced with `.gain(1)`
-    expect(out).toContain('s("drums_bd ~ drums_bd ~").gain(1)');
-    // Layer 4 (snare, muted) — forced to `.gain(0)`
-    expect(out).toContain('s("~ drums_sd ~ drums_sd").gain(0)');
-    // Layer 5 (hihat) — `.gain(0.15)` replaced with `.gain(0.7)`
-    expect(out).toContain('s("drums_hh*8").decay(.04).sustain(0).gain(0.7)');
-    // First layer's gain is no longer the original 0.18
-    expect(out).not.toContain('gain(0.18)');
+    // Layer 0's original gain is no longer present
+    expect(out).not.toContain('gain(0.16)');
   });
 });
