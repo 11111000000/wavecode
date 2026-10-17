@@ -22,6 +22,8 @@ import {
   transientsToSnippet,
   type Transient,
 } from '~/domain/audio/transient';
+import { appendToTopStack } from '~/domain/strudel';
+import { consoleStore } from '~/presentation/components/consoleStore';
 import { previewPillPayload as _pianoPillRef } from './pianoRecStore';
 
 /**
@@ -275,101 +277,6 @@ export const setMicInstrument = (s: string): void => {
 };
 
 /**
- * Mirrors `pianoRecStore.stackAppend` — paren-aware splice of a
- * freshly-transcribed snippet into an existing top-level `stack(...)`,
- * or a fresh `stack(...)` when the editor has no stack yet. Kept
- * here (not imported from pianoRecStore) so the two stores can evolve
- * independently; the algorithm is the same.
- */
-const stackAppend = (currentScore: string, snippet: string): string => {
-  if (currentScore.trim() === '') return snippet;
-  const stackStart = findTopLevelStackAt(currentScore);
-  if (stackStart !== -1) {
-    let i = stackStart + 5;
-    i = skipWhitespaceAndComments(currentScore, i);
-    const openParen = i;
-    const closeIdx = findStackClose(currentScore, openParen + 1);
-    if (closeIdx !== -1) {
-      const head = currentScore.slice(0, closeIdx).replace(/\s+$/, '');
-      const tail = currentScore.slice(closeIdx);
-      const inner = snippet
-        .split('\n')
-        .map((l) => '  ' + l)
-        .join('\n');
-      const headNeedsComma = /,\s*$/.test(head);
-      return `${head}${headNeedsComma ? '' : ','}\n${inner}\n${tail}`;
-    }
-  }
-  const trimmedCurrent = currentScore.trim();
-  return `stack(\n${trimmedCurrent},\n${snippet.split('\n').map((l) => '  ' + l).join('\n')}\n)`;
-};
-
-const skipWhitespaceAndComments = (src: string, i: number): number => {
-  while (i < src.length) {
-    const ch = src[i];
-    if (ch === ' ' || ch === '\t' || ch === '\n' || ch === '\r') { i += 1; continue; }
-    if (ch === '/' && src[i + 1] === '/') {
-      const nl = src.indexOf('\n', i);
-      i = nl === -1 ? src.length : nl + 1;
-      continue;
-    }
-    if (ch === '/' && src[i + 1] === '*') {
-      const close = src.indexOf('*/', i + 2);
-      i = close === -1 ? src.length : close + 2;
-      continue;
-    }
-    break;
-  }
-  return i;
-};
-
-const findTopLevelStackAt = (src: string): number => {
-  const i = skipWhitespaceAndComments(src, 0);
-  if (src.slice(i, i + 5) !== 'stack') return -1;
-  let j = i + 5;
-  j = skipWhitespaceAndComments(src, j);
-  if (src[j] !== '(') return -1;
-  const peek = src[j + 1];
-  if (
-    peek !== undefined
-    && peek !== ' '
-    && peek !== '\t'
-    && peek !== '\n'
-    && peek !== '\r'
-    && peek !== '/'
-    && peek !== ')'
-  ) {
-    return -1;
-  }
-  return i;
-};
-
-const findStackClose = (src: string, afterOpenParen: number): number => {
-  let depth = 1;
-  let inStr: '"' | "'" | '`' | null = null;
-  for (let i = afterOpenParen; i < src.length; i += 1) {
-    const ch = src[i];
-    if (inStr) {
-      if (ch === '\\') { i += 1; continue; }
-      if (ch === inStr) inStr = null;
-      continue;
-    }
-    if (ch === '"' || ch === "'" || ch === '`') { inStr = ch; continue; }
-    if (ch === '/' && src[i + 1] === '/') {
-      const nl = src.indexOf('\n', i);
-      i = nl === -1 ? src.length : nl;
-      continue;
-    }
-    if (ch === '(') depth += 1;
-    else if (ch === ')') {
-      depth -= 1;
-      if (depth === 0) return i;
-    }
-  }
-  return -1;
-};
-
-/**
  * `micDetectionActive` — derived signal consumed by `MicPanel`'s
  * preview-pill icon. Decides which icon to show based on what's in
  * the buffers RIGHT NOW:
@@ -446,8 +353,16 @@ export const applyToScore = (): void => {
     return;
   }
 
-  const newScore = stackAppend(appStore.score, snippet);
-  dispatch({ type: 'replaceScore', text: newScore });
+  const result = appendToTopStack(appStore.score, snippet);
+  if (!result.ok) {
+    consoleStore.pushToast({
+      severity: 'warn',
+      title: 'Не удалось вставить запись',
+      body: 'В score незакрытая скобка stack(...) — исправьте синтаксис и повторите.',
+    });
+    return;
+  }
+  dispatch({ type: 'replaceScore', text: result.score });
   clearPreview();
 };
 

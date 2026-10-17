@@ -32,6 +32,8 @@ export type {
 
 export type { MixerLayer, ValidateForEditResult } from './walker';
 
+export type { AppendToStackResult } from './splice';
+
 // Parser / walker — the public behaviour.
 export { parseScore, argText, argLeadingName } from './parser';
 export {
@@ -48,6 +50,8 @@ export {
   isStringArg,
   isNumberArg,
 } from './walker';
+
+export { appendToTopStack } from './splice';
 
 // Tokenizer is exposed for advanced consumers (e.g. a future
 // IDE highlighter that wants the raw token stream). Most
