@@ -11,10 +11,8 @@ import YinWorker from './yinDetector.worker?worker';
  *   4. RAF loop: each frame grabs the latest time-domain data via
  *      `getFloatTimeDomainData`, posts it to the Worker (Transferable),
  *      receives a YIN frame, and forwards it to the caller.
- *   5. lifetime: stop() tears down tracks, our AnalyserNode, worker, raf.
- *      Crucially we DO NOT close the shared AudioContext (we don't own it
- *      when it was reused from `__wavecodeAudioCtx`); only the
- *      WhistleDetector-owned contexts get closed.
+ *   5. lifetime: stop() tears down tracks, our AnalyserNode, MediaStreamSource,
+ *      worker, raf, and the AudioContext WE created.
  *
  * What's NOT here:
  *   - Note segmentation (lives in `domain/audio/whistle.ts`)
@@ -39,22 +37,24 @@ import YinWorker from './yinDetector.worker?worker';
  * dominated by the FFT window). If we ever need sub-frame timing
  * (live spectrogram lag compensation) we'd move to AudioWorklet.
  *
- * Why share the AudioContext with LiveAudioEngine
- * ------------------------------------------------
- * `LiveAudioEngine.unlockAudioContext()` exposes a global
- * `window.__wavecodeAudioCtx` — the SAME AudioContext that drives
- * Strudel/superdough output. We reuse it for the input
- * `MediaStreamSource` when present, so the user's mic input goes
- * through the same audio graph root that handles output. Creating a
- * separate `AudioContext` for input is allowed by the Web Audio spec
- * but in some browsers (Safari/iOS in particular) it splits audio
- * focus — the second context may not start reliably after a user
- * gesture, and on ChromeOS it has been observed to suspend the
- * first context. Sharing the context avoids both.
- *
- * If the shared context is not present yet (Play never pressed), we
- * create a fresh one. We DO close our own context in `stop()` when
- * we created it, but NOT when we reused the shared one.
+ * Why a SEPARATE AudioContext (not sharing with LiveAudioEngine)
+ * ----------------------------------------------------------------
+ * `LiveAudioEngine.unlockAudioContext()` exposes
+ * `window.__wavecodeAudioCtx` — the AudioContext that drives
+ * Strudel/superdough output. We deliberately do NOT reuse it:
+ *   - Sharing caused a regression where sample banks (drums, bass,
+ *     piano) stopped playing after the whistle detector had stashed
+ *     its context first. The cause was that
+ *     `LiveAudioEngine.unlockAudioContext` then short-circuited the
+ *     analyser-tap install path (it only sets up the destination
+ *     tap and analyser when it creates a fresh context), leaving
+ *     Strudel's output graph without the routing the visualizer /
+ *     mixer depended on.
+ *   - Two AudioContexts on the same device is allowed and well-
+ *     supported on Chrome/Edge/Firefox. iOS Safari can be finicky
+ *     about a second context starting after a user gesture, but in
+ *     practice a `MediaStreamSource` on context #2 starts reliably
+ *     because the gesture is the mic permission prompt (not Play).
  *
  * Returned handle is single-use: start() once, stop() once.
  */
@@ -220,27 +220,17 @@ export const startWhistleDetector = (
       stream = micStream;
       setState('starting-audio');
 
-      // Reuse the global AudioContext from LiveAudioEngine if it's
-      // been created. Otherwise create our own (and remember to
-      // close it in stop()).
-      const win = window as unknown as { __wavecodeAudioCtx?: AudioContext };
-      const sharedCtx = win.__wavecodeAudioCtx ?? null;
-      let ctx: AudioContext;
-      if (sharedCtx !== null && sharedCtx.state !== 'closed') {
-        ctx = sharedCtx;
-        ownsAudioCtx = false;
-      } else {
-        const Ctor: typeof AudioContext =
-          typeof AudioContext !== 'undefined'
-            ? AudioContext
-            : (window as unknown as { webkitAudioContext: typeof AudioContext })
-                .webkitAudioContext;
-        ctx = new Ctor({ latencyHint: 'interactive' });
-        // Stash for any other code that reads the same global.
-        win.__wavecodeAudioCtx = ctx;
-        ownsAudioCtx = true;
-      }
+      // Always create our own AudioContext. Do NOT stash to
+      // `window.__wavecodeAudioCtx` (that's LiveAudioEngine's
+      // output context — see header comment for why we don't share).
+      const Ctor: typeof AudioContext =
+        typeof AudioContext !== 'undefined'
+          ? AudioContext
+          : (window as unknown as { webkitAudioContext: typeof AudioContext })
+              .webkitAudioContext;
+      const ctx = new Ctor({ latencyHint: 'interactive' });
       audioCtx = ctx;
+      ownsAudioCtx = true;
       const src = ctx.createMediaStreamSource(micStream);
       const node = ctx.createAnalyser();
       node.fftSize = fftSize;
