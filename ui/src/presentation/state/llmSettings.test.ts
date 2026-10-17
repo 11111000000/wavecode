@@ -8,7 +8,7 @@ describe('llmSettings', () => {
 
   it('getLLMSettings returns defaults when localStorage is empty', async () => {
     const { getLLMSettings } = await import('./llmSettings');
-    expect(getLLMSettings()).toEqual({ model: 'smart', thinking: 'low' });
+    expect(getLLMSettings()).toEqual({ model: 'fast', thinking: 'low' });
     expect(localStorage.getItem('wavecode-llm-settings-v1')).toBeNull();
   });
 
@@ -25,16 +25,16 @@ describe('llmSettings', () => {
   it('setThinking persists and updates getLLMSettings', async () => {
     const { setThinking, getLLMSettings } = await import('./llmSettings');
     setThinking('high');
-    expect(getLLMSettings()).toEqual({ model: 'smart', thinking: 'high' });
+    expect(getLLMSettings()).toEqual({ model: 'fast', thinking: 'high' });
 
     const raw = localStorage.getItem('wavecode-llm-settings-v1');
-    expect(JSON.parse(raw!)).toEqual({ model: 'smart', thinking: 'high' });
+    expect(JSON.parse(raw!)).toEqual({ model: 'fast', thinking: 'high' });
   });
 
   it('falls back to defaults when localStorage has invalid JSON', async () => {
     localStorage.setItem('wavecode-llm-settings-v1', '{not valid json');
     const { getLLMSettings } = await import('./llmSettings');
-    expect(getLLMSettings()).toEqual({ model: 'smart', thinking: 'low' });
+    expect(getLLMSettings()).toEqual({ model: 'fast', thinking: 'low' });
   });
 
   it('merges partial stored state with defaults', async () => {
