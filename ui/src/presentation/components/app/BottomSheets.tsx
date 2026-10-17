@@ -1,4 +1,4 @@
-import { Show, type JSX } from 'solid-js';
+import { Show, Suspense, type JSX } from 'solid-js';
 import { BottomSheet } from '~/presentation/components/BottomSheet';
 import { MixerPanel } from '~/presentation/components/MixerPanel';
 import { StepGrid } from '~/presentation/components/StepGrid';
@@ -6,7 +6,7 @@ import { PianoKeyboard } from '~/presentation/components/PianoKeyboard';
 import { MicPanel } from '~/presentation/components/MicPanel';
 import { HelloPanel } from '~/presentation/panels/HelloPanel';
 import { AIEditPanel } from '~/presentation/panels/AIEditPanel';
-import { VisualizerPanel } from '~/presentation/panels/VisualizerPanel';
+import { VisualizerPanelLazy } from '~/presentation/panels/VisualizerPanelLazy';
 
 export type BottomSheetsProps = Record<string, never>;
 
@@ -57,13 +57,22 @@ export function BottomSheets(_: BottomSheetsProps): JSX.Element {
       {/* wavecode-visualizer-tab: full-snap by default (see uiState.setTab)
           so the spectrum canvas doesn't get squashed to 50px on small
           phones. BottomSheet still respects the same drag-to-resize
-          affordances as the other sheets. */}
+          affordances as the other sheets.
+
+          VisualizerPanel is loaded via `VisualizerPanelLazy`
+          (wavecode-bundle-split). The chunk (~14 KB raw, ~5 KB gz)
+          only fetches when the user first opens the
+          «Визуализация» tab — keeps the cold-start main chunk slim.
+          Solid's `<Suspense>` boundary catches the dynamic import
+          pending state without disturbing the sheet's drag/snap UX. */}
       <BottomSheet
         kind="visualize"
         title="Визуализация"
         subtitle="карта цикла + эквалайзер"
       >
-        <VisualizerPanel />
+        <Suspense fallback={<div class="visualizer-panel visualizer-panel--loading" />}>
+          <VisualizerPanelLazy />
+        </Suspense>
       </BottomSheet>
 
       <Show when={!isDesktopViewport()}>

@@ -82,6 +82,14 @@ export default defineConfig({
     rollupOptions: {
       output: {
         manualChunks: {
+          // `vendor-solid` — Solid.js runtime. Pulled out of the main
+          // chunk so the main entry stays small and the Solid runtime is
+          // cached across deploys (Solid changes less often than app code).
+          'vendor-solid': ['solid-js', 'solid-js/web', 'solid-js/store'],
+          // Strudel runtime (~660 KB raw, ~213 KB gz). All five packages
+          // are imported dynamically from LiveAudioEngine.ensureRepl(); they
+          // are pulled into a single chunk so the user's first ▶ click loads
+          // them in one round-trip and the audio stack can evaluate.
           strudel: [
             '@strudel/core',
             '@strudel/webaudio',
@@ -90,6 +98,9 @@ export default defineConfig({
             '@strudel/transpiler',
             '@strudel/serial',
           ],
+          // CodeMirror 6 (~386 KB raw, ~125 KB gz). Imported via
+          // `lazy()` in CodeMirrorEditor.tsx — only loads when the user
+          // first opens the Score tab.
           codemirror: [
             '@codemirror/state',
             '@codemirror/view',
@@ -99,6 +110,9 @@ export default defineConfig({
             '@codemirror/autocomplete',
             '@codemirror/lint',
           ],
+          // Effect-TS family + supporting packages. Loaded eagerly with
+          // the main chunk because the AppLayer composition and the
+          // appStore Effect.gen pipelines both depend on it at boot.
           effect: ['effect', '@effect/schema', '@effect/platform', '@effect/platform-browser'],
         },
       },
