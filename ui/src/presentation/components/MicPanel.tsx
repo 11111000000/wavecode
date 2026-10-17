@@ -170,94 +170,95 @@ export function MicPanel(): JSX.Element {
       data-listening={micListening()}
       data-empty={isEmpty() ? 'true' : 'false'}
     >
-      <Show when={!isEmpty()}>
-        <div class="mic-ux-row-status">
-          <PreviewPill />
-          <InstrumentSelector />
-          <SlotSelect slotTitle={slotTitle} />
-        </div>
-
-        <div class="mic-ux-row-cta mic-ux-row-cta--multi">
-          <button
-            type="button"
-            class="mic-ux-cta"
-            data-cta="start"
-            data-listening={micListening()}
-            aria-pressed={micListening()}
-            aria-label={micListening() ? 'Stop the mic' : 'Start the mic'}
-            title={micListening() ? 'Stop listening' : 'Start listening — grant mic permission'}
-            onClick={onToggleMic}
-          >
-            <span>{micListening() ? '■ STOP' : '◆ START'}</span>
-          </button>
-          <button
-            type="button"
-            class="mic-ux-cta"
-            data-cta="apply"
-            aria-label="Apply the recorded snippet to the score"
-            title="Apply preview via the active slot"
-            disabled={micPreviewNotes().length === 0 && micTransients().length === 0}
-            onClick={() => applyToScore()}
-          >
-            <span>⌃ Add to score</span>
-          </button>
-          <button
-            type="button"
-            class="mic-ux-cta-sm"
-            data-cta="reset"
-            aria-label="Reset the preview buffer"
-            title="Clear the preview (Ctrl+Z doesn't apply — preview is local)"
-            disabled={micPreviewNotes().length === 0 && micTransients().length === 0}
-            onClick={() => clearPreview()}
-          >
-            + reset
-          </button>
-          <button
-            type="button"
-            class="mic-ux-preview-toggle"
-            data-cta="preview"
-            data-active={previewing() ? 'true' : 'false'}
-            aria-pressed={previewing()}
-            aria-label={previewing() ? 'Stop preview playback' : 'Play the recorded snippet'}
-            title={previewing() ? 'Stop preview' : 'Hear the recorded snippet in the running audio'}
-            disabled={micPreviewNotes().length === 0 && micTransients().length === 0}
-            onClick={onTogglePreview}
-          >
-            {previewing() ? '■ stop preview' : '👁 preview'}
-          </button>
-        </div>
-
-        <div class="mic-ux-row-roll">
-          <div class="mic-ux-roll-header">Live timeline</div>
-          <PianoRollPreview
-            notes={micPreviewNotes()}
-            transients={micTransients()}
-          />
-        </div>
-
-        <MicMeter />
-
-        <Show when={micError() !== null}>
-          <span class="mic-error-pill" role="alert">
-            ✕ {micError()}
-            <Show when={isMicPermissionError()}>
-              <span class="mic-error-hint">
-                {' '}—{' '}
-                <Show when={micPermissionUrl() === null} fallback={<PermissionHint />}>
-                  разрешите доступ к микрофону в настройках браузера
-                </Show>
-              </span>
-            </Show>
-          </span>
-        </Show>
-      </Show>
-
+      {/* Empty-state hint — a compact banner, not a full replacement.
+          The controls below are ALWAYS visible so the user always has
+          a way to start recording. */}
       <Show when={isEmpty()}>
         <EmptyState
           showHelp={showHelp()}
           onToggleHelp={() => setShowHelp(!showHelp())}
           onPlayDemo={onPlayDemo}
         />
+      </Show>
+
+      <div class="mic-ux-row-status">
+        <PreviewPill />
+        <InstrumentSelector />
+        <SlotSelect slotTitle={slotTitle} />
+      </div>
+
+      <div class="mic-ux-row-cta mic-ux-row-cta--multi">
+        <button
+          type="button"
+          class="mic-ux-cta"
+          data-cta="start"
+          data-listening={micListening()}
+          aria-pressed={micListening()}
+          aria-label={micListening() ? 'Stop the mic' : 'Start the mic'}
+          title={micListening() ? 'Stop listening' : 'Start listening — grant mic permission'}
+          onClick={onToggleMic}
+        >
+          <span>{micListening() ? '■ STOP' : '◆ START'}</span>
+        </button>
+        <button
+          type="button"
+          class="mic-ux-cta"
+          data-cta="apply"
+          aria-label="Apply the recorded snippet to the score"
+          title="Apply preview via the active slot"
+          disabled={micPreviewNotes().length === 0 && micTransients().length === 0}
+          onClick={() => applyToScore()}
+        >
+          <span>⌃ Add to score</span>
+        </button>
+        <button
+          type="button"
+          class="mic-ux-cta-sm"
+          data-cta="reset"
+          aria-label="Reset the preview buffer"
+          title="Clear the preview (Ctrl+Z doesn't apply — preview is local)"
+          disabled={micPreviewNotes().length === 0 && micTransients().length === 0}
+          onClick={() => clearPreview()}
+        >
+          + reset
+        </button>
+        <button
+          type="button"
+          class="mic-ux-preview-toggle"
+          data-cta="preview"
+          data-active={previewing() ? 'true' : 'false'}
+          aria-pressed={previewing()}
+          aria-label={previewing() ? 'Stop preview playback' : 'Play the recorded snippet'}
+          title={previewing() ? 'Stop preview' : 'Hear the recorded snippet in the running audio'}
+          disabled={micPreviewNotes().length === 0 && micTransients().length === 0}
+          onClick={onTogglePreview}
+        >
+          {previewing() ? '■ stop preview' : '👁 preview'}
+        </button>
+      </div>
+
+      <div class="mic-ux-row-roll">
+        <div class="mic-ux-roll-header">Live timeline</div>
+        <PianoRollPreview
+          notes={micPreviewNotes()}
+          transients={micTransients()}
+        />
+      </div>
+
+      <MicMeter />
+
+      <Show when={micError() !== null}>
+        <span class="mic-error-pill" role="alert">
+          ✕ {micError()}
+          <Show when={isMicPermissionError()}>
+            <span class="mic-error-hint">
+              {' '}—{' '}
+              <Show when={micPermissionUrl() === null} fallback={<PermissionHint />}>
+                разрешите доступ к микрофону в настройках браузера
+              </Show>
+            </span>
+          </Show>
+        </span>
       </Show>
     </div>
   );
