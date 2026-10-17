@@ -5,7 +5,6 @@ import type * as MiniModule from '@strudel/mini';
 import type * as TonalModule from '@strudel/tonal';
 import type * as TranspilerModule from '@strudel/transpiler';
 import type * as WebaudioModule from '@strudel/webaudio';
-import * as superdough from 'superdough';
 import type { LayerMix } from '~/domain/types';
 import type { NoteEvent } from '~/domain/midi/encoder';
 import { injectMix } from '~/application/useCases/injectMix';
@@ -315,20 +314,28 @@ const ensureRepl = (audioCtx: AudioContext): Promise<ReplHandle> => {
       // БЕЗ этого Cyclist триггерит хапы, но superdough падает с
       // "sound sawtooth not found" — тишина.
       //
-      // CRITICAL: import from 'superdough' (via top-level static
-      // import, NOT dynamic). When Vite bundles @strudel/webaudio
-      // together with its superdough dep, a dynamic `import('superdough')`
-      // at runtime resolves to a SEPARATE module instance and SEPARATE
-      // soundMap. The static import (hoisted by Vite) resolves to the
-      // SAME instance used by webaudioRepl → soundMap writes go to the
-      // right place. (See: git log master fix(audio))
-      superdough.registerSynthSounds();
+      // CRITICAL: must use the SAME superdough instance that
+      // `webaudioRepl` is using internally, otherwise `registerSound`
+      // writes to a different `soundMap` than the one Cyclist reads
+      // from — every hap with `.s("sawtooth")` / `.s("triangle")` /
+      // `.s("white")` then throws `sound X not found`. We use the
+      // re-exported surface from `@strudel/webaudio` (loaded via the
+      // SAME `loadModules()` instance that created the repl) instead
+      // of a separate `import * from 'superdough'` — Vite's static
+      // analysis would otherwise create a second superdough module
+      // instance and we'd hit the dual-soundMap bug (see the
+      // `[getTrigger] error: sound X not found` storm in the user's
+      // console before this fix).
+      const superdoughRuntime = modules.webaudio as typeof WebaudioModule & {
+        registerSynthSounds: () => void;
+        initAudio: (opts?: { maxPolyphony?: number; multiChannelOrbits?: boolean }) => Promise<void>;
+      };
+      superdoughRuntime.registerSynthSounds();
       console.log('[wavecode] synth sounds registered');
 
       // Загружаем worklet'ы (reverb, delay, djf) — нужно для synth с эффектами.
-      // Тот же superdough instance через static import.
       try {
-        await superdough.initAudio();
+        await superdoughRuntime.initAudio();
         console.log('[wavecode] initAudio done (worklets loaded)');
       } catch (err) {
         console.warn('[wavecode] initAudio failed (will continue without worklets):', err);
