@@ -10,14 +10,12 @@
  *   - Bossa Nova: 3+2 clave + nylon comping + shaker
  *   - Trap: 808 sub + hat rolls
  *   - Reggaeton: dembow + detuned synth bass
- *   - IDM glitch: 5/4 + 7/8 polymeter
  *   - Dreampop: 16th-note strum + chorus pad
  *   - Step Grid demo: rock beat для 🎹 Step
  *   - Piano ballad: Salamander Piano v3 (CC0)
  *   - 808 classic (synth): чистый Strudel-синтез, no samples
  *   - Analog bass (synth): CC0 Moog-стиль
  *   - 808 king (samples): CC0 Freesound drums
- *   - Lush pad (synth): CC0 Vanyamba + IDM Atmosphare
  *   - Retro lead (synth): CC0 Garzul Minimoog
  *   - Toms funk (samples): CC0 toms
  *
@@ -213,27 +211,6 @@ export const BUILTIN_PRESETS: ReadonlyArray<Preset> = [
     ].join('\n'),
   },
   {
-    // IDM glitch: polymetric 5/4 + 7/8, bit-reduced samples.
-    id: 'idm-glitch',
-    name: 'IDM glitch',
-    artist: 'Autechre',
-    score: [
-      '// IDM glitch — polymetric 5/4 + 7/8, bit-reduced + random gating',
-      'stack(',
-      '  // 5/4 polymeter kick — every 5 steps of 8ths',
-      '  s("bd ~ ~ ~ ~ bd ~ ~ ~").gain(0.45),',
-      '  // 7/8 polymeter snare — independent cycle',
-      '  s("~ ~ ~ sd ~ ~ sd ~").gain(0.35),',
-      '  // Hi-hat with random gating (Euclidean-like)',
-      '  s("drums_hh*8").euclid(5, 8).decay(.03).gain(0.20),',
-      '  // Bit-reduced noise percussion',
-      '  s("white*8").crush(4, 8000).decay(.05).gain(0.10),',
-      '  // Detuned sine melody — irregular rhythm',
-      '  note("~ c5 ~ ~ eb5 ~ ~ g4 ~ ~ ~ c5 ~").s("sine").detune(15).gain(0.10).room(.4)',
-      ')',
-    ].join('\n'),
-  },
-  {
     // Dreampop / shoegaze: 16th-note strum + chorus-washed pad + soft vocal.
     id: 'dreampop',
     name: 'Dreampop',
@@ -357,29 +334,6 @@ export const BUILTIN_PRESETS: ReadonlyArray<Preset> = [
       '  s("~ ~ ~ ~ ~ ~ ~ drums_cp").gain(0.35),',
       '  // Sub-bass — тоническая основа',
       '  note("<a1 a1 a1 a1>").s("sine").lpf(120).gain(0.30)',
-      ')',
-    ].join('\n'),
-  },
-  {
-    // Lush pad — CC0 Vanyamba choir/Fantasy pad + CAT-FOX IDM Atmosphare.
-    // Long attack + release for cinematic feel. C-E-G-A chord progression.
-    id: 'lush-pad',
-    name: 'Lush pad',
-    artist: 'CC0 Choir+IDM',
-    score: [
-      '// Lush pad — CC0 sustained pads (synth:pad-*) + strings + soft bass',
-      'stack(',
-      '  // Sustained chord pad — slow attack/release для cinematic feel',
-      '  note("[c3,e3,g3] [e3,g3,b3] [g3,b3,d4] [a3,c4,e4]")',
-      '    .s("synth_pad-c3").attack(0.5).release(2).gain(0.32).room(.6),',
-      '  // High pad layer — fifth up, для shimmer',
-      '  note("[g3,b3,d4] [b3,d4,f#4] [d4,f#4,a4] [e4,g4,c5]")',
-      '    .s("synth_pad-e3").attack(0.7).release(2.5).gain(0.20).room(.7),',
-      '  // Strings — sustained C4 sample как foundation',
-      '  note("[c4,g4] [e4,b4] [g4,d5] [a4,e5]")',
-      '    .s("synth_strings-c4").attack(1.0).release(3).gain(0.18).room(.5),',
-      '  // Sub-bass — root notes на каждый аккорд',
-      '  note("<c2 e2 g2 a2>").s("synth_bass-c2").gain(0.18).lpf(300).room(.3)',
       ')',
     ].join('\n'),
   },

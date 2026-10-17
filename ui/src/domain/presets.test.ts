@@ -2,8 +2,8 @@ import { describe, it, expect, vi } from 'vitest';
 import { BUILTIN_PRESETS, validatePreset } from './presets';
 
 describe('BUILTIN_PRESETS', () => {
-  it('has 18 entries (1 old Creep + 10 genre + 1 step demo + 2 piano demos + 2 drum demos + 3 synth demos)', () => {
-    expect(BUILTIN_PRESETS).toHaveLength(18);
+  it('has 16 entries (1 Creep + 9 genre [IDM removed] + 1 step demo + 2 piano demos + 2 drum demos + 2 synth demos [lush-pad removed])', () => {
+    expect(BUILTIN_PRESETS).toHaveLength(16);
   });
 
   it('has unique ids', () => {
@@ -37,10 +37,10 @@ describe('BUILTIN_PRESETS', () => {
     expect(creep?.artist).toBe('Radiohead');
   });
 
-  it('all 10 new genre presets are present', () => {
+  it('all 9 new genre presets are present (idm-glitch removed)', () => {
     const expected = [
       'edm-house', 'hiphop-boombap', 'jazz-ii-v-i', 'ambient-drone',
-      'bossa-nova', 'trap-atlanta', 'reggaeton', 'idm-glitch',
+      'bossa-nova', 'trap-atlanta', 'reggaeton',
       'dreampop', 'step-grid-demo',
     ];
     for (const id of expected) {
@@ -48,8 +48,8 @@ describe('BUILTIN_PRESETS', () => {
     }
   });
 
-  it('all 3 new synth-pack demos are present (CC0 analog bass / lush pad / retro lead)', () => {
-    const expected = ['analog-bass', 'lush-pad', 'retro-lead'];
+  it('all 2 new synth-pack demos are present (CC0 analog bass / retro lead)', () => {
+    const expected = ['analog-bass', 'retro-lead'];
     for (const id of expected) {
       const p = BUILTIN_PRESETS.find((p) => p.id === id);
       expect(p, `missing ${id}`).toBeDefined();
