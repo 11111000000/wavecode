@@ -40,7 +40,7 @@ describe('BUILTIN_PRESETS', () => {
   it('all 10 new genre presets are present', () => {
     const expected = [
       'edm-house', 'hiphop-boombap', 'jazz-ii-v-i', 'ambient-drone',
-      'bossa-nova', 'trap-modern', 'reggaeton', 'idm-glitch',
+      'bossa-nova', 'trap-atlanta', 'reggaeton', 'idm-glitch',
       'dreampop', 'step-grid-demo',
     ];
     for (const id of expected) {
