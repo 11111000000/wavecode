@@ -1,0 +1,243 @@
+---
+schema: math-coding/3.3
+id: wavecode-piano-transcribe
+revision: 1
+state: draft
+body_sha: "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+yaml_sha: "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+
+intent: |
+  Turn the on-screen piano (and any WebMIDI keyboard) into a SOURCE OF
+  TRUTH for melody entry. Today, recording a phrase produces a
+  one-line-per-note snippet that gets spliced into the score by
+  hand; the user then has to massage it into Strudel mini-notation
+  to get rhythm back. With `🎼 transcribe` next to the FILE:
+
+    - record 4 bars with RECORDING ON
+    - click `🎼 transcribe` (with BPM 120, instrument "piano")
+    - see a PREVIEW: `note("<[c4] [e4 g4] [c4 e4] [c5]>").s("piano")`
+    - click `✓ Apply`
+    - the editor replaces the score with a valid, immediately
+      playable Strudel-score; the audio engine picks it up.
+
+  Without mini-notation literacy, a user with a MIDI keyboard can
+  drive the live-coding workflow. With it, they get a starting
+  point to keep editing.
+
+commitment: |
+  1. `ui/src/application/useCases/pianoTranscribe.ts` exports a
+     PURE function `pianoTranscribe(notes, options) → { score,
+     summary }`. No Effect, no Solid — testable in isolation.
+  2. `pianoRecStore` gains three functions:
+     `transcribe(bpm, instrument) → string`,
+     `applyTranscription() → void` (dispatches `replaceScore` +
+     `evalScore(score)`), and `cancelTranscription() → void`.
+     Plus a `transcribePreview` accessor the toolbar binds to.
+  3. `PianoToolbar` renders a `🎼 transcribe` button next to
+     `↑ apply`, a BPM number input (default 120), and a collapsible
+     preview panel with `✓ Apply` / `✗ Cancel` and the score text.
+     Disabled when `recBuffer()` is empty.
+  4. Generated score is validated through `parseScore` from
+     `ui/src/domain/strudel/`; if validation fails (parser surfaces
+     no `CallNode`), the function falls back to `note("c4")` and
+     reports `summary.valid === false`.
+  5. Tests cover: empty buffer, single note, chord column, sequence,
+     quantize grouping (notes within 1/16 window → same column),
+     AST validation roundtrip, instrument-name passthrough.
+
+scope:
+  paths:
+    - "ui/src/application/useCases/pianoTranscribe.ts"
+    - "ui/src/application/useCases/pianoTranscribe.test.ts"
+    - "ui/src/presentation/state/pianoRecStore.ts"
+    - "ui/src/presentation/components/PianoKeyboard.tsx"
+    - "ui/src/presentation/components/PianoToolbar.tsx"
+    - "ui/src/styles/components.css"
+    - "decisions/wavecode-piano-transcribe.yaml"
+  exclusions:
+    - "ui/src/presentation/components/App.tsx"
+    - "ui/src/presentation/components/app/**"
+    - "ui/src/presentation/components/landing/**"
+    - "ui/src/presentation/components/CodeMirrorEditor.tsx"
+    - "ui/src/presentation/panels/AIEditPanel.tsx"
+    - "ui/src/application/useCases/llmEdit.ts"
+    - "ui/src/domain/presets.ts"
+    - "ui/src/infrastructure/audio/**"
+    - "ui/vite.config.ts"
+    - "ui/src/domain/strudel/**"
+
+outcomes:
+  - id: piano-transcribe-pure-fn
+    statement: |
+      `pianoTranscribe(notes, options) → { score, summary }` is a
+      pure function with no side effects. Empty buffer → empty
+      string + zero summary; AST-valid inputs → AST-valid
+      `note("…")` output.
+  - id: piano-transcribe-quantize-grid
+    statement: |
+      Notes within a single 1/16 grid cell (60000 / bpm / 4 ms wide)
+      are grouped into ONE column; the column's pitches are sorted
+      low→high and emitted as `[c4 e4 g4]` (chord) for ≥2 notes or
+      `c4` (single) for one note.
+  - id: piano-transcribe-cat-pattern
+    statement: |
+      Multi-column output is wrapped as `<[c4] [e4 g4] …>` so each
+      column plays for one full Strudel cycle (the user tunes `cps`
+      to taste; a hint in the preview panel tells them the
+      relationship `cps ≈ bpm / 60`).
+  - id: piano-transcribe-instrument-passthrough
+    statement: |
+      The selected `PianoInstrument` (e.g. `piano`, `casio`,
+      `triangle`) is appended as `.s("<instrument>")` to the
+      generated score so it matches what the user just played.
+  - id: piano-transcribe-validation-fallback
+    statement: |
+      If `parseScore(result)` does not surface a `CallNode`, the
+      function returns `note("c4")` with `summary.valid === false`.
+      This is a defensive fallback for future parser regressions;
+      in practice the generator always produces a valid score.
+  - id: piano-transcribe-apply-flow
+    statement: |
+      `applyTranscription()` (a) reads the current `transcribePreview`,
+      (b) `dispatch({ type: 'replaceScore', text: score })`, (c)
+      `void evalScore(score)`, (d) clears the buffer (mirroring
+      `applyToScore`), (e) clears `transcribePreview`. On error
+      path the buffer is preserved for retry (mirrors the existing
+      `at-cursor` no-op-with-warning pattern).
+
+obligations:
+  - id: piano-transcribe-unit-tests
+    claim: |
+      `pianoTranscribe.test.ts` covers ≥ 8 cases: empty buffer,
+      single note, chord column, sequence, quantize grouping,
+      AST roundtrip, instrument passthrough, validation fallback.
+    acceptance:
+      all:
+        - verifier: "vitest run ui/src/application/useCases/pianoTranscribe.test.ts"
+          result: pass
+  - id: piano-transcribe-store-actions
+    claim: |
+      `PianoToolbar.test.tsx` extends with `describe('transcribe')`
+      covering: button hidden when buffer empty, click on REC-on +
+      buffer non-empty populates `transcribePreview`, Apply
+      dispatches `replaceScore` + calls `evalScore`, Cancel clears
+      the preview without dispatching.
+    acceptance:
+      all:
+        - verifier: "vitest run ui/src/presentation/components/PianoToolbar.test.tsx"
+          result: pass
+  - id: piano-transcribe-typecheck
+    claim: |
+      `npm --dir ui run typecheck` exits 0 after this commit.
+    acceptance:
+      all:
+        - verifier: "tsc --noEmit"
+          result: pass
+  - id: piano-transcribe-lint
+    claim: |
+      `npm --dir ui run lint:no-console` exits 0 — no `console.*`
+      in `src/domain` or `src/application`; presentation-layer
+      `console.warn` calls in `pianoRecStore.applyTranscription`
+      are tolerated (matches the existing `applyToScore` pattern).
+    acceptance:
+      all:
+        - verifier: "eslint src/domain src/application"
+          result: pass
+  - id: piano-transcribe-presets-validation
+    claim: |
+      `npm --dir ui run validate:presets` exits 0 (existing 18
+      presets unchanged; this commit does not touch presets).
+    acceptance:
+      all:
+        - verifier: "node --experimental-strip-types ../scripts/validate-presets.ts"
+          result: pass
+  - id: piano-transcribe-build
+    claim: |
+      `npm --dir ui run build` exits 0 (vite + tsc). Bundle-size
+      diff reported in the PR description (main chunk should grow
+      by < 5 KB gzipped given the tiny pure-function payload).
+    acceptance:
+      all:
+        - verifier: "vite build"
+          result: pass
+
+assumptions:
+  - id: piano-transcribe-assumption-bpm-stable
+    state: assumed
+    statement: |
+      "The user knows the BPM of what they recorded; if they don't,
+       the default 120 BPM is close enough that 1/16 grid cells
+       group plausibly. If not, they can override the BPM field
+       and click `🎼 transcribe` again."
+    owner: human:operator
+  - id: piano-transcribe-assumption-one-cycle-fits
+    state: assumed
+    statement: |
+      "Recorded phrases are short (≤ 16 columns at default quantize).
+       A single `<>` wrapper handles this comfortably. Longer
+       recordings fall back to `note('<a b c …>')` losing rhythm
+       precision beyond 16 columns — documented as future-work in
+       `decisions/wavecode-piano-transcribe.yaml` `relations.follows_up`."
+    owner: human:operator
+  - id: piano-transcribe-assumption-evalScore-sync
+    state: assumed
+    statement: |
+      "`replaceScore` + `evalScore(score)` is the canonical 'set
+       score and play now' pair (verified in `appStore.dispatch` +
+       `audioActions.evalScore`); other call sites in the codebase
+       follow the same pattern."
+    evidence: "git grep 'replaceScore' ui/src/"
+    owner: agent
+
+risk:
+  declared_triggers:
+    - bpm-mismatch-causes-grid-jitter
+    - chord-vs-arpeggio-confusion
+    - multi-cycle-recording-truncation
+    - instrument-name-not-resolved-by-strudel
+  owner: human:operator
+
+reversal:
+  - signal: pianoTranscribe.test.ts-fails
+    action: rework
+  - signal: user-feedback-cat-vs-space-separator
+    action: rework-format-with-flag
+  - signal: preview-panel-truncates-long-scores
+    action: rework-css-or-switch-to-modal
+
+counterexample: |
+  "Live coding is code-first; if a user can't write mini-notation,
+   they're not the target audience. Adding a piano → score
+   transcription reduces the bar to entry but at the expense of
+   the live-coding ethos — once you can record, you might as well
+   use a DAW, where the integration is more polished."
+
+  Counter: the live-coding ethos doesn't require writing
+  mini-notation by hand — it requires editing it. The transcribe
+  output is a STRUDEL SCORE the user keeps editing live. They
+  still get to mutate `<c4 e4 g4>` → `<c4 e4 g4 c5>` or add `.s()`
+  chains. The piano is an INPUT DEVICE for code, not a replacement
+  for the code itself.
+
+antithesis: |
+  "Keep only `↑ apply` (one-line-per-note commit); users can
+  hand-craft mini-notation in the editor. Skip auto-transcription."
+
+  Rejected because: (1) every other live-coding tool with a MIDI
+  input has a similar "perform → score" bridge (see Vortex
+  Tracker, Sonic Pi's `live_loop` recorder, Bitwig's MIDI-to-clip).
+  (2) The CSS Components aesthetic of the piano toolbar
+  (`🎼 transcribe` next to `↑ apply`) is a tiny, well-bounded UI
+  addition. (3) The pure function is testable and reusable — a
+  Tier 2 pianoroll could call `pianoTranscribe` to seed its
+  timeline from a MIDI recording.
+
+relations:
+  addresses:
+    - wavecode-bootstrap-math-coding-3.3@1
+    - wavecode-piano-rec-clarity@1
+    - wavecode-strudel-ast@1
+  depends_on:
+    - wavecode-bootstrap-math-coding-3.3@1
+    - wavecode-strudel-ast@1
+---

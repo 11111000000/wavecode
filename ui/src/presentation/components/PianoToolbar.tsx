@@ -15,6 +15,12 @@ import {
   previewPillPayload,
   pianoSlotLabel,
   pianoSlotGlyph,
+  transcribe,
+  applyTranscription,
+  cancelTranscription,
+  transcribePreview,
+  transcribeBpm,
+  setTranscribeBpm,
   type PianoSlot,
 } from '../state/pianoRecStore';
 import type { PianoInstrument } from '~/domain/music/notes';
@@ -29,7 +35,7 @@ import type { PianoInstrument } from '~/domain/music/notes';
  * routing lives in PianoKeyboard; this component owns only the UI
  * affordances.
  *
- * Six affordances:
+ * Seven affordances:
  *   1. REC toggle (magenta pulse when on) — writes pressed keys into
  *      the rec buffer.
  *   2. FOLLOW toggle (cyan when on) — independent of REC. When on,
@@ -51,7 +57,15 @@ import type { PianoInstrument } from '~/domain/music/notes';
  *      committed and to which slot, BEFORE apply. Visible whenever
  *      the buffer is non-empty. Critical for the mobile BottomSheet
  *      case where the editor is hidden under the sheet.
- *   6. Instrument selector — 4 inline buttons (△ ∿ ⊿ ⊓), amber when
+ *   6. 🎼 transcribe + BPM input (wavecode-piano-transcribe) — when
+ *      the buffer is non-empty, this button populates
+ *      `transcribePreview` with a Strudel-score fragment derived from
+ *      the buffer via the pure `pianoTranscribe` use-case. The preview
+ *      panel (collapsible, mounted BELOW the toolbar row) renders the
+ *      generated mini-notation + a Russian-language summary + Apply /
+ *      Cancel buttons. Apply dispatches `replaceScore` and calls
+ *      `evalScore(score)` to play immediately.
+ *   7. Instrument selector — 4 inline buttons (△ ∿ ⊿ ⊓), amber when
  *      active. Each label is a unicode glyph chosen for legibility at
  *      24px without external SVG.
  *
@@ -146,6 +160,8 @@ export const PianoToolbar = (props: PianoToolbarProps): JSX.Element => {
   };
 
   const canApply = (): boolean => recEnabled() && recBuffer().length > 0;
+  const canTranscribe = (): boolean => recBuffer().length > 0;
+  const preview = (): ReturnType<typeof transcribePreview> => transcribePreview();
 
   // Apply-flash state — local to the toolbar, fires only on a successful
   // commit. The flash lasts 1.5s and persists even after the buffer
@@ -174,6 +190,86 @@ export const PianoToolbar = (props: PianoToolbarProps): JSX.Element => {
   const pillPayload = (): ReturnType<typeof previewPillPayload> => previewPillPayload();
 
   return (
+    <>
+      <style>{`
+.piano-transcribe-preview {
+  margin-top: var(--space-2xs);
+  padding: var(--space-2xs) var(--space-sm);
+  background: var(--surface-2);
+  border: 1px solid var(--primary);
+  border-radius: var(--radius-md);
+  font-family: var(--font-mono);
+  font-size: var(--fs-2xs);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2xs);
+  max-width: 100%;
+  overflow: hidden;
+}
+.piano-transcribe-preview__row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  flex-wrap: wrap;
+}
+.piano-transcribe-preview__score {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: var(--space-2xs) var(--space-xs);
+  background: var(--surface-1);
+  border-radius: var(--radius-sm);
+  color: var(--fg);
+  font-size: var(--fs-2xs);
+  overflow-x: auto;
+  white-space: nowrap;
+}
+.piano-transcribe-preview__summary {
+  color: var(--fg-dim);
+  font-size: var(--fs-2xs);
+  white-space: nowrap;
+}
+.piano-transcribe-preview__hint {
+  color: var(--fg-dim);
+  font-size: var(--fs-2xs);
+  opacity: 0.8;
+}
+.piano-transcribe-preview__apply,
+.piano-transcribe-preview__cancel {
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  padding: 0 var(--space-sm);
+  font-family: var(--font-mono);
+  font-size: var(--fs-2xs);
+  font-weight: var(--fw-semibold);
+  letter-spacing: var(--ls-wide);
+  text-transform: uppercase;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+  transition: color var(--dur-xs) var(--ease), background var(--dur-xs) var(--ease);
+}
+.piano-transcribe-preview__apply {
+  color: var(--ok);
+  border-color: var(--ok);
+}
+.piano-transcribe-preview__apply:hover {
+  background: var(--ok);
+  color: var(--fg-inverse);
+}
+.piano-transcribe-preview__cancel {
+  color: var(--fg-dim);
+}
+.piano-transcribe-preview__cancel:hover {
+  color: var(--warn);
+  border-color: var(--warn);
+}
+.piano-transcribe-preview[data-valid='false'] .piano-transcribe-preview__score {
+  color: var(--warn);
+  border: 1px solid var(--warn);
+}
+`}</style>
     <div class="piano-toolbar-row">
       <button
         type="button"
@@ -237,6 +333,38 @@ export const PianoToolbar = (props: PianoToolbarProps): JSX.Element => {
           aria-label="Применить записанные ноты к score"
         >
           ↑ apply
+        </button>
+      </Show>
+      <Show when={canTranscribe()}>
+        <label
+          class="piano-transcribe-bpm"
+          title="BPM для транскрипции (определяет сетку 1/16)"
+        >
+          <span class="piano-transcribe-bpm__label">BPM</span>
+          <input
+            type="number"
+            class="piano-transcribe-bpm__input"
+            min="30"
+            max="300"
+            step="1"
+            value={transcribeBpm()}
+            onInput={(e) => {
+              const next = Number.parseInt(e.currentTarget.value, 10);
+              if (Number.isFinite(next) && next > 0) setTranscribeBpm(next);
+            }}
+            aria-label="BPM для транскрипции"
+          />
+        </label>
+        <button
+          type="button"
+          class="piano-transcribe-btn"
+          data-active={preview() !== null ? 'true' : 'false'}
+          onClick={() => transcribe(transcribeBpm())}
+          title="Транскрибировать записанные ноты в Strudel-score"
+          aria-label="Транскрибировать записанные ноты в Strudel-score"
+          aria-pressed={preview() !== null}
+        >
+          🎼 transcribe
         </button>
       </Show>
       <Show when={applyFlash() || (recEnabled() && pillPayload() !== null)}>
@@ -309,5 +437,44 @@ export const PianoToolbar = (props: PianoToolbarProps): JSX.Element => {
         </span>
       </Show>
     </div>
+    <Show when={preview()}>
+      {(p) => (
+        <div
+          class="piano-transcribe-preview"
+          data-valid={p().summary.valid ? 'true' : 'false'}
+          data-bpm={p().bpm}
+          aria-live="polite"
+        >
+          <div class="piano-transcribe-preview__row">
+            <code class="piano-transcribe-preview__score">{p().score}</code>
+            <span class="piano-transcribe-preview__summary">{p().summaryText}</span>
+          </div>
+          <div class="piano-transcribe-preview__row">
+            <span class="piano-transcribe-preview__hint">
+              cps ≈ {(p().bpm / 60).toFixed(2)} для темпа записи · .s("{p().instrument}")
+            </span>
+            <button
+              type="button"
+              class="piano-transcribe-preview__apply"
+              onClick={() => applyTranscription()}
+              title="Заменить score этой транскрипцией"
+              aria-label="Применить транскрипцию"
+            >
+              ✓ Apply
+            </button>
+            <button
+              type="button"
+              class="piano-transcribe-preview__cancel"
+              onClick={() => cancelTranscription()}
+              title="Отменить транскрипцию"
+              aria-label="Отменить транскрипцию"
+            >
+              ✗ Cancel
+            </button>
+          </div>
+        </div>
+      )}
+    </Show>
+    </>
   );
 };
