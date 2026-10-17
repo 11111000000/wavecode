@@ -14,7 +14,7 @@ import {
 import {
   startMicDetector,
   isMicSupported,
-  type MicMode,
+  type MeterFrame,
   type MicCaptureHandle,
   type MicCaptureState,
 } from '~/infrastructure/audio/MicCapture';
@@ -46,6 +46,17 @@ import { previewPillPayload as _pianoPillRef } from './pianoRecStore';
  *      snippet via `notesToSnippet` and dispatches it through the active
  *      slot. Mirrors pianoRecStore.applyToScore verbatim.
  *
+ * Auto-detection model
+ * --------------------
+ * The Mic panel no longer exposes a "sustain vs transient vs auto"
+ * mode toggle. Both pipelines run every frame inside
+ * `MicCapture.startMicDetector`; this store consumes a single unified
+ * event stream and derives a `micDetectionActive` state from it:
+ *   - 'idle'         — no recent activity in either buffer
+ *   - 'sustained'    — notes present, no recent onsets
+ *   - 'percussive'   — recent onsets, no notes
+ *   - 'both'         — both buffers have content (singing + tapping)
+ *
  * Anti-patterns avoided:
  *   - NO inline worker / AudioContext (those live in infrastructure).
  *   - NO Strudel grammar knowledge (lives in domain).
@@ -54,7 +65,18 @@ import { previewPillPayload as _pianoPillRef } from './pianoRecStore';
  */
 
 export type MicSlot = 'append-stack' | 'replace-score' | 'at-cursor';
-export type { MicMode };
+
+export type MicDetectionKind = 'idle' | 'sustained' | 'percussive' | 'both';
+
+export type MicPeakMark = {
+  readonly ms: number;
+  readonly type: 'note' | 'transient';
+};
+
+/** Window over which `micPeakTimes` retains onset markers for the
+ *  live spike overlay. Anything older than `nowMs - windowMs` is
+ *  pruned on every `onFrame` / `onTransient` callback. */
+const PEAK_HISTORY_WINDOW_MS = 3_000;
 
 export const [micListening, setMicListening] = createSignal(false);
 export const [micState, setMicStateSignal] = createSignal<MicCaptureState>('idle');
@@ -75,30 +97,20 @@ export const [micEditorFocused, setMicEditorFocused] = createSignal(false);
 // Set by `onMicFrame`; cleared on `clearPreview` / `stopMic`.
 export const [micCurrentRms, setMicCurrentRms] = createSignal<number>(0);
 
-/**
- * Pipeline mode. 'sustain' (default) runs MPM pitch detection and
- * accumulates AudioNote[]. 'transient' runs onset detection (RMS
- * flux + spectral centroid) and accumulates Transient[]. 'auto'
- * (Phase 3) runs BOTH in parallel from the same AnalyserNode —
- * a pitched kick drum surfaces as both a `PitchFrame` and a
- * `Transient` in the same tick. The preview pill shows the union;
- * applyToScore stacks the two snippets.
- */
-export const [micMode, setMicModeSignal] = createSignal<MicMode>('sustain');
-export const setMicMode = (m: MicMode): void => {
-  setMicModeSignal(m);
-  // Stop+restart so the detector runs the new pipeline. The
-  // preview buffer is cleared (the previous pipeline's output is
-  // no longer relevant after a mode switch).
-  if (micListening()) {
-    stopMic();
-    startMic();
-  } else {
-    clearPreview();
-  }
-};
+/** Latest meter frame from `MicCapture.onMeter`. The UI consumes this
+ *  to render the live RMS bar with onset spike markers. */
+export const [micMeterFrame, setMicMeterFrame] = createSignal<MeterFrame | null>(null);
 
-/** Detected transients (populated in 'transient' AND 'auto' modes). */
+/** Trailing 3-second list of detected onsets (`{ms, type}`) — used
+ *  by the UI to draw vertical spike markers at the time each note
+ *  closed or each transient fired. Pruned on every MicCapture event
+ *  to entries within the last `PEAK_HISTORY_WINDOW_MS`. */
+export const [micPeakTimes, setMicPeakTimes] = createSignal<
+  ReadonlyArray<MicPeakMark>
+>([]);
+
+/** Detected transients (always populated — both pipelines run every
+ *  frame in the new auto-only model). */
 export const [micTransients, setMicTransients] = createSignal<ReadonlyArray<Transient>>([]);
 
 /**
@@ -144,11 +156,35 @@ const resetSegState = (): void => {
   setMicCurrentHz(null);
   setMicCurrentRms(0);
   setMicPrunedCount(0);
+  setMicMeterFrame(null);
+  setMicPeakTimes([]);
+};
+
+/** Prune `micPeakTimes` of entries older than `nowMs - window`. Called
+ *  on every MicCapture event so the array stays bounded at ~30-100
+ *  entries regardless of session length. */
+const prunePeakTimes = (nowMs: number): void => {
+  const cutoff = nowMs - PEAK_HISTORY_WINDOW_MS;
+  const cur = micPeakTimes();
+  let i = 0;
+  while (i < cur.length && cur[i]!.ms < cutoff) i += 1;
+  if (i === 0) return;
+  setMicPeakTimes(cur.slice(i));
+};
+
+/** Append a `note` mark to `micPeakTimes` (called when a sustained
+ *  note is closed in the segmenter — i.e. when `micPreviewNotes`
+ *  grew in length) and prune the trailing 3s window. */
+const recordNotePeak = (timestampMs: number): void => {
+  const next: MicPeakMark = { ms: timestampMs, type: 'note' };
+  setMicPeakTimes([...micPeakTimes(), next]);
+  prunePeakTimes(timestampMs);
 };
 
 const onMicFrame = (frame: PitchFrame): void => {
   setMicCurrentHz(frame.hz);
   setMicCurrentRms(frame.rms);
+  const beforeNotes = segState.notes.length;
   segState = feed(segState, frame, DEFAULT_TUNE, frame.timestampMs);
   setMicPreviewNotes(segState.notes);
   // Defensive: the parallel domain branch will add `notesPrunedCount`
@@ -156,6 +192,11 @@ const onMicFrame = (frame: PitchFrame): void => {
   // no false negative from the field's absence on the type).
   const pruned = (segState as { notesPrunedCount?: number }).notesPrunedCount;
   setMicPrunedCount(typeof pruned === 'number' ? pruned : 0);
+  // A new note closed in the segmenter → mark a `note` spike on the
+  // live meter overlay so the user sees their sung notes land.
+  if (segState.notes.length > beforeNotes) {
+    recordNotePeak(frame.timestampMs);
+  }
 };
 
 const onMicTransient = (transient: Transient): void => {
@@ -164,6 +205,17 @@ const onMicTransient = (transient: Transient): void => {
   // buffer at the moment of apply, so a 1-second-old onset is
   // still part of the output if the user hasn't hit "clear").
   setMicTransients([...micTransients(), transient]);
+  // Record a `transient` peak at the onset's start time so the
+  // meter overlay draws a spike exactly where the hit fired.
+  const next: MicPeakMark = { ms: transient.startMs, type: 'transient' };
+  setMicPeakTimes([...micPeakTimes(), next]);
+  prunePeakTimes(transient.startMs);
+};
+
+const onMicMeter = (frame: MeterFrame): void => {
+  setMicMeterFrame(frame);
+  // Don't add a peak mark for the meter itself — that's only for
+  // detected musical events (notes + transients).
 };
 
 export const startMic = (): void => {
@@ -175,11 +227,10 @@ export const startMic = (): void => {
   }
   resetSegState();
   setMicErrorSignal(null);
-  const mode = micMode();
   detector = startMicDetector({
-    mode,
     onFrame: onMicFrame,
     onTransient: onMicTransient,
+    onMeter: onMicMeter,
     onStateChange: (s) => setMicStateSignal(s),
     onError: (err) => {
       pushError(err);
@@ -318,40 +369,49 @@ const findStackClose = (src: string, afterOpenParen: number): number => {
   return -1;
 };
 
+/**
+ * `micDetectionActive` — derived signal consumed by `MicPanel`'s
+ * preview-pill icon. Decides which icon to show based on what's in
+ * the buffers RIGHT NOW:
+ *   - both buffers empty → 'idle'
+ *   - notes only           → 'sustained'
+ *   - transients only      → 'percussive'
+ *   - both non-empty       → 'both'
+ *
+ * This is a plain function (Solid's `createMemo` would also work) —
+ * it's cheap, but every reader in the panel re-derives. Performance
+ * is fine because the only consumers are UI components in the same
+ * panel; if we ever lift this into a frequently-rendered tree we'd
+ * wrap it in `createMemo`.
+ */
+export const micDetectionActive = (): MicDetectionKind => {
+  const hasNotes = micPreviewNotes().length > 0;
+  const hasTransients = micTransients().length > 0;
+  if (hasNotes && hasTransients) return 'both';
+  if (hasNotes) return 'sustained';
+  if (hasTransients) return 'percussive';
+  return 'idle';
+};
+
 export const applyToScore = (): void => {
-  const mode = micMode();
-  let snippet: string | null;
-  if (mode === 'transient') {
-    const buf = micTransients();
-    if (buf.length === 0) return;
-    snippet = transientsToSnippet(buf);
-  } else if (mode === 'auto') {
-    // Auto mode: stack the two snippets if both buffers produced
-    // something, otherwise commit whichever is non-empty. Mirrors
-    // pianoRecStore.stackAppend's pattern of "if there's existing
-    // content, splice; if not, emit verbatim".
-    const notesBuf = micPreviewNotes();
-    const transBuf = micTransients();
-    const notesSnippet = notesBuf.length === 0
-      ? null
-      : notesToSnippet(notesBuf, { instrument: micInstrument() });
-    const transSnippet = transBuf.length === 0
-      ? null
-      : transientsToSnippet(transBuf);
-    if (notesSnippet === null && transSnippet === null) return;
-    if (notesSnippet !== null && transSnippet !== null) {
-      // Both non-empty → stack the two. Don't indent to keep the
-      // output readable when the user is iterating on a small session.
-      snippet = `stack(\n  ${notesSnippet},\n  ${transSnippet}\n)`;
-    } else {
-      snippet = (notesSnippet ?? transSnippet) as string;
-    }
+  const notesBuf = micPreviewNotes();
+  const transBuf = micTransients();
+  const notesSnippet = notesBuf.length === 0
+    ? null
+    : notesToSnippet(notesBuf, { instrument: micInstrument() });
+  const transSnippet = transBuf.length === 0
+    ? null
+    : transientsToSnippet(transBuf);
+  if (notesSnippet === null && transSnippet === null) return;
+  let snippet: string;
+  if (notesSnippet !== null && transSnippet !== null) {
+    // Both buffers produced something → emit a stack(...) so the
+    // apply preserves the two contributions as siblings. Don't
+    // indent; small sessions stay readable this way.
+    snippet = `stack(\n  ${notesSnippet},\n  ${transSnippet}\n)`;
   } else {
-    const buf = micPreviewNotes();
-    if (buf.length === 0) return;
-    snippet = notesToSnippet(buf, { instrument: micInstrument() });
+    snippet = (notesSnippet ?? transSnippet) as string;
   }
-  if (snippet === null) return;
 
   const slot = micSlot();
 
@@ -392,16 +452,15 @@ export const applyToScore = (): void => {
 };
 
 /**
- * Compact preview-pill payload — count + first N note names + slot label.
- * Pure read of signals. Used by `MicPanel` to render the live
- * preview pill beside the mic button.
+ * Compact preview-pill payload — count + first N item names + slot label.
+ * Pure read of signals. Used by `MicPanel` to render the live preview
+ * pill beside the mic button.
  *
- * Mode-specific behaviour:
- *   - 'transient' → drum count + first 6 onset type shortcodes (bd/sd/...).
- *   - 'auto'      → concatenated first N items with a leading kind
- *                   marker so the user sees which pipeline produced
- *                   what ("♪ c4 ♪ e4 ✦ bd ✦ sd …").
- *   - 'sustain'   → note count + first 6 note names (c4 e4 g4 …).
+ * The auto-detection model means the user sees a unified stream:
+ *   - notes are prefixed with '♪'
+ *   - onsets are prefixed with '✦'
+ * Both can appear in `firstNames` simultaneously. The `kind` field
+ * lets the UI pick the right icon (mic / drum / both / muted).
  *
  * Returns null when there is nothing to preview.
  */
@@ -412,67 +471,33 @@ export const previewPillPayload = (): {
   pruned: number;
   slot: MicSlot;
   slotLabel: string;
+  kind: MicDetectionKind;
 } | null => {
-  const mode = micMode();
   const PREVIEW_LIMIT = 6;
   const notesBuf = micPreviewNotes();
   const transBuf = micTransients();
 
-  if (mode === 'transient') {
-    if (transBuf.length === 0) return null;
-    const short = { kick: 'bd', snare: 'sd', hat: 'hh', click: 'cp' } as const;
-    const firstNames = transBuf.slice(0, PREVIEW_LIMIT).map((t) => `✦ ${short[t.type]}`);
-    return {
-      count: transBuf.length,
-      firstNames,
-      overflow: Math.max(0, transBuf.length - PREVIEW_LIMIT),
-      pruned: 0,
-      slot: micSlot(),
-      slotLabel: micSlotLabel(micSlot()),
-    };
-  }
+  if (notesBuf.length === 0 && transBuf.length === 0) return null;
 
-  if (mode === 'auto') {
-    // Concatenate notes + transients, capped at PREVIEW_LIMIT, each
-    // prefixed with a kind marker (♪ for sustain, ✦ for diff) so the
-    // user can tell which pipeline fired.
-    const short = { kick: 'bd', snare: 'sd', hat: 'hh', click: 'cp' } as const;
-    const noteStrings = notesBuf.map((n) => {
-      const cls = ((n.midi % 12) + 12) % 12;
-      const oct = Math.floor(n.midi / 12) - 1;
-      const names = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
-      return `♪ ${names[cls]}${oct}`;
-    });
-    const transStrings = transBuf.map((t) => `✦ ${short[t.type]}`);
-    const merged = [...noteStrings, ...transStrings];
-    if (merged.length === 0) return null;
-    const firstNames = merged.slice(0, PREVIEW_LIMIT);
-    const totalCount = notesBuf.length + transBuf.length;
-    return {
-      count: totalCount,
-      firstNames,
-      overflow: Math.max(0, merged.length - PREVIEW_LIMIT),
-      pruned: micPrunedCount(),
-      slot: micSlot(),
-      slotLabel: micSlotLabel(micSlot()),
-    };
-  }
-
-  // sustain (default)
-  if (notesBuf.length === 0) return null;
-  const firstNames = notesBuf.slice(0, PREVIEW_LIMIT).map((n) => {
+  const short = { kick: 'bd', snare: 'sd', hat: 'hh', click: 'cp' } as const;
+  const noteStrings = notesBuf.map((n) => {
     const cls = ((n.midi % 12) + 12) % 12;
     const oct = Math.floor(n.midi / 12) - 1;
     const names = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
-    return `${names[cls]}${oct}`;
+    return `♪ ${names[cls]}${oct}`;
   });
+  const transStrings = transBuf.map((t) => `✦ ${short[t.type]}`);
+  const merged = [...noteStrings, ...transStrings];
+  const firstNames = merged.slice(0, PREVIEW_LIMIT);
+  const totalCount = notesBuf.length + transBuf.length;
   return {
-    count: notesBuf.length,
+    count: totalCount,
     firstNames,
-    overflow: Math.max(0, notesBuf.length - PREVIEW_LIMIT),
+    overflow: Math.max(0, merged.length - PREVIEW_LIMIT),
     pruned: micPrunedCount(),
     slot: micSlot(),
     slotLabel: micSlotLabel(micSlot()),
+    kind: micDetectionActive(),
   };
 };
 

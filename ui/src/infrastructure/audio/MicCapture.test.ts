@@ -25,6 +25,8 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
  *   - MediaStream track stop on stop()
  *   - Cleanup ordering: raf cancelled before worker terminated
  *   - isMicSupported reflects the globalThis AudioContext/getUserMedia
+ *   - onMeter fires per-tick with rolling-peak RMS
+ *   - The transient pipeline always runs (no mode toggle)
  */
 
 type StubWorker = {
@@ -60,6 +62,7 @@ type StubAnalyser = {
 type StubAudioContext = {
   sampleRate: number;
   state: string;
+  currentTime: number;
   createMediaStreamSource: ReturnType<typeof vi.fn>;
   createAnalyser: ReturnType<typeof vi.fn>;
   close: ReturnType<typeof vi.fn>;
@@ -73,9 +76,16 @@ const stubAnalyser: StubAnalyser = {
   frequencyBinCount: 1024,
   context: undefined as unknown as StubAudioContext,
 };
+// Incrementing clock so each RAF tick sees a monotonically
+// advancing `audioCtx.currentTime`. Without this the meter peak
+// window would never advance and the peak-RMS test would be
+// deterministic but unhelpful. The advance is 16ms per call
+// (~60Hz RAF); tests can override as needed.
+let mockCurrentTimeMs = 0;
 const stubAudioContext: StubAudioContext = {
   sampleRate: 48000,
   state: 'running',
+  get currentTime(): number { return mockCurrentTimeMs / 1000; },
   createMediaStreamSource: vi.fn(() => ({ connect: vi.fn() })),
   createAnalyser: vi.fn(() => stubAnalyser),
   close: vi.fn().mockResolvedValue(undefined),
@@ -96,6 +106,10 @@ const installStubs = (): void => {
   (globalThis as unknown as { requestAnimationFrame: typeof requestAnimationFrame }).requestAnimationFrame = (
     cb: FrameRequestCallback,
   ): number => {
+    // Advance the fake audio clock before invoking the callback so
+    // each tick observes a fresh `audioCtx.currentTime` (which the
+    // meter / worker-post path reads for `timestampMs`).
+    mockCurrentTimeMs += 16;
     return setTimeout(() => cb(performance.now()), 0) as unknown as number;
   };
   (globalThis as unknown as { cancelAnimationFrame: typeof cancelAnimationFrame }).cancelAnimationFrame = (
@@ -114,6 +128,7 @@ const installStubs = (): void => {
 import {
   startMicDetector,
   isMicSupported,
+  type MeterFrame,
   type MicCaptureState,
 } from './MicCapture';
 
@@ -143,6 +158,7 @@ describe('MicCapture', () => {
     stubAnalyser.fftSize = 0;
     stubMediaStreamTrack.stop.mockClear();
     stubAudioContext.close.mockClear();
+    mockCurrentTimeMs = 0;
     installStubs();
   });
 
@@ -312,63 +328,128 @@ describe('MicCapture', () => {
     await handle.stop();
   });
 
-  it("mode='auto' spawns the MPM worker AND reads freq data for transients", async () => {
+  it('always spawns the MPM worker AND reads freq data for transients (no mode toggle)', async () => {
+    // The new API has no `mode` knob: the MPM worker is configured
+    // and the in-process transient pipeline runs on every tick. We
+    // exercise both with the default start (no `mode` field).
     const handle = startMicDetector({
-      mode: 'auto',
       onFrame: () => {},
       onTransient: () => {},
     });
-    // Wait for streaming; the worker.configure and the analyser setup
-    // must have happened.
     await waitFor(() => stubWorker.postMessage.mock.calls.length > 0);
     const configureCall = stubWorker.postMessage.mock.calls.find(
       (c) => (c[0] as { type?: string }).type === 'configure',
     );
     expect(configureCall).toBeDefined();
-    // And at least one 'sample' frame should have been queued.
+    // At least one 'sample' frame should have been posted.
     const sampleCall = stubWorker.postMessage.mock.calls.find(
       (c) => (c[0] as { type?: string }).type === 'sample',
     );
     expect(sampleCall).toBeDefined();
-    // And the analyser.getByteFrequencyData should have been called
-    // (auto runs the in-thread transient pipeline on the same read).
+    // And the analyser's freq-domain read for transients.
     await waitFor(() => stubAnalyser.getByteFrequencyData.mock.calls.length > 0);
     expect(stubAnalyser.getByteFrequencyData).toHaveBeenCalled();
     await handle.stop();
   });
 
-  it("mode='auto' surfaces worker frames via onFrame callback", async () => {
-    const frames: { hz: number | null }[] = [];
+  it('onMeter fires once per RAF tick with rms + peak + hz + timestampMs', async () => {
+    const meters: MeterFrame[] = [];
     const handle = startMicDetector({
-      mode: 'auto',
-      onFrame: (f) => frames.push(f),
-      onTransient: () => {},
+      onFrame: () => {},
+      onMeter: (m) => meters.push(m),
     });
-    await waitFor(() => stubWorker.onmessage !== null);
-    stubWorker.onmessage!(
-      new MessageEvent('message', {
-        data: { type: 'frame', hz: 440, clarity: 0.95, rms: 0.3, timestampMs: 1000 },
-      }),
-    );
-    expect(frames).toHaveLength(1);
-    expect(frames[0]?.hz).toBe(440);
+    // Wait for at least 3 ticks to accumulate on the meter.
+    await waitFor(() => meters.length >= 3);
+    expect(meters.length).toBeGreaterThanOrEqual(3);
+    for (const m of meters) {
+      expect(typeof m.rms).toBe('number');
+      expect(m.rms).toBeGreaterThanOrEqual(0);
+      expect(typeof m.peak).toBe('number');
+      expect(m.peak).toBeGreaterThanOrEqual(m.rms - 1e-9);
+      expect(m.peak).toBeLessThanOrEqual(1);
+      // hz is null until a worker frame arrives; tolerate either.
+      if (m.hz !== null) {
+        expect(typeof m.hz).toBe('number');
+      }
+      expect(typeof m.timestampMs).toBe('number');
+    }
     await handle.stop();
   });
 
-  it("mode='transient' does NOT spawn the MPM worker", async () => {
-    const handle = startMicDetector({
-      mode: 'transient',
-      onTransient: () => {},
+  it('onMeter computes peak as rolling-max RMS over the trailing 200ms window', async () => {
+    // Hand-feed a sequence of RMS values that grows then shrinks; the
+    // peak reported by onMeter should equal the max within the last
+    // 200ms window, not the latest frame's RMS.
+    let bufIdx = 0;
+    const fakeRmsByFrame: number[] = [];
+    stubAnalyser.getFloatTimeDomainData.mockImplementation((buf: Float32Array): void => {
+      const v = fakeRmsByFrame[bufIdx] ?? 0;
+      // Fill the buffer with a constant magnitude so RMS == v.
+      for (let i = 0; i < buf.length; i += 1) buf[i] = v;
+      bufIdx += 1;
     });
-    // Wait for streaming phase to be entered (state setter fires).
-    await waitFor(() =>
-      stubAnalyser.getByteFrequencyData.mock.calls.length > 0,
-    );
-    // No 'configure' message should have been posted (no worker).
-    const configureCall = stubWorker.postMessage.mock.calls.find(
-      (c) => (c[0] as { type?: string }).type === 'configure',
-    );
-    expect(configureCall).toBeUndefined();
+    // Sequence: ramp up over 10 frames then drop to near-zero. At 16ms
+    // per RAF tick, 13 ticks ≈ 208ms — a fresh peak window at the end.
+    fakeRmsByFrame.push(0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.001, 0.001, 0.001);
+
+    const meters: MeterFrame[] = [];
+    const handle = startMicDetector({
+      onFrame: () => {},
+      onMeter: (m) => meters.push(m),
+    });
+    await waitFor(() => meters.length >= 13);
+
+    // Find the meter frame where the loud hit (rms=1.0) was reported.
+    const loudIdx = meters.findIndex((m) => m.rms >= 0.99);
+    expect(loudIdx).toBeGreaterThanOrEqual(0);
+    // And the meter frame at the end (after the drop) — its peak
+    // should still remember the loud hit if it's within the 200ms
+    // window, OR equal the latest RMS if the hit fell off the window.
+    const last = meters[meters.length - 1]!;
+    if (last.timestampMs - meters[loudIdx]!.timestampMs <= 200) {
+      // Hit still in window → peak ≥ 0.99.
+      expect(last.peak).toBeGreaterThanOrEqual(0.99);
+    } else {
+      // Hit aged out → peak == latest rms (≈ 0.001).
+      expect(last.peak).toBeLessThan(0.05);
+    }
     await handle.stop();
+  });
+
+  it('onMeter carries the latest worker-reported hz', async () => {
+    const meters: MeterFrame[] = [];
+    const handle = startMicDetector({
+      onFrame: () => {},
+      onMeter: (m) => meters.push(m),
+    });
+    await waitFor(() => meters.length >= 1);
+    // Before any worker frame, hz should be null.
+    expect(meters[0]?.hz).toBeNull();
+    await waitFor(() => stubWorker.onmessage !== null);
+    stubWorker.onmessage!(
+      new MessageEvent('message', {
+        data: { type: 'frame', hz: 523.25, clarity: 0.99, rms: 0.5, timestampMs: 5000 },
+      }),
+    );
+    // After the worker reports a pitch, subsequent meter ticks
+    // surface that hz.
+    await waitFor(() => meters.some((m) => m.hz !== null));
+    const withHz = meters.filter((m) => m.hz === 523.25);
+    expect(withHz.length).toBeGreaterThanOrEqual(1);
+    await handle.stop();
+  });
+
+  it('stop() clears the meter peak buffer (no leak across restarts)', async () => {
+    const meters: MeterFrame[] = [];
+    const handle = startMicDetector({
+      onFrame: () => {},
+      onMeter: (m) => meters.push(m),
+    });
+    await waitFor(() => meters.length >= 1);
+    await handle.stop();
+    // After stop(), no more meter frames should arrive.
+    const countAtStop = meters.length;
+    await new Promise((r) => setTimeout(r, 50));
+    expect(meters.length).toBe(countAtStop);
   });
 });

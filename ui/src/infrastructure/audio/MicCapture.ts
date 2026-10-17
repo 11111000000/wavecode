@@ -12,9 +12,17 @@ import YinWorker from './yinDetector.worker?worker';
  *   3. spawn a dedicated Worker (`yinDetector.worker.ts`)
  *   4. RAF loop: each frame grabs the latest time-domain data via
  *      `getFloatTimeDomainData`, posts it to the Worker (Transferable),
- *      receives a YIN frame, and forwards it to the caller.
- *   5. lifetime: stop() tears down tracks, our AnalyserNode, MediaStreamSource,
- *      worker, raf, and the AudioContext WE created.
+ *      receives a YIN frame, AND in parallel feeds the same read into
+ *      the in-process transient detector. Both pipelines run every
+ *      tick — no user-facing "mode" toggle.
+ *   5. Fires three callbacks as new events surface:
+ *      - `onFrame`     — every worker frame (pitch detected or null)
+ *      - `onTransient` — each new onset the transient pipeline emits
+ *      - `onMeter`     — every RAF tick with {rms, peak, hz, ts},
+ *                        used by the UI for the live RMS meter +
+ *                        onset spike markers
+ *   6. lifetime: stop() tears down tracks, our AnalyserNode,
+ *      MediaStreamSource, worker, raf, and the AudioContext WE created.
  *
  * What's NOT here:
  *   - Note segmentation (lives in `domain/audio/micCapture.ts`)
@@ -59,27 +67,40 @@ import YinWorker from './yinDetector.worker?worker';
  *     because the gesture is the mic permission prompt (not Play).
  *
  * Returned handle is single-use: start() once, stop() once.
+ *
+ * Pipeline-mode history
+ * ---------------------
+ * Earlier versions exposed a `mode: 'sustain' | 'transient' | 'auto'`
+ * knob on `MicStartOptions` so users could pick which pipeline ran.
+ * The `auto` mode ran both in parallel, which is what every user
+ * actually wanted — picking sustain-only or transient-only required
+ * understanding the difference between pitch detection and onset
+ * detection, which is the wrong mental model for a singer / tapper.
+ * `mode` has been deleted from the API; both pipelines ALWAYS run.
  */
 
-export type MicMode = 'sustain' | 'transient' | 'auto';
+export type MeterFrame = {
+  /** Instantaneous RMS at the latest frame, 0..1. Computed in main
+   *  thread from `getFloatTimeDomainData` (same algorithm as the
+   *  worker uses, see `yinDetector.worker.ts`). */
+  readonly rms: number;
+  /** Maximum RMS observed in the trailing ~200ms. Computed from the
+   *  per-frame RMS ring buffer; used by the UI for the meter
+   *  sparkline so a single quiet frame between two loud hits doesn't
+   *  collapse the bar. */
+  readonly peak: number;
+  /** Latest detected pitch (Hz) from the worker, or null if the
+   *  current frame has no clear pitch. */
+  readonly hz: number | null;
+  /** `audioCtx.currentTime * 1000` at the tick that produced this
+   *  meter reading; same epoch the worker frames use. */
+  readonly timestampMs: number;
+};
 
 export type MicStartOptions = {
-  /**
-   * Which pipeline runs in the RAF tick.
-   *   - 'sustain'   (default) — MPM worker, emits via `onFrame`. Best
-   *                  for voice / whistle / violin.
-   *   - 'transient' — in-thread onset detector, emits via `onTransient`.
-   *                  Does NOT spawn the MPM worker (saves 5-10ms/frame).
-   *                  Best for drums / claps / clicks.
-   *   - 'auto'      — runs BOTH pipelines in parallel from the same
-   *                  AnalyserNode. A frame where a pitched kick fires
-   *                  surfaces BOTH via `onFrame` (sustain side) AND
-   *                  `onTransient` (percussion side) in the same tick.
-   *                  The caller decides how to render / apply them.
-   */
-  readonly mode?: MicMode;
   readonly onFrame?: (frame: PitchFrame) => void;
   readonly onTransient?: (transient: Transient) => void;
+  readonly onMeter?: (frame: MeterFrame) => void;
   readonly onStateChange?: (state: MicCaptureState) => void;
   readonly onError?: (err: Error) => void;
   readonly fftSize?: number;          // default 2048
@@ -102,6 +123,10 @@ export type MicCaptureHandle = {
 
 const DEFAULT_FFT_SIZE = 2048;
 const DEFAULT_CLARITY_THRESHOLD = 0.9;
+/** Rolling window for `peak` in `MeterFrame`. 200ms is short enough
+ *  that a sustained note's max tracks the note's envelope, not some
+ *  historical sound from minutes back. */
+const METER_PEAK_WINDOW_MS = 200;
 
 const isMicCaptureSupported = (): boolean =>
   typeof navigator !== 'undefined'
@@ -131,8 +156,8 @@ const requestMic = async (
   } catch (err) {
     if (err instanceof Error && err.message === 'mic-permission-timeout') {
       throw new Error(
-        'Browser mic permission prompt не ответил за 5 секунд — ' +
-          'проверьте, не заблокирован ли prompt браузером.',
+        'Browser mic permission prompt не ответил за 5 секунд — '
+          + 'проверьте, не заблокирован ли prompt браузером.',
       );
     }
     throw err instanceof Error ? err : new Error(String(err));
@@ -142,6 +167,19 @@ const requestMic = async (
 const mkWorker = (): Worker => {
   const w = new YinWorker();
   return w as unknown as Worker;
+};
+
+/** In-thread RMS — same shape as the worker's computeRms but operates
+ *  on the main-thread copy of `getFloatTimeDomainData`. Cheap
+ *  (~2048 mults per frame, ~0.1ms on a laptop) and avoids waiting
+ *  for the worker's async reply to surface in `onMeter`. */
+const computeRms = (buf: Float32Array): number => {
+  let sum = 0;
+  for (let i = 0; i < buf.length; i += 1) {
+    const sample = buf[i] ?? 0;
+    sum += sample * sample;
+  }
+  return Math.sqrt(sum / buf.length);
 };
 
 export const startMicDetector = (
@@ -166,10 +204,19 @@ export const startMicDetector = (
   // Track our own MediaStreamSource so we can disconnect it
   // independently in stop() (the AnalyserNode is per-call too).
   let mediaSource: MediaStreamAudioSourceNode | null = null;
+  // Latest hz the worker reported — refreshed on every onFrame
+  // message. Read by the tick() when firing onMeter so the meter
+  // callback knows whether the current audio frame is pitched.
+  let latestHz: number | null = null;
+  // Per-tick RMS samples for the trailing 200ms peak window.
+  // We append one entry per tick, then prune anything older than
+  // `sampleTs - METER_PEAK_WINDOW_MS` and reduce-max over what's
+  // left. A bounded array is fine here: at 60Hz RAF the window holds
+  // ~12 entries, never more.
+  const recentRms: Array<{ rms: number; timestampMs: number }> = [];
 
   const fftSize = opts.fftSize ?? DEFAULT_FFT_SIZE;
   const clarityThreshold = opts.clarityThreshold ?? DEFAULT_CLARITY_THRESHOLD;
-  const mode: MicMode = opts.mode ?? 'sustain';
   const audioConstraints: MediaStreamConstraints = {
     audio: {
       echoCancellation: false,
@@ -223,6 +270,8 @@ export const startMicDetector = (
       }
       audioCtx = null;
     }
+    recentRms.length = 0;
+    latestHz = null;
     setState('idle');
   };
 
@@ -258,41 +307,41 @@ export const startMicDetector = (
       mediaSource = src;
       src.connect(node);
 
-      if (mode === 'sustain' || mode === 'auto') {
-        // Both 'sustain' and 'auto' need the MPM worker for pitch
-        // detection. 'auto' additionally runs the transient pipeline
-        // in-thread (see the tick function below); both run on the
-        // same AnalyserNode reads.
-        worker = mkWorker();
-        worker.onmessage = (ev: MessageEvent): void => {
-          const data = ev.data as {
-            type?: string;
-            hz?: number | null;
-            clarity?: number;
-            rms?: number;
-            timestampMs?: number;
-            message?: string;
-          };
-          if (data.type === 'frame') {
-            opts.onFrame?.({
-              hz: typeof data.hz === 'number' ? data.hz : null,
-              clarity: typeof data.clarity === 'number' ? data.clarity : 0,
-              rms: typeof data.rms === 'number' ? data.rms : 0,
-              timestampMs: typeof data.timestampMs === 'number'
-                ? data.timestampMs
-                : performance.now(),
-            });
-          } else if (data.type === 'error') {
-            opts.onError?.(new Error(`mic-worker: ${data.message ?? 'unknown'}`));
-          }
+      // Always spawn the MPM worker — pitch detection is cheap
+      // (~5-10ms/frame in a worker, off the main thread) and the
+      // user model is "sing into the mic and notes appear; tap
+      // into the mic and onsets appear", with both visible at
+      // once. There is no longer a user-facing mode toggle.
+      worker = mkWorker();
+      worker.onmessage = (ev: MessageEvent): void => {
+        const data = ev.data as {
+          type?: string;
+          hz?: number | null;
+          clarity?: number;
+          rms?: number;
+          timestampMs?: number;
+          message?: string;
         };
-        worker.postMessage({
-          type: 'configure',
-          fftSize,
-          sampleRate: ctx.sampleRate,
-          clarityThreshold,
-        });
-      }
+        if (data.type === 'frame') {
+          latestHz = typeof data.hz === 'number' ? data.hz : null;
+          opts.onFrame?.({
+            hz: latestHz,
+            clarity: typeof data.clarity === 'number' ? data.clarity : 0,
+            rms: typeof data.rms === 'number' ? data.rms : 0,
+            timestampMs: typeof data.timestampMs === 'number'
+              ? data.timestampMs
+              : performance.now(),
+          });
+        } else if (data.type === 'error') {
+          opts.onError?.(new Error(`mic-worker: ${data.message ?? 'unknown'}`));
+        }
+      };
+      worker.postMessage({
+        type: 'configure',
+        fftSize,
+        sampleRate: ctx.sampleRate,
+        clarityThreshold,
+      });
       setState('streaming');
 
       const sendBuf = new Float32Array(fftSize);
@@ -304,29 +353,12 @@ export const startMicDetector = (
         analyser.getFloatTimeDomainData(sendBuf);
         const sampleTs = audioCtx.currentTime * 1000;
 
-        if (mode === 'transient') {
-          // Pure percussive: no MPM worker — feed time + freq straight
-          // into the in-process transient detector.
-          analyser.getByteFrequencyData(freqBuf);
-          const frame: TransientFrame = {
-            timeDomain: sendBuf,
-            freqDomain: freqBuf,
-            sampleRate,
-            timestampMs: sampleTs,
-          };
-          const next = feedTransient(transientState, frame);
-          // If a new onset was detected, surface it.
-          if (next.transients.length > transientState.transients.length) {
-            const newest = next.transients[next.transients.length - 1]!;
-            opts.onTransient?.(newest);
-          }
-          transientState = next;
-        } else {
-          // 'sustain' AND 'auto' both run the MPM worker. In 'auto'
-          // we ALSO run the in-thread transient detector on the same
-          // AnalyserNode read, so both callbacks may fire on the same
-          // tick (e.g. a pitched kick drum).
-          if (worker === null) return;
+        // MPM worker — post the same time-domain buffer the
+        // transient pipeline reads. The worker replies asynchronously
+        // via onmessage above; both pipelines see the same audio
+        // tick, so a pitched kick drum surfaces as BOTH a `frame`
+        // and a `transient` in the same wall-clock window.
+        if (worker !== null) {
           const buf = new Float32Array(sendBuf);
           try {
             worker.postMessage({
@@ -344,22 +376,45 @@ export const startMicDetector = (
               timestampMs: sampleTs,
             }, [fresh.buffer]);
           }
-          if (mode === 'auto') {
-            analyser.getByteFrequencyData(freqBuf);
-            const frame: TransientFrame = {
-              timeDomain: sendBuf,
-              freqDomain: freqBuf,
-              sampleRate,
-              timestampMs: sampleTs,
-            };
-            const next = feedTransient(transientState, frame);
-            if (next.transients.length > transientState.transients.length) {
-              const newest = next.transients[next.transients.length - 1]!;
-              opts.onTransient?.(newest);
-            }
-            transientState = next;
-          }
         }
+
+        // In-thread transient detector — same AnalyserNode read.
+        analyser.getByteFrequencyData(freqBuf);
+        const transientFrame: TransientFrame = {
+          timeDomain: sendBuf,
+          freqDomain: freqBuf,
+          sampleRate,
+          timestampMs: sampleTs,
+        };
+        const next = feedTransient(transientState, transientFrame);
+        if (next.transients.length > transientState.transients.length) {
+          const newest = next.transients[next.transients.length - 1]!;
+          opts.onTransient?.(newest);
+        }
+        transientState = next;
+
+        // Live meter: rolling-peak RMS + latest hz, fired every tick
+        // so the UI can render the bar even when no pitch / onset is
+        // detected (silent frames keep the meter at zero).
+        if (opts.onMeter !== undefined) {
+          const rmsNow = computeRms(sendBuf);
+          recentRms.push({ rms: rmsNow, timestampMs: sampleTs });
+          const cutoff = sampleTs - METER_PEAK_WINDOW_MS;
+          while (recentRms.length > 0 && recentRms[0]!.timestampMs < cutoff) {
+            recentRms.shift();
+          }
+          let peak = rmsNow;
+          for (const entry of recentRms) {
+            if (entry.rms > peak) peak = entry.rms;
+          }
+          opts.onMeter({
+            rms: rmsNow,
+            peak,
+            hz: latestHz,
+            timestampMs: sampleTs,
+          });
+        }
+
         rafId = requestAnimationFrame(tick);
       };
       rafId = requestAnimationFrame(tick);
