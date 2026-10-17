@@ -43,6 +43,9 @@ export type AudioNote = {
   readonly cents: number;
   readonly startMs: number;
   readonly durationMs: number;
+  /** Stddev of cents across the held note's frames (rounded).
+   *  0 = straight tone; >30 = noticeable vibrato. */
+  readonly vibratoCents: number;
 };
 
 export type MicTune = {
@@ -63,6 +66,10 @@ export type MicTune = {
    * chopped into fragments by brief amplitude dips. Default 100 ms.
    */
   readonly noteMergeWindowMs: number;
+  /** Sliding window for stored notes (ms). Notes older than
+   *  `nowMs - windowMs` are pruned on each feed call so long sessions
+   *  don't OOM. Default 30_000. */
+  readonly windowMs: number;
 };
 
 /**
@@ -75,6 +82,8 @@ export type MicTune = {
  *  - noteVarianceCents 80 (was 50) — natural vocal vibrato is wider
  *    than 50 cents; the tighter window was splitting single notes.
  *  - noteMergeWindowMs 100 — see field comment.
+ *  - windowMs 30000 — 30-second sliding buffer for stored notes; a
+ *    5-minute violin performance doesn't accumulate notes indefinitely.
  */
 export const DEFAULT_TUNE: MicTune = {
   silenceGate: 0.012,
@@ -84,6 +93,7 @@ export const DEFAULT_TUNE: MicTune = {
   minNoteMs: 80,
   noteVarianceCents: 80,
   noteMergeWindowMs: 100,
+  windowMs: 30_000,
 };
 
 export type OpenNote = {
@@ -91,6 +101,8 @@ export type OpenNote = {
   readonly startMs: number;
   readonly centsSum: number;
   readonly centsN: number;
+  /** Sum of (cents^2) across accumulated frames — for stddev. */
+  readonly centsSqSum: number;
 };
 
 export type MicState = {
@@ -98,12 +110,15 @@ export type MicState = {
   readonly notes: ReadonlyArray<AudioNote>;
   /** ms timestamp of the most recently closed note (used for merge). */
   readonly lastClosedMs: number | null;
+  /** Total notes that fell out the sliding window since `feed` started. */
+  readonly notesPrunedCount: number;
 };
 
 export const initialMicState = (): MicState => ({
   openNote: null,
   notes: [],
   lastClosedMs: null,
+  notesPrunedCount: 0,
 });
 
 export const hzToMidi = (hz: number): { readonly midi: number; readonly cents: number } => {
@@ -121,6 +136,69 @@ const frameIsPitch = (f: PitchFrame, t: MicTune): boolean =>
   && f.hz >= t.minHz
   && f.hz <= t.maxHz;
 
+/** Stddev of cents across the accumulated open note. Returns 0 unless
+ *  stddev exceeds the 30-cent audibility threshold — the snippet
+ *  generator's `.vib(N)` only makes sense for clearly audible wobble.
+ *  N<2 → 0. */
+const computeVibratoCents = (
+  centsSum: number,
+  centsSqSum: number,
+  centsN: number,
+): number => {
+  if (centsN < 2) return 0;
+  const mean = centsSum / centsN;
+  const variance = centsSqSum / centsN - mean * mean;
+  if (variance <= 0) return 0;
+  const stddev = Math.sqrt(variance);
+  return stddev > 30 ? Math.round(stddev) : 0;
+};
+
+/** Drop notes whose startMs is older than `nowMs - windowMs`. Also
+ *  drop the open note if it started more than windowMs ago. Increments
+ *  `notesPrunedCount` for each dropped closed note; the open-note drop
+ *  does NOT count (it's an open note, not a stored note). Returns the
+ *  same state object when nothing was changed. */
+const pruneState = (
+  state: MicState,
+  nowMs: number,
+  windowMs: number,
+): MicState => {
+  const cutoff = nowMs - windowMs;
+  let pruned = 0;
+  const kept: AudioNote[] = [];
+  for (const n of state.notes) {
+    if (n.startMs >= cutoff) {
+      kept.push(n);
+    } else {
+      pruned += 1;
+    }
+  }
+
+  const lastOrigStartMs = state.notes.length > 0
+    ? state.notes[state.notes.length - 1]!.startMs
+    : null;
+  const lastKeptStartMs = kept.length > 0
+    ? kept[kept.length - 1]!.startMs
+    : null;
+  const lastNotePruned = lastKeptStartMs !== lastOrigStartMs;
+  const lastClosedMs = lastNotePruned ? null : state.lastClosedMs;
+
+  const openNoteTooOld = state.openNote !== null
+    && nowMs - state.openNote.startMs > windowMs;
+  const openNote = openNoteTooOld ? null : state.openNote;
+
+  if (pruned === 0 && openNote === state.openNote && lastClosedMs === state.lastClosedMs) {
+    return state;
+  }
+  return {
+    ...state,
+    notes: kept,
+    openNote,
+    lastClosedMs,
+    notesPrunedCount: state.notesPrunedCount + pruned,
+  };
+};
+
 /**
  * Append-style state transition. Returns a NEW MicState (we never
  * mutate the input — keeps `feed()` pure for tests + replay).
@@ -135,6 +213,9 @@ const frameIsPitch = (f: PitchFrame, t: MicTune): boolean =>
  *   4. Pitched frame, has open note →
  *      a. same midi as open (within noteVarianceCents) → extend
  *      b. different midi → close old, open new.
+ *
+ * After every transition, prune notes older than `nowMs - windowMs`
+ * so a long performance doesn't accumulate an unbounded buffer.
  */
 export const feed = (
   state: MicState,
@@ -145,32 +226,46 @@ export const feed = (
   const hasPitch = frame.rms >= tune.silenceGate && frameIsPitch(frame, tune);
 
   if (!hasPitch) {
-    if (state.openNote === null) return state;
-    const durationMs = nowMs - state.openNote.startMs;
-    if (durationMs < tune.minNoteMs) {
-      return {
-        openNote: null,
-        notes: state.notes,
-        lastClosedMs: nowMs,
-      };
+    let next: MicState;
+    if (state.openNote === null) {
+      next = state;
+    } else {
+      const durationMs = nowMs - state.openNote.startMs;
+      if (durationMs < tune.minNoteMs) {
+        next = {
+          openNote: null,
+          notes: state.notes,
+          lastClosedMs: nowMs,
+          notesPrunedCount: state.notesPrunedCount,
+        };
+      } else {
+        const vib = computeVibratoCents(
+          state.openNote.centsSum,
+          state.openNote.centsSqSum,
+          state.openNote.centsN,
+        );
+        next = {
+          openNote: null,
+          notes: [
+            ...state.notes,
+            {
+              midi: state.openNote.midi,
+              cents: Math.round(state.openNote.centsSum / state.openNote.centsN),
+              startMs: state.openNote.startMs,
+              durationMs,
+              vibratoCents: vib,
+            },
+          ],
+          lastClosedMs: nowMs,
+          notesPrunedCount: state.notesPrunedCount,
+        };
+      }
     }
-    const centsAvg = Math.round(state.openNote.centsSum / state.openNote.centsN);
-    return {
-      openNote: null,
-      notes: [
-        ...state.notes,
-        {
-          midi: state.openNote.midi,
-          cents: centsAvg,
-          startMs: state.openNote.startMs,
-          durationMs,
-        },
-      ],
-      lastClosedMs: nowMs,
-    };
+    return pruneState(next, nowMs, tune.windowMs);
   }
 
   const { midi, cents } = hzToMidi(frame.hz!);
+  const centsSq = cents * cents;
 
   // Case 2: same-MIDI merge after brief silence.
   // We POP the last note from `state.notes` and re-open it starting
@@ -186,61 +281,74 @@ export const feed = (
   ) {
     const last = state.notes[state.notes.length - 1]!;
     if (last.midi === midi) {
-      return {
+      return pruneState({
         openNote: {
           midi: last.midi,
           startMs: last.startMs,
           centsSum: last.cents + cents,
+          centsSqSum: last.cents * last.cents + centsSq,
           centsN: 2,
         },
         notes: state.notes.slice(0, -1),  // POP — the silence path re-appends on close
         lastClosedMs: null,
-      };
+        notesPrunedCount: state.notesPrunedCount,
+      }, nowMs, tune.windowMs);
     }
   }
 
+  let next: MicState;
   if (state.openNote === null) {
-    return {
-      openNote: { midi, startMs: nowMs, centsSum: cents, centsN: 1 },
+    next = {
+      openNote: { midi, startMs: nowMs, centsSum: cents, centsSqSum: centsSq, centsN: 1 },
       notes: state.notes,
       lastClosedMs: null,
+      notesPrunedCount: state.notesPrunedCount,
     };
+  } else {
+    const openMidi = state.openNote.midi;
+    const driftCents = Math.abs(midi - openMidi) * 100;
+    if (driftCents <= tune.noteVarianceCents) {
+      next = {
+        openNote: {
+          midi: openMidi,
+          startMs: state.openNote.startMs,
+          centsSum: state.openNote.centsSum + cents,
+          centsSqSum: state.openNote.centsSqSum + centsSq,
+          centsN: state.openNote.centsN + 1,
+        },
+        notes: state.notes,
+        lastClosedMs: null,
+        notesPrunedCount: state.notesPrunedCount,
+      };
+    } else {
+      const durationMs = nowMs - state.openNote.startMs;
+      const carriedNotes: ReadonlyArray<AudioNote> =
+        durationMs >= tune.minNoteMs
+          ? [
+              ...state.notes,
+              {
+                midi: openMidi,
+                cents: Math.round(state.openNote.centsSum / state.openNote.centsN),
+                startMs: state.openNote.startMs,
+                durationMs,
+                vibratoCents: computeVibratoCents(
+                  state.openNote.centsSum,
+                  state.openNote.centsSqSum,
+                  state.openNote.centsN,
+                ),
+              },
+            ]
+          : state.notes;
+
+      next = {
+        openNote: { midi, startMs: nowMs, centsSum: cents, centsSqSum: centsSq, centsN: 1 },
+        notes: carriedNotes,
+        lastClosedMs: null,
+        notesPrunedCount: state.notesPrunedCount,
+      };
+    }
   }
-
-  const openMidi = state.openNote.midi;
-  const driftCents = Math.abs(midi - openMidi) * 100;
-  if (driftCents <= tune.noteVarianceCents) {
-    return {
-      openNote: {
-        midi: openMidi,
-        startMs: state.openNote.startMs,
-        centsSum: state.openNote.centsSum + cents,
-        centsN: state.openNote.centsN + 1,
-      },
-      notes: state.notes,
-      lastClosedMs: null,
-    };
-  }
-
-  const durationMs = nowMs - state.openNote.startMs;
-  const carriedNotes: ReadonlyArray<AudioNote> =
-    durationMs >= tune.minNoteMs
-      ? [
-          ...state.notes,
-          {
-            midi: openMidi,
-            cents: Math.round(state.openNote.centsSum / state.openNote.centsN),
-            startMs: state.openNote.startMs,
-            durationMs,
-          },
-        ]
-      : state.notes;
-
-  return {
-    openNote: { midi, startMs: nowMs, centsSum: cents, centsN: 1 },
-    notes: carriedNotes,
-    lastClosedMs: null,
-  };
+  return pruneState(next, nowMs, tune.windowMs);
 };
 
 /** Force-close any open note. Used by `MicPanel` "freeze" button
@@ -249,28 +357,42 @@ export const closeOpenNote = (
   state: MicState,
   nowMs: number,
   minNoteMs: number = DEFAULT_TUNE.minNoteMs,
+  windowMs: number = DEFAULT_TUNE.windowMs,
 ): MicState => {
+  let next: MicState;
   if (state.openNote === null) {
-    return { ...state, lastClosedMs: state.notes.length > 0 ? nowMs : state.lastClosedMs };
+    next = {
+      ...state,
+      lastClosedMs: state.notes.length > 0 ? nowMs : state.lastClosedMs,
+    };
+  } else {
+    const durationMs = nowMs - state.openNote.startMs;
+    if (durationMs < minNoteMs) {
+      next = { openNote: null, notes: state.notes, lastClosedMs: nowMs, notesPrunedCount: state.notesPrunedCount };
+    } else {
+      const vib = computeVibratoCents(
+        state.openNote.centsSum,
+        state.openNote.centsSqSum,
+        state.openNote.centsN,
+      );
+      next = {
+        openNote: null,
+        notes: [
+          ...state.notes,
+          {
+            midi: state.openNote.midi,
+            cents: Math.round(state.openNote.centsSum / state.openNote.centsN),
+            startMs: state.openNote.startMs,
+            durationMs,
+            vibratoCents: vib,
+          },
+        ],
+        lastClosedMs: nowMs,
+        notesPrunedCount: state.notesPrunedCount,
+      };
+    }
   }
-  const durationMs = nowMs - state.openNote.startMs;
-  if (durationMs < minNoteMs) {
-    return { openNote: null, notes: state.notes, lastClosedMs: nowMs };
-  }
-  const centsAvg = Math.round(state.openNote.centsSum / state.openNote.centsN);
-  return {
-    openNote: null,
-    notes: [
-      ...state.notes,
-      {
-        midi: state.openNote.midi,
-        cents: centsAvg,
-        startMs: state.openNote.startMs,
-        durationMs,
-      },
-    ],
-    lastClosedMs: nowMs,
-  };
+  return pruneState(next, nowMs, windowMs);
 };
 
 export type MicSnippetOptions = {
@@ -299,6 +421,11 @@ export type MicSnippetOptions = {
  * If all notes are equal length AND the total duration is small, we
  * fall back to the no-`@` form (looks cleaner in the editor).
  *
+ * Vibrato: if any note carries `vibratoCents > 30`, we wrap the
+ * pattern with `.vib(N)` where N = max(vibratoCents)/10 (rounded,
+ * clamped to ≥1). Covers vocal + violin vibrato; straight tones emit
+ * nothing extra.
+ *
  * Cents offset is intentionally dropped — Strudel snippets don't carry
  * micro-tuning, and average-cents over a sustained tone is mostly breath noise.
  */
@@ -321,6 +448,12 @@ export const notesToSnippet = (
       Math.max(0.01, (n.durationMs || 0) / 1000).toFixed(3),
     );
     inner = `note("${names.map((n, i) => `${n}@${seconds[i]}`).join(' ')}").s("${instrument}")`;
+  }
+
+  const maxVib = notes.reduce((acc, n) => Math.max(acc, n.vibratoCents), 0);
+  if (maxVib > 30) {
+    const depth = Math.max(1, Math.round(maxVib / 10));
+    inner = `${inner}.vib(${depth})`;
   }
 
   const slow = opts.slowFactor;

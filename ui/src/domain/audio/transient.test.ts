@@ -38,6 +38,15 @@ const noise = (n: number = FRAME_SIZE, amp: number = 0.1): Float32Array => {
   return out;
 };
 
+/** Helper for crafting Transient literals with sensible defaults. */
+const note = (type: Transient['type'], startMs: number, envelopeMs: number = 0): Transient => ({
+  type,
+  startMs,
+  amplitude: 0.3,
+  spectralCentroidHz: 0,
+  envelopeMs,
+});
+
 /** Build a frame with a flat freq-domain (centroid near sampleRate/4). */
 const flatFreq = (n: number = 1024, value: number = 100): Uint8Array => {
   const out = new Uint8Array(n);
@@ -183,13 +192,6 @@ describe('feedTransient — onset detection', () => {
 });
 
 describe('transientsToSnippet', () => {
-  const note = (type: Transient['type'], startMs: number): Transient => ({
-    type,
-    startMs,
-    amplitude: 0.3,
-    spectralCentroidHz: 0,
-  });
-
   it('null on empty', () => {
     expect(transientsToSnippet([])).toBeNull();
   });
@@ -263,5 +265,153 @@ describe('DEFAULT_TUNE — sane defaults for acoustic percussion', () => {
   });
   it('refractory window ≥ 30ms prevents double-firing on a single beat', () => {
     expect(DEFAULT_TRANSIENT_TUNE.minTransMs).toBeGreaterThanOrEqual(30);
+  });
+});
+
+describe('feedTransient — envelope (decay time) measurement', () => {
+  // Uses 30ms-spaced frames so envelope timing is unambiguous.
+  const FRAME_STEP_MS = 30;
+
+  it('short hit (loud then silent in one frame) → envelopeMs < 80', () => {
+    let s = initialTransientState();
+    // Silence baseline so the first loud frame has measurable flux.
+    s = feedTransient(s, frame({ time: new Float32Array(FRAME_SIZE), t: 0 }));
+    // Loud kick — onset fires. RMS ≈ 0.5 → peak.
+    s = feedTransient(s, frame({ time: sine(80, FRAME_SIZE, 0.5), freq: peakedFreq(80), t: FRAME_STEP_MS }));
+    // Next frame: silence. RMS ≈ 0 < 0.37 * 0.5 → decay detected.
+    s = feedTransient(s, frame({ time: new Float32Array(FRAME_SIZE), t: FRAME_STEP_MS * 2 }));
+    expect(s.transients).toHaveLength(1);
+    expect(s.transients[0]!.envelopeMs).toBeGreaterThan(0);
+    expect(s.transients[0]!.envelopeMs).toBeLessThan(80);
+  });
+
+  it('long hit (sustained ~250ms then silent) → envelopeMs > 150', () => {
+    let s = initialTransientState();
+    s = feedTransient(s, frame({ time: new Float32Array(FRAME_SIZE), t: 0 }));
+    // Onset at t=30
+    s = feedTransient(s, frame({ time: sine(80, FRAME_SIZE, 0.5), freq: peakedFreq(80), t: 30 }));
+    // Sustained at same RMS for ~250ms
+    for (let t = 60; t <= 270; t += FRAME_STEP_MS) {
+      s = feedTransient(s, frame({ time: sine(80, FRAME_SIZE, 0.5), freq: peakedFreq(80), t }));
+    }
+    // Drop to silence at t=300 → RMS=0 < 0.37*peak → envelope finalized.
+    s = feedTransient(s, frame({ time: new Float32Array(FRAME_SIZE), t: 300 }));
+    expect(s.transients).toHaveLength(1);
+    expect(s.transients[0]!.envelopeMs).toBeGreaterThan(150);
+    expect(s.transients[0]!.envelopeMs).toBeLessThanOrEqual(1000);
+  });
+
+  it('multi-frame decay path: RMS at half peak still tracks (only 1/e finishes it)', () => {
+    let s = initialTransientState();
+    s = feedTransient(s, frame({ time: new Float32Array(FRAME_SIZE), t: 0 }));
+    s = feedTransient(s, frame({ time: sine(80, FRAME_SIZE, 0.5), freq: peakedFreq(80), t: 30 }));
+    // Frame at t=60 with RMS ≈ 0.25 (half of peak 0.5). 0.25 > 0.185
+    // (0.37*peak) → still tracking, not yet finalised.
+    s = feedTransient(s, frame({ time: sine(80, FRAME_SIZE, 0.25), freq: peakedFreq(80), t: 60 }));
+    expect(s.transients[0]!.envelopeMs).toBe(0);
+  });
+
+  it('cap at ENVELOPE_MAX_MS (1000) when decay never observed and a new onset fires', () => {
+    let s = initialTransientState();
+    s = feedTransient(s, frame({ time: new Float32Array(FRAME_SIZE), t: 0 }));
+    s = feedTransient(s, frame({ time: sine(80, FRAME_SIZE, 0.5), freq: peakedFreq(80), t: 30 }));
+    // Sustain the same RMS for ~1.2s — envelope is never dropped because
+    // RMS stays above the 1/e threshold.
+    for (let t = 60; t < 1200; t += 30) {
+      s = feedTransient(s, frame({ time: sine(80, FRAME_SIZE, 0.5), freq: peakedFreq(80), t }));
+    }
+    // Drop to silence — RMS=0 < 0.37*peak → decay finalized at t=1200.
+    // envelopeMs = min(1000, 1200-30) = 1000.
+    s = feedTransient(s, frame({ time: new Float32Array(FRAME_SIZE), t: 1200 }));
+    // After silence, the next loud frame fires a fresh onset.
+    s = feedTransient(s, frame({ time: sine(80, FRAME_SIZE, 0.5), freq: peakedFreq(80), t: 1230 }));
+    expect(s.transients).toHaveLength(2);
+    expect(s.transients[0]!.envelopeMs).toBeLessThanOrEqual(1000);
+    expect(s.transients[0]!.envelopeMs).toBeGreaterThan(0);
+    // Second envelope is fresh.
+    expect(s.transients[1]!.envelopeMs).toBe(0);
+  });
+
+  it('new onset fires before the previous envelope completes → previous envelope closes at nowMs', () => {
+    let s = initialTransientState();
+    s = feedTransient(s, frame({ time: new Float32Array(FRAME_SIZE), t: 0 }));
+    s = feedTransient(s, frame({ time: sine(80, FRAME_SIZE, 0.5), freq: peakedFreq(80), t: 30 }));
+    // Sustain at same RMS (no decay) for the refractory window.
+    s = feedTransient(s, frame({ time: sine(80, FRAME_SIZE, 0.5), freq: peakedFreq(80), t: 60 }));
+    // Now force a much louder frame (amp=2.0 → RMS≈1.4) for a +12dB flux
+    // — bigger than the 6dB onset threshold, fires new onset.
+    s = feedTransient(s, frame({ time: sine(80, FRAME_SIZE, 2.0), freq: peakedFreq(80), t: 90 }));
+    expect(s.transients).toHaveLength(2);
+    // First transient's envelope closes at min(1000, 90-30) = 60ms.
+    expect(s.transients[0]!.envelopeMs).toBe(60);
+    expect(s.transients[1]!.envelopeMs).toBe(0);
+  });
+
+  it('Transient type includes envelopeMs (default value of envelopeMs field is wired through)', () => {
+    const t: Transient = {
+      type: 'kick',
+      startMs: 0,
+      amplitude: 0.5,
+      spectralCentroidHz: 100,
+      envelopeMs: 42,
+    };
+    expect(t.envelopeMs).toBe(42);
+  });
+});
+
+describe('transientsToSnippet — envelope-aware .decay wrapper', () => {
+  it('emits .decay(N) wrapper when envelopeMs > 0 (short envelope, single-type)', () => {
+    // 50ms envelope → N = 50/1000 = 0.050 → "0.050"
+    // Same step-quantisation as the existing single-type test:
+    //   cycleMs=950, 16 steps, kicks at 0/250/500/750 → stepIdx 0/4/8/12.
+    const out = transientsToSnippet([
+      note('kick', 0, 50),
+      note('kick', 250, 50),
+      note('kick', 500, 50),
+      note('kick', 750, 50),
+    ]);
+    expect(out).toBe(
+      's("drums_bd ~ ~ ~ drums_bd ~ ~ ~ drums_bd ~ ~ ~ drums_bd ~ ~ ~").decay(0.050)',
+    );
+  });
+
+  it('emits .decay(N) on stack() output when envelopeMs > 0', () => {
+    // max envelopeMs = 100 → N = 0.100
+    // The .decay() wraps the WHOLE stack (one outer application), not
+    // each layer — matches how the snippet would be eval'd in Strudel.
+    const out = transientsToSnippet([
+      note('kick', 0, 80),
+      note('snare', 250, 100),
+      note('kick', 500, 80),
+      note('snare', 750, 100),
+    ]);
+    expect(out).toBe(
+      'stack(\n' +
+      '  s("drums_bd ~ ~ ~ ~ ~ ~ ~ drums_bd ~ ~ ~ ~ ~ ~ ~"),\n' +
+      '  s("~ ~ ~ ~ drums_sd ~ ~ ~ ~ ~ ~ ~ drums_sd ~ ~ ~")\n).decay(0.100)',
+    );
+  });
+
+  it('omits .decay wrapper when envelopeMs is 0 (uninitialized / never measured)', () => {
+    const out = transientsToSnippet([
+      note('kick', 0),
+      note('kick', 250),
+      note('kick', 500),
+      note('kick', 750),
+    ]);
+    expect(out).toBe('s("drums_bd ~ ~ ~ drums_bd ~ ~ ~ drums_bd ~ ~ ~ drums_bd ~ ~ ~")');
+  });
+
+  it('uses max(envelopeMs) for the .decay() value', () => {
+    // max envelope = 250ms → N = 0.250
+    const out = transientsToSnippet([
+      note('kick', 0, 100),
+      note('kick', 250, 250),
+      note('kick', 500, 50),
+      note('kick', 750, 75),
+    ]);
+    expect(out).toBe(
+      's("drums_bd ~ ~ ~ drums_bd ~ ~ ~ drums_bd ~ ~ ~ drums_bd ~ ~ ~").decay(0.250)',
+    );
   });
 });

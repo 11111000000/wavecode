@@ -256,11 +256,12 @@ describe('closeOpenNote()', () => {
 });
 
 describe('notesToSnippet()', () => {
-  const note = (midi: number, t: number, durationMs: number = 200): AudioNote => ({
+  const note = (midi: number, t: number, durationMs: number = 200, vibratoCents: number = 0): AudioNote => ({
     midi,
     cents: 0,
     startMs: t,
     durationMs,
+    vibratoCents,
   });
 
   it('null on empty', () => {
@@ -269,9 +270,9 @@ describe('notesToSnippet()', () => {
 
   it('produces a single-voice note pattern (no duration info)', () => {
     expect(notesToSnippet([
-      { midi: 60, cents: 0, startMs: 0, durationMs: 0 },
-      { midi: 64, cents: 0, startMs: 0, durationMs: 0 },
-      { midi: 67, cents: 0, startMs: 0, durationMs: 0 },
+      { midi: 60, cents: 0, startMs: 0, durationMs: 0, vibratoCents: 0 },
+      { midi: 64, cents: 0, startMs: 0, durationMs: 0, vibratoCents: 0 },
+      { midi: 67, cents: 0, startMs: 0, durationMs: 0, vibratoCents: 0 },
     ]))
       .toBe('note("c4 e4 g4").s("piano")');
   });
@@ -279,9 +280,9 @@ describe('notesToSnippet()', () => {
   it('emits @<seconds> per note when durationMs is set (preserves melody timing)', () => {
     // 400ms, 600ms, 200ms — relative ratios 0.33 : 0.5 : 0.17
     expect(notesToSnippet([
-      { midi: 60, cents: 0, startMs: 0, durationMs: 400 },
-      { midi: 64, cents: 0, startMs: 0, durationMs: 600 },
-      { midi: 67, cents: 0, startMs: 0, durationMs: 200 },
+      { midi: 60, cents: 0, startMs: 0, durationMs: 400, vibratoCents: 0 },
+      { midi: 64, cents: 0, startMs: 0, durationMs: 600, vibratoCents: 0 },
+      { midi: 67, cents: 0, startMs: 0, durationMs: 200, vibratoCents: 0 },
     ]))
       .toBe('note("c4@0.400 e4@0.600 g4@0.200").s("piano")');
   });
@@ -313,15 +314,216 @@ describe('notesToSnippet()', () => {
     // length). Avoids spurious `@0` in code where timing was never
     // captured (e.g. imported from a save format without timing).
     expect(notesToSnippet([
-      { midi: 60, cents: 0, startMs: 0, durationMs: 0 },
-      { midi: 64, cents: 0, startMs: 0, durationMs: 0 },
+      { midi: 60, cents: 0, startMs: 0, durationMs: 0, vibratoCents: 0 },
+      { midi: 64, cents: 0, startMs: 0, durationMs: 0, vibratoCents: 0 },
     ])).toBe('note("c4 e4").s("piano")');
   });
 
   it('emits @<seconds> when at least one note has durationMs (mixed bag handled)', () => {
     expect(notesToSnippet([
-      { midi: 60, cents: 0, startMs: 0, durationMs: 0 },
-      { midi: 64, cents: 0, startMs: 0, durationMs: 500 },
+      { midi: 60, cents: 0, startMs: 0, durationMs: 0, vibratoCents: 0 },
+      { midi: 64, cents: 0, startMs: 0, durationMs: 500, vibratoCents: 0 },
     ])).toBe('note("c4@0.010 e4@0.500").s("piano")');
+  });
+
+  it('emits .vib(N) wrapper when a note has vibratoCents > 30', () => {
+    expect(notesToSnippet([
+      note(60, 0, 400, 50),
+    ])).toBe('note("c4@0.400").s("piano").vib(5)');
+  });
+
+  it('omits .vib wrapper when vibratoCents <= 30', () => {
+    expect(notesToSnippet([
+      note(60, 0, 400, 0),
+      note(64, 200, 200, 25),
+    ])).toBe('note("c4@0.400 e4@0.200").s("piano")');
+  });
+
+  it('uses max(vibratoCents) across all notes for the .vib() depth', () => {
+    expect(notesToSnippet([
+      note(60, 0, 400, 35),
+      note(64, 200, 200, 80),
+    ])).toBe('note("c4@0.400 e4@0.200").s("piano").vib(8)');
+  });
+
+  it('emits .vib(3) when vibratoCents is just above the 30-cent threshold', () => {
+    expect(notesToSnippet([
+      note(60, 0, 400, 31),
+    ])).toBe('note("c4@0.400").s("piano").vib(3)');
+  });
+});
+
+describe('feed() — vibrato tracking (vibratoCents on closed note)', () => {
+  it('straight tone has vibratoCents = 0', () => {
+    let s: MicState = initialMicState();
+    s = feed(s, frame(440, { t: 0, rms: 0.2 }));
+    s = feed(s, frame(440, { t: 50, rms: 0.2 }));
+    s = feed(s, frame(440, { t: 100, rms: 0.2 }));
+    s = feed(s, frame(440, { t: 150, rms: 0.2 }));
+    s = feed(s, frame(null, { t: 200, rms: 0.001 }));
+    expect(s.notes).toHaveLength(1);
+    expect(s.notes[0]?.vibratoCents).toBe(0);
+  });
+
+  it('wobbly pitch (oscillating ±45 cents within A4) produces vibratoCents > 30', () => {
+    // Pre-compute the two Hz values:
+    //   cents -45 within A4 (midiRound=69): midiFloat = 68.55
+    //     hz = 440 * 2^(-0.45/12) ≈ 428.55
+    //   cents +45 within A4 (midiRound=69): midiFloat = 69.45
+    //     hz = 440 * 2^(0.45/12)  ≈ 451.60
+    // Both round to midi=69, drift ≤ noteVarianceCents=80, so they
+    // extend the open note. Stddev of cents ≈ 45 → vibratoCents > 30.
+    const wobbleLow = 440 * Math.pow(2, -45 / 1200);
+    const wobbleHigh = 440 * Math.pow(2, 45 / 1200);
+    let s: MicState = initialMicState();
+    for (let t = 0; t < 200; t += 50) {
+      s = feed(s, frame(t % 100 === 0 ? wobbleLow : wobbleHigh, { t, rms: 0.2 }));
+    }
+    s = feed(s, frame(null, { t: 250, rms: 0.001 }));
+    expect(s.notes).toHaveLength(1);
+    expect(s.notes[0]?.vibratoCents).toBeGreaterThan(30);
+  });
+
+  it('small wobble (±10 cents) does NOT cross the 30-cent vibrato threshold', () => {
+    const wobbleLow = 440 * Math.pow(2, -10 / 1200);
+    const wobbleHigh = 440 * Math.pow(2, 10 / 1200);
+    let s: MicState = initialMicState();
+    for (let t = 0; t < 200; t += 50) {
+      s = feed(s, frame(t % 100 === 0 ? wobbleLow : wobbleHigh, { t, rms: 0.2 }));
+    }
+    s = feed(s, frame(null, { t: 250, rms: 0.001 }));
+    expect(s.notes).toHaveLength(1);
+    expect(s.notes[0]?.vibratoCents).toBe(0);
+  });
+
+  it('closeOpenNote computes vibratoCents from the open note accumulated stats', () => {
+    const wobbleLow = 440 * Math.pow(2, -45 / 1200);
+    const wobbleHigh = 440 * Math.pow(2, 45 / 1200);
+    let s: MicState = initialMicState();
+    for (let t = 0; t < 200; t += 50) {
+      s = feed(s, frame(t % 100 === 0 ? wobbleLow : wobbleHigh, { t, rms: 0.2 }));
+    }
+    // Force-close at t=250 instead of waiting for silence.
+    s = closeOpenNote(s, 250);
+    expect(s.notes).toHaveLength(1);
+    expect(s.notes[0]?.vibratoCents).toBeGreaterThan(30);
+  });
+});
+
+describe('feed() — long-form buffer cap (sliding window)', () => {
+  // Tests in this block disable the merge path (noteMergeWindowMs=0)
+  // so each fed note exists as a discrete closed entry — the merge
+  // complicates assertions about the sliding window.
+  const noMergeTune = (windowMs: number): MicTune => ({
+    ...DEFAULT_TUNE,
+    windowMs,
+    noteMergeWindowMs: 0,
+  });
+
+  it('prunes notes older than windowMs and bumps notesPrunedCount', () => {
+    // windowMs is large during phase 1 so nothing prunes while the
+    // user "performs". Phase 2 jumps far enough to cut phase-1 out.
+    const tune = noMergeTune(2000);
+    let s: MicState = initialMicState();
+    const noteFrames = (t: number): void => {
+      s = feed(s, frame(440, { t, rms: 0.2 }), tune);
+      s = feed(s, frame(null, { t: t + 100, rms: 0.001 }), tune);
+    };
+    noteFrames(0);
+    noteFrames(400);
+    noteFrames(800);
+    noteFrames(1200);
+
+    expect(s.notes).toHaveLength(4);
+    expect(s.notesPrunedCount).toBe(0);
+
+    // Phase 2: at t=4100, cutoff=4100-2000=2100 → all phase-1 notes
+    // (startMs 0..1200) get pruned. The phase-2 note survives.
+    s = feed(s, frame(440, { t: 4000, rms: 0.2 }), tune);
+    s = feed(s, frame(null, { t: 4100, rms: 0.001 }), tune);
+
+    expect(s.notes).toHaveLength(1);
+    expect(s.notes[0]?.startMs).toBe(4000);
+    expect(s.notesPrunedCount).toBe(4);
+  });
+
+  it('keeps only notes whose startMs >= cutoff', () => {
+    // Use a large window so phase 1 doesn't prune anything, then a
+    // silence frame at a tighter windowMs to test exact boundary.
+    const bigTune = noMergeTune(100_000);
+    let s: MicState = initialMicState();
+    const nf = (t: number): void => {
+      s = feed(s, frame(440, { t, rms: 0.2 }), bigTune);
+      s = feed(s, frame(null, { t: t + 80, rms: 0.001 }), bigTune);
+    };
+    nf(0);
+    nf(100);
+    nf(200);
+    nf(300);
+    expect(s.notes).toHaveLength(4);
+    expect(s.notesPrunedCount).toBe(0);
+
+    // Silence at t=380 with windowMs=150 → cutoff=230.
+    // Drop startMs < 230 → n0 (0), n1 (100), n2 (200) pruned.
+    // Keep n3 (300).
+    s = feed(s, frame(null, { t: 380, rms: 0.001 }), {
+      ...bigTune,
+      windowMs: 150,
+    });
+    expect(s.notes).toHaveLength(1);
+    expect(s.notes[0]?.startMs).toBe(300);
+    expect(s.notesPrunedCount).toBe(3);
+  });
+
+  it('drops an open note whose startMs is older than windowMs', () => {
+    const tune = noMergeTune(200);
+    let s: MicState = initialMicState();
+    // Open a note at t=0 and sustain it (case 4a extends — startMs
+    // remains 0 across frames). Once the call's nowMs exceeds
+    // windowMs past the startMs, prune drops the open note.
+    s = feed(s, frame(440, { t: 0, rms: 0.2 }), tune);
+    s = feed(s, frame(440, { t: 100, rms: 0.2 }), tune);
+    expect(s.openNote).not.toBeNull();
+    s = feed(s, frame(440, { t: 250, rms: 0.2 }), tune);
+    // 250 - 0 = 250 > 200 → pruneState nulls the open note.
+    expect(s.openNote).toBeNull();
+    // The drop is literal — no closed-note emitted for it.
+    expect(s.notes).toHaveLength(0);
+    expect(s.notesPrunedCount).toBe(0);
+  });
+
+  it('does not count open-note drops in notesPrunedCount', () => {
+    const tune = noMergeTune(100);
+    let s: MicState = initialMicState();
+    s = feed(s, frame(440, { t: 0, rms: 0.2 }), tune);
+    expect(s.notesPrunedCount).toBe(0);
+    // Sustain past the window — extend keeps openNote alive in the
+    // segmenter step, but prune drops it. notesPrunedCount stays 0
+    // (open-note drops don't count).
+    s = feed(s, frame(440, { t: 200, rms: 0.2 }), tune);
+    expect(s.openNote).toBeNull();
+    expect(s.notesPrunedCount).toBe(0);
+    // A subsequent new note shouldn't carry over any drop count either.
+    s = feed(s, frame(660, { t: 300, rms: 0.2 }), tune);
+    expect(s.openNote).not.toBeNull();
+    expect(s.notesPrunedCount).toBe(0);
+  });
+
+  it('resets lastClosedMs when the last note was pruned', () => {
+    const tune = noMergeTune(200);
+    let s: MicState = initialMicState();
+    s = feed(s, frame(440, { t: 0, rms: 0.2 }), tune);
+    s = feed(s, frame(null, { t: 100, rms: 0.001 }), tune);
+    expect(s.lastClosedMs).toBe(100);
+    expect(s.notes).toHaveLength(1);
+    // Jump far into the future — old note gets pruned.
+    s = feed(s, frame(440, { t: 1000, rms: 0.2 }), tune);
+    expect(s.notesPrunedCount).toBe(1);
+    expect(s.notes).toHaveLength(0);
+    expect(s.lastClosedMs).toBeNull();
+  });
+
+  it('default windowMs is 30_000ms', () => {
+    expect(DEFAULT_TUNE.windowMs).toBe(30_000);
   });
 });
