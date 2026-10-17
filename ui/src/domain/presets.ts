@@ -100,7 +100,7 @@ export const BUILTIN_PRESETS: ReadonlyArray<Preset> = [
     artist: 'House',
     score: [
       '// EDM house — build → drop → breakdown → drop2 (cat of 4 sections)',
-      'cat([',
+      'cat(',
       '  // ===== Section 1: BUILD — 4-on-floor с поднимающимся filter на lead =====',
       '  stack(',
       '    s("drums_bd*4").gain(0.45),',
@@ -144,7 +144,7 @@ export const BUILTIN_PRESETS: ReadonlyArray<Preset> = [
       '    // Crash downbeat',
       '    s("drums_crash ~ ~ ~ ~ ~ ~ ~").gain(0.30)',
       '  )',
-      '])',
+      ')',
     ].join('\n'),
   },
   {
@@ -155,7 +155,7 @@ export const BUILTIN_PRESETS: ReadonlyArray<Preset> = [
     artist: '90s NYC',
     score: [
       '// Hip-hop boom-bap — vinyl_intro → verse → hook → verse2 (cat of 4 sections)',
-      'cat([',
+      'cat(',
       '  // ===== Section 1: VINYL INTRO — только vinyl crackle + hi-hat =====',
       '  stack(',
       '    s("white*16").hpf(8000).gain(0.15).room(.3),',
@@ -192,7 +192,7 @@ export const BUILTIN_PRESETS: ReadonlyArray<Preset> = [
       '    // Тонкая echo-тональная петля вместо full lead',
       '    note("~ ~ ~ c5 ~ ~ ~ e5 ~ ~ ~ ~ a4").s("square").decay(.2).gain(0.08).room(.5)',
       '  )',
-      '])',
+      ')',
     ].join('\n'),
   },
   {
@@ -280,7 +280,7 @@ export const BUILTIN_PRESETS: ReadonlyArray<Preset> = [
     artist: 'Modern trap',
     score: [
       '// Trap Atlanta — build → drop → breakdown → drop2 (cat of 4 sections)',
-      'cat([',
+      'cat(',
       '  // ===== Section 1: BUILD (1 cycle) — sparse sub + hat buildup + sub bass =====',
       '  stack(',
       '    note("<a1 ~ ~ ~ ~ ~ ~ ~>").s("sine").lpf(80).decay(1.0).sustain(0).gain(0.45),',
@@ -322,7 +322,7 @@ export const BUILTIN_PRESETS: ReadonlyArray<Preset> = [
       '    // Crash на downbeat второй drop-секции',
       '    s("drums_crash ~ ~ ~ ~ ~ ~ ~").gain(0.35)',
       '  )',
-      '])',
+      ')',
     ].join('\n'),
   },
   {
