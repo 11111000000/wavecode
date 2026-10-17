@@ -5,11 +5,17 @@ import { LLMClient, type CompletionRequest, type CompletionChunk } from '~/domai
  * Live LLM client — raw fetch к llm.kosov.online (LiteLLM proxy, OpenAI-compatible).
  *
  * Models (через llm-proxy):
- *   - "smart" → deepseek/deepseek-v4-pro (reasoning ON, 1M ctx, quality).
- *   - "fast"  → deepseek/deepseek-flash (reasoning OFF через thinking=disabled,
- *               non-reasoning mode, ~1.2-1.5s TTFB).
+ *   - "smart" → MiniMax-M3 (reasoning ON, ~3-21s end-to-end).
+ *   - "fast"  → MiniMax-M2.1-highspeed (reasoning OFF через
+ *               thinking=disabled, non-reasoning mode, ~1.0-1.5s TTFB).
  *
- * LiteLLM может вернуть либо JSON, либо SSE. Парсим оба.
+ * Streaming: chat/completions called with `stream: true` returns
+ * Server-Sent Events. We parse each `data: {...}` line and emit a
+ * `CompletionChunk` per `delta.content` (or `delta.reasoning_content`).
+ * Chunks are pushed into the returned `ReadableStream` as soon as they
+ * arrive — no buffering until the full body is read. If the proxy
+ * ever returns a buffered JSON response (some LiteLLM builds do),
+ * we fall back to the legacy JSON path and synthesize one big chunk.
  */
 
 type Model = 'smart' | 'fast';
@@ -43,7 +49,7 @@ const make = (deps: LiveLLMClientDeps): Context.Tag.Service<typeof LLMClient> =>
       const requestBody: Record<string, unknown> = {
         model: modelName,
         messages,
-        stream: false,
+        stream: true,
         temperature: 0.3,
         max_tokens: 2000,
       };
@@ -60,7 +66,7 @@ const make = (deps: LiveLLMClientDeps): Context.Tag.Service<typeof LLMClient> =>
         requestBody.extra_body = { thinking: { type: 'disabled' } };
       }
 
-      console.log('[llm] → request', {
+      console.log('[llm] → request (stream)', {
         model: modelName,
         messages: messages.length,
         reasoning_effort: includeReasoning ? reasoningEffort : '(off)',
@@ -94,91 +100,204 @@ const make = (deps: LiveLLMClientDeps): Context.Tag.Service<typeof LLMClient> =>
         return yield* Effect.fail(new Error(errMsg));
       }
 
+      // Read the first byte of the response to detect SSE-vs-JSON shape.
+      // LiteLLM with `stream: true` returns `text/event-stream`; with
+      // `stream: false` returns `application/json`. Some deployments
+      // ignore `stream` and return JSON either way — we sniff the first
+      // chunk's leading character ('{' → JSON, 'd' → SSE) and route.
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
-      let buffer = '';
-      let done = false;
-      while (!done) {
-        const chunk = yield* Effect.tryPromise(() => reader.read());
-        if (chunk.done) {
-          done = true;
-          break;
-        }
-        if (chunk.value) {
-          buffer += decoder.decode(chunk.value, { stream: true });
-        }
+      const { value: firstChunk } = yield* Effect.tryPromise(() => reader.read());
+      if (!firstChunk) {
+        return yield* Effect.fail(new Error('LLM stream produced no bytes'));
       }
-      buffer += decoder.decode();
-
-      console.log('[llm] ← response', {
-        status: response.status,
-        bodyLength: buffer.length,
-        bodyPreview: buffer.slice(0, 200),
-      });
-
-      if (!buffer.trim()) {
-        const errMsg = 'LLM returned empty body (no chunks)';
-        console.error('[llm] ✗', errMsg);
-        return yield* Effect.fail(new Error(errMsg));
+      const head = decoder.decode(firstChunk, { stream: false });
+      const trimmedHead = head.trimStart();
+      if (trimmedHead.startsWith('{')) {
+        // Buffered JSON — fall back to legacy parse path.
+        let buffer = head;
+        while (true) {
+          const next = yield* Effect.tryPromise(() => reader.read());
+          if (next.done) break;
+          if (next.value) buffer += decoder.decode(next.value, { stream: true });
+        }
+        buffer += decoder.decode();
+        const fallback = synthesizeSingleChunkStream(buffer);
+        if (fallback instanceof Error) {
+          return yield* Effect.fail(fallback);
+        }
+        return fallback;
       }
 
-      let content = '';
-      let reasoningContent = '';
-      try {
-        const parsed = JSON.parse(buffer) as {
-          choices?: { message?: { content?: string; reasoning_content?: string } }[];
-          error?: { message?: string };
-        };
-        if (parsed.error) {
-          const errMsg = `LLM API error: ${parsed.error.message ?? JSON.stringify(parsed.error)}`;
-          console.error('[llm] ✗', errMsg);
-          return yield* Effect.fail(new Error(errMsg));
-        }
-        content = parsed.choices?.[0]?.message?.content ?? '';
-        reasoningContent = parsed.choices?.[0]?.message?.reasoning_content ?? '';
-      } catch {
-        const sseContent: string[] = [];
-        for (const line of buffer.split('\n')) {
-          const trimmed = line.trim();
-          if (!trimmed.startsWith('data:')) continue;
-          const data = trimmed.slice(5).trim();
-          if (data === '[DONE]' || !data) continue;
-          try {
-            const parsed = JSON.parse(data) as {
-              choices?: { delta?: { content?: string } }[];
-            };
-            const delta = parsed.choices?.[0]?.delta?.content;
-            if (delta) sseContent.push(delta);
-          } catch {
-            // skip malformed line
-          }
-        }
-        content = sseContent.join('');
-      }
-
-      console.log('[llm] ✓ content length:', content.length, 'reasoning length:', reasoningContent.length);
-
-      if (!content) {
-        // Reasoning may have eaten the budget. Surface reasoning_content
-        // length in the error so the operator can see this is a token-budget
-        // issue, not a wrong-model issue.
-        const hint = reasoningContent
-          ? ` (reasoning used ${reasoningContent.length} chars — likely max_tokens too low)`
-          : '';
-        return yield* Effect.fail(
-          new Error(`LLM returned empty content (parsed but no message body)${hint}`),
-        );
-      }
-
+      // SSE path — first chunk may already contain one or more lines.
+      // Wrap the remaining reader + carryover into a controller-driven
+      // ReadableStream that emits CompletionChunk per `delta`.
       const stream = new ReadableStream<CompletionChunk>({
         start(controller) {
-          controller.enqueue({ type: 'text', delta: content });
-          controller.close();
+          let buffer = head;
+          let closed = false;
+          const closeOnce = (): void => {
+            if (closed) return;
+            closed = true;
+            try {
+              controller.close();
+            } catch {
+              /* already closed */
+            }
+          };
+          const pump = async (): Promise<void> => {
+            try {
+              while (true) {
+                const next = await reader.read();
+                if (next.done) break;
+                if (next.value) buffer += decoder.decode(next.value, { stream: true });
+                let nlIdx = buffer.indexOf('\n');
+                while (nlIdx !== -1) {
+                  const line = buffer.slice(0, nlIdx).replace(/\r$/, '');
+                  buffer = buffer.slice(nlIdx + 1);
+                  consumeSseLine(line, controller);
+                  nlIdx = buffer.indexOf('\n');
+                }
+              }
+              buffer += decoder.decode();
+              if (buffer.trim()) {
+                consumeSseLine(buffer, controller);
+                buffer = '';
+              }
+              closeOnce();
+            } catch (err) {
+              try {
+                controller.error(err);
+              } catch {
+                /* already errored */
+              }
+            } finally {
+              try {
+                await reader.cancel();
+              } catch {
+                /* ignore */
+              }
+            }
+          };
+          // Kick off pump; do not await — ReadableStream `start` is sync.
+          void pump();
+        },
+        cancel() {
+          // Reader is cancelled by pump()'s finally; nothing else to do.
         },
       });
+
       return stream;
     }),
 });
+
+/**
+ * Dispatch one SSE line. Empty lines and non-`data:` prefixes are
+ * skipped (SSE protocol). `[DONE]` closes the stream (we close from
+ * the outer pump; just no-op here). Each `data: {...}` JSON object
+ * may carry `choices[].delta.content` (text) or
+ * `choices[].delta.reasoning_content` (reasoning trace).
+ *
+ * We do NOT enqueue reasoning content to the chunk stream — the
+ * `cleanLLMResponse` step in `applyEdit` strips it, and exposing it
+ * would confuse the UI transcript. Reasoning content is logged to
+ * the console for debugging.
+ */
+const consumeSseLine = (
+  line: string,
+  controller: ReadableStreamDefaultController<CompletionChunk>,
+): void => {
+  if (!line) return;
+  const trimmed = line.trim();
+  if (!trimmed.startsWith('data:')) return;
+  const payload = trimmed.slice(5).trim();
+  if (payload === '[DONE]') return;
+  let parsed: {
+    choices?: {
+      delta?: { content?: string; reasoning_content?: string };
+      finish_reason?: string | null;
+    }[];
+    error?: { message?: string };
+  };
+  try {
+    parsed = JSON.parse(payload) as typeof parsed;
+  } catch {
+    return;
+  }
+  if (parsed.error?.message) {
+    try {
+      controller.error(new Error(`LLM stream error: ${parsed.error.message}`));
+    } catch {
+      /* already errored */
+    }
+    return;
+  }
+  const choice = parsed.choices?.[0];
+  const delta = choice?.delta;
+  if (delta?.content) {
+    controller.enqueue({ type: 'text', delta: delta.content });
+  }
+  if (delta?.reasoning_content) {
+    console.log('[llm] … reasoning', delta?.reasoning_content.length, 'chars so far');
+  }
+};
+
+/**
+ * Fallback for non-streaming responses. Parses the buffered JSON
+ * (or stitched-together SSE) and synthesizes a single chunk stream
+ * containing the full message content. Returns an `Error` if the
+ * body cannot be parsed or the message is empty.
+ */
+const synthesizeSingleChunkStream = (
+  buffer: string,
+): ReadableStream<CompletionChunk> | Error => {
+  if (!buffer.trim()) {
+    return new Error('LLM returned empty body (no chunks)');
+  }
+  let content = '';
+  let reasoningContent = '';
+  try {
+    const parsed = JSON.parse(buffer) as {
+      choices?: { message?: { content?: string; reasoning_content?: string } }[];
+      error?: { message?: string };
+    };
+    if (parsed.error) {
+      return new Error(`LLM API error: ${parsed.error.message ?? JSON.stringify(parsed.error)}`);
+    }
+    content = parsed.choices?.[0]?.message?.content ?? '';
+    reasoningContent = parsed.choices?.[0]?.message?.reasoning_content ?? '';
+  } catch {
+    const sseContent: string[] = [];
+    for (const line of buffer.split('\n')) {
+      const trimmed = line.trim();
+      if (!trimmed.startsWith('data:')) continue;
+      const data = trimmed.slice(5).trim();
+      if (data === '[DONE]' || !data) continue;
+      try {
+        const parsed = JSON.parse(data) as {
+          choices?: { delta?: { content?: string } }[];
+        };
+        const delta = parsed.choices?.[0]?.delta?.content;
+        if (delta) sseContent.push(delta);
+      } catch {
+        // skip malformed line
+      }
+    }
+    content = sseContent.join('');
+  }
+  if (!content) {
+    const hint = reasoningContent
+      ? ` (reasoning used ${reasoningContent.length} chars — likely max_tokens too low)`
+      : '';
+    return new Error(`LLM returned empty content (parsed but no message body)${hint}`);
+  }
+  return new ReadableStream<CompletionChunk>({
+    start(controller) {
+      controller.enqueue({ type: 'text', delta: content });
+      controller.close();
+    },
+  });
+};
 
 /**
  * Translate an HTTP error response from LiteLLM into a single actionable
