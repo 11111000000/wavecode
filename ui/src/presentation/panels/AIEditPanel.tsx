@@ -1,10 +1,15 @@
-import { createSignal, Show, For, createEffect, onCleanup, createMemo } from 'solid-js';
+import { createSignal, Show, For, createEffect, onCleanup, createMemo, batch } from 'solid-js';
 import { Effect } from 'effect';
 import { dispatch, appStore } from '../state/appStore';
 import { AppLayer } from '~/infrastructure/composition';
 import { AudioEngine } from '~/domain/services';
 import { unlockAudioContext } from '~/infrastructure/audio/LiveAudioEngine';
-import { applyEdit, getLastRawLLMResponse, type DialogTurn } from '~/application/useCases/llmEdit';
+import {
+  applyEditStream,
+  getLastRawLLMResponse,
+  type DialogTurn,
+  type ApplyEditResult,
+} from '~/application/useCases/llmEdit';
 import { getLLMSettings } from '../state/llmSettings';
 import { LLMSettingsPopover } from '~/presentation/components/LLMSettingsPopover';
 import { logger } from '~/infrastructure/log';
@@ -22,7 +27,18 @@ import type { Role } from '~/domain/types';
  *   │  textarea + Применить        │
  *   │  + селекты модели/think      │
  *   └──────────────────────────────┘
- * При новом сообщении auto-scroll в конец.
+ *
+ * Streaming + self-heal:
+ *   - During streaming, a draft `assistant` message accumulates
+ *     tokens as they arrive from `onToken`. The status pill reads
+ *     "ИИ думает…" → "Применяю…".
+ *   - On completion, the draft is replaced by the final assistant
+ *     message (cleaned score). If `wasHealed` is true, the status
+ *     pill says "Готово (сам исправил)" — the user sees a hint that
+ *     the LLM's first attempt was broken and the self-heal retry
+ *     salvaged it.
+ *   - On hard failure (LLM error or self-heal budget exhausted),
+ *     the existing `lastFailed` + manual retry button stays.
  */
 
 const roleLabel = (role: Role): string => {
@@ -35,15 +51,32 @@ const roleLabel = (role: Role): string => {
 
 type FailedRequest = { readonly text: string };
 
+type Status =
+  | { kind: 'idle'; msg: string }
+  | { kind: 'streaming' }
+  | { kind: 'applying' }
+  | { kind: 'ok'; msg: string }
+  | { kind: 'err'; msg: string };
+
+/**
+ * A draft message that accumulates streaming tokens in the active
+ * preset's dialog. Once the final cleaned score arrives we replace
+ * this with the real assistant message in `appStore.dialogs`.
+ */
+type DraftAssistantMessage = {
+  readonly role: 'assistant';
+  readonly text: string;
+};
+
 export function AIEditPanel() {
   const [instruction, setInstruction] = createSignal('');
   const [busy, setBusy] = createSignal(false);
-  const [status, setStatus] = createSignal<{ kind: 'idle' | 'ok' | 'err'; msg: string }>({ kind: 'idle', msg: '' });
+  const [status, setStatus] = createSignal<Status>({ kind: 'idle', msg: '' });
   const [settings] = createSignal(getLLMSettings());
-  // Последний запрос, упавший с ошибкой. Нужен для кнопки «Попробовать
-  // исправить» — повторяет ровно тот же текст + текущие настройки модели/
-  // thinking. Очищается при успехе (новом или повторном).
   const [lastFailed, setLastFailed] = createSignal<FailedRequest | null>(null);
+  // Live-updated by `onToken` callbacks so the user sees the LLM's
+  // output appear as the model emits it. Cleared on success/failure.
+  const [draftAssistant, setDraftAssistant] = createSignal<DraftAssistantMessage | null>(null);
 
   let messagesRef: HTMLDivElement | undefined;
 
@@ -59,8 +92,11 @@ export function AIEditPanel() {
       return;
     }
     unlockAudioContext();
-    setBusy(true);
-    setStatus({ kind: 'idle', msg: 'Отправляю в ИИ…' });
+    batch(() => {
+      setBusy(true);
+      setStatus({ kind: 'streaming' });
+      setDraftAssistant({ role: 'assistant', text: '' });
+    });
 
     const hist = activeMessages().slice(-10).map((m): DialogTurn => ({
       role: m.role === 'user' ? 'user' : 'assistant',
@@ -68,16 +104,23 @@ export function AIEditPanel() {
     }));
     const currentSettings = settings();
 
-    let newScore: string;
+    let result: ApplyEditResult;
     try {
-      newScore = await Effect.runPromise(
+      result = await Effect.runPromise(
         Effect.gen(function* () {
-          return yield* applyEdit(
+          return yield* applyEditStream(
             appStore.score,
             text,
             hist,
             { status: appStore.audio.status, ...(appStore.audio.lastError ? { lastError: appStore.audio.lastError } : {}) },
             { model: currentSettings.model, thinking: currentSettings.thinking },
+            {
+              onToken: (delta) => {
+                setDraftAssistant((prev) =>
+                  prev ? { role: 'assistant', text: prev.text + delta } : prev,
+                );
+              },
+            },
           );
         }).pipe(Effect.provide(AppLayer)),
       );
@@ -88,13 +131,16 @@ export function AIEditPanel() {
         ['[AIEditPanel] LLM error:', msg, err],
         'AIEditPanel.submit',
       );
-      setStatus({ kind: 'err', msg: `LLM ошибка: ${msg}` });
-      setLastFailed({ text });
-      setBusy(false);
+      batch(() => {
+        setStatus({ kind: 'err', msg: `LLM ошибка: ${msg}` });
+        setLastFailed({ text });
+        setDraftAssistant(null);
+        setBusy(false);
+      });
       return;
     }
 
-    if (!newScore || !newScore.trim()) {
+    if (!result.score || !result.score.trim()) {
       const raw = getLastRawLLMResponse();
       logger.push(
         'warn',
@@ -102,35 +148,49 @@ export function AIEditPanel() {
         'AIEditPanel.submit',
       );
       const preview = raw.length > 200 ? `${raw.slice(0, 200)}…` : raw;
-      setStatus({
-        kind: 'err',
-        msg: raw
-          ? `ИИ вернул пустой ответ после очистки. Сырой: "${preview.replace(/\n/g, ' ')}"`
-          : 'ИИ вернул пустой ответ (нет данных от API)',
+      batch(() => {
+        setStatus({
+          kind: 'err',
+          msg: raw
+            ? `ИИ вернул пустой ответ после очистки. Сырой: "${preview.replace(/\n/g, ' ')}"`
+            : 'ИИ вернул пустой ответ (нет данных от API)',
+        });
+        setLastFailed({ text });
+        setDraftAssistant(null);
+        setBusy(false);
       });
-      setLastFailed({ text });
-      setBusy(false);
       return;
     }
 
-    dispatch({ type: 'replaceScore', text: newScore });
-    dispatch({ type: 'assistantMessage', text: newScore });
-    dispatch({ type: 'userMessage', text });
-    if (overrideText === undefined) {
-      // Retry: текст уже в textarea как instruction, не перезаписываем.
-      setInstruction('');
-    }
+    // Draft → final assistant message in the dialog thread.
+    batch(() => {
+      dispatch({ type: 'replaceScore', text: result.score });
+      dispatch({ type: 'assistantMessage', text: result.score });
+      dispatch({ type: 'userMessage', text });
+      setDraftAssistant(null);
+      if (overrideText === undefined) {
+        // Retry: текст уже в textarea как instruction, не перезаписываем.
+        setInstruction('');
+      }
+      setStatus({ kind: 'applying' });
+    });
 
     try {
       await Effect.runPromise(
         Effect.gen(function* () {
           const audio = yield* AudioEngine;
-          yield* audio.eval(newScore);
+          yield* audio.eval(result.score);
         }).pipe(Effect.provide(AppLayer)),
       );
       dispatch({ type: 'audioStatusChange', status: 'playing' });
-      setStatus({ kind: 'ok', msg: 'Применено и играет ✓' });
-      setLastFailed(null);
+      batch(() => {
+        setStatus({
+          kind: 'ok',
+          msg: result.wasHealed ? 'Готово (сам исправил) ✓' : 'Готово ✓',
+        });
+        setLastFailed(null);
+        setBusy(false);
+      });
     } catch (audioErr) {
       const msg = audioErr instanceof Error ? audioErr.message : String(audioErr);
       logger.push(
@@ -139,10 +199,11 @@ export function AIEditPanel() {
         'AIEditPanel.submit',
       );
       dispatch({ type: 'audioStatusChange', status: 'error', error: msg });
-      setStatus({ kind: 'err', msg: `ИИ ответил, но ошибка аудио: ${msg}` });
-      setLastFailed({ text });
-    } finally {
-      setBusy(false);
+      batch(() => {
+        setStatus({ kind: 'err', msg: `ИИ ответил, но ошибка аудио: ${msg}` });
+        setLastFailed({ text });
+        setBusy(false);
+      });
     }
   };
 
@@ -152,11 +213,10 @@ export function AIEditPanel() {
     void submit(f.text);
   };
 
-  
-
   createEffect(() => {
     // Следим за длиной истории: при изменении auto-scroll в конец.
     void activeMessages().length;
+    void draftAssistant()?.text.length;
     if (messagesRef) {
       messagesRef.scrollTop = messagesRef.scrollHeight;
     }
@@ -170,7 +230,7 @@ export function AIEditPanel() {
     <div class="ai-edit-panel-inner">
       <div class="ai-messages" ref={messagesRef}>
         <Show
-          when={activeMessages().length > 0}
+          when={activeMessages().length > 0 || draftAssistant()}
           fallback={
             <div class="ai-messages-empty">
               Здесь будет диалог с ИИ для выбранной композиции. Напиши инструкцию внизу — например:
@@ -186,12 +246,27 @@ export function AIEditPanel() {
               </div>
             )}
           </For>
+          {/* Draft message: rendered while the LLM is streaming tokens
+              and discarded on completion (replaced by the real
+              assistantMessage dispatched to appStore). */}
+          <Show when={draftAssistant()}>
+            {(draft) => (
+              <div class="ai-message ai-message-assistant ai-message-streaming">
+                <div class="ai-message-meta">
+                  ИИ<span class="ai-streaming-cursor">▍</span>
+                </div>
+                <div class="ai-message-body">{draft().text}</div>
+              </div>
+            )}
+          </Show>
         </Show>
       </div>
 
-      <Show when={status().msg}>
+      <Show when={status().kind !== 'idle'}>
         <div class="ai-status-row">
-          <div class={`ai-status ai-status-${status().kind}`}>{status().msg}</div>
+          <div class={`ai-status ai-status-${statusKind(status())}`}>
+            {statusMessage(status())}
+          </div>
           <Show when={status().kind === 'err' && lastFailed()}>
             <button
               type="button"
@@ -218,9 +293,6 @@ export function AIEditPanel() {
             const isTouchDevice =
               typeof window !== 'undefined' &&
               (('ontouchstart' in window) || (navigator.maxTouchPoints ?? 0) > 0);
-            // Mobile: Enter submits, Shift+Enter inserts newline (soft keyboards
-            // have no easy modifier-Enter path).
-            // Desktop: Ctrl/Cmd+Enter submits, plain Enter inserts newline.
             if (isTouchDevice) {
               if (e.shiftKey) return;
               if (e.isComposing) return;
@@ -255,11 +327,31 @@ export function AIEditPanel() {
             class="ai-apply-btn"
             onClick={() => void submit()}
             disabled={busy()}
+            data-ai-apply-btn
           >
-            {busy() ? '⏳ Применяю…' : '✦ Применить'}
+            {applyButtonLabel(status(), busy())}
           </button>
         </div>
       </div>
     </div>
   );
 }
+
+const statusKind = (s: Status): 'idle' | 'ok' | 'err' | 'streaming' | 'applying' => s.kind;
+
+const statusMessage = (s: Status): string => {
+  switch (s.kind) {
+    case 'idle': return s.msg;
+    case 'streaming': return 'ИИ думает…';
+    case 'applying': return 'Применяю…';
+    case 'ok': return s.msg;
+    case 'err': return s.msg;
+  }
+};
+
+const applyButtonLabel = (s: Status, busy: boolean): string => {
+  if (!busy) return '✦ Применить';
+  if (s.kind === 'streaming') return '⏳ Думаю…';
+  if (s.kind === 'applying') return '⏳ Применяю…';
+  return '⏳ …';
+};

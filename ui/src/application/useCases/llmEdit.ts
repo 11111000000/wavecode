@@ -1,5 +1,6 @@
-import { Effect } from 'effect';
+import { Effect, type Context } from 'effect';
 import { LLMClient } from '~/domain/services';
+import { parseScore } from '~/domain/strudel';
 
 /**
  * System prompt для wavecode AI-редактора.
@@ -89,6 +90,24 @@ export const SYSTEM_PROMPT = [
 ].join('\n');
 
 /**
+ * System prompt for the self-heal retry. Given the user's original
+ * score, the LLM's broken first attempt, and a parser-side reason
+ * for the rejection, the model is asked to return a syntactically
+ * valid Strudel score that still reflects the original instruction.
+ */
+export const FIX_SYSTEM_PROMPT = [
+  'Ты — wavecode, AI-ассистент для live-coding музыки в Strudel.',
+  'Ты получил ИСХОДНЫЙ score и ИНСТРУКЦИЮ, но твой ПРЕДЫДУЩИЙ ОТВЕТ',
+  'не прошёл синтаксический разбор парсером. Нужно вернуть',
+  'ИСПРАВЛЕННУЮ ВЕРСИЮ, которая:',
+  '  1. Парсится как валидный Strudel score (balanced parens, valid args).',
+  '  2. Сохраняет смысл исходной инструкции.',
+  '  3. Не добавляет markdown, преамбул, <think>блоков.',
+  '',
+  'Верни ТОЛЬКО ИСПРАВЛЕННЫЙ JS — никаких пояснений.',
+].join('\n');
+
+/**
  * Собирает user prompt с текущим score, статусом аудио и инструкцией.
  * Содержит явное напоминание: "МОДИФИЦИРУЙ, а НЕ переписывай с нуля".
  *
@@ -121,6 +140,42 @@ export const buildUserPrompt = (
     'Сохрани все ноты/аккорды, которые НЕ упомянуты в инструкции. Измени ТОЛЬКО то что просит пользователь.',
     'Если инструкция неприменима к score — верни базу без изменений.',
     'Только JS код, без markdown и пояснений.',
+  ].join('\n');
+};
+
+/**
+ * Builds the user prompt for the self-heal retry. We re-use the
+ * original instruction so the model still knows the user's intent,
+ * but supply the broken attempt and the parser-side rejection so it
+ * can spot the specific defect (unbalanced parens, dropped token,
+ * half-finished stack, etc.).
+ */
+export const buildFixPrompt = (
+  currentScore: string,
+  instruction: string,
+  brokenAttempt: string,
+  parseError: string,
+): string => {
+  return [
+    '=== ТЕКУЩИЙ SCORE (БАЗА) ===',
+    '```',
+    currentScore,
+    '```',
+    '',
+    '=== ИНСТРУКЦИЯ ПОЛЬЗОВАТЕЛЯ ===',
+    instruction,
+    '',
+    '=== ТВОЙ ПРЕДЫДУЩИЙ ОТВЕТ (СЛОМАН) ===',
+    '```',
+    brokenAttempt,
+    '```',
+    '',
+    '=== ПОЧЕМУ СЛОМАНО ===',
+    parseError,
+    '',
+    '=== ЗАДАЧА ===',
+    'Верни ИСПРАВЛЕННЫЙ полный score, который парсится как валидный Strudel',
+    'и сохраняет смысл исходной инструкции. Только JS код, без markdown и пояснений.',
   ].join('\n');
 };
 
@@ -201,9 +256,93 @@ export type DialogTurn = {
 };
 
 /**
- * useCase: применить инструкцию пользователя к текущему score.
- * Принимает историю диалога — LLM получает её как messages array и помнит
- * контекст (например "это не Creep" или "я уже просил бас").
+ * Hard cap on the number of self-heal retries per `applyEditStream`
+ * invocation. The LLM might produce a perpetually broken score (e.g.
+ * a model that does not understand Strudel at all); without this
+ * cap we would loop forever. One retry covers the common case where
+ * the model ran out of token budget during reasoning and emitted
+ * half a `stack(…`.
+ *
+ * See `decisions/wavecode-ai-streaming-and-self-heal.yaml`
+ * `obligation: self-heal-budget-is-one`.
+ */
+export const SELF_HEAL_RETRY_BUDGET = 1;
+
+/**
+ * Callbacks for `applyEditStream`. Each is invoked at most once per
+ * lifecycle event (`onToken` may be called many times — once per
+ * delta from the LLM stream). The semantics match `ReadableStream`
+ * reader's `pull` events: tokens arrive as soon as the LLM emits
+ * them, complete fires once the stream finishes, error fires once
+ * if the request fails or the self-heal exhausts the retry budget.
+ */
+export type ApplyEditCallbacks = {
+  readonly onToken?: (text: string) => void;
+  readonly onComplete?: (result: ApplyEditResult) => void;
+  readonly onError?: (err: Error) => void;
+};
+
+/**
+ * Result of `applyEditStream`. `wasHealed` is `true` iff the LLM's
+ * first response was AST-invalid and the single retry succeeded;
+ * `false` if the first attempt was already valid. `attempts` counts
+ * the LLM round-trips used (1 = happy path, 2 = self-heal).
+ */
+export type ApplyEditResult = {
+  readonly score: string;
+  readonly wasHealed: boolean;
+  readonly attempts: 1 | 2;
+};
+
+/**
+ * Structural check over the cleaned score text + AST. We treat a
+ * score as broken iff:
+ *
+ *   (a) `parseScore` returns an AST with no `StackNode` or
+ *       `CallNode` (pure CommentNode/OtherNode soup — the parser
+ *       never throws, it captures unparseable input as OtherNode);
+ *   (b) the cleaned source text has unbalanced parens
+ *       (open/close mismatch).
+ *
+ * Note: `validateForEdit` is intentionally NOT used because it
+ * requires exactly 4 `s(…)` rows in a top-level stack — most
+ * wavecode edits legitimately produce single-pattern scores.
+ *
+ * See `decisions/wavecode-ai-streaming-and-self-heal.yaml`
+ * `assumption: ast-failure-means-broken-score`.
+ */
+export const isScoreBroken = (cleaned: string): { broken: boolean; reason: string } => {
+  const trimmed = cleaned.trim();
+  if (!trimmed) {
+    return { broken: true, reason: 'empty after cleaning' };
+  }
+  // (b) Paren balance — fast syntactic sanity check.
+  const open = (trimmed.match(/\(/g) ?? []).length;
+  const close = (trimmed.match(/\)/g) ?? []).length;
+  if (open !== close) {
+    return {
+      broken: true,
+      reason: `unbalanced parens (${open} open vs ${close} close)`,
+    };
+  }
+  // (a) AST structural check.
+  const ast = parseScore(trimmed);
+  const hasCall = ast.nodes.some((n) => n.kind === 'stack' || n.kind === 'call');
+  if (!hasCall) {
+    return {
+      broken: true,
+      reason: 'parseScore found no StackNode/CallNode (only comments / junk)',
+    };
+  }
+  return { broken: false, reason: 'ok' };
+};
+
+/**
+ * useCase: применить инструкцию пользователя к текущему score
+ * (back-compat surface). Returns the cleaned score string.
+ *
+ * Internally routes through `applyEditStream` without callbacks.
+ * Existing callers (AIEditPanel, llmEdit.test.ts) see no change.
  */
 export const applyEdit = (
   currentScore: string,
@@ -213,62 +352,162 @@ export const applyEdit = (
   options: { model?: 'smart' | 'fast'; thinking?: 'low' | 'high' | 'off' } = {},
 ): Effect.Effect<string, Error | string, LLMClient> =>
   Effect.gen(function* () {
+    const result = yield* applyEditStream(currentScore, instruction, history, audioState, options);
+    return result.score;
+  });
+
+/**
+ * useCase: streaming variant of `applyEdit` that surfaces LLM
+ * tokens in real time and self-heals once on AST-invalid responses.
+ *
+ * Lifecycle:
+ *   1. Build messages array from history + the user's instruction.
+ *   2. Call `llm.streamCompletion` and read every chunk; accumulate
+ *      raw text and forward each `delta` to `onToken` (if provided).
+ *   3. Clean the raw text via `cleanLLMResponse`.
+ *   4. Validate the cleaned score through `isScoreBroken`. If broken,
+ *      retry ONCE with `buildFixPrompt` + the broken attempt + parse
+ *      error. The retry's cleaned text is validated the same way.
+ *   5. On success, invoke `onComplete` with the result. On hard
+ *      failure (request error OR retry-budget exhaustion), invoke
+ *      `onError` and reject the Effect.
+ *
+ * The retry budget is `SELF_HEAL_RETRY_BUDGET = 1` — no infinite
+ * loops, no extra LLM cost beyond one regenerator call.
+ */
+export const applyEditStream = (
+  currentScore: string,
+  instruction: string,
+  history: ReadonlyArray<DialogTurn> = [],
+  audioState: { status: string; lastError?: string } = { status: 'unknown' },
+  options: { model?: 'smart' | 'fast'; thinking?: 'low' | 'high' | 'off' } = {},
+  callbacks: ApplyEditCallbacks = {},
+): Effect.Effect<ApplyEditResult, Error | string, LLMClient> =>
+  Effect.gen(function* () {
     const llm = yield* LLMClient;
 
-    // Build messages array: history + current request.
-    // History ограничена до последних 10 turns чтобы не переполнять контекст.
     const recentHistory = history.slice(-10);
-    const messages = [
+    const userMessage = {
+      id: `user-${Date.now()}`,
+      role: 'user' as const,
+      content: buildUserPrompt(currentScore, instruction, audioState),
+      ts: Date.now(),
+    };
+    const baseMessages = [
       ...recentHistory.map((t, i) => ({
         id: `hist-${i}`,
         role: t.role,
         content: t.content,
         ts: 0,
       })),
+      userMessage,
+    ];
+
+    // === Attempt 1: standard edit ===
+    const firstRaw = yield* readStream(
+      llm,
       {
-        id: `user-${Date.now()}`,
+        model: options.model ?? 'smart',
+        thinking: options.thinking ?? 'low',
+        systemPrompt: SYSTEM_PROMPT,
+        messages: baseMessages,
+      },
+      callbacks.onToken,
+    );
+
+    const firstCleaned = cleanLLMResponse(firstRaw);
+    (window as unknown as { __wavecodeLastRaw?: string }).__wavecodeLastRaw = firstRaw;
+
+    const firstCheck = isScoreBroken(firstCleaned);
+    if (!firstCheck.broken) {
+      const result: ApplyEditResult = { score: firstCleaned, wasHealed: false, attempts: 1 };
+      callbacks.onComplete?.(result);
+      return result;
+    }
+
+    // === Attempt 2: self-heal retry (budget = 1) ===
+    const fixMessages = [
+      ...baseMessages,
+      {
+        id: `assistant-${Date.now()}`,
+        role: 'assistant' as const,
+        content: firstCleaned,
+        ts: Date.now(),
+      },
+      {
+        id: `fix-${Date.now()}`,
         role: 'user' as const,
-        content: buildUserPrompt(currentScore, instruction, audioState),
+        content: buildFixPrompt(currentScore, instruction, firstCleaned, firstCheck.reason),
         ts: Date.now(),
       },
     ];
 
-    const stream = yield* llm.streamCompletion({
-      model: options.model ?? 'smart',
-      thinking: options.thinking ?? 'low',
-      systemPrompt: SYSTEM_PROMPT,
-      messages,
-    });
+    const secondRaw = yield* readStream(
+      llm,
+      {
+        model: options.model ?? 'smart',
+        thinking: options.thinking ?? 'low',
+        systemPrompt: FIX_SYSTEM_PROMPT,
+        messages: fixMessages,
+      },
+      callbacks.onToken,
+    );
 
+    const secondCleaned = cleanLLMResponse(secondRaw);
+    const secondCheck = isScoreBroken(secondCleaned);
+
+    if (secondCheck.broken) {
+      // Budget exhausted — surface the second parse error.
+      const err = new Error(
+        `LLM self-heal failed: ${secondCheck.reason}. Original attempt: ${firstCheck.reason}.`,
+      );
+      callbacks.onError?.(err);
+      return yield* Effect.fail(err);
+    }
+
+    const result: ApplyEditResult = { score: secondCleaned, wasHealed: true, attempts: 2 };
+    // Stash the final (healed) response for the same diagnostic UI
+    // that reads `__wavecodeLastRaw` to surface "ИИ вернул пустой
+    // ответ" on hard failure.
+    (window as unknown as { __wavecodeLastRaw?: string }).__wavecodeLastRaw = secondRaw;
+    callbacks.onComplete?.(result);
+    return result;
+  });
+
+/**
+ * Read every chunk from the LLM client's streamCompletion, accumulate
+ * the raw text, and forward each delta to `onToken` (if provided).
+ *
+ * Kept as a private helper so `applyEditStream` and the back-compat
+ * `applyEdit` share the exact same streaming semantics.
+ */
+const readStream = (
+  llm: Context.Tag.Service<typeof LLMClient>,
+  request: Parameters<typeof llm.streamCompletion>[0],
+  onToken: ((text: string) => void) | undefined,
+): Effect.Effect<string, Error | string, LLMClient> =>
+  Effect.gen(function* () {
+    const stream = yield* llm.streamCompletion(request);
     const reader = stream.getReader();
     const decoder = new TextDecoder();
     let raw = '';
-
-    while (true) {
-      const { done, value } = yield* Effect.tryPromise(() => reader.read());
-      if (done) break;
-      if (value && value.type === 'text' && value.delta) {
-        raw += decoder.decode(new TextEncoder().encode(value.delta));
+    try {
+      while (true) {
+        const { done, value } = yield* Effect.tryPromise(() => reader.read());
+        if (done) break;
+        if (value && value.type === 'text' && value.delta) {
+          const decoded = decoder.decode(new TextEncoder().encode(value.delta), { stream: false });
+          raw += decoded;
+          onToken?.(decoded);
+        }
       }
+    } finally {
+      yield* Effect.tryPromise({
+        try: () => reader.cancel(),
+        catch: () => undefined,
+      }).pipe(Effect.ignore);
     }
-
-    yield* Effect.tryPromise({
-      try: () => reader.cancel(),
-      catch: () => undefined,
-    }).pipe(Effect.ignore);
-
-    // Stash raw response on globalThis so UI может показать что LLM ответил
-    // при ошибках (например "ИИ вернул пустой ответ").
-    (window as unknown as { __wavecodeLastRaw?: string }).__wavecodeLastRaw = raw;
-
-    const cleaned = cleanLLMResponse(raw);
-    // Note: raw/cleaned length diagnostics used to be logged via `console.log`
-    // here. Removed in feat/quality-tooling — application/ has no-console:'error',
-    // and the raw response is already stashed on globalThis
-    // (`__wavecodeLastRaw`, retrieved via getLastRawLLMResponse) for any
-    // debug UI that wants it. Verbose logging now flows through the
-    // centralised logger (infrastructure/log/*) when wired up.
-    return cleaned;
+    return raw;
   });
 
 /** Last raw LLM response (для отладки/UI). */

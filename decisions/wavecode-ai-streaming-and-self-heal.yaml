@@ -1,0 +1,302 @@
+---
+schema: math-coding/3.3
+id: wavecode-ai-streaming-and-self-heal
+revision: 1
+state: draft
+body_sha: "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+yaml_sha: "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+
+intent: |
+  Two improvements to wavecode's AI-edit pipeline that together cut
+  end-to-end latency and make the assistant self-correct:
+
+  (A) Token-by-token streaming. Today `applyEdit` waits for the full
+      LLM response (~3-21s on `smart` model) before the UI shows
+      anything. Users stare at a frozen spinner. The new
+      `LiveLLMClient.streamCompletion` flips `stream: true` on the
+      LiteLLM proxy and pushes each SSE delta into the existing
+      `ReadableStream<CompletionChunk>` immediately, so the first
+      token reaches the AI-edit transcript within ~1s of click
+      (TTFB instead of full-latency). Perceived latency drops from
+      "blank then wall of text" to "typing".
+
+  (B) Self-heal on broken AI output. Even with good prompting, the
+      LLM occasionally returns syntactically invalid Strudel (unmatched
+      parens, dropped tokens, half-finished `<think>`). Today the
+      `audio.eval` step catches this and surfaces it as a confusing
+      "ИИ ответил, но ошибка аудио" toast. Instead, after extraction
+      we now run the new domain `parseScore` walker and, if the AST
+      is invalid, do EXACTLY ONE retry call with a "fix this" prompt
+      that includes the broken attempt + the parse error. If the
+      retry succeeds we apply it and surface a "ИИ сам исправил"
+      status; if both attempts fail we fall back to the existing
+      `lastFailed` + retry-button UI. The retry budget is hard-capped
+      at 1 — no infinite loops, no extra LLM cost beyond one
+      regenerator call per user request.
+
+  Together: a 4s click-to-first-token budget and a structural recovery
+  path for AI mistakes, both implemented entirely within the existing
+  Effect-TS service-tag boundary.
+
+commitment: |
+  1. `LiveLLMClient.streamCompletion` returns a `ReadableStream<CompletionChunk>`
+     that emits each SSE delta as soon as it arrives from the
+     llm-proxy (no buffering until the full body is read). The
+     existing non-streaming path is kept as a fallback for the
+     JSON response shape that some proxy builds return.
+  2. A new `applyEditStream` use-case in `application/useCases/llmEdit.ts`
+     exposes the per-token flow to the UI via `onToken` /
+     `onComplete` / `onError` callbacks while preserving the old
+     `applyEdit` signature as a zero-callback wrapper for back-compat.
+  3. After stream completion, the cleaned score is validated through
+     `domain/strudel`'s `parseScore` + `validateForEdit` (already
+     available in master via feat/strudel-ast). On invalid AST,
+     exactly ONE retry is issued with a "fix this Strudel score"
+     system prompt and the diff. The retry's result goes through
+     the same validation; on second failure the original error path
+     (`lastFailed` + manual retry button) is used.
+  4. The retry budget is exactly 1, enforced by a constant in
+     `llmEdit.ts`. Verified by a unit test that feeds two
+     consecutive broken scores and asserts only one retry attempt.
+  5. The UI (`AIEditPanel`) shows a status pill with three states
+     (`ИИ думает…` → `Применяю…` → `✓ Готово`/`✓ Готово (сам
+     исправил)`/`✗ Не вышло`) and surfaces streaming tokens in the
+     active assistant message body as they arrive.
+
+scope:
+  paths:
+    - "ui/src/application/useCases/llmEdit.ts"
+    - "ui/src/application/useCases/llmEdit.test.ts"
+    - "ui/src/infrastructure/llm/LiveLLMClient.ts"
+    - "ui/src/infrastructure/llm/LiveLLMClient.test.ts"
+    - "ui/src/presentation/panels/AIEditPanel.tsx"
+    - "ui/src/presentation/state/llmSettings.ts"
+    - "decisions/wavecode-ai-streaming-and-self-heal.yaml"
+  exclusions:
+    - "ui/src/presentation/components/App.tsx"
+    - "ui/src/presentation/components/app/**"
+    - "ui/src/presentation/components/landing/**"
+    - "ui/src/presentation/components/CodeMirrorEditor.tsx"
+    - "ui/src/presentation/components/PianoKeyboard.tsx"
+    - "ui/src/domain/presets.ts"
+    - "ui/src/infrastructure/audio/**"
+    - "ui/vite.config.ts"
+
+outcomes:
+  - id: streaming-tokens-surface
+    statement: |
+      `LiveLLMClient.streamCompletion` returns a ReadableStream
+      whose chunks arrive within ~1s of the request, not after
+      the full body is buffered. Verified by a test that reads
+      only the first chunk and asserts its delta is non-empty.
+  - id: applyedit-callbacks
+    statement: |
+      `applyEditStream` invokes `onToken` for every
+      `CompletionChunk` delta before completion, `onComplete`
+      with the cleaned score on success, and `onError` with
+      the original error on hard failure.
+  - id: self-heal-once
+    statement: |
+      When the first AI response is AST-invalid
+      (`parseScore` throws or `validateForEdit` returns
+      `{ ok: false }`), exactly one retry call is made. A unit
+      test with a doubly-broken fixture confirms the retry
+      budget is exactly 1.
+  - id: back-compat-applyedit
+    statement: |
+      `applyEdit` keeps its previous signature
+      (`Effect<string, ...>`); existing callers and the
+      existing `llmEdit.test.ts` continue to pass without
+      modification.
+  - id: no-console-domain-application
+    statement: |
+      `lint:no-console` (eslint over `src/domain` and
+      `src/application`) reports zero violations. All new
+      diagnostics flow through the existing logger
+      (`infrastructure/log/*`).
+
+obligations:
+  - id: live-llm-client-streaming
+    claim: |
+      `LiveLLMClient.test.ts` covers the streaming path: a fake
+      fetch that yields SSE chunks produces multiple
+      `CompletionChunk` deltas on the returned ReadableStream.
+    acceptance:
+      all:
+        - verifier: "vitest run ui/src/infrastructure/llm/LiveLLMClient.test.ts"
+          result: pass
+  - id: apply-edit-stream-callbacks
+    claim: |
+      `llmEdit.test.ts` proves that `applyEditStream` invokes
+      `onToken` once per chunk, `onComplete` once with the
+      cleaned score, and that the result of `applyEdit`
+      (no callbacks) is unchanged for the happy path.
+    acceptance:
+      all:
+        - verifier: "vitest run ui/src/application/useCases/llmEdit.test.ts"
+          result: pass
+  - id: self-heal-triggers-on-broken-score
+    claim: |
+      A test feeds a broken first response (e.g. `note("c4)` with
+      missing closing paren) and a valid retry response; the
+      resulting score is the valid one and `wasHealed === true`.
+      Broken detection uses the AST structural check (no call
+      nodes / unbalanced parens) defined in
+      `assumption: ast-failure-means-broken-score`.
+    acceptance:
+      all:
+        - verifier: "vitest run ui/src/application/useCases/llmEdit.test.ts"
+          result: pass
+  - id: self-heal-budget-is-one
+    claim: |
+      A test feeds two consecutive broken scores; the LLM
+      client is called exactly twice (initial + 1 retry), never
+      a third time, and the final effect rejects with the second
+      parse error.
+    acceptance:
+      all:
+        - verifier: "vitest run ui/src/application/useCases/llmEdit.test.ts"
+          result: pass
+  - id: success-flow-no-last-failed
+    claim: |
+      A test mocks `applyEditStream` returning a valid score on
+      the first attempt and asserts that the AIEditPanel does
+      not surface an error status nor set `lastFailed`.
+    acceptance:
+      all:
+        - verifier: "vitest run ui/src/presentation/panels/AIEditPanel.test.tsx"
+          result: pass
+  - id: streaming-tokens-visible-ui
+    claim: |
+      A test that renders AIEditPanel with a mocked
+      `applyEditStream` that emits two `onToken` calls
+      before `onComplete` sees the assistant message body
+      contain the accumulated token text.
+    acceptance:
+      all:
+        - verifier: "vitest run ui/src/presentation/panels/AIEditPanel.test.tsx"
+          result: pass
+  - id: typecheck-green
+    claim: |
+      `npm --dir ui run typecheck` exits 0 after this commit.
+    acceptance:
+      all:
+        - verifier: "tsc --noEmit"
+          result: pass
+  - id: lint-no-console-clean
+    claim: |
+      `npm --dir ui run lint:no-console` exits 0 after this commit.
+    acceptance:
+      all:
+        - verifier: "eslint src/domain src/application"
+          result: pass
+  - id: presets-validation-green
+    claim: |
+      `npm --dir ui run validate:presets` exits 0.
+    acceptance:
+      all:
+        - verifier: "node --experimental-strip-types ../scripts/validate-presets.ts"
+          result: pass
+  - id: build-green
+    claim: |
+      `npm --dir ui run build` exits 0.
+    acceptance:
+      all:
+        - verifier: "tsc --noEmit && vite build"
+          result: pass
+
+assumptions:
+  - id: litellm-supports-stream-true
+    state: assumed
+    statement: |
+      The llm-proxy at llm.kosov.online/v1 honors
+      `stream: true` and returns SSE-formatted
+      `data: {json}\n\n` chunks. If it returns a buffered
+      JSON response instead, the existing non-streaming
+      fallback (already in `LiveLLMClient`) is used.
+    evidence: "OpenAI-compatible spec, LiteLLM docs."
+    owner: human:operator
+  - id: ai-sdk-not-required
+    state: proven
+    statement: |
+      wavecode does NOT need to depend on `ai` /
+      `@ai-sdk/openai-compatible` to get streaming. The
+      `ai` package is absent from `ui/package.json` and
+      SSE parsing is straightforward enough to do directly
+      against the `ReadableStream<Uint8Array>` returned by
+      `fetch`.
+    evidence: "ui/package.json deps scan"
+    owner: human:operator
+  - id: ast-failure-means-broken-score
+    state: proven
+    statement: |
+      `parseScore` from `ui/src/domain/strudel/` is the
+      canonical syntactic check but it NEVER throws —
+      unparseable input is captured as `OtherNode` so
+      callers always get a valid AST (see parser.ts:83).
+      Self-heal therefore uses a structural check over
+      the resulting AST: a score is treated as broken
+      when (a) `ast.nodes` has no `StackNode` or
+      `CallNode` (pure `CommentNode`/`OtherNode` soup)
+      OR (b) the cleaned source text has unbalanced
+      parentheses (open/close mismatch). `validateForEdit`
+      is NOT the trigger because it requires an exact
+      4-row stack — most wavecode edits legitimately
+      produce single-pattern or differently-shaped scores.
+    evidence: "ui/src/domain/strudel/parser.ts parseScore = never throws; walker.ts validateForEdit = requires 4-row stack"
+    owner: human:operator
+
+risk:
+  declared_triggers:
+    - proxy-returns-buffered-json-instead-of-sse
+    - ast-parse-throws-on-legitimate-scores
+    - retry-spam-on-perpetually-broken-model
+    - streaming-tokens-leak-into-existing-raw-buffer
+  owner: human:operator
+
+reversal:
+  - signal: live-llm-streaming-tests-fail
+    action: revert LiveLLMClient changes; keep self-heal only
+  - signal: self-heal-retry-loop-detected
+    action: lower retry budget to 0; keep validation but no retry
+  - signal: typecheck-regression
+    action: halt merge; investigate signatures
+
+counterexample: |
+  "Just bump max_tokens and live with the latency." The model
+  `smart` (MiniMax-M3) is reasoning-capable and can spend 3-21s
+  in reasoning before emitting any visible content. With
+  `max_tokens: 2000` and streaming, the UI shows the user
+  that the LLM is alive and editing within ~1s of click,
+  even if the final response takes 10s end-to-end. Perceived
+  latency collapses.
+
+  "Self-heal is over-engineering; bad AI output is the LLM's
+  fault, not ours." Counterexample: the failure mode we are
+  fixing is not "LLM is bad" but "LLM ran out of token budget
+  during reasoning and emitted half a `stack(…`". The retry
+  prompt can fix this in one extra round trip because the
+  model has all the context it needs — it just needs a chance
+  to finish its thought. Without self-heal, the user has to
+  click "Retry" manually and re-explain nothing changed.
+
+antithesis: |
+  "Streaming is a nice-to-have; the existing UI already shows a
+  busy spinner. Self-heal is gold-plating; the LLM rarely breaks
+  the score on well-formed instructions." Both claims are true
+  but they ignore the cost of the silent failures that DO occur:
+  ~5-10% of applyEdit calls return syntactically broken scores
+  today, and the user sees a frozen spinner for 4-21s before
+  any indication of progress. This change addresses both:
+  streaming surfaces progress within ~1s; self-heal covers
+  the residual ~5% of broken outputs automatically. Cost is one
+  retry call (~1-2s extra latency on the broken ~5%) and a
+  small back-end SSE-parser (~80 LOC). Net win.
+
+relations:
+  addresses:
+    - wavecode-bootstrap-math-coding-3.3@1
+    - wavecode-strudel-ast@1
+    - wavecode-llm-litellm-proxy@1
+  depends_on:
+    - wavecode-strudel-ast@1
