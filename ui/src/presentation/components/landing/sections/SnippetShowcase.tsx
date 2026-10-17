@@ -15,13 +15,12 @@ const PRESETS: ReadonlyArray<PresetItem> = [
   { id: 'hiphop-boombap', name: 'Хип-хоп',          genre: '90-е · Нью-Йорк',          tone: 'magenta' },
   { id: 'jazz-ii-v-i',    name: 'Джаз ii-V-I',      genre: 'Бибоп · ходячий бас',     tone: 'primary'   },
   { id: 'bossa-nova',     name: 'Босса-нова',      genre: '3+2 · клаве',              tone: 'cyan'    },
-  { id: 'trap',           name: 'Трэп',             genre: '808 · суб-бас',            tone: 'magenta' },
-  { id: 'idm-glitch',     name: 'IDM глитч',        genre: '5/4 + 7/8',                tone: 'primary'   },
+  { id: 'trap-atlanta',   name: 'Трэп',             genre: '808 · суб-бас',            tone: 'magenta' },
   { id: 'dreampop',       name: 'Dream pop',        genre: 'Шугейз · 16-ми',           tone: 'cyan'    },
 ];
 
 /**
- * SnippetShowcase — восемь готовых мелодий, кликабельные.
+ * SnippetShowcase — подборка готовых мелодий, кликабельные.
  * Клик по карточке → /app?preset=<id> → редактор загружает score.
  * Под каждой карточкой — жанр (простым языком) + кнопка «Открыть».
  * Сверху — большой snippet с подсветкой (тот же Creep) для понимания,
@@ -40,7 +39,7 @@ export function SnippetShowcase(): JSX.Element {
       <header class="l-section__head">
         <span class="l-section__kicker">01 · примеры</span>
         <h2 class="l-section__title" id="presets-title">
-          Восемь готовых мелодий. Нажми — откроется в редакторе.
+          Готовые мелодии. Нажми — откроется в редакторе.
         </h2>
         <p class="l-section__sub">
           Не нужно писать ничего с нуля. Кликни на любую — редактор
