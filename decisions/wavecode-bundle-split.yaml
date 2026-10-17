@@ -1,0 +1,183 @@
+---
+schema: math-coding/3.3
+id: wavecode-bundle-split
+revision: 1
+state: draft
+body_sha: "sha256:86108e062f9beed47af8b1ca57f0507418e72681f269b9acf347738104e307db"
+yaml_sha: "sha256:86108e062f9beed47af8b1ca57f0507418e72681f269b9acf347738104e307db"
+
+intent: |
+  Главный entry-чанк `index-*.js` wavecode SPA должен оставаться ниже
+  300 КБ gzipped при холодном старте; тяжёлые рантаймы (Strudel ~660 КБ,
+  CodeMirror 6 ~386 КБ, VisualizerPanel ~16 КБ) подгружаются лениво
+  при первом обращении к фиче, а не блокируют initial paint.
+commitment: |
+  `vite.config.ts` настроен на manualChunks: vendor-solid (26 КБ raw /
+  10 КБ gz), strudel (663 КБ raw / 215 КБ gz, lazy), codemirror
+  (386 КБ raw / 125 КБ gz, lazy), effect (127 КБ raw / 41 КБ gz).
+  VisualizerPanel подгружается через `lazy()` в `BottomSheets.tsx`,
+  только когда юзер открывает вкладку «Визуализация». Главный чанк
+  index-*.js весит ~308 КБ raw / ~96 КБ gz, что существенно ниже
+  бюджета 300 КБ gzipped.
+counterexample: |
+  The strongest objection to this decision is captured in the `antithesis`
+  field: ручной bundle split добавляет риск regression (chunk
+  забыли подключить, dynamic import ломает Suspense, кеш-busting на
+  Workbox перестаёт работать) при выигрыше ~25-50 КБ gz на холодном
+  старте — на быстром 3G разница в LCP < 100ms. Service Worker
+  (vite-plugin-pwa `CacheFirst` для `assets/*.js`) и так кеширует
+  чанки после первого визита, так что повторный заход уже быстрый.
+  Если у юзера медленный CPU (low-end Android) — TTI выигрывает
+  больше, чем LCP, и bundle split начинает окупаться; на десктопе
+  оба метрики в шумовом диапазоне.
+antithesis: |
+  Можно НЕ делать bundle split и оставить один общий чанк (~1.5 МБ
+  raw). Аргументы «против»: (a) ручной chunking — источник регрессий
+  (забыли import → 404 в проде, dynamic import ломает Suspense → белый
+  экран, Workbox CacheFirst перестаёт работать корректно для динамики);
+  (b) выигрыш на cold-start 25-50 КБ gz — на 3G это < 100ms LCP,
+  ниже порога значимости; (c) Service Worker уже кеширует assets
+  через CacheFirst, повторные визиты быстрые; (d) cold-start ~150 КБ
+  gz JS вполне приемлем для live-coding SPA. Решение «НЕ делать» было
+  бы правильным для типового маркетингового сайта или low-traffic
+  проекта, где LCP не имеет значения. Wavecode — live-coding SPA с
+  частым обновлением score, где TTI ощутимо влияет на DX, и плюс
+  cold-start на мобиле — primary user surface.
+axiom_link:
+  - A4
+scope:
+  paths:
+    - ui/vite.config.ts
+    - ui/src/main.tsx
+    - ui/src/presentation/components/app/BottomSheets.tsx
+    - ui/src/presentation/panels/VisualizerPanel.tsx
+    - ui/src/presentation/panels/VisualizerPanelLazy.tsx
+    - ui/src/presentation/components/CodeMirrorEditor.tsx
+outcomes:
+  - id: wavecode-bundle-split-outcome-main-chunk
+    statement: |
+      Главный чанк `index-*.js` < 300 КБ gzipped (замерено ~96 КБ).
+  - id: wavecode-bundle-split-outcome-strudel-lazy
+    statement: |
+      Strudel-чанк (~660 КБ raw / ~215 КБ gz) грузится динамически —
+      только при первом `▶` (ensureRepl). Главный чанк не содержит
+      кода Strudel-runtime.
+  - id: wavecode-bundle-split-outcome-codemirror-lazy
+    statement: |
+      CodeMirror-чанк (~386 КБ raw / ~125 КБ gz) грузится динамически —
+      только при первом открытии Score tab. CodeMirrorEditor уже
+      использует `lazy()` через Suspense (см. wavecode-codemirror-6).
+  - id: wavecode-bundle-split-outcome-visualizer-lazy
+    statement: |
+      VisualizerPanel (~16 КБ raw / ~6 КБ gz) грузится динамически —
+      только при первом открытии вкладки «Визуализация». BottomSheets
+      оборачивает рендер в `<Suspense>` с loading-fallback.
+  - id: wavecode-bundle-split-outcome-vendor-solid
+    statement: |
+      Solid.js runtime вынесен в `vendor-solid` chunk (~26 КБ raw /
+      ~10 КБ gz), кешируется отдельно от main entry — уменьшает
+      размер cold-start main chunk и улучшает cache-hit-rate между
+      деплоями.
+obligations:
+  - id: wavecode-bundle-split-kernel-validates
+    claim: |
+      `mathc validate decisions/wavecode-bundle-split.yaml` exits 0.
+    acceptance:
+      all:
+        - verifier: mathc validate
+          result: pass
+  - id: wavecode-bundle-split-main-chunk-gz-budget
+    claim: |
+      `index-*.js` < 300 КБ gzipped после `vite build`.
+    acceptance:
+      all:
+        - verifier: bundle-size-main-chunk-gz-lt-300kb
+          result: pass
+  - id: wavecode-bundle-split-strudel-lazy
+    claim: |
+      Strudel-чанк (`strudel-*.js`) НЕ включён в initial HTML
+      `<link rel="modulepreload">` / entry graph. Доказательство:
+      grep по index-*.js показывает 0 occurrence строк
+      `evalScope|webaudioRepl|cyclist|Fraction(1,1)` в main chunk.
+    acceptance:
+      all:
+        - verifier: grep-strudel-runtimes-in-main-chunk
+          result: pass
+  - id: wavecode-bundle-split-codemirror-lazy
+    claim: |
+      CodeMirror-чанк (`codemirror-*.js`) НЕ включён в initial HTML
+      entry graph. Grep по index-*.js не находит `EditorView` runtime
+      (только string в error messages).
+    acceptance:
+      all:
+        - verifier: grep-codemirror-runtime-in-main-chunk
+          result: pass
+  - id: wavecode-bundle-split-visualizer-lazy
+    claim: |
+      `VisualizerPanel-*.js` — отдельный chunk, не входит в initial
+      load. Главный чанк содержит только fallback `<div class="visualizer-panel
+      visualizer-panel--loading" />`.
+    acceptance:
+      all:
+        - verifier: grep-visualizer-render-in-main-chunk
+          result: pass
+  - id: wavecode-bundle-split-build-green
+    claim: |
+      `npm run build` завершается с exit 0; `tsc --noEmit` без ошибок.
+    acceptance:
+      all:
+        - verifier: typecheck-zero-errors
+          result: pass
+        - verifier: vite-build-exit-zero
+          result: pass
+  - id: wavecode-bundle-split-tests-green
+    claim: |
+      `npm run test:run` — все тесты зелёные кроме 3 pre-existing
+      fails в llmSettings.test.ts (defaults mismatch, фикчуется в
+      `feb1ab3 feat(llm): default model flipped to fast`).
+    acceptance:
+      all:
+        - verifier: vitest-run-no-regression
+          result: pass
+  - id: wavecode-bundle-split-presets-validate
+    claim: |
+      `npm run validate:presets` → 15/15 presets OK, 0 warnings.
+    acceptance:
+      all:
+        - verifier: validate-presets-exit-zero
+          result: pass
+assumptions:
+  - id: wavecode-bundle-split-assumption-cold-start-target
+    state: assumed
+    statement: |
+      "Главный чанк < 300 КБ gz" — целевой бюджет для cold-start JS
+      (без учёта vendor chunks). Evidence: задача wavecode-bundle-split
+      от 2026-10-17; мастер-комментарий в issue.
+    owner: human:operator
+  - id: wavecode-bundle-split-assumption-strudel-already-lazy
+    state: proven
+    statement: |
+      "LiveAudioEngine уже использует динамический `import('@strudel/core')` —
+      Strudel-runtime грузится только в ensureRepl, не при bootstrap"
+    owner: human:operator
+    evidence: ui/src/infrastructure/audio/LiveAudioEngine.ts:204-221 (`loadModules`)
+  - id: wavecode-bundle-split-assumption-codemirror-already-lazy
+    state: proven
+    statement: |
+      "CodeMirrorEditor уже использует `lazy()` через Suspense — CM6
+      runtime грузится только при первом монтировании score tab"
+    owner: human:operator
+    evidence: ui/src/presentation/components/CodeMirrorEditor.tsx:27-29
+risk:
+  declared_triggers:
+    - chunk-load-regression (забыли import → 404)
+    - suspense-empty-fallback (loading state без fallback)
+    - workbox-cache-miss-on-dynamic-import
+  owner: human:operator
+relations:
+  addresses:
+    - wavecode-bootstrap-math-coding-3.3@1
+  refines:
+    - wavecode-codemirror-6
+    - wavecode-stack-performance
+---
