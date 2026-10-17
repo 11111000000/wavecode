@@ -2,8 +2,8 @@ import { describe, it, expect, vi } from 'vitest';
 import { BUILTIN_PRESETS, validatePreset } from './presets';
 
 describe('BUILTIN_PRESETS', () => {
-  it('has 16 entries (1 Creep + 9 genre [IDM removed] + 1 step demo + 2 piano demos + 2 drum demos + 2 synth demos [lush-pad removed])', () => {
-    expect(BUILTIN_PRESETS).toHaveLength(16);
+  it('has 15 entries (1 Creep + 8 genre [IDM, dreampop removed] + 1 step demo + 2 piano demos + 2 drum demos + 2 synth demos [lush-pad removed])', () => {
+    expect(BUILTIN_PRESETS).toHaveLength(15);
   });
 
   it('has unique ids', () => {
@@ -37,11 +37,11 @@ describe('BUILTIN_PRESETS', () => {
     expect(creep?.artist).toBe('Radiohead');
   });
 
-  it('all 9 new genre presets are present (idm-glitch removed)', () => {
+  it('all 8 new genre presets are present (idm-glitch and dreampop removed)', () => {
     const expected = [
       'edm-house', 'hiphop-boombap', 'jazz-ii-v-i', 'ambient-drone',
       'bossa-nova', 'trap-atlanta', 'reggaeton',
-      'dreampop', 'step-grid-demo',
+      'step-grid-demo',
     ];
     for (const id of expected) {
       expect(BUILTIN_PRESETS.find((p) => p.id === id), `missing ${id}`).toBeDefined();

@@ -51,7 +51,6 @@ export function EditorMockup(): JSX.Element {
             <span class="l-mockup__chip">Bossa Nova</span>
             <span class="l-mockup__chip">Trap</span>
             <span class="l-mockup__chip">IDM glitch</span>
-            <span class="l-mockup__chip">Dreampop</span>
           </div>
 
           <div class="l-mockup__body">
