@@ -1,0 +1,228 @@
+---
+schema: math-coding/3.3
+id: wavecode-strudel-ast
+revision: 1
+state: draft
+body_sha: "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+yaml_sha: "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+
+intent: |
+  Replace regex-based parsing in `ui/src/domain/layers/parseStack.ts`
+  with a proper Strudel mini-notation AST (tokenizer + recursive-descent
+  parser + walker). The AST is the foundation for downstream features
+  that today cannot work without structural score inspection: AI-edit
+  (rewrite a single `s("…")` row safely), StepGrid in-place splice
+  (reliably locate exactly 4 sample rows), Tier 2 pianoroll (parse
+  pitch + rhythm from `note("…")`), and Strudel-code generators.
+
+  The regex parser is fragile in measurable ways: it counts
+  `s(`-tokens everywhere in the file (including inside `//`
+  comments and inside string literals that happen to contain the
+  substring `s("…")`), and it walks parens by hand without a real
+  tokenizer. The AST solves both problems by treating comments
+  and string contents as opaque, and by exposing a typed
+  `ScoreNode` tree the rest of the codebase can traverse.
+
+commitment: |
+  1. `ui/src/domain/strudel/` exposes `parseScore(text)` returning
+     a `ScoreNode[]` AST, plus a `walker.ts` with `findTopStack`,
+     `countSLayers`, `validateForEdit`, `validateForMixer`.
+  2. The existing `parseStackTopLayers(score)` in
+     `ui/src/domain/layers/parseStack.ts` is rewritten to route
+     through the AST walker. External callers (MixerPanel, editGridLayer)
+     see the same `LayerDescriptor` shape and the same index/name/source
+     semantics — verified by the existing `parseStack.test.ts` suite
+     passing unchanged.
+  3. `canEditGridLayer(score)` in
+     `ui/src/application/useCases/editGridLayer.ts` uses the AST
+     walker; the existing behaviour (true iff exactly 4 `s(…)`
+     rows are present in the top-level stack) is preserved.
+  4. All 18 BUILTIN_PRESETS parse via the new AST without changing
+     their `parseStackTopLayers` / `canEditGridLayer` results.
+  5. Parse cost: `parseScore(preset.score)` runs in < 5 ms on M1
+     (warm) for any single preset.
+
+scope:
+  paths:
+    - "ui/src/domain/strudel/**"
+    - "ui/src/domain/layers/parseStack.ts"
+    - "ui/src/application/useCases/editGridLayer.ts"
+    - "ui/src/presentation/components/MixerPanel.tsx"
+    - "decisions/wavecode-strudel-ast.yaml"
+  exclusions:
+    - "ui/src/domain/presets.ts"
+    - "ui/src/presentation/components/landing/**"
+    - "ui/src/presentation/components/App.tsx"
+    - "ui/vite.config.ts"
+    - "ui/src/infrastructure/audio/**"
+    - "ui/node_modules/**"
+
+outcomes:
+  - id: strudel-ast-public-api
+    statement: |
+      `ui/src/domain/strudel/index.ts` exports `parseScore`,
+      `findTopStack`, `countSLayers`, `getStackArgs`,
+      `validateForEdit`, `validateForMixer`, plus the AST type
+      names (`ScoreNode`, `StackNode`, `CallNode`, `Arg`, `Span`).
+  - id: strudel-ast-backward-compat
+    statement: |
+      `parseStackTopLayers(score)` returns the same
+      `LayerDescriptor[]` (same length, same `index`/`name`/`source`
+      triples) for every preset as before this commit. Verified by
+      the existing `parseStack.test.ts` suite passing unchanged.
+  - id: strudel-ast-preset-coverage
+    statement: |
+      All 18 BUILTIN_PRESETS pass `parseScore(...) → findTopStack → countSLayers`
+      with `findTopStack` returning a `StackNode` and `countSLayers`
+      matching the hand-computed count for each preset.
+  - id: strudel-ast-perf-budget
+    statement: |
+      `parseScore(BUILTIN_PRESETS[i].score)` runs in under 5 ms
+      (median over 200 warm runs) on the developer M1 host.
+  - id: strudel-ast-stepgrid-precondition
+    statement: |
+      `canEditGridLayer(score)` returns `true` exactly for those
+      presets whose top-level stack contains exactly 4 `s(…)`
+      rows, and `false` otherwise — preserving prior behaviour.
+
+obligations:
+  - id: strudel-ast-tokenizer-tests
+    claim: |
+      `ui/src/domain/strudel/tokenizer.test.ts` covers ≥ 20 cases
+      including identifier variants, single/double/backtick strings,
+      nested brackets, line/block comments, and EOF.
+    acceptance:
+      all:
+        - verifier: "vitest run ui/src/domain/strudel/tokenizer.test.ts"
+          result: pass
+  - id: strudel-ast-parser-tests
+    claim: |
+      `ui/src/domain/strudel/parser.test.ts` covers ≥ 20 cases
+      including empty score, single call, top-level stack, nested
+      stack, comments, mini-notation in strings, broken syntax,
+      and a perf-budget benchmark asserting < 5 ms per preset.
+    acceptance:
+      all:
+        - verifier: "vitest run ui/src/domain/strudel/parser.test.ts"
+          result: pass
+  - id: strudel-ast-walker-tests
+    claim: |
+      `ui/src/domain/strudel/walker.test.ts` covers ≥ 10 cases
+      covering findTopStack on the 18 built-in presets,
+      countSLayers on a hand-built fixture, and validateForEdit /
+      validateForMixer behaviour.
+    acceptance:
+      all:
+        - verifier: "vitest run ui/src/domain/strudel/walker.test.ts"
+          result: pass
+  - id: strudel-ast-parseStack-backward-compat
+    claim: |
+      `ui/src/domain/layers/parseStack.test.ts` (existing suite,
+      11 cases) passes without modification after this commit.
+    acceptance:
+      all:
+        - verifier: "vitest run ui/src/domain/layers/parseStack.test.ts"
+          result: pass
+  - id: strudel-ast-typecheck
+    claim: |
+      `npm --dir ui run typecheck` exits 0 after this commit.
+    acceptance:
+      all:
+        - verifier: "tsc --noEmit"
+          result: pass
+  - id: strudel-ast-lint-domain
+    claim: |
+      `npm --dir ui run lint:no-console` exits 0 (no `console.*`
+      calls in `src/domain` or `src/application`).
+    acceptance:
+      all:
+        - verifier: "eslint src/domain src/application"
+          result: pass
+  - id: strudel-ast-presets-validation
+    claim: |
+      `npm --dir ui run validate:presets` exits 0 (all 18
+      built-in presets pass the smoke test).
+    acceptance:
+      all:
+        - verifier: "node --experimental-strip-types ../scripts/validate-presets.ts"
+          result: pass
+
+assumptions:
+  - id: strudel-ast-assumption-mini-syntax-stable
+    state: assumed
+    statement: |
+      "Strudel mini-notation syntax in BUILTIN_PRESETS does not
+       contain constructs the tokenizer cannot tokenize (e.g. JS
+       template-string interpolation `${...}` inside backtick
+       strings used as Strudel arguments)."
+    evidence: "manual review of all 18 presets + scan for `${`"
+    owner: human:operator
+  - id: strudel-ast-assumption-five-ms-budget
+    state: assumed
+    statement: |
+      "5 ms is a generous budget for a single preset on M1; the
+       AST will be called from the MixerPanel reactive memo, which
+       re-parses only when score identity changes (Solid's
+       createMemo does not re-run on a different memo's input)."
+    owner: human:operator
+  - id: strudel-ast-assumption-layer-shape-stable
+    state: proven
+    statement: |
+      "LayerDescriptor shape (index/source/name) is the public
+       contract of parseStack.ts; MixerPanel + editGridLayer
+       import these types from the same module."
+    evidence: "git blame ui/src/domain/layers/parseStack.ts"
+    owner: human:operator
+
+risk:
+  declared_triggers:
+    - regression-in-mixer-row-order
+    - regression-in-edit-mode-precondition
+    - perf-budget-regression-on-large-preset
+    - ast-fails-to-parse-realistic-strudel-construct
+  owner: human:operator
+
+reversal:
+  - signal: parseStack.test.ts-or-editGridLayer-regression
+    action: revert
+  - signal: ast-perf-budget-exceeds-five-ms
+    action: rework
+
+counterexample: |
+  "The regex-based parseStack.ts has been working for months;
+   every preset parses correctly today; the AST is over-engineering
+   for a problem that does not exist." Counterexample: the regex
+   parser mis-counts layers for any score where a `//` comment
+   contains the substring `s("…")`, or where a string argument
+   literally contains `s("drums_bd")` as data (e.g. an
+   auto-generated code-completion preview). The AST skips
+   comments at the token level and treats string contents as
+   opaque, so this class of bug cannot occur. StepGrid's
+   edit-mode precondition (exactly 4 sample rows) becomes
+   structurally enforced rather than textually guessed.
+
+antithesis: |
+  "Keep the regex parser; layer-count and name detection are
+   accurate enough for the demo presets; an AST is unjustified
+   complexity for a single-domain helper."
+
+   Rejected because: the AST unblocks AI-edit (rewrite a single
+   `s("…")` row with semantic guarantees, not text replacements),
+   StepGrid (locate the 4 sample rows by structure rather than
+   by counting `s(`-tokens), and Tier 2 pianoroll (parse a
+   `note("…")` body into a sequence of pitches/durations). All
+   three features are blocked without an AST; the regex parser
+   is the bottleneck, not the surface. The implementation cost
+   is one tokenizer + one parser + one walker (~300 LOC + ~150
+   LOC of tests), all domain-pure with no runtime dependencies,
+   and the existing 11 parseStack.test.ts cases serve as a
+   backward-compat oracle so the migration is verified against
+   the prior behaviour on every commit.
+
+relations:
+  addresses:
+    - wavecode-bootstrap-math-coding-3.3@1
+    - wavecode-step-grid-modes@1
+    - wavecode-track-mixer@1
+  depends_on:
+    - wavecode-bootstrap-math-coding-3.3@1
