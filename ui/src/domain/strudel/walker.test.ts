@@ -101,6 +101,26 @@ describe('walker', () => {
     }
   });
 
+  it('validateForEdit returns discriminated reason: "empty" for whitespace-only input', () => {
+    const r = validateForEdit('   \n  ');
+    expect(r).toEqual({ ok: false, layerCount: 0, reason: 'empty' });
+  });
+
+  it('validateForEdit returns discriminated reason: "no-top-stack" when no stack at all', () => {
+    const r = validateForEdit('note("c4 e4 g4")');
+    expect(r).toEqual({ ok: false, layerCount: 0, reason: 'no-top-stack' });
+  });
+
+  it('validateForEdit returns discriminated reason: "wrong-count" with the actual count', () => {
+    const r = validateForEdit('stack(s("a"), s("b"), s("c"))');
+    expect(r).toEqual({ ok: false, layerCount: 3, reason: 'wrong-count' });
+  });
+
+  it('validateForEdit returns reason: null on success', () => {
+    const r = validateForEdit('stack(s("a"), s("b"), s("c"), s("d"))');
+    expect(r).toEqual({ ok: true, layerCount: 4, reason: null });
+  });
+
   it('validateForMixer returns the same layers as the legacy parseStackTopLayers', () => {
     // The mixer shape (index/source/name triples) is the public
     // contract — verify on a hand-built fixture.
