@@ -123,12 +123,18 @@ describe('MicPanel — empty state', () => {
     expect(container.querySelector('.mic-ux-empty-help-text')).toBeNull();
   });
 
-  it('empty state hides all 4 rows of the full layout', () => {
+  it('empty state shows the hint banner AND keeps all 4 rows visible', () => {
     const { container } = render(() => <MicPanel />);
-    expect(container.querySelector('.mic-ux-row-status')).toBeNull();
-    expect(container.querySelector('.mic-ux-row-cta')).toBeNull();
-    expect(container.querySelector('.mic-ux-row-roll')).toBeNull();
-    expect(container.querySelector('.mic-ux-row-meter')).toBeNull();
+    // The empty-state hint is present (so the user knows what to do)…
+    expect(container.querySelector('.mic-ux-empty')).not.toBeNull();
+    expect(container.querySelector('.mic-ux-empty-title')).not.toBeNull();
+    // …but the full 4-row layout is ALSO rendered so the START button,
+    // instrument selector, slot dropdown, apply/reset/preview, piano
+    // roll and meter are always reachable.
+    expect(container.querySelector('.mic-ux-row-status')).not.toBeNull();
+    expect(container.querySelector('.mic-ux-row-cta')).not.toBeNull();
+    expect(container.querySelector('.mic-ux-row-roll')).not.toBeNull();
+    expect(container.querySelector('.mic-ux-row-meter')).not.toBeNull();
   });
 });
 
