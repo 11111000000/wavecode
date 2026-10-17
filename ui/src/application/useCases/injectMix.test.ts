@@ -141,13 +141,18 @@ describe('injectMix', () => {
 
   it('handles the Creep preset end-to-end', () => {
     const creep = [
+      '// Creep (Radiohead) — G → B → C → Cm, indie-rock с Hendrix-style аранжировкой',
       'stack(',
+      '  // Chord pad — voicing() берёт chord-name → Tonal/Chord-symbol, даёт правильную инверсию',
+      '  chord("<G B C Cm>").voicing().s("triangle").gain(0.18).lpf(1500).room(.3),',
+      '  // Acoustic guitar arpeggio — sawtooth + slight shape() эмулирует string',
+      '  note("<g3 b3 d4 b3 c4 b3 c4 ees4 / e3 g3 c4 g3 e3 g3 c4 g3>").s("sawtooth").shape(0.3).gain(0.12).lpf(2500).room(.4),',
+      '  // Bass — root notes, G2/B2/C3/C3',
       '  note("<g2 b2 c3 c3>").s("sawtooth").gain(0.4).lpf(300),',
-      '  note("<[55,59,62] [59,63,66] [60,64,67] [60,63,67]>").s("triangle").gain(0.2).lpf(1500),',
-      '  n("<55 67 59 67 62 67 59 67>*2").s("sawtooth").gain(0.12).lpf(1500),',
-      '  s("sbd ~ sbd ~").gain(0.5),',
-      '  s("~ white ~ white").decay(.05).sustain(0).gain(0.22),',
-      '  s("white*8").decay(.04).sustain(0).gain(0.15)',
+      '  // Acoustic kit: kick на 1/3, snare backbeat, 8th-note hihat',
+      '  s("drums_bd ~ drums_bd ~").gain(0.55),',
+      '  s("~ drums_sd ~ drums_sd").gain(0.28),',
+      '  s("drums_hh*8").decay(.04).sustain(0).gain(0.15)',
       ')',
     ].join('\n');
     const mix6: ReadonlyArray<LayerMix> = [
@@ -160,15 +165,19 @@ describe('injectMix', () => {
     ];
     const out = injectMix(creep, mix6);
     // Each layer's last numeric .gain() is replaced.
-    expect(out).toContain('.gain(0.8).lpf(300)');
-    expect(out).toContain('.gain(0.6).lpf(1500)');
-    // The drum layer had .gain(0.5) → .gain(1) (clamped but actually 1.0)
-    expect(out).toContain('s("sbd ~ sbd ~").gain(1)');
-    // The muted layer (index 4) is forced to 0
-    expect(out).toContain('s("~ white ~ white").decay(.05).sustain(0).gain(0)');
-    expect(out).toContain('s("white*8").decay(.04).sustain(0).gain(0.7)');
-    // First two layers' gains are not the originals
-    expect(out).not.toContain('.gain(0.4).lpf(300)');
-    expect(out).not.toContain('.gain(0.2).lpf(1500)');
+    // Layer 0 (chord pad) — `.gain(0.18)` replaced with `.gain(0.8)`
+    expect(out).toContain('chord("<G B C Cm>").voicing().s("triangle").gain(0.8).lpf(1500).room(.3)');
+    // Layer 1 (arpeggio) — `.gain(0.12)` replaced with `.gain(0.6)`
+    expect(out).toContain('.gain(0.6).lpf(2500)');
+    // Layer 2 (bass) — `.gain(0.4)` kept (mix asked for 0.4 too)
+    expect(out).toContain('note("<g2 b2 c3 c3>").s("sawtooth").gain(0.4).lpf(300)');
+    // Layer 3 (kick) — `.gain(0.55)` replaced with `.gain(1)`
+    expect(out).toContain('s("drums_bd ~ drums_bd ~").gain(1)');
+    // Layer 4 (snare, muted) — forced to `.gain(0)`
+    expect(out).toContain('s("~ drums_sd ~ drums_sd").gain(0)');
+    // Layer 5 (hihat) — `.gain(0.15)` replaced with `.gain(0.7)`
+    expect(out).toContain('s("drums_hh*8").decay(.04).sustain(0).gain(0.7)');
+    // First layer's gain is no longer the original 0.18
+    expect(out).not.toContain('gain(0.18)');
   });
 });

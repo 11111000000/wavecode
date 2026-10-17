@@ -33,21 +33,26 @@ describe('parseStackTopLayers', () => {
 
   it('handles the Creep preset (6 layers)', () => {
     const creep = [
+      '// Creep (Radiohead) — G → B → C → Cm, indie-rock с Hendrix-style аранжировкой',
       'stack(',
+      '  // Chord pad — voicing() берёт chord-name → Tonal/Chord-symbol, даёт правильную инверсию',
+      '  chord("<G B C Cm>").voicing().s("triangle").gain(0.18).lpf(1500).room(.3),',
+      '  // Acoustic guitar arpeggio — sawtooth + slight shape() эмулирует string',
+      '  note("<g3 b3 d4 b3 c4 b3 c4 ees4 / e3 g3 c4 g3 e3 g3 c4 g3>").s("sawtooth").shape(0.3).gain(0.12).lpf(2500).room(.4),',
+      '  // Bass — root notes, G2/B2/C3/C3',
       '  note("<g2 b2 c3 c3>").s("sawtooth").gain(0.4).lpf(300),',
-      '  note("<[55,59,62] [59,63,66] [60,64,67] [60,63,67]>").s("triangle").gain(0.2).lpf(1500),',
-      '  n("<55 67 59 67 62 67 59 67>*2").s("sawtooth").gain(0.12).lpf(1500),',
-      '  s("sbd ~ sbd ~").gain(0.5),',
-      '  s("~ white ~ white").decay(.05).sustain(0).gain(0.22),',
-      '  s("white*8").decay(.04).sustain(0).gain(0.15)',
+      '  // Acoustic kit: kick на 1/3, snare backbeat, 8th-note hihat',
+      '  s("drums_bd ~ drums_bd ~").gain(0.55),',
+      '  s("~ drums_sd ~ drums_sd").gain(0.28),',
+      '  s("drums_hh*8").decay(.04).sustain(0).gain(0.15)',
       ')',
     ].join('\n');
     const layers = parseStackTopLayers(creep);
     expect(layers).toHaveLength(6);
     expect(layers.map((l) => l.name)).toEqual([
-      'Bass (g2)',
+      'chord',
       'Piano',
-      'Arp',
+      'Bass (g2)',
       'Samples',
       'Samples',
       'Samples',
