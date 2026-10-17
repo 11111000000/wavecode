@@ -2,7 +2,7 @@
  * Встроенные пресеты — известные мелодии/прогрессии.
  *
  * Каждый пресет имеет СВОЙ ритмический рисунок (не общий шаблон):
- *   - Creep: indie-rock 4/4, kick+snare backbeat, 8th-note hihat
+ *   - Creep: multi-section via cat() — intro (clean) → verse (band) → chorus (full) → outro
  *   - EDM 4-on-floor: House, 4-on-floor + pluck lead
  *   - Hip-hop boom-bap: swing 16ths, hard kick, snare 3
  *   - Jazz ii-V-I: walking bass + comping chords
@@ -33,24 +33,48 @@ export type Preset = {
 
 export const BUILTIN_PRESETS: ReadonlyArray<Preset> = [
   {
-    // Creep — Radiohead. G → B → C → Cm chord progression.
+    // Creep (Radiohead) — multi-section via cat(): intro (clean) → verse (band in)
+    // → chorus (full + lead + crash) → outro (pad + bass fade).
+    // G → B → C → Cm progression через все секции.
     id: 'creep',
     name: 'Creep',
     artist: 'Radiohead',
     score: [
-      '// Creep (Radiohead) — G → B → C → Cm, indie-rock с Hendrix-style аранжировкой',
-      'stack(',
-      '  // Chord pad — voicing() берёт chord-name → Tonal/Chord-symbol, даёт правильную инверсию',
-      '  chord("<G B C Cm>").voicing().s("triangle").gain(0.18).lpf(1500).room(.3),',
-      '  // Acoustic guitar arpeggio — sawtooth + slight shape() эмулирует string',
-      '  note("<g3 b3 d4 b3 c4 b3 c4 ees4 / e3 g3 c4 g3 e3 g3 c4 g3>").s("sawtooth").shape(0.3).gain(0.12).lpf(2500).room(.4),',
-      '  // Bass — root notes, G2/B2/C3/C3',
-      '  note("<g2 b2 c3 c3>").s("sawtooth").gain(0.4).lpf(300),',
-      '  // Acoustic kit: kick на 1/3, snare backbeat, 8th-note hihat',
-      '  s("drums_bd ~ drums_bd ~").gain(0.55),',
-      '  s("~ drums_sd ~ drums_sd").gain(0.28),',
-      '  s("drums_hh*8").decay(.04).sustain(0).gain(0.15)',
-      ')',
+      '// Creep (Radiohead) — multi-section: intro/verse/chorus/outro, total ~8 sec',
+      'cat([',
+      '  // ===== Section 1: INTRO (cycle 1) — clean arpeggio + bass only =====',
+      '  stack(',
+      '    chord("<G B C Cm>").voicing().s("triangle").gain(0.16).lpf(1500).room(.5),',
+      '    note("<g3 b3 d4 b3 c4 b3 ees4 d4>").s("sawtooth").shape(0.3).gain(0.10).lpf(2500).room(.4),',
+      '    note("<g2 b2 c3 c3>").s("sawtooth").gain(0.35).lpf(300)',
+      '  ),',
+      '  // ===== Section 2: VERSE (cycle 2) — добавляем kit =====',
+      '  stack(',
+      '    chord("<G B C Cm>").voicing().s("triangle").gain(0.18).lpf(1500).room(.3),',
+      '    note("<g3 b3 d4 b3 c4 b3 ees4 d4>").s("sawtooth").shape(0.3).gain(0.12).lpf(2500).room(.4),',
+      '    note("<g2 b2 c3 c3>").s("sawtooth").gain(0.40).lpf(300),',
+      '    s("drums_bd ~ drums_bd ~").gain(0.55),',
+      '    s("~ drums_sd ~ drums_sd").gain(0.28),',
+      '    s("drums_hh*8").decay(.04).sustain(0).gain(0.15)',
+      '  ),',
+      '  // ===== Section 3: CHORUS (cycle 3) — full kit + lead melody + crash =====',
+      '  stack(',
+      '    chord("<G B C Cm>").voicing().s("triangle").gain(0.20).lpf(2000).room(.4),',
+      '    // Lead: высокий motif, Jonny-style — те же chord tones но октавой выше',
+      '    note("<g4 b4 d5 b4 c5 b4 ees5 d5>").s("sawtooth").shape(0.4).gain(0.16).lpf(3500).room(.5),',
+      '    note("<g2 b2 c3 c3>").s("sawtooth").gain(0.45).lpf(300),',
+      '    s("drums_bd ~ drums_bd ~").gain(0.55),',
+      '    s("~ drums_sd ~ drums_sd").gain(0.32),',
+      '    s("drums_hh*8").decay(.04).sustain(0).gain(0.18),',
+      '    // Crash accent на первом бите секции',
+      '    s("drums_crash ~ ~ ~ ~ ~ ~ ~").gain(0.30)',
+      '  ),',
+      '  // ===== Section 4: OUTRO (cycle 4) — wind down: pad + bass, kit и lead уходят =====',
+      '  stack(',
+      '    chord("<G B C Cm>").voicing().s("triangle").attack(1).release(2).gain(0.20).room(.7),',
+      '    note("<g2 b2 c3 c3>").s("sawtooth").gain(0.30).lpf(300)',
+      '  )',
+      '])',
     ].join('\n'),
   },
   {
