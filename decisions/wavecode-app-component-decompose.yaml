@@ -1,0 +1,153 @@
+---
+schema: math-coding/3.3
+id: wavecode-app-component-decompose
+revision: 1
+state: draft
+
+intent: |
+  Разбить App.tsx (273 строки в одном монолитном AppShell) на 4
+  сфокусированных хука (useBootstrap, useKeyboardShortcuts,
+  useAudioStartIndicator, useRouteGuards), сам AppShell свести
+  к pure composition (≤100 строк). Behavior обязан остаться
+  идентичным — это regression-sensitive change в master-ветке,
+  которая сейчас в проде (wavecode.kosov.online). Цель —
+  разделить ответственности: bootstrap (audio+IDB+autosave),
+  keyboard map, transient UI signal (audioStarting), route-level
+  confirm dialogs. AppShell становится читаемым composition root:
+  видно, какие хуки инкапсулируют какие concerns. Reactivity-flow
+  сохраняется 1:1 (сигналы, onMount, onCleanup, createRoot).
+commitment: |
+  App.tsx ≤ 100 строк, ровно 4 новых хука, каждый с unit-тестом.
+  Identical observable behavior: те же keyboard shortcuts, те же
+  autoflip audioStarting, те же confirm prompts на тех же
+  действиях, тот же boot pipeline. Никаких новых состояний,
+  никаких рефакторингов domain/application слоёв.
+counterexample: |
+  The strongest objection to this decision is captured in the
+  `antithesis` field above: behavior regression в prod-deploy
+  wavecode.kosov.online — превращает «чистый рефактор» в hotfix.
+antithesis: |
+  (1) «App.tsx и так читается — рефактор перфекционизм». Возражение:
+  273 строки AppShell смешивают 4 разных concerns (audio bootstrap,
+  keyboard map, transient UI flag, route guards) в одном
+  компонентном scope. Тестировать прицельно любую из 4-х
+  обязанностей сейчас нельзя — extract позволит unit-test
+  каждую отдельно. Сейчас любая правка требует touch App.tsx и
+  рискует сломать соседний concern.
+  (2) «Идентичное поведение не проверяемо — лучше оставить как
+  было». Возражение: extract по существу copy-paste с rename,
+  плюс требует unit-test для каждого хука. Если хуки ведут себя
+  так же — App.tsx × поведение не сломалось. Если не так —
+  тесты поймают в ту же минуту, до merge.
+  (3) «Хуки-обёртки над onMount/onCleanup — overengineering».
+  Возражение: реальная выгода не в «обёртке», а в создании
+  единой feature-owned surface (один файл = один concern +
+  один тест-файл). Без extract у useAudioStartIndicator нет
+  собственного имени в type-space — невозможно grep,
+  документировать intent, покрыть тестом изолированно.
+  (4) «useBootstrap дублирует useAppBootstrap». Возражение: да,
+  useBootstrap — тонкая композиция (useAppBootstrap + useAutoSave),
+  единственная цель — сократить AppShell с 2 строк до 1 и
+  выразить семантику «app-level lifetime effects» единым термом.
+  Не «лишний слой ради слоя», а naming для composition root.
+scope:
+  paths:
+    - "ui/src/App.tsx"
+    - "ui/src/presentation/state/useBootstrap.ts"
+    - "ui/src/presentation/state/useKeyboardShortcuts.ts"
+    - "ui/src/presentation/state/useAudioStartIndicator.ts"
+    - "ui/src/presentation/state/useRouteGuards.ts"
+    - "ui/src/presentation/state/useAppBootstrap.ts"
+    - "ui/src/presentation/state/useAutoSave.ts"
+exclusions:
+    - "ui/src/presentation/components/landing/**"
+    - "ui/src/presentation/components/panels/**"
+    - "vite.config.ts"
+    - "ui/src/domain/**"
+    - "ui/src/application/**"
+outcomes:
+  - id: wavecode-app-component-decompose-outcome-size
+    statement: |
+      `App.tsx` после рефактора занимает не более 100 строк
+      (проверяется `wc -l ui/src/App.tsx`).
+  - id: wavecode-app-component-decompose-outcome-hooks
+    statement: |
+      4 новых хука (useBootstrap, useKeyboardShortcuts,
+      useAudioStartIndicator, useRouteGuards) + каждый имеет
+      минимум один unit-test (vitest) который проходит в CI.
+  - id: wavecode-app-component-decompose-outcome-behavior
+    statement: |
+      Observable behavior AppShell не изменился: те же
+      keyboard shortcuts (Ctrl+, / Ctrl+Z / Ctrl+Y / Ctrl+Shift+A),
+      тот же safety-timeout (2с) для audioStarting, тот же
+      confirm-текст и branches для new/reset, тот же boot
+      pipeline (transport sync + sample load + IDB restore +
+      grid restore + audio preload на gesture + ctxState polling).
+obligations:
+  - id: wavecode-app-component-decompose-obligation-size
+    claim: |
+      `wc -l <worktree>/ui/src/App.tsx` ≤ 100.
+    acceptance:
+      all:
+        - verifier: "wc -l"
+          result: pass
+  - id: wavecode-app-component-decompose-obligation-tests
+    claim: |
+      Unit-тесты для каждого хука проходят: useBootstrap.test,
+      useKeyboardShortcuts.test, useAudioStartIndicator.test,
+      useRouteGuards.test (≥ 1 test each, `vitest run` exit 0 для
+      новых файлов).
+    acceptance:
+      all:
+        - verifier: "vitest run on new hook tests"
+          result: pass
+  - id: wavecode-app-component-decompose-obligation-typecheck
+    claim: |
+      `npm run typecheck` (tsc --noEmit) выходит с code 0 на
+      head worktree.
+    acceptance:
+      all:
+        - verifier: "npm run typecheck"
+          result: pass
+  - id: wavecode-app-component-decompose-obligation-lint
+    claim: |
+      `npm run lint:no-console` (eslint на domain/application)
+      exit 0.
+    acceptance:
+      all:
+        - verifier: "npm run lint:no-console"
+          result: pass
+  - id: wavecode-app-component-decompose-obligation-presets
+    claim: |
+      `npm run validate:presets` exit 0 (sibling gate — рефактор
+      не должен ломать preset schema validation).
+    acceptance:
+      all:
+        - verifier: "npm run validate:presets"
+          result: pass
+  - id: wavecode-app-component-decompose-obligation-build
+    claim: |
+      `npm run build` (tsc --noEmit && vite build) exit 0.
+    acceptance:
+      all:
+        - verifier: "npm run build"
+          result: pass
+assumptions:
+  - value: |
+      useAppBootstrap существующая реализация (151 строка) корректна
+      и не требует internals-рефактора (только re-export/identity).
+  - value: |
+      installKeyboardShortcuts в uiState.ts — stable public API;
+      изменение сигнатуры не нужно.
+  - value: |
+      AudioRuntime type из useAppBootstrap — публичный экспорт,
+      useBootstrap может его re-export as-is.
+risk:
+  declared_triggers:
+    - behavior-regression-in-prod-deploy
+    - cleanup-leak-if-onCleanup-context-mismatch
+  owner: human:operator
+relations:
+  addresses:
+    - wavecode-bootstrap-math-coding-3.3@1
+---
