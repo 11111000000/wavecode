@@ -5,6 +5,7 @@ import {
   initialMicState,
   closeOpenNote,
   notesToSnippet,
+  computeTempoCpm,
   DEFAULT_TUNE,
   type PitchFrame,
   type MicState,
@@ -350,6 +351,193 @@ describe('notesToSnippet()', () => {
     expect(notesToSnippet([
       note(60, 0, 400, 31),
     ])).toBe('note("c4@0.400").s("piano").vib(3)');
+  });
+});
+
+describe('computeTempoCpm()', () => {
+  const mk = (startMs: number, midi: number = 60): AudioNote => ({
+    midi, cents: 0, startMs, durationMs: 0, vibratoCents: 0,
+  });
+
+  it('returns null when there is only 1 note', () => {
+    expect(computeTempoCpm([mk(0)])).toBeNull();
+  });
+
+  it('returns null for 2 notes within 30ms of each other (sub-frame noise)', () => {
+    expect(computeTempoCpm([mk(0), mk(10), mk(20)])).toBeNull();
+  });
+
+  it('keeps a single surviving IOI and discards sub-frame ones (2-note case)', () => {
+    // 0→10 (10ms, dropped) and 10→600 (590ms, kept). One interval
+    // survives the 30ms filter — that's enough to derive a CPM.
+    // 60 / 0.59 ≈ 101.7 BPM → cpm ≈ 25.42.
+    expect(computeTempoCpm([mk(0), mk(10), mk(600)])).toBeCloseTo(25.42, 1);
+  });
+
+  it('derives cpm = bpm/4 from the median IOI (2 notes, 500ms apart → 120 BPM → cpm=30)', () => {
+    expect(computeTempoCpm([mk(0), mk(500)])).toBe(30);
+  });
+
+  it('derives cpm = bpm/4 from the median IOI (3 notes, 400ms apart → 150 BPM → cpm=37.5)', () => {
+    expect(computeTempoCpm([mk(0), mk(400), mk(800)])).toBe(37.5);
+  });
+
+  it('uses the median when IOIs are uneven (400ms then 800ms)', () => {
+    // intervals = [400, 800], median = 600ms → bpm=100 → cpm=25
+    expect(computeTempoCpm([mk(0), mk(400), mk(1200)])).toBe(25);
+  });
+
+  it('clamps to user-supplied bpmRange when BPM > max', () => {
+    // 2 notes 200ms apart → 300 BPM. With range {40, 200}: clamp to 200 → cpm=50.
+    expect(
+      computeTempoCpm([mk(0), mk(200)], { bpmRange: { min: 40, max: 200 } }),
+    ).toBe(50);
+  });
+
+  it('clamps to user-supplied bpmRange when BPM < min', () => {
+    // 2 notes 2000ms apart → 30 BPM. With range {40, 200}: clamp to 40 → cpm=10.
+    expect(
+      computeTempoCpm([mk(0), mk(2000)], { bpmRange: { min: 40, max: 200 } }),
+    ).toBe(10);
+  });
+
+  it('keeps out-of-range BPM verbatim when bpmRange is undefined (default behaviour)', () => {
+    // 2 notes 200ms apart → 300 BPM. No range → keep raw → cpm=75.
+    expect(computeTempoCpm([mk(0), mk(200)])).toBe(75);
+    // 2 notes 2000ms apart → 30 BPM. No range → keep raw → cpm=7.5.
+    expect(computeTempoCpm([mk(0), mk(2000)])).toBe(7.5);
+  });
+
+  it('clamps even when the user-supplied range matches the default values', () => {
+    // Explicit field → clamp; the values do not matter.
+    expect(
+      computeTempoCpm([mk(0), mk(200)], { bpmRange: { min: 40, max: 200 } }),
+    ).toBe(50);
+  });
+});
+
+describe('notesToSnippet() — tempo quantisation (opt-in)', () => {
+  const note = (midi: number, t: number, durationMs: number = 0, vibratoCents: number = 0): AudioNote => ({
+    midi, cents: 0, startMs: t, durationMs, vibratoCents,
+  });
+
+  it('does nothing when tempoQuantize is false (default)', () => {
+    expect(notesToSnippet([note(60, 0), note(64, 500)])).toBe(
+      'note("c4 e4").s("piano")',
+    );
+  });
+
+  it('does nothing when tempoQuantize is true but only 1 note is present', () => {
+    expect(notesToSnippet([note(60, 0)], { tempoQuantize: true })).toBe(
+      'note("c4").s("piano")',
+    );
+  });
+
+  it('does nothing when all IOIs are < 30ms (sub-frame noise)', () => {
+    // 3 notes 10ms apart — no IOI survives the filter.
+    expect(
+      notesToSnippet([note(60, 0), note(64, 10), note(67, 20)], {
+        tempoQuantize: true,
+      }),
+    ).toBe('note("c4 e4 g4").s("piano")');
+  });
+
+  it('wraps in setCpm(30.000) for 2 notes 500ms apart (120 BPM, default range)', () => {
+    // 60/0.5 = 120 BPM; cpm = 120/4 = 30 (matches preset default CPS=0.5).
+    expect(
+      notesToSnippet([note(60, 0), note(64, 500)], { tempoQuantize: true }),
+    ).toBe('setCpm(30.000).note("c4 e4").s("piano")');
+  });
+
+  it('wraps in setCpm(37.500) for 3 notes 400ms apart (150 BPM)', () => {
+    expect(
+      notesToSnippet(
+        [note(60, 0), note(64, 400), note(67, 800)],
+        { tempoQuantize: true },
+      ),
+    ).toBe('setCpm(37.500).note("c4 e4 g4").s("piano")');
+  });
+
+  it('combines with .vib() — wrapping order matches existing vib test', () => {
+    // 2 notes 500ms apart (120 BPM, cpm=30) where the FIRST note
+    // carries vibratoCents=50 → depth=5. The existing vib test emits
+    // `note("c4@0.400 e4@0.400").s("piano").vib(5)` — vib AFTER s,
+    // setCpm prepends the snippet. Single-note cases can't quantise
+    // (no IOI), so we exercise the combination with 2+ notes.
+    expect(
+      notesToSnippet(
+        [
+          note(60, 0, 400, 50),
+          note(64, 500, 400, 0),
+        ],
+        { tempoQuantize: true },
+      ),
+    ).toBe('setCpm(30.000).note("c4@0.400 e4@0.400").s("piano").vib(5)');
+  });
+
+  it('combines with slowFactor — slow is outermost, then setCpm', () => {
+    expect(
+      notesToSnippet(
+        [note(60, 0), note(64, 500)],
+        { slowFactor: 2, tempoQuantize: true },
+      ),
+    ).toBe('slow(2).setCpm(30.000).note("c4 e4").s("piano")');
+  });
+
+  it('combines slowFactor + tempoQuantize + vib (full stack)', () => {
+    expect(
+      notesToSnippet(
+        [
+          note(60, 0, 400, 50),
+          note(64, 500, 400, 0),
+        ],
+        { slowFactor: 2, tempoQuantize: true },
+      ),
+    ).toBe('slow(2).setCpm(30.000).note("c4@0.400 e4@0.400").s("piano").vib(5)');
+  });
+
+  it('keeps raw BPM (clamped to range only when user supplies one) — BPM > max', () => {
+    // 2 notes 200ms apart → 300 BPM. Default range: keep → cpm=75.
+    expect(
+      notesToSnippet([note(60, 0), note(64, 200)], { tempoQuantize: true }),
+    ).toBe('setCpm(75.000).note("c4 e4").s("piano")');
+    // Same notes with explicit range {40, 200}: clamp to 200 → cpm=50.
+    expect(
+      notesToSnippet(
+        [note(60, 0), note(64, 200)],
+        { tempoQuantize: true, tempoBpmRange: { min: 40, max: 200 } },
+      ),
+    ).toBe('setCpm(50.000).note("c4 e4").s("piano")');
+  });
+
+  it('keeps raw BPM when below default min (clamp only when user supplies range)', () => {
+    // 2 notes 2000ms apart → 30 BPM. Default range: keep → cpm=7.5.
+    expect(
+      notesToSnippet([note(60, 0), note(64, 2000)], { tempoQuantize: true }),
+    ).toBe('setCpm(7.500).note("c4 e4").s("piano")');
+    // Same notes with explicit range {40, 200}: clamp to 40 → cpm=10.
+    expect(
+      notesToSnippet(
+        [note(60, 0), note(64, 2000)],
+        { tempoQuantize: true, tempoBpmRange: { min: 40, max: 200 } },
+      ),
+    ).toBe('setCpm(10.000).note("c4 e4").s("piano")');
+  });
+
+  it('accepts tempoTargetCps without changing the result (formula cancels it out)', () => {
+    // 120 BPM at any targetCps → cpm = bpm/4 = 30 (targetCps cancels).
+    expect(
+      notesToSnippet(
+        [note(60, 0), note(64, 500)],
+        { tempoQuantize: true, tempoTargetCps: 0.5 },
+      ),
+    ).toBe('setCpm(30.000).note("c4 e4").s("piano")');
+    expect(
+      notesToSnippet(
+        [note(60, 0), note(64, 500)],
+        { tempoQuantize: true, tempoTargetCps: 1.0 },
+      ),
+    ).toBe('setCpm(30.000).note("c4 e4").s("piano")');
   });
 });
 

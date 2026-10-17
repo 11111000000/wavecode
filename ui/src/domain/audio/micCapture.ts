@@ -401,6 +401,91 @@ export type MicSnippetOptions = {
   readonly instrument?: string;
   /** If true, wrap in `slow(<n>)` to slow by a factor (for legato playback). */
   readonly slowFactor?: number;
+  /**
+   * Opt-in tempo quantisation: when true, wrap the snippet in
+   * `setCpm(N)` where N is derived from the median inter-onset interval
+   * of the detected notes (see `computeTempoCpm`). Off by default so
+   * existing callers see no change.
+   */
+  readonly tempoQuantize?: boolean;
+  /**
+   * Target CPS the user's transport is (or will be) at. Unused by the
+   * math (the conversion `cps * 240 = bpm` cancels `targetCps` out
+   * — we always emit a CPM relative to `cpm = bpm / 4`, matching the
+   * preset convention "1 cycle = 1 bar of 4 beats"). Kept on the API
+   * so the caller can document intent and we can re-derive the formula
+   * later without changing callers.
+   */
+  readonly tempoTargetCps?: number;
+  /**
+   * BPM clamp range. When **undefined** (default) we use the preset
+   * convention `{ min: 40, max: 200 }` but DO NOT clamp — out-of-range
+   * BPMs are preserved so the user gets their actual tempo, not a
+   * truncated one. When **explicitly supplied** (even with the same
+   * numeric values), we clamp to the supplied range.
+   *
+   * Use the explicit-field check to distinguish the two cases; a
+   * deep-equal on the values would be brittle.
+   */
+  readonly tempoBpmRange?: { readonly min: number; readonly max: number };
+};
+
+/**
+ * Pure helper: derive the `setCpm(N)` value to wrap a snippet in, from
+ * the median inter-onset interval of the detected notes.
+ *
+ * Returns `null` when:
+ *   - fewer than 2 notes (cannot compute any IOI),
+ *   - zero IOIs ≥ 30ms survive the sub-frame-noise filter (e.g. all
+ *     notes are within 30ms of each other),
+ *   - any other reason to skip — the snippet is returned as if
+ *     `tempoQuantize` was false.
+ *
+ * Note on the noise filter: we keep the result with a SINGLE surviving
+ * IOI (e.g. 2 notes, one interval). The task's spec wording "fewer
+ * than 2 intervals remain → null" is internally inconsistent with
+ * its own test case "2 notes 500ms apart → cpm=N" — two notes
+ * produce only one interval. Treating "fewer than 1 interval" as the
+ * skip condition matches the test expectations.
+ *
+ * Math:
+ *   bpm = 60 / median_ioi_sec          (treat IOI as 1 beat)
+ *   cps = bpm / 240                    (1 cycle = 4 beats, per presets)
+ *   cpm = cps * 60 = bpm / 4
+ *
+ * Reference: `ui/src/domain/presets.ts` header — "каждый такт = 1 cycle
+ * (cps=0.5 по умолчанию = 2 сек/такт), chord changes по 1 биту
+ * (0.5 сек) на 120 BPM". So cps=0.5 ↔ 120 BPM ↔ 30 CPM.
+ *
+ * The `bpmRange` param distinguishes "user-supplied range, clamp" from
+ * "default range, keep raw BPM even outside it" — see MicSnippetOptions.
+ */
+export const computeTempoCpm = (
+  notes: ReadonlyArray<AudioNote>,
+  opts: {
+    readonly targetCps?: number | undefined;
+    readonly bpmRange?: { readonly min: number; readonly max: number } | undefined;
+  } = {},
+): number | null => {
+  if (notes.length < 2) return null;
+  const intervalsMs: number[] = [];
+  for (let i = 1; i < notes.length; i += 1) {
+    const ioiMs = notes[i]!.startMs - notes[i - 1]!.startMs;
+    if (ioiMs >= 30) intervalsMs.push(ioiMs);
+  }
+  if (intervalsMs.length < 1) return null;
+  const sorted = [...intervalsMs].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  const medianMs = sorted.length % 2 === 0
+    ? (sorted[mid - 1]! + sorted[mid]!) / 2
+    : sorted[mid]!;
+  const sec = medianMs / 1000;
+  if (sec <= 0) return null;
+  let bpm = 60 / sec;
+  if (opts.bpmRange !== undefined) {
+    bpm = Math.min(opts.bpmRange.max, Math.max(opts.bpmRange.min, bpm));
+  }
+  return bpm / 4;
 };
 
 /**
@@ -456,9 +541,20 @@ export const notesToSnippet = (
     inner = `${inner}.vib(${depth})`;
   }
 
+  if (opts.tempoQuantize === true) {
+    const cpm = computeTempoCpm(notes, {
+      targetCps: opts.tempoTargetCps,
+      bpmRange: opts.tempoBpmRange,
+    });
+    if (cpm !== null) {
+      inner = `setCpm(${cpm.toFixed(3)}).${inner}`;
+    }
+  }
+
   const slow = opts.slowFactor;
   if (typeof slow === 'number' && slow > 1) {
-    return `slow(${slow}).${inner}`;
+    inner = `slow(${slow}).${inner}`;
   }
+
   return inner;
 };
