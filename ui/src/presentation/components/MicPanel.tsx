@@ -19,7 +19,10 @@ import {
   micSlotLabel,
   micSlotGlyph,
   previewPillPayload,
+  setMicMode,
+  micMode,
   type MicSlot,
+  type MicMode,
 } from '../state/micStore';
 
 /**
@@ -179,6 +182,28 @@ export function MicPanel(): JSX.Element {
             return `${Math.round(hz)} Hz`;
           })()}
         </span>
+      </div>
+
+      <div class="mic-mode-row" role="group" aria-label="Режим приёма">
+        <span class="mic-row-label">mode</span>
+        <For each={[
+          { id: 'sustain' as MicMode, label: '♪ sustain', title: 'Pitch (голос, свист, скрипка) → MIDI ноты' },
+          { id: 'transient' as MicMode, label: '✦ transient', title: 'Onset (стук, щелчок, хлопок) → drum pattern' },
+        ]}>
+          {(m) => (
+            <button
+              type="button"
+              class="mic-mode-btn"
+              data-mode={m.id}
+              data-active={micMode() === m.id}
+              aria-label={m.title}
+              title={m.title}
+              onClick={() => setMicMode(m.id)}
+            >
+              {m.label}
+            </button>
+          )}
+        </For>
       </div>
 
       <div class="mic-slot-row" role="group" aria-label="Куда применить">

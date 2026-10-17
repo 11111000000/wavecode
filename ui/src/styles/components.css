@@ -4467,6 +4467,28 @@ textarea.ai-textarea:focus-visible {
   font-size: var(--fs-2xs);
 }
 
+.mic-mode-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding-left: var(--space-2xs);
+  border-left: 1px solid var(--surface-2);
+}
+.mic-mode-btn {
+  padding: 2px 8px;
+  border: 1px solid var(--surface-2);
+  border-radius: var(--radius-sm);
+  background: var(--surface-0);
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.mic-mode-btn[data-active='true'] {
+  color: var(--cyan);
+  border-color: var(--cyan);
+  background: color-mix(in oklab, var(--cyan) 14%, var(--surface-0));
+}
+
 .mic-slot-row {
   display: inline-flex;
   align-items: center;
