@@ -5,7 +5,7 @@ import { installTypingTracker } from './presentation/state/editorTypingTracker';
 import { evalScore, stopAudio } from './presentation/state/audioActions';
 import { isGridEmptyState } from './presentation/state/gridState';
 import { syncGridFromScore } from './presentation/components/StepGrid';
-import { getPreset, saveCustomPreset, deleteCustomPreset } from './presentation/state/presetsStore';
+import { getPreset, saveCustomPreset, deleteCustomPreset, renameCustomPreset } from './presentation/state/presetsStore';
 import { getSelectedPresetId, setSelectedPresetPersist } from './presentation/state/selectedPreset';
 import { useBootstrap } from './presentation/state/useBootstrap';
 import { useKeyboardShortcuts } from './presentation/state/useKeyboardShortcuts';
@@ -42,9 +42,23 @@ function AppShell(): JSX.Element {
     const id = presetId();
     if (!id.startsWith('custom-')) return;
     deleteCustomPreset(id);
+    // appStore.activePresetId — гонка с useAutoSave (500ms debounce):
+    // если релоад случится до flush, IDB сохранит старый custom-id
+    // → после релоада dropdown показывает мёртвый id, а играет
+    // содержимое 'creep' (см. decisions/fix-new-composition-flow.yaml).
+    dispatch({ type: 'switchPreset', id: 'creep' });
     setSelectedPresetPersist('creep');
     const fallback = getPreset('creep');
     if (fallback) dispatch({ type: 'replaceScore', text: fallback.score });
+  };
+  const onRenamePreset = (): void => {
+    const id = presetId();
+    if (!id.startsWith('custom-')) return;
+    const current = getPreset(id);
+    if (!current) return;
+    const raw = window.prompt('Переименовать пресет', current.name);
+    if (raw === null) return;
+    renameCustomPreset(id, raw);
   };
   const onToggleLayout = (): void => { setLayout(getLayout() === 'ai-primary' ? 'code-primary' : 'ai-primary'); };
   const chooseMobileMode = (m: MobileMode): void => { setMobileMode(m); setMobileModeSignal(m); };
@@ -89,7 +103,8 @@ function AppShell(): JSX.Element {
       presetId={presetId} mobileMode={mobileMode} showSavePreset={showSavePreset} newPresetName={newPresetName}
       chooseMobileMode={chooseMobileMode} onSavePreset={() => setShowSavePreset((v) => !v)}
       onRollback={undo} onRedo={redo} onNew={onNew}
-      onDeletePreset={onDeletePreset} onResetAll={onResetAll} onToggleLayout={onToggleLayout} onOpenAdmin={openAdmin}
+      onDeletePreset={onDeletePreset} onRenamePreset={onRenamePreset} onResetAll={onResetAll}
+      onToggleLayout={onToggleLayout} onOpenAdmin={openAdmin}
       onLoadPreset={onLoadPreset} onSetShowSavePreset={setShowSavePreset} onSetNewPresetName={setNewPresetName}
       onSaveCustomPreset={onSaveCustomPreset}
       onPlay={() => { setAudioStarting(true); void evalScore(); }} onStop={() => { void stopAudio(); }}

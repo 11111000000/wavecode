@@ -23,6 +23,7 @@ export type TopBarProps = {
   onRedo: () => void;
   onNew: () => void;
   onDeletePreset: () => void;
+  onRenamePreset: () => void;
   onResetAll: () => void;
   onToggleLayout: () => void;
   onOpenAdmin: () => void;
@@ -131,6 +132,7 @@ export function TopBar(props: TopBarProps): JSX.Element {
           chooseMobileMode={props.chooseMobileMode}
           onSavePreset={props.onSavePreset}
           onDeletePreset={props.onDeletePreset}
+          onRenamePreset={props.onRenamePreset}
           onResetAll={props.onResetAll}
           onOpenAdmin={props.onOpenAdmin}
         />

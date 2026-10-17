@@ -1,7 +1,7 @@
 import { Show, createSignal, onMount, onCleanup, For, type JSX } from 'solid-js';
 import type { MobileMode } from '~/presentation/state/uiState';
 import {
-  SaveIcon, TrashIcon, ResetIcon, PhoneIcon, WrenchIcon, DotsVIcon,
+  SaveIcon, TrashIcon, ResetIcon, PhoneIcon, WrenchIcon, DotsVIcon, PencilIcon,
 } from '~/presentation/icons';
 
 export type OverflowMenuProps = {
@@ -10,6 +10,7 @@ export type OverflowMenuProps = {
   chooseMobileMode: (m: MobileMode) => void;
   onSavePreset: () => void;
   onDeletePreset: () => void;
+  onRenamePreset: () => void;
   onResetAll: () => void;
   onOpenAdmin: () => void;
 };
@@ -76,6 +77,15 @@ export function OverflowMenu(props: OverflowMenuProps): JSX.Element {
           </button>
 
           <Show when={props.presetId.startsWith('custom-')}>
+            <button
+              type="button"
+              class="wc-overflow-item"
+              role="menuitem"
+              onClick={() => { close(); props.onRenamePreset(); }}
+            >
+              <PencilIcon size={14} />
+              <span>Переименовать пресет</span>
+            </button>
             <button
               type="button"
               class="wc-overflow-item"
