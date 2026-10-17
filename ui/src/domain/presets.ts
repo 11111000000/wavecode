@@ -10,7 +10,6 @@
  *   - Bossa Nova: 3+2 clave + nylon comping + shaker
  *   - Trap: 808 sub + hat rolls
  *   - Reggaeton: dembow + detuned synth bass
- *   - Dreampop: 16th-note strum + chorus pad
  *   - Step Grid demo: rock beat для 🎹 Step
  *   - Piano ballad: Salamander Piano v3 (CC0)
  *   - 808 classic (synth): чистый Strudel-синтез, no samples
@@ -218,28 +217,6 @@ export const BUILTIN_PRESETS: ReadonlyArray<Preset> = [
       '  s("~ ~ rim ~ ~ rim ~ rim ~ ~ rim ~ ~ rim ~").decay(.05).gain(0.10),',
       '  // Subtle shaker на каждой 16-й',
       '  s("~ sh ~ sh ~ sh ~ sh ~ sh ~ sh ~ sh ~").decay(.04).gain(0.12)',
-      ')',
-    ].join('\n'),
-  },
-  {
-    // Dreampop / shoegaze: 16th-note strum + chorus-washed pad + soft vocal.
-    id: 'dreampop',
-    name: 'Dreampop',
-    artist: 'Shoegaze',
-    score: [
-      '// Dreampop / shoegaze — jangly 16th strum + chorus-washed pad + soft lead',
-      'stack(',
-      '  // 16th-note guitar strum — sawtooth + shape(0.4) эмулирует струнную',
-      '  // плюс heavy reverb+delay для shoegaze wash',
-      '  note("<e4 ~ b4 ~ e4 ~ b4 ~ e4 ~ b4 ~ g4 ~ d4 ~ g4 ~ d4 ~>").s("sawtooth").shape(0.4).gain(0.10).lpf(2500).room(.6).delay(.3),',
-      '  // Chorus-washed chord pad — Am → F → C → G (классика dreampop)',
-      '  chord("<Am F C G>").voicing().s("triangle").lpf(2000).room(.7).gain(0.16),',
-      '  // Bass — root notes, слегка up чтобы держать groove',
-      '  note("<a2 f2 c2 g2 a2 f2 c2 g2>").s("triangle").gain(0.30).lpf(500),',
-      '  // Soft vocal lead — triangle с медленной attack и reverb (lo-fi vocal feel)',
-      '  note("a4 ~ c5 ~ e5 ~ c5 ~ a4 ~ g4 ~ a4 ~ c5 ~ e5 ~ c5 ~").s("triangle").attack(.05).decay(.3).sustain(.1).gain(0.10).room(.5).lpf(2500),',
-      '  // Soft kick на 1 и 3 (sampled с deep lpf)',
-      '  s("drums_bd ~ ~ drums_bd ~ ~ ~ ~").decay(.10).gain(0.22)',
       ')',
     ].join('\n'),
   },

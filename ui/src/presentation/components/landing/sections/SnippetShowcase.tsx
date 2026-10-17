@@ -16,7 +16,6 @@ const PRESETS: ReadonlyArray<PresetItem> = [
   { id: 'jazz-ii-v-i',    name: 'Джаз ii-V-I',      genre: 'Бибоп · ходячий бас',     tone: 'primary'   },
   { id: 'bossa-nova',     name: 'Босса-нова',      genre: '3+2 · клаве',              tone: 'cyan'    },
   { id: 'trap-atlanta',   name: 'Трэп',             genre: '808 · суб-бас',            tone: 'magenta' },
-  { id: 'dreampop',       name: 'Dream pop',        genre: 'Шугейз · 16-ми',           tone: 'cyan'    },
 ];
 
 /**
