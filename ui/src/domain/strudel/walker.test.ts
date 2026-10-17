@@ -31,7 +31,7 @@ import { BUILTIN_PRESETS } from '~/domain/presets';
  * to `findTopStack` semantics must be reflected here.
  */
 const EXPECTED_STACK_LAYERS: ReadonlyArray<{ readonly id: string; readonly sLayers: number; readonly totalLayers: number }> = [
-  { id: 'creep', sLayers: 0, totalLayers: 3 }, // intro section only (legacy depth-1)
+  { id: 'creep', sLayers: 0, totalLayers: 2 }, // verse bar 1 only (legacy depth-1)
   { id: 'edm-house', sLayers: 2, totalLayers: 4 }, // section 1 only (legacy depth-1)
   { id: 'hiphop-boombap', sLayers: 2, totalLayers: 2 }, // intro only (legacy depth-1)
   { id: 'jazz-ii-v-i', sLayers: 2, totalLayers: 7 }, // no cat wrapper, top-level stack

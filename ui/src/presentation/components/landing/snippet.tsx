@@ -18,55 +18,36 @@ export type SnippetLine = ReadonlyArray<
  */
 export const HERO_SNIPPET: ReadonlyArray<SnippetLine> = [
   [
-    { t: 'comment', text: '// Creep (Radiohead) — G → B → C → Cm в инди-рок 4/4' },
+    { t: 'comment', text: '// Creep (Radiohead) — G → B → C → Cm, ~92 BPM' },
   ],
   [
-    { t: 'code', text: 'stack(' },
-  ],
-  [
-    { t: 'code', text: '  ' },
-    { t: 'comment', text: '// Bass: root notes' },
-  ],
-  [
-    { t: 'code', text: '  note(' },
-    { t: 'mini',  text: '"<g2 b2 c3 c3>"' },
-    { t: 'code', text: ').s("sawtooth").gain(0.4).lpf(300),' },
+    { t: 'code', text: 'cat(' },
   ],
   [
     { t: 'code', text: '  ' },
-    { t: 'comment', text: '// Chord pad' },
+    { t: 'comment', text: '// verse: clean arpeggio, один аккорд на такт' },
   ],
   [
-    { t: 'code', text: '  note(' },
-    { t: 'mini',  text: '"<[55,59,62] [59,63,66] [60,64,67] [60,63,67]>"' },
-    { t: 'code', text: ').s("triangle").gain(0.2).lpf(1500),' },
+    { t: 'code', text: '  stack(' },
   ],
   [
-    { t: 'code', text: '  ' },
-    { t: 'comment', text: '// 8th-note arpeggio' },
+    { t: 'code', text: '    note(' },
+    { t: 'mini',  text: '"g3 b3 d4 b3 g3 b3 d4 b3"' },
+    { t: 'code', text: ').s("triangle").decay(.28).sustain(0).gain(0.16).room(.5),' },
   ],
   [
-    { t: 'code', text: '  n(' },
-    { t: 'mini',  text: '"<55 67 59 67 62 67 59 67>*2"' },
-    { t: 'code', text: ').s("sawtooth").gain(0.12).lpf(1500),' },
+    { t: 'code', text: '    note(' },
+    { t: 'mini',  text: '"g2"' },
+    { t: 'code', text: ').s("sawtooth").gain(0.3).lpf(300),' },
   ],
   [
-    { t: 'code', text: '  s(' },
-    { t: 'mini',  text: '"drums_bd ~ drums_bd ~"' },
-    { t: 'code', text: ').gain(0.5),' },
+    { t: 'code', text: '  ),' },
   ],
   [
-    { t: 'code', text: '  s(' },
-    { t: 'mini',  text: '"~ white ~ white"' },
-    { t: 'code', text: ').decay(.05).sustain(0).gain(0.22),' },
+    { t: 'comment', text: '  // … B, C, Cm, затем chorus: distorted triads + drums' },
   ],
   [
-    { t: 'code', text: '  s(' },
-    { t: 'mini',  text: '"white*8"' },
-    { t: 'code', text: ').decay(.04).sustain(0).gain(0.15)' },
-  ],
-  [
-    { t: 'code', text: ')' },
+    { t: 'code', text: ').slow(1.3)' },
   ],
 ];
 
