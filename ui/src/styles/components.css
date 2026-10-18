@@ -5200,3 +5200,151 @@ textarea.ai-textarea:focus-visible {
   opacity: 0.7;
 }
 
+/* =========================================================================
+ *  ONBOARDING TOUR — wavecode-welcome-tour
+ *  5-step first-visit overlay. Self-mounted at the App level
+ *  (see presentation/components/tour/WelcomeTour.tsx). Z-index
+ *  --z-modal + 10 = 70 — strictly above tabbar / sheet / fab,
+ *  but BELOW .wc-toast (z=80) so streaming LLM token updates or
+ *  error toasts stay visible mid-tour.
+ * ========================================================================= */
+
+.tour-overlay {
+  position: fixed;
+  inset: 0;
+  /* Higher than --z-modal (60) but lower than --z-toast (80). */
+  z-index: calc(var(--z-modal) + 10);
+  pointer-events: auto;
+  background: rgba(0, 0, 0, 0.62);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+  animation: tour-overlay-fade var(--dur-md) var(--ease);
+}
+
+@keyframes tour-overlay-fade {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.tour-spotlight {
+  position: fixed;
+  border: 2px solid var(--primary);
+  border-radius: var(--radius-md);
+  box-shadow:
+    0 0 0 4px rgba(245, 158, 11, 0.18),
+    0 0 22px var(--primary-glow);
+  pointer-events: none;
+  transition:
+    top    180ms var(--ease),
+    left   180ms var(--ease),
+    width  180ms var(--ease),
+    height 180ms var(--ease);
+}
+
+.tour-tooltip {
+  position: fixed;
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  padding: var(--space-lg);
+  box-shadow: var(--shadow-pop), 0 0 24px rgba(0, 0, 0, 0.5);
+  font-family: var(--font-sans);
+  color: var(--fg);
+  pointer-events: auto;
+  animation: tour-tooltip-in var(--dur-md) var(--ease-spring);
+}
+
+@keyframes tour-tooltip-in {
+  from { opacity: 0; transform: translateY(8px) scale(0.98); }
+  to   { opacity: 1; transform: translateY(0)   scale(1); }
+}
+
+.tour-tooltip__step {
+  font-family: var(--font-mono);
+  font-size: var(--fs-2xs);
+  text-transform: uppercase;
+  letter-spacing: var(--ls-caps);
+  color: var(--fg-dim);
+  margin-bottom: var(--space-xs);
+}
+
+.tour-tooltip__title {
+  margin: 0 0 var(--space-sm) 0;
+  font-family: var(--font-display);
+  font-size: var(--fs-lg);
+  font-weight: var(--fw-semibold);
+  color: var(--primary);
+  line-height: 1.2;
+}
+
+.tour-tooltip__body {
+  margin: 0 0 var(--space-md) 0;
+  font-size: var(--fs-sm);
+  line-height: var(--lh-relaxed);
+  color: var(--fg);
+}
+
+.tour-tooltip__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  justify-content: flex-end;
+}
+
+.tour-tooltip__btn {
+  min-height: var(--touch-target);
+  padding: 0 var(--space-md);
+  font-family: var(--font-sans);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  user-select: none;
+  transition:
+    background var(--dur-xs) var(--ease),
+    color var(--dur-xs) var(--ease),
+    transform var(--dur-2xs) var(--ease);
+  background: var(--surface-1);
+  color: var(--fg);
+  border: 1px solid var(--border);
+}
+.tour-tooltip__btn:hover { background: var(--surface-3); border-color: var(--border-strong); }
+.tour-tooltip__btn:active { transform: scale(0.96); }
+
+.tour-tooltip__btn--primary {
+  background: var(--primary);
+  color: var(--fg-inverse);
+  border-color: var(--primary);
+  box-shadow: var(--shadow-glow-primary);
+}
+.tour-tooltip__btn--primary:hover {
+  background: var(--primary);
+  filter: brightness(1.1);
+}
+
+.tour-tooltip__btn--ghost {
+  background: transparent;
+  color: var(--fg-dim);
+  border-color: transparent;
+}
+.tour-tooltip__btn--ghost:hover {
+  background: var(--surface-3);
+  color: var(--fg);
+}
+
+.tour-tooltip__hint {
+  margin-top: var(--space-sm);
+  font-family: var(--font-mono);
+  font-size: var(--fs-3xs);
+  text-transform: uppercase;
+  letter-spacing: var(--ls-caps);
+  color: var(--fg-ghost);
+  text-align: right;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tour-overlay,
+  .tour-tooltip,
+  .tour-spotlight { transition: none; animation: none; }
+}
+

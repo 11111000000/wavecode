@@ -200,6 +200,7 @@ export function TransportBar(props: TransportBarProps): JSX.Element {
           class="transport-play-btn"
           data-tone={audioRunning() ? 'cyan' : 'primary'}
           data-state={audioRunning() ? 'stop' : 'play'}
+          data-tour="play"
           aria-label={audioRunning() ? 'Стоп' : 'Запуск'}
           aria-pressed={audioRunning()}
           aria-busy={!audioRunning() && audioStarting()}

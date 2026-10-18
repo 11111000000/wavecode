@@ -16,6 +16,7 @@ import { installConsoleGlobals } from './presentation/components/consoleGlobals'
 import { AppShellView } from './presentation/components/app/AppShellView';
 import { Admin } from './presentation/pages/Admin';
 import { Landing } from './presentation/components/landing/Landing';
+import { WelcomeTour } from './presentation/components/tour/WelcomeTour';
 
 export function App(): JSX.Element {
   const route = useHashRoute();
@@ -23,6 +24,7 @@ export function App(): JSX.Element {
     <Show when={route() === 'landing'}><Landing /></Show>
     <Show when={route() === 'app'}><AppShell /></Show>
     <Show when={route() === 'admin'}><Admin /></Show>
+    <WelcomeTour />
   </>);
 }
 
