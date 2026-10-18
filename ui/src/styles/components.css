@@ -5425,3 +5425,156 @@ textarea.ai-textarea:focus-visible {
   .tour-spotlight { transition: none; animation: none; }
 }
 
+/* =========================================================================
+ *  PIANOROLL — DAW-style note editor in ScorePanel.
+ *  <Pianoroll /> renders a Canvas (HTML5) timeline + side pitch labels.
+ *  Toggle sibling: `.pianoroll-view-toggle` (text | roll) lives just
+ *  under the editor area; default = text.
+ * ========================================================================= */
+
+.pianoroll-host {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  background: var(--surface-0, #0a0a0e);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, monospace);
+}
+
+.pianoroll-toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  padding: var(--space-2xs) var(--space-sm);
+  background: var(--surface-1, #111114);
+  border-bottom: 1px solid var(--border);
+  font-size: var(--fs-2xs, 11px);
+  color: var(--fg-dim);
+  flex-shrink: 0;
+  height: 36px;
+}
+
+.pianoroll-count {
+  margin-right: auto;
+  font-variant-numeric: tabular-nums;
+  color: var(--fg-dim);
+}
+
+.pianoroll-zoom-btn {
+  height: 26px;
+  min-width: 26px;
+  padding: 0 var(--space-xs);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--fg-dim);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: var(--fs-2xs);
+  line-height: 1;
+  transition: all var(--dur-xs) var(--ease);
+}
+.pianoroll-zoom-btn:hover {
+  border-color: var(--primary, #60a5fa);
+  color: var(--primary, #60a5fa);
+}
+.pianoroll-zoom-btn:active { transform: scale(0.95); }
+
+.pianoroll-zoom-value {
+  min-width: 44px;
+  text-align: center;
+  font-size: var(--fs-2xs);
+  color: var(--fg);
+  font-variant-numeric: tabular-nums;
+}
+
+.pianoroll-canvas-wrap {
+  position: relative;
+  flex: 1 1 auto;
+  overflow: hidden;
+}
+
+.pianoroll-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  cursor: crosshair;
+  background: var(--surface-0, #0a0a0e);
+  touch-action: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.pianoroll-empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-xs);
+  background: rgba(10, 10, 14, 0.85);
+  color: var(--fg-ghost);
+  font-family: var(--font-mono);
+  font-size: var(--fs-2xs);
+  text-align: center;
+  pointer-events: none;
+}
+.pianoroll-empty code {
+  background: var(--surface-2);
+  padding: 1px 6px;
+  border-radius: 3px;
+  border: 1px solid var(--border);
+  color: var(--primary, #60a5fa);
+  font-size: var(--fs-2xs);
+}
+.pianoroll-empty p {
+  margin: 0;
+}
+
+/* ----- view-mode toggle (text | roll) shown under the editor  ----- */
+
+.pianoroll-view-toggle {
+  display: inline-flex;
+  margin: var(--space-sm) 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  background: var(--surface-2);
+  align-self: flex-start;
+}
+.pianoroll-view-toggle-btn {
+  height: 32px;
+  padding: 0 var(--space-md);
+  background: transparent;
+  border: 0;
+  border-right: 1px solid var(--border);
+  color: var(--fg-dim);
+  font-family: inherit;
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+  cursor: pointer;
+  text-transform: lowercase;
+  letter-spacing: var(--ls-wide);
+  transition: all var(--dur-xs) var(--ease);
+  min-height: var(--touch-target, 44px);
+}
+.pianoroll-view-toggle-btn:last-child { border-right: 0; }
+.pianoroll-view-toggle-btn:hover {
+  color: var(--fg);
+  background: var(--surface-3);
+}
+.pianoroll-view-toggle-btn[data-active='true'] {
+  background: var(--primary, #60a5fa);
+  color: var(--fg-inverse, #06060a);
+}
+
+.pianoroll-pane {
+  width: 100%;
+  min-height: 220px;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
