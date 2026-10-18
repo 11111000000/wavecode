@@ -1,0 +1,303 @@
+---
+schema: math-coding/3.3
+id: wavecode-welcome-tour
+revision: 1
+state: draft
+body_sha: "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+yaml_sha: "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+
+intent: |
+  A first-time user lands on `#/app` after the Landing CTA and sees
+  a top bar, transport strip, AI panel, and a code editor — without
+  any affordance telling them what to click first. The README
+  promises "learns in 10 minutes" but the app itself offers no
+  in-product guidance. New users try clicking the play button by
+  accident, never discover the AI panel's "Применить" affordance,
+  and bounce.
+
+  The fix: a 5-step onboarding overlay that points at exactly one
+  UI element at a time, with one Russian sentence explaining what
+  to do and one "Дальше" / "Пропустить" button pair. The overlay
+  appears only on the first visit to `#/app` (gated by a
+  localStorage flag `wavecode-onboarding-complete-v1`) and is
+  skippable at every step — no modal trap, no required reading.
+
+  Five steps, in order:
+  1. PLAY  — highlight the play button in the transport strip.
+  2. EDIT  — highlight the CodeMirror `.cm-content` editor.
+  3. AI    — highlight the AI panel textarea.
+  4. SAVE  — highlight the overflow menu (⋯) where "Сохранить
+             пресет" lives.
+  5. DONE  — full-screen "Готово!" with a final close button.
+
+  No new dependency on third-party tour libraries (driver.js /
+  shepherd.js); a hand-rolled ~120 LOC overlay is enough and
+  avoids the 30-50KB gz cost of pulling in a generic library for a
+  one-time UX affordance.
+
+commitment: |
+  1. `ui/src/presentation/components/tour/tourState.ts` exposes:
+     - `WAVECODE_ONBOARDING_KEY = 'wavecode-onboarding-complete-v1'`
+       (the localStorage key; single source of truth).
+     - `shouldShowTour(): boolean` — reads the flag, returns `true`
+       iff the flag is absent or != 'true'. Pure read; no side
+       effects.
+     - `markTourComplete(): void` — sets the flag to `'true'`.
+       Wrapped in try/catch so a quota-exceeded / private-mode
+       localStorage failure never throws in the UI.
+     - A module-level Solid signal `tourStep` (number 0..N) tracking
+       the current step within the active session, plus `nextStep`,
+       `skipTour`, `resetTour` mutators. The signal is
+       session-scoped — closing the tour clears it, reloading the
+       page with the flag set still doesn't re-open the tour.
+     - `isTourActive(): boolean` — true when on `#/app` AND
+       `shouldShowTour()` AND step < steps.length.
+  2. `tourSteps.ts` exports `TOUR_STEPS: ReadonlyArray<TourStep>`,
+     five entries in fixed order, each with
+     `{ id, target, title, body, position: 'top'|'bottom'|'left'|'right' }`.
+     Targets use existing selectors where possible
+     (`[data-testid="transport-play-btn"]`, `.cm-content`,
+     `[data-ai-textarea]`, `.wc-overflow-menu`, `body`) so no
+     extra `data-tour` plumbing is required for four of five
+     steps. The play button gets ONE additional attribute
+     `data-tour="play"` for symmetry and to make the selector
+     resilient if the testid is later renamed.
+  3. `WelcomeTour.tsx` renders nothing when `isTourActive()` is
+     false. When active, it:
+     - Reads the current route via `useHashRoute()` and self-hides
+       on `landing` / `admin` (the tour is only meaningful inside
+       `#/app`).
+     - Computes the target element's bounding rect on every step
+       change AND every `resize`/`scroll` event (passive
+       listeners), renders a `.tour-spotlight` ring at that rect.
+     - Renders a `.tour-tooltip` card positioned via CSS
+       `position: fixed` with the per-step `position` prop
+       (`top` / `bottom` / `left` / `right` of the spotlight).
+     - Shows three buttons: «Пропустить» (calls `skipTour` →
+       `markTourComplete`), «Дальше →» (calls `nextStep`; on the
+       last step the label flips to «Готово ✓» and the call goes
+       to `markTourComplete`), and a small «Esc» hint.
+     - Closes on Escape key (sets the flag and unmounts).
+     - Bumps the step on the relevant user action when possible:
+       step 1 (PLAY) auto-advances when the transport-play button
+       is clicked; step 2 (EDIT) auto-advances when the CodeMirror
+       editor dispatches a doc-changed event; steps 3/4 advance
+       on explicit «Дальше» only (because we don't want to
+       surprise the user mid-prompt / mid-menu).
+  4. `App.tsx` grows ONE line: `<WelcomeTour />` as the last child
+     of the `<>` fragment in the `App` component. The component
+     self-gates; no conditional at the call site is needed.
+  5. `TransportBar.tsx` grows ONE attribute:
+     `data-tour="play"` on the `.transport-play-btn` element.
+     Existing `data-testid` already targets the same node.
+  6. `ui/src/styles/components.css` gains a new section
+     `/* ONBOARDING TOUR — wavecode-welcome-tour */` at the end
+     of the file with: `.tour-overlay`, `.tour-spotlight`,
+     `.tour-tooltip`, `.tour-tooltip__title`, `.tour-tooltip__body`,
+     `.tour-tooltip__actions`, `.tour-tooltip__btn`. Z-index
+     `var(--z-modal) + 10` (= 70), strictly above
+     `.wc-tabbar` / `.wc-sheet-backdrop` but below `.wc-toast`
+     (80) — toast updates are still visible during the tour.
+  7. Unit tests in `WelcomeTour.test.tsx` cover: (a) flag absent →
+     first step renders, (b) flag set → nothing renders, (c)
+     «Пропустить» sets flag, (d) «Дальше» advances to next step
+     on step 1→2, (e) last step's «Готово ✓» sets flag.
+
+scope:
+  paths:
+    - "ui/src/presentation/components/tour/**"
+    - "ui/src/styles/components.css"
+    - "ui/src/presentation/components/TransportBar.tsx"
+    - "ui/src/App.tsx"
+    - "decisions/wavecode-welcome-tour.yaml"
+  exclusions:
+    - "ui/src/presentation/components/app/**"
+    - "ui/src/presentation/panels/AIEditPanel.tsx"
+    - "ui/src/application/useCases/llmEdit.ts"
+    - "ui/src/presentation/components/PianoKeyboard.tsx"
+    - "ui/src/presentation/components/SnippetShowcase.tsx"
+    - "ui/src/presentation/state/use*"
+    - "ui/vite.config.ts"
+
+outcomes:
+  - id: tour-gating-idempotent
+    statement: |
+      On the 2nd-and-onward visits to `#/app`, no tour overlay
+      ever renders. Verified by setting the localStorage flag to
+      `'true'` and confirming that `WelcomeTour` returns `null`.
+  - id: tour-renders-five-steps
+    statement: |
+      On the 1st visit (flag absent), `WelcomeTour` renders each
+      of the five steps in order when «Дальше» is clicked. After
+      the 5th step the flag is set to `'true'` and no further
+      overlay appears.
+  - id: tour-skippable
+    statement: |
+      Clicking «Пропустить» on any step calls `markTourComplete`
+      and immediately hides the overlay. Reloading the page does
+      NOT re-open the tour after either «Пропустить» or the
+      final «Готово ✓».
+  - id: tour-z-above-chrome
+    statement: |
+      The overlay sits above `.wc-tabbar` (z=30), `.wc-sheet` (z=40),
+      and `.wc-fab` (z=20), so the dim backdrop covers the entire
+      viewport. Toast (z=80) remains visible on top so a streaming
+      LLM token update is still visible mid-tour.
+  - id: tour-no-new-deps
+    statement: |
+      No new entry in `ui/package.json` `dependencies` /
+      `devDependencies`. The overlay is hand-rolled with Solid +
+      native CSS.
+
+obligations:
+  - id: tour-state-unit
+    claim: |
+      `tourState.ts` exports `shouldShowTour`, `markTourComplete`,
+      `nextStep`, `skipTour`, `resetTour`, `isTourActive`. Unit
+      tests in `tourState.test.ts` verify that `markTourComplete`
+      writes `'true'` to localStorage and that `shouldShowTour`
+      returns `false` afterwards.
+    acceptance:
+      all:
+        - verifier: "vitest run ui/src/presentation/components/tour/tourState.test.ts"
+          result: pass
+  - id: tour-component-unit
+    claim: |
+      `WelcomeTour.test.tsx` covers the five render / interaction
+      scenarios: (a) flag absent renders step 1 with title text,
+      (b) flag set renders nothing, (c) «Пропустить» sets flag,
+      (d) «Дальше» advances step 1 → 2, (e) «Готово ✓» on step 5
+      sets the flag.
+    acceptance:
+      all:
+        - verifier: "vitest run ui/src/presentation/components/tour/WelcomeTour.test.tsx"
+          result: pass
+  - id: tour-five-steps-correct-text
+    claim: |
+      `tourSteps.ts` exports exactly five steps with the agreed
+      Russian copy and the agreed target selectors. Verified by a
+      unit test that asserts `TOUR_STEPS.length === 5`,
+      each `target` matches the documented selector, and
+      `TOUR_STEPS[0].title` is the Russian string «Нажми ▶».
+    acceptance:
+      all:
+        - verifier: "vitest run ui/src/presentation/components/tour/tourSteps.test.ts"
+          result: pass
+  - id: tour-no-touch-on-excluded
+    claim: |
+      No file in `ui/src/presentation/components/app/**`,
+      `ui/src/presentation/panels/AIEditPanel.tsx`,
+      `ui/src/application/useCases/llmEdit.ts`, or any `use*`
+      hook under `ui/src/presentation/state/` is modified by this
+      commit. Verified by `git diff --stat HEAD~1 -- ui/src/`
+      showing only the files listed in `scope.paths`.
+    acceptance:
+      all:
+        - verifier: "git diff --stat HEAD~1 -- ui/src/"
+          result: pass
+  - id: typecheck-green
+    claim: |
+      `npm --dir ui run typecheck` exits 0 after this commit.
+    acceptance:
+      all:
+        - verifier: "tsc --noEmit"
+          result: pass
+  - id: lint-no-console-green
+    claim: |
+      `npm --dir ui run lint:no-console` exits 0 — no new
+      `console.*` call under `src/domain` or `src/application`.
+    acceptance:
+      all:
+        - verifier: "eslint src/domain src/application"
+          result: pass
+  - id: presets-validate-green
+    claim: |
+      `npm --dir ui run validate:presets` exits 0 — the tour is
+      additive UI and cannot regress preset parsing.
+    acceptance:
+      all:
+        - verifier: "node --experimental-strip-types ../scripts/validate-presets.ts"
+          result: pass
+  - id: pre-existing-fails-unchanged
+    claim: |
+      The 3 pre-existing failing tests in `llmSettings.test.ts`
+      still fail with the SAME error messages after this commit
+      (this change does not touch llmSettings, llmSettingsStore,
+      or any LLM plumbing).
+    acceptance:
+      all:
+        - verifier: "vitest run ui/src/presentation/state/llmSettings.test.ts"
+          result: pass
+
+assumptions:
+  - id: localStorage-available
+    state: assumed
+    statement: |
+      `window.localStorage` is available in the runtime context
+      where the tour runs (mobile Safari ≥14, desktop Chrome /
+      Firefox / Safari — wavecode's supported matrix). All reads /
+      writes are wrapped in try/catch and degrade silently to
+      "treat as not-yet-completed" if the storage throws.
+    owner: human:operator
+  - id: existing-selectors-stable
+    state: assumed
+    statement: |
+      `.cm-content`, `[data-ai-textarea]`, `.wc-overflow-menu`,
+      `[data-testid="transport-play-btn"]` are stable selectors
+      already exposed by the CodeMirror / AI panel / OverflowMenu
+      / TransportBar layers. Each of those selectors is itself
+      test-covered by its owner's test suite, so a regression on
+      that side fails the owner's tests first.
+    owner: human:operator
+  - id: tour-z-above-toast-not-needed
+    state: assumed
+    statement: |
+      The tour intentionally sits BELOW `.wc-toast` (z=80) so a
+      streaming LLM token update or an error toast remains visible
+      during the tour. Verified by the `--z-modal + 10` (= 70)
+      rule in `components.css`.
+    owner: human:operator
+
+risk:
+  declared_triggers:
+    - tour-target-selector-rename
+    - localStorage-corrupted-or-quota-exceeded
+    - resize-during-step-change-causing-spotlight-misposition
+  owner: human:operator
+
+reversal:
+  - signal: tour-flaky-on-resize-or-scroll
+    action: rework
+  - signal: tour-mis-positioned-on-mobile-bottom-sheet
+    action: rework
+  - signal: users-still-bounce-within-first-minute
+    action: rework
+
+counterexample: |
+  "There is already a README, tooltips on every button, and a
+  Landing page that explains the workflow — a 5-step modal is
+  patronising for users who already read the README and adds
+  noise for everyone else." Counterexample: every onboarding
+  flow in apps the user already uses (Linear, Figma, Notion,
+  Vercel) shows a brief overlay on first use even though the
+  docs are public. The cost of skipping one extra click («Пропустить»)
+  is ~200ms; the cost of bouncing a confused user is permanent
+  churn. The tour is also strictly idempotent — the localStorage
+  flag means a returning user never sees it. The README still
+  exists for the long-form reference; the tour is the
+  short-form "what do I click first".
+
+antithesis: |
+  "Just add more tooltips and a tutorial video — a modal overlay
+  is bad UX because it interrupts the user."
+
+  Rejected because: tooltips require the user to hover
+  individual elements in turn — they don't form a coherent
+  narrative ("first play, then edit, then save"). A video
+  requires the user to context-switch out of the app.
+  Both fail to act as the "first 30 seconds" affordance that
+  closes the "where do I start?" gap.
+
+relations:
+  addresses:
+    - wavecode-bootstrap-math-coding-3.3@1
