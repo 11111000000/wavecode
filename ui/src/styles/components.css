@@ -5200,3 +5200,80 @@ textarea.ai-textarea:focus-visible {
   opacity: 0.7;
 }
 
+/* =========================================================================
+ *  VOCAB HOVER TOOLTIP (wavecode-inline-tooltips)
+ *  Inline glossary popover for Strudel functions / samples / notes.
+ *  Decorates the CM6 `.cm-tooltip` host element (added by
+ *  vocabTooltip() in CodeMirrorEditorImpl.tsx) with a clear
+ *  category-coded border + monospace example block.
+ *
+ *  Border colour signals the category at a glance:
+ *    -- function  → primary (violet)
+ *    -- sample    → cyan
+ *    -- note      → magenta
+ *  No emoji, no images — text-only by design (palette is already
+ *  busy enough on the score screen).
+ * ========================================================================= */
+
+.cm-vocab-tooltip {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2xs);
+  padding: var(--space-sm) var(--space-md);
+  max-width: 320px;
+  min-width: 180px;
+  font-family: var(--font-sans);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-base);
+  color: var(--fg);
+  /* The CM6 host element already gives us background + border; we
+   * override only the category-coloured accent border + a hint of
+   * depth so it stands out from the editor surface. */
+  border-left: 3px solid var(--primary);
+  background: var(--surface-2);
+}
+.cm-vocab-tooltip--sample { border-left-color: var(--cyan); }
+.cm-vocab-tooltip--note   { border-left-color: var(--magenta); }
+
+.cm-vocab-tooltip__head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-sm);
+}
+.cm-vocab-tooltip__name {
+  font-family: var(--font-mono);
+  font-size: var(--fs-md);
+  font-weight: var(--fw-semibold);
+  color: var(--fg);
+  letter-spacing: 0;
+}
+.cm-vocab-tooltip__tag {
+  margin-left: auto;
+  font-size: var(--fs-3xs);
+  text-transform: uppercase;
+  letter-spacing: var(--ls-caps);
+  color: var(--fg-dim);
+}
+.cm-vocab-tooltip--function .cm-vocab-tooltip__tag { color: var(--primary); }
+.cm-vocab-tooltip--sample   .cm-vocab-tooltip__tag { color: var(--cyan); }
+.cm-vocab-tooltip--note     .cm-vocab-tooltip__tag { color: var(--magenta); }
+
+.cm-vocab-tooltip__ru {
+  color: var(--fg-dim);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-relaxed);
+}
+
+.cm-vocab-tooltip__example {
+  display: block;
+  margin-top: var(--space-2xs);
+  padding: var(--space-2xs) var(--space-sm);
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  color: var(--fg);
+  background: var(--surface-0);
+  border-radius: var(--radius-sm);
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+

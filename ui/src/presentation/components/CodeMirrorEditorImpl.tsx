@@ -7,6 +7,7 @@ import { createEffect, onCleanup, onMount, untrack } from 'solid-js';
 import { miniNotationHighlight } from '../editor/miniNotationHighlight';
 import { runtimeMiniHighlight } from '../editor/runtimeMiniHighlight';
 import { strudelCompletions } from '../editor/strudelCompletions';
+import { vocabTooltip } from '../editor/vocabTooltip';
 import { flashDecorations } from '../state/pianoRecStore';
 import { installSelectionTracker, type SelectionRange } from '../state/editorSelection';
 
@@ -61,6 +62,11 @@ export function CodeMirrorEditor(props: Props) {
         miniNotationHighlight,
         runtimeMiniHighlight,
         autocompletion({ override: [strudelCompletions] }),
+        // wavecode-inline-tooltips: hover popover with Russian
+        // description + example for Strudel functions, samples,
+        // and note names. See `decisions/wavecode-inline-tooltips.yaml`
+        // for scope / silence contract.
+        vocabTooltip(),
         flashDecorations,
         EditorView.contentAttributes.of({
           autocorrect: 'off',
