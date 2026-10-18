@@ -61,12 +61,12 @@ describe('micStore — initial state', () => {
 });
 
 describe('micStore — setters', () => {
-  it('setMicSlot cycles correctly', async () => {
+  it('setMicSlot sets append-stack and at-cursor', async () => {
     const w = await importStore();
-    w.setMicSlot('replace-score');
-    expect(w.micSlot()).toBe('replace-score');
     w.setMicSlot('at-cursor');
     expect(w.micSlot()).toBe('at-cursor');
+    w.setMicSlot('append-stack');
+    expect(w.micSlot()).toBe('append-stack');
   });
 
   it('setMicInstrument updates and the change is reflected in previewPillPayload', async () => {
@@ -86,11 +86,9 @@ describe('micStore — setters', () => {
 });
 
 describe('micStore — toggleMicSlot', () => {
-  it('cycles append-stack → replace-score → at-cursor → append-stack', async () => {
+  it('cycles append-stack → at-cursor → append-stack', async () => {
     const w = await importStore();
     expect(w.micSlot()).toBe('append-stack');
-    w.toggleMicSlot();
-    expect(w.micSlot()).toBe('replace-score');
     w.toggleMicSlot();
     expect(w.micSlot()).toBe('at-cursor');
     w.toggleMicSlot();
@@ -101,13 +99,11 @@ describe('micStore — toggleMicSlot', () => {
 describe('micStore — slot labels and glyphs', () => {
   it('slot labels are user-readable Russian', async () => {
     expect((await importStore()).micSlotLabel('append-stack')).toBe('конец стека');
-    expect((await importStore()).micSlotLabel('replace-score')).toBe('заменить score');
     expect((await importStore()).micSlotLabel('at-cursor')).toBe('в курсор');
   });
 
   it('slot glyphs are compact bullets', async () => {
     expect((await importStore()).micSlotGlyph('append-stack')).toBe('↵ stack');
-    expect((await importStore()).micSlotGlyph('replace-score')).toBe('⟳ replace');
     expect((await importStore()).micSlotGlyph('at-cursor')).toBe('⌖ cursor');
   });
 });
@@ -140,63 +136,42 @@ describe('micStore — clearPreview', () => {
 });
 
 describe('micStore — applyToScore (slot dispatching)', () => {
-  it('replace-score slot is a no-op when both buffers are empty', async () => {
+  it('is a no-op when both buffers are empty', async () => {
     const w = await importStore();
     const { appStore } = await import('../state/appStore');
-    w.setMicSlot('replace-score');
     const before = appStore.score;
     w.applyToScore();
     const after = appStore.score;
     expect(after).toBe(before);
-    // And the slot signal still points at our choice (no leak).
-    expect(w.micSlot()).toBe('replace-score');
   });
 
-  it('emits a stack(...) snippet when both notes and transients are present', async () => {
+  it('append-stack slot splices the snippet into the score', async () => {
     const w = await importStore();
-    const { appStore } = await import('../state/appStore');
-    // We can't trivially seed preview notes / transients without the
-    // detector (feed() is exported but not normally called from the
-    // store directly). Instead, reach into the module's setter
-    // closures to stage mixed content.
-    // Notes: a single MIDI 60 (C4) note.
+    const { appStore, dispatch } = await import('../state/appStore');
+    dispatch({ type: 'replaceScore', text: '' });
+    w.setMicSlot('append-stack');
     w.setMicPreviewNotes([
       { midi: 60, cents: 0, startMs: 0, durationMs: 200, vibratoCents: 0 },
     ]);
-    w.setMicTransients([
-      { type: 'kick', startMs: 200, amplitude: 0.5, spectralCentroidHz: 100, envelopeMs: 80 },
-    ]);
-    w.setMicSlot('replace-score');
     w.applyToScore();
-    expect(appStore.score).toMatch(/^stack\(\n/);
-    expect(appStore.score).toContain('note(');
-    expect(appStore.score).toContain('s("');
-    expect(appStore.score).toContain(',');
-    expect(appStore.score).toContain(')\n)');
-  });
-
-  it('emits a bare note(...) snippet when only notes are present', async () => {
-    const w = await importStore();
-    const { appStore } = await import('../state/appStore');
-    w.setMicPreviewNotes([
-      { midi: 60, cents: 0, startMs: 0, durationMs: 200, vibratoCents: 0 },
-    ]);
-    w.setMicSlot('replace-score');
-    w.applyToScore();
+    // Empty score → appendToTopStack returns the snippet verbatim.
     expect(appStore.score).toMatch(/^note\(/);
-    expect(appStore.score).not.toMatch(/^stack\(/);
+    expect(appStore.score).toContain('c4');
+    expect(appStore.score).toContain('s("piano")');
   });
 
-  it('emits a bare s(...) snippet when only transients are present', async () => {
+  it('append-stack slot wraps a bare note(...) score in a stack', async () => {
     const w = await importStore();
-    const { appStore } = await import('../state/appStore');
-    w.setMicTransients([
-      { type: 'kick', startMs: 0, amplitude: 0.5, spectralCentroidHz: 100, envelopeMs: 80 },
+    const { appStore, dispatch } = await import('../state/appStore');
+    dispatch({ type: 'replaceScore', text: 'note("e4 g4")' });
+    w.setMicSlot('append-stack');
+    w.setMicPreviewNotes([
+      { midi: 60, cents: 0, startMs: 0, durationMs: 200, vibratoCents: 0 },
     ]);
-    w.setMicSlot('replace-score');
     w.applyToScore();
-    expect(appStore.score).toMatch(/^s\(/);
-    expect(appStore.score).not.toMatch(/^stack\(/);
+    expect(appStore.score).toMatch(/^stack\(/);
+    expect(appStore.score).toContain('note("e4 g4")');
+    expect(appStore.score).toContain('c4');
   });
 });
 

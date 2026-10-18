@@ -5,7 +5,6 @@ import {
   initialMicState,
   feed,
   closeOpenNote,
-  notesToSnippet,
   DEFAULT_TUNE,
   type AudioNote,
   type MicState,
@@ -18,10 +17,8 @@ import {
   type MicCaptureHandle,
   type MicCaptureState,
 } from '~/infrastructure/audio/MicCapture';
-import {
-  transientsToSnippet,
-  type Transient,
-} from '~/domain/audio/transient';
+import { type Transient } from '~/domain/audio/transient';
+import { micSnippetFromBuffers } from '~/domain/audio/micSnippet';
 import { appendToTopStack } from '~/domain/strudel';
 import { consoleStore } from '~/presentation/components/consoleStore';
 import { logger } from '~/infrastructure/log';
@@ -38,16 +35,16 @@ import { previewPillPayload as _pianoPillRef } from './pianoRecStore';
  *   2. Segmentation buffer — accumulating `AudioNote[]` that the user
  *      has produced; managed by `feed()` on every detected frame.
  *   3. Slot selector — where `applyToScore` writes the snippet:
- *      `append-stack` (splice into existing top-level `stack(...)`),
- *      `replace-score` (destructive), or `at-cursor` (CodeMirror insert).
- *      Mirror of pianoRecStore's three slots; lives here separately so
- *      the piano and mic tools evolve independently.
+ *      `append-stack` (splice into existing top-level `stack(...)`) or
+ *      `at-cursor` (CodeMirror insert). There is deliberately no
+ *      destructive `replace-score` slot — overwriting the whole score
+ *      is what the editor's manual delete is for.
  *   4. Editor API signal — `setMicEditorApi` is wired by
  *      ScorePanel.onReady (mirroring `setPianoEditorApi`); needed for
  *      the `at-cursor` slot to insert at the active selection.
  *   5. Apply pipeline — `applyToScore` commits the buffer to a Strudel
- *      snippet via `notesToSnippet` and dispatches it through the active
- *      slot. Mirrors pianoRecStore.applyToScore verbatim.
+ *      snippet via `micSnippetFromBuffers` and dispatches it through the
+ *      active slot.
  *
  * Auto-detection model
  * --------------------
@@ -67,7 +64,7 @@ import { previewPillPayload as _pianoPillRef } from './pianoRecStore';
  *     duplicate the signal so piano and mic can move independently.
  */
 
-export type MicSlot = 'append-stack' | 'replace-score' | 'at-cursor';
+export type MicSlot = 'append-stack' | 'at-cursor';
 
 export type MicDetectionKind = 'idle' | 'sustained' | 'percussive' | 'both';
 
@@ -131,7 +128,6 @@ let detector: MicCaptureHandle | null = null;
 export const micSlotLabel = (slot: MicSlot): string => {
   switch (slot) {
     case 'append-stack': return 'конец стека';
-    case 'replace-score': return 'заменить score';
     case 'at-cursor': return 'в курсор';
   }
 };
@@ -139,7 +135,6 @@ export const micSlotLabel = (slot: MicSlot): string => {
 export const micSlotGlyph = (slot: MicSlot): string => {
   switch (slot) {
     case 'append-stack': return '↵ stack';
-    case 'replace-score': return '⟳ replace';
     case 'at-cursor': return '⌖ cursor';
   }
 };
@@ -267,7 +262,7 @@ export const clearPreview = (): void => {
 };
 
 export const toggleMicSlot = (): void => {
-  const order: ReadonlyArray<MicSlot> = ['append-stack', 'replace-score', 'at-cursor'];
+  const order: ReadonlyArray<MicSlot> = ['append-stack', 'at-cursor'];
   const cur = micSlot();
   const idx = order.indexOf(cur);
   setMicSlot(order[(idx + 1) % order.length]!);
@@ -302,32 +297,14 @@ export const micDetectionActive = (): MicDetectionKind => {
 };
 
 export const applyToScore = (): void => {
-  const notesBuf = micPreviewNotes();
-  const transBuf = micTransients();
-  const notesSnippet = notesBuf.length === 0
-    ? null
-    : notesToSnippet(notesBuf, { instrument: micInstrument() });
-  const transSnippet = transBuf.length === 0
-    ? null
-    : transientsToSnippet(transBuf);
-  if (notesSnippet === null && transSnippet === null) return;
-  let snippet: string;
-  if (notesSnippet !== null && transSnippet !== null) {
-    // Both buffers produced something → emit a stack(...) so the
-    // apply preserves the two contributions as siblings. Don't
-    // indent; small sessions stay readable this way.
-    snippet = `stack(\n  ${notesSnippet},\n  ${transSnippet}\n)`;
-  } else {
-    snippet = (notesSnippet ?? transSnippet) as string;
-  }
+  const snippet = micSnippetFromBuffers(
+    micPreviewNotes(),
+    micTransients(),
+    { instrument: micInstrument() },
+  );
+  if (snippet === null) return;
 
   const slot = micSlot();
-
-  if (slot === 'replace-score') {
-    dispatch({ type: 'replaceScore', text: snippet });
-    clearPreview();
-    return;
-  }
 
   if (slot === 'at-cursor') {
     const api = micEditorApi();

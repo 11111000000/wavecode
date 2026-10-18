@@ -104,15 +104,6 @@ describe('MicPanel — empty state', () => {
     );
   });
 
-  it('Demo button calls evalScore with a sample drum snippet', () => {
-    const { container } = render(() => <MicPanel />);
-    const demoBtn = container.querySelector<HTMLButtonElement>('.mic-ux-empty-demo')!;
-    fireEvent.click(demoBtn);
-    expect(evalScoreMock).toHaveBeenCalledTimes(1);
-    const arg = evalScoreMock.mock.calls[0]?.[0] ?? '';
-    expect(arg).toContain('drums_bd');
-  });
-
   it('"Learn more" toggle reveals help text', () => {
     const { container } = render(() => <MicPanel />);
     const helpBtn = container.querySelector<HTMLButtonElement>('.mic-ux-empty-help')!;
@@ -177,16 +168,16 @@ describe('MicPanel — row 1 (pill + instrument + slot)', () => {
     await w.stopMic();
   });
 
-  it('renders a slot <select> with 3 options (Add to end / Replace all / At cursor)', async () => {
+  it('renders a slot <select> with 2 options (Add to end / At cursor)', async () => {
     const w = await import('../state/micStore');
     w.startMic();
     const { container } = render(() => <MicPanel />);
     const select = container.querySelector<HTMLSelectElement>('.mic-ux-slot-select');
     expect(select).not.toBeNull();
     const opts = select?.querySelectorAll('option');
-    expect(opts).toHaveLength(3);
+    expect(opts).toHaveLength(2);
     const labels = Array.from(opts ?? []).map((o) => o.textContent?.trim());
-    expect(labels).toEqual(['Add to end', 'Replace all', 'At cursor']);
+    expect(labels).toEqual(['Add to end', 'At cursor']);
     await w.stopMic();
   });
 

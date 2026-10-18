@@ -18,6 +18,7 @@ import {
   type MicSlot,
 } from '../state/micStore';
 import { evalScore, stopAudio } from '../state/audioActions';
+import { micSnippetFromBuffers } from '~/domain/audio/micSnippet';
 import { PianoRollPreview } from './PianoRollPreview';
 import { MicMeter } from './MicMeter';
 
@@ -32,17 +33,22 @@ import { MicMeter } from './MicMeter';
  *   row 4 — RMS meter (MicMeter) — bar + onset spikes + Hz/RMS read-out
  *
  * Empty state (when nothing's been recorded AND mic isn't listening):
- * a single centered "Tap START and sing / tap / hum." block with a
- * demo button + a toggleable "Learn more" paragraph. The user can
- * audition what the feature does without first figuring out how to
- * grant mic permission.
+ * a single centered "Tap START and sing / tap / hum." hint with a
+ * toggleable "Learn more" paragraph. No demo button — wavecode already
+ * has a whole library of ready presets on the landing screen; the mic
+ * is a pure INPUT control, not a showcase.
+ *
+ * The slot selector has exactly two targets: append to the end of the
+ * current `stack(...)`, or insert at the editor cursor. "Replace all"
+ * was removed — overwriting the whole score is too destructive for a
+ * one-tap control (the user can always delete text by hand).
  *
  * What lives here vs. in the store:
  *   - The CTA handlers (start/stop, apply, clear, preview) are thin
  *     one-liners delegating to the store. No Web Audio here.
- *   - All reactive reads (`micListening`, `previewPillPayload`, ...)
- *     come from the adapter, not the underlying `micStore`. The
- *     adapter is the contract that survives the WS-A domain merge.
+ *   - The Preview toggle and "Add to score" BOTH build their snippet
+ *     through `micSnippetFromBuffers` (domain) so what you hear in
+ *     preview is byte-for-byte what lands in the editor.
  *
  * Error pill: when `getUserMedia` rejects, we surface the raw error
  * string + a per-browser link to the mic-permission page. Same logic
@@ -72,22 +78,11 @@ const SLOTS: ReadonlyArray<{
     ariaLabel: 'Append the recorded snippet to the end of the existing stack',
   },
   {
-    id: 'replace-score',
-    label: 'Replace all',
-    ariaLabel: 'Replace the whole score with the recorded snippet (Ctrl+Z to undo)',
-  },
-  {
     id: 'at-cursor',
     label: 'At cursor',
     ariaLabel: 'Insert the recorded snippet at the cursor position in the editor',
   },
 ];
-
-/** Short Strudel snippet for the demo button. We pick a 4-on-the-
- *  floor kick because (a) it works without a long warm-up, (b) it's
- *  audible on the default sample bank (drums_bd), and (c) it mirrors
- *  what the user will hear when they actually tap a real mic. */
-const DEMO_SNIPPET = 's("drums_bd*4").gain(0.6)';
 
 /** Per-browser link to the mic-permission page. null = no public URL
  *  (Safari), in which case the UI shows "разрешите в настройках
@@ -129,25 +124,19 @@ export function MicPanel(): JSX.Element {
     else startMic();
   };
 
-  const onPlayDemo = (): void => {
-    void evalScore(DEMO_SNIPPET);
-  };
-
   /** Preview toggle: when ON, the recorded snippet plays through the
-   *  running audio engine; when OFF, the engine stops. The snippet
-   *  itself isn't rebuilt on buffer updates (that's a follow-up
-   *  feature) — the user clicks again to replay after a new take. */
+   *  running audio engine; when OFF, the engine stops. The snippet is
+   *  built via the same domain function `applyToScore` uses, so the
+   *  preview is exactly what would land in the editor. */
   const onTogglePreview = (): void => {
     const next = !previewing();
     setPreviewing(next);
     if (next) {
-      // Build a minimal snippet inline. We don't dispatch — this
-      // bypasses the editor entirely and only plays through the
-      // audio engine (so the user can hear what they're about to
-      // apply without committing it to the score).
-      const notes = micPreviewNotes();
-      const transients = micTransients();
-      const snippet = buildDemoSnippet(notes, transients, micInstrument());
+      const snippet = micSnippetFromBuffers(
+        micPreviewNotes(),
+        micTransients(),
+        { instrument: micInstrument() },
+      );
       if (snippet !== null) {
         void evalScore(snippet);
       }
@@ -177,7 +166,6 @@ export function MicPanel(): JSX.Element {
         <EmptyState
           showHelp={showHelp()}
           onToggleHelp={() => setShowHelp(!showHelp())}
-          onPlayDemo={onPlayDemo}
         />
       </Show>
 
@@ -323,11 +311,7 @@ const SlotSelect = (props: {
       title={props.slotTitle(micSlot())}
       onChange={(e): void => {
         const v = e.currentTarget.value;
-        if (
-          v === 'append-stack'
-          || v === 'replace-score'
-          || v === 'at-cursor'
-        ) {
+        if (v === 'append-stack' || v === 'at-cursor') {
           setMicSlot(v);
         }
       }}
@@ -354,7 +338,6 @@ const SlotSelect = (props: {
 const EmptyState = (props: {
   readonly showHelp: boolean;
   readonly onToggleHelp: () => void;
-  readonly onPlayDemo: () => void;
 }): JSX.Element => (
   <div class="mic-ux-empty" role="region" aria-label="Mic feature introduction">
     <div class="mic-ux-empty-title">Tap START and sing, tap, or hum.</div>
@@ -362,15 +345,6 @@ const EmptyState = (props: {
       Try a kick drum, a beatbox pattern, or a melody.
     </div>
     <div class="mic-ux-empty-actions">
-      <button
-        type="button"
-        class="mic-ux-empty-demo"
-        aria-label="Play a sample drum pattern"
-        title="Plays a sample so you can hear what the feature does"
-        onClick={(): void => { props.onPlayDemo(); }}
-      >
-        ▶ Demo: play a sample
-      </button>
       <button
         type="button"
         class="mic-ux-empty-help"
@@ -388,8 +362,7 @@ const EmptyState = (props: {
         a whistle becomes MIDI notes) and percussive onsets (a tap on the
         table or a clap becomes a drum hit). Both show up on the live timeline
         above the meter; click &ldquo;Add to score&rdquo; to splice them into
-        your pattern at the slot you choose. Demo plays a four-on-the-floor
-        kick so you can hear the sample bank without granting mic permission.
+        your pattern at the slot you choose.
       </p>
     </Show>
   </div>
@@ -413,45 +386,3 @@ const PermissionHint = (): JSX.Element => (
     </span>
   </>
 );
-
-// ── helpers ───────────────────────────────────────────────────────────
-
-/** Build a Strudel snippet from current preview buffers for the
- *  Preview-toggle button. Mirrors `applyToScore`'s branching logic
- *  but doesn't dispatch to the editor. Returns null when there's
- *  nothing to play. */
-const buildDemoSnippet = (
-  notes: ReadonlyArray<{ readonly midi: number; readonly startMs: number; readonly durationMs: number; readonly cents: number; readonly vibratoCents: number }>,
-  transients: ReadonlyArray<{ readonly type: 'kick' | 'snare' | 'hat' | 'click'; readonly startMs: number; readonly amplitude: number; readonly spectralCentroidHz: number; readonly envelopeMs: number }>,
-  instrument: string,
-): string | null => {
-  const hasNotes = notes.length > 0;
-  const hasTrans = transients.length > 0;
-  if (!hasNotes && !hasTrans) return null;
-  // Local copy of the domain helpers so we don't pull them in here
-  // (architecture rule: presentation depends on domain, but
-  // presentation/state/micStore wraps domain calls). The Preview
-  // toggle is presentation-only, so we keep it inline.
-  const notesSnippet = hasNotes
-    ? `note("${notes
-        .map((n) => {
-          const cls = ((n.midi % 12) + 12) % 12;
-          const oct = Math.floor(n.midi / 12) - 1;
-          const names = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'] as const;
-          const name = names[cls] ?? 'C';
-          const dur = Math.max(0.01, n.durationMs / 1000).toFixed(3);
-          return `${name}${oct}@${dur}`;
-        })
-        .join(' ')}").s("${instrument}")`
-    : null;
-  const transSnippet = hasTrans
-    ? (() => {
-        const map = { kick: 'drums_bd', snare: 'drums_sd', hat: 'drums_hh', click: 'drums_cp' } as const;
-        return `s("${transients.map((t) => map[t.type]).join(' ')}")`;
-      })()
-    : null;
-  if (notesSnippet !== null && transSnippet !== null) {
-    return `stack(\n  ${notesSnippet},\n  ${transSnippet}\n)`;
-  }
-  return notesSnippet ?? transSnippet;
-};
