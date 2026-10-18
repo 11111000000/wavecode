@@ -17,6 +17,11 @@ import { AppShellView } from './presentation/components/app/AppShellView';
 import { Admin } from './presentation/pages/Admin';
 import { Landing } from './presentation/components/landing/Landing';
 import { WelcomeTour } from './presentation/components/tour/WelcomeTour';
+import { VoiceFAB } from './presentation/components/VoiceFAB';
+import { initVoiceAI } from './presentation/state/voiceAIStore';
+import { initWhistle } from './presentation/state/whistleStore';
+import { WebSpeechSTTLive } from './infrastructure/stt/WebSpeechSTT';
+import { AppLayer } from './infrastructure/composition';
 
 export function App(): JSX.Element {
   const route = useHashRoute();
@@ -36,6 +41,9 @@ function AppShell(): JSX.Element {
   const [newPresetName, setNewPresetName] = createSignal('');
   const [mobileMode, setMobileModeSignal] = createSignal<MobileMode>(getMobileMode());
   const presetId = getSelectedPresetId;
+
+  initVoiceAI({ sttLayer: WebSpeechSTTLive });
+  initWhistle({ audioLayer: AppLayer });
 
   const undo = (): void => { void stopAudio(); dispatch({ type: 'undoScore' }); };
   const redo = (): void => { void stopAudio(); dispatch({ type: 'redoScore' }); };
@@ -99,7 +107,7 @@ function AppShell(): JSX.Element {
     }
   });
 
-  return (
+  return (<>
     <AppShellView
       audioRunning={audio.audioRunning} audioStarting={audioStarting} ctxState={audio.ctxState}
       presetId={presetId} mobileMode={mobileMode} showSavePreset={showSavePreset} newPresetName={newPresetName}
@@ -111,5 +119,6 @@ function AppShell(): JSX.Element {
       onSaveCustomPreset={onSaveCustomPreset}
       onPlay={() => { setAudioStarting(true); void evalScore(); }} onStop={() => { void stopAudio(); }}
     />
-  );
+    <VoiceFAB />
+  </>);
 }
