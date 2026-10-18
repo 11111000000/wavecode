@@ -5681,8 +5681,8 @@ textarea.ai-textarea:focus-visible {
   .tour-spotlight { transition: none; animation: none; }
 }
 
-/* =========================================================================
- *  PIANOROLL — DAW-style note editor in ScorePanel.
+}
+
  *  <Pianoroll /> renders a Canvas (HTML5) timeline + side pitch labels.
  *  Toggle sibling: `.pianoroll-view-toggle` (text | roll) lives just
  *  under the editor area; default = text.
@@ -5832,5 +5832,192 @@ textarea.ai-textarea:focus-visible {
   min-height: 220px;
   border-radius: var(--radius-md);
   overflow: hidden;
+
+ *  LOOP RECORDER (wavecode-loop-recorder)
+ *  Boss RC-505-style multi-track loop recorder UI.
+ *  4 color-coded slots + punch-in timeline + mix-down.
+ * ========================================================================= */
+
+.loop-recorder {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  padding: var(--space-sm) var(--space-md);
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
 }
 
+.loop-recorder-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  flex-wrap: wrap;
+}
+
+.loop-recorder-title {
+  font-weight: var(--fw-semibold);
+  color: var(--fg);
+  font-size: var(--fs-sm);
+}
+
+.loop-recounter-stats {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: var(--fs-3xs);
+  color: var(--fg-dim);
+}
+
+.loop-recounter-pill {
+  background: var(--magenta-soft);
+  color: var(--magenta);
+  padding: 2px var(--space-xs);
+  border-radius: var(--radius-sm);
+  letter-spacing: var(--ls-caps);
+  text-transform: uppercase;
+}
+
+.loop-recorder-actions {
+  display: flex;
+  gap: var(--space-xs);
+}
+
+.loop-slot-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--space-xs);
+}
+
+.loop-slot {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  min-height: var(--touch-target, 44px);
+  padding: var(--space-xs) var(--space-sm);
+  background: var(--surface-2);
+  border: 2px solid var(--border);
+  border-radius: var(--radius-md);
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  cursor: pointer;
+  transition: transform var(--dur-fast, 80ms) var(--ease, ease-out);
+}
+
+.loop-slot:hover { transform: translateY(-1px); }
+
+.loop-slot[data-color='green']    { --slot-color: var(--ok, #4ade80); }
+.loop-slot[data-color='cyan']     { --slot-color: var(--cyan, #5eead4); }
+.loop-slot[data-color='magenta']  { --slot-color: var(--magenta, #f472b6); }
+.loop-slot[data-color='violet']   { --slot-color: var(--primary, #a78bfa); }
+
+.loop-slot[data-color] {
+  border-color: var(--slot-color);
+  color: var(--slot-color);
+}
+
+.loop-slot[data-empty='true'] {
+  border-style: dashed;
+  opacity: 0.7;
+}
+
+.loop-slot[data-status='recording'] {
+  background: color-mix(in srgb, var(--slot-color) 20%, transparent);
+  animation: wc-loop-rec-pulse 1.2s ease-in-out infinite;
+}
+
+.loop-slot[data-status='has-region'] {
+  background: color-mix(in srgb, var(--slot-color) 14%, transparent);
+}
+
+.loop-slot-index {
+  font-weight: var(--fw-bold);
+  font-size: var(--fs-md);
+}
+
+.loop-slot-status {
+  font-size: var(--fs-3xs);
+  text-transform: uppercase;
+  letter-spacing: var(--ls-caps);
+  color: var(--fg-dim);
+}
+
+.loop-slot[data-status='recording'] .loop-slot-status {
+  color: var(--slot-color);
+}
+
+.loop-slot-bar {
+  display: block;
+  width: 100%;
+  height: 3px;
+  background: var(--bg);
+  border-radius: var(--radius-pill, 999px);
+  overflow: hidden;
+}
+
+.loop-slot-bar-fill {
+  display: block;
+  height: 100%;
+  width: 60%;
+  background: var(--slot-color);
+  opacity: 0.7;
+}
+
+@keyframes wc-loop-rec-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 var(--slot-color); }
+  50%      { box-shadow: 0 0 0 4px color-mix(in srgb, var(--slot-color) 30%, transparent); }
+}
+
+.loop-timeline {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  padding: var(--space-xs) var(--space-sm);
+  background: var(--surface-2);
+  border-radius: var(--radius-md);
+}
+
+.loop-timeline-label {
+  font-size: var(--fs-3xs);
+  color: var(--fg-dim);
+  text-transform: uppercase;
+  letter-spacing: var(--ls-caps);
+  font-family: var(--font-mono);
+}
+
+.loop-timeline-strip {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--space-xs);
+  flex: 1;
+}
+
+.loop-timeline-beat {
+  min-height: var(--touch-target, 44px);
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--fg-dim);
+  font-family: var(--font-mono);
+  cursor: pointer;
+  transition: background var(--dur-fast, 80ms) var(--ease, ease-out);
+}
+
+.loop-timeline-beat:hover,
+.loop-timeline-beat[data-active='true'] {
+  background: var(--primary-soft, rgba(120, 119, 198, 0.2));
+  color: var(--fg);
+  border-color: var(--primary);
+}
+
+.loop-err {
+  font-family: var(--font-mono);
+  font-size: var(--fs-3xs);
+  color: var(--err);
+  padding: var(--space-xs) var(--space-sm);
+  background: var(--err-soft);
+  border-radius: var(--radius-sm);

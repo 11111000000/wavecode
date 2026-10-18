@@ -1,0 +1,197 @@
+---
+schema: math-coding/3.3
+id: wavecode-loop-recorder
+revision: 1
+state: draft
+body_sha: "sha256:18cb9b8c989e55bd828cbc42484956e79bdb3dc3b919c647c5bb6fe725ddedab"
+yaml_sha: "sha256:18cb9b8c989e55bd828cbc42484956e79bdb3dc3b919c647c5bb6fe725ddedab"
+
+intent: |
+  Расширить однократный AudioRecorder до multi-track loop recorder для
+  live performance. Live-юзер на сцене (Боно, DJ, продюсер) должен
+  иметь возможность записывать до 4 регионов, наслаивать overdub'ы,
+  делать punch-in по таймлайну, миксовать всё в WAV одним файлом.
+  Boss RC-505 / SP-404 style workflow внутри Solid.js SPA.
+
+commitment: |
+  LoopRecorder — обёртка над существующим AudioRecorder (start/stop
+  API остаётся без изменений, backward-compat обязателен). До 4
+  регионов, color-coded (1=green, 2=cyan, 3=magenta, 4=violet),
+  каждый регион = (id, blob, startMs, color). Overdub работает
+  автоматически: запись поверх существующего региона = новый take
+  ложится миксом. Punch-in: click в таймлайне (0-4 такта) → старт
+  записи в нужной точке. Crossfade 50ms между регионами при наложении.
+  Mix-down экспорт: OfflineAudioContext + wavEncoder → один WAV Blob.
+  UI: 4 slot-кнопки + timeline + clear/export (Solid-сигналы в
+  recorderStore). Существующая AudioRecorder.start/stop/exportWav
+  продолжает работать (deprecated, но не удаляется).
+
+counterexample: |
+  "Есть однократный рекордер, юзер может просто нажать record → stop →
+  получить один файл. Loop — overkill". Counterargument: на сцене
+  юзер пишет первый такт → loop'ит → поверх докладывает перкуссию →
+  сверху вокал → получается трёхслойный loop. Однократный AudioRecorder
+  даёт только один blob за один take. Чтобы получить тот же результат,
+  юзер должен вручную оффлайн-миксовать 3 отдельных WAV файла в DAW,
+  что невозможно без дев-окружения и убивает живую работу.
+  "Зачем OfflineAudioContext, можно просто склеить blob'ы через
+  MediaRecorder". Counterargument: MediaRecorder пишет lossy и не
+  гарантирует sample-accurate align между регионами (реклаймы
+  могут смещаться на ms). OfflineAudioContext + wavEncoder даёт
+  lossless WAV с sample-accurate crossfade.
+
+antithesis: |
+  "Single MediaRecorder + ⬇️Download достаточно, loop-station
+  переусложнение для SPA". Отклонено: Tier-2 killer feature для
+  live-performers; UI жестко ограничен 4 регионами (UX constraint);
+  mix-down делается в однострочном вызове OfflineAudioContext.startRendering()
+  → wavEncoder.audioBufferToWav. Не требует новых зависимостей.
+  Backward-compat сохранена: AudioRecorder.start/stop/exportWav
+  остаются нетронутыми.
+
+axiom_link:
+  - A1
+  - A3
+
+scope:
+  paths:
+    - "ui/src/infrastructure/audio/LoopRecorder.ts"
+    - "ui/src/infrastructure/audio/LoopRecorder.test.ts"
+    - "ui/src/presentation/state/recorderStore.ts"
+    - "ui/src/presentation/components/LoopRecorderPanel.tsx"
+    - "ui/src/presentation/components/LoopRecorderPanel.test.tsx"
+    - "ui/src/styles/components.css"
+
+outcomes:
+  - id: region-system-working
+    statement: |
+      addRegion / removeRegion / clearAllRegions / getRegions / getRegionCount
+      оперируют над внутренним массивом регионов и возвращают ожидаемые
+      значения (покрыто vitest).
+  - id: punch-in-precision
+    statement: |
+      punchIn(beat, ctx, streamMsDelay) стартует запись в момент
+      ctx.currentTime + beat * cycleMs; цикл ctc = cps=0.5 → 2000ms cycle.
+  - id: mix-down-lossless
+    statement: |
+      mixDownRegions() возвращает Blob типа audio/wav; length > 0;
+      header parseable через parseWavHeader (покрыто vitest).
+  - id: backward-compat-audio-recorder
+    statement: |
+      AudioRecorder.start / stop / getMime / dispose / exportWav
+      (через takeFilename) продолжают работать без изменений; не
+      удаляются, не переименовываются.
+  - id: panel-ui-renders
+    statement: |
+      LoopRecorderPanel рендерит 4 .loop-slot с разными data-color
+      (green/cyan/magenta/violet) (покрыто unit-тестом).
+
+obligations:
+  - id: region-api-vitest
+    claim: |
+      `addRegion(blob, startMs)`, `removeRegion(id)`, `clearAllRegions()`,
+      `getRegionCount()` на LoopRecorder работают без UI; покрыто vitest.
+    acceptance:
+      all:
+        - verifier: vitest
+          result: pass
+  - id: punch-in-vitest
+    claim: |
+      `punchIn(beat)` стартует запись в нужном такте; цикл cps=0.5 →
+      offset = beat * 2000ms (покрыто vitest через фейковый ctx).
+    acceptance:
+      all:
+        - verifier: vitest
+          result: pass
+  - id: mix-down-blob
+    claim: |
+      `mixDownRegions()` возвращает Promise<Blob>; тип
+      `audio/wav`; header валиден (parseWavHeader).
+    acceptance:
+      all:
+        - verifier: vitest
+          result: pass
+  - id: backward-compat-preserved
+    claim: |
+      AudioRecorder.start / stop API остаются работающими (deprecate,
+      не remove). Защищено обратной совместимостью: тесты audioActions
+      и RecordButton не трогаются, существующий импорт `LiveRecorder`
+      из AudioRecorder не сломан.
+    acceptance:
+      all:
+        - verifier: vitest
+          result: pass
+  - id: panel-render-4-slots
+    claim: |
+      LoopRecorderPanel рендерит 4 slot-кнопки с разными data-color
+      (green/cyan/magenta/violet), и каждая имеет actions onClick +
+      onShiftClick (покрыто unit-тестом с mock store).
+    acceptance:
+      all:
+        - verifier: vitest
+          result: pass
+  - id: typecheck-green
+    claim: |
+      `npm run typecheck` (tsc --noEmit) возвращает exit 0 для новой
+      ветки.
+    acceptance:
+      all:
+        - verifier: manual
+          result: pass
+
+assumptions:
+  - id: wavecode-loop-recorder-assumption-1
+    state: proven
+    statement: |
+      "OfflineAudioContext доступен во всех целевых браузерах (Chrome
+      desktop / Android, Safari 14.5+, Firefox); chunked через
+      setTimeout(0) между decode-blob'ами не фризит main thread."
+      Evidence: "Decisions wavecode-audio-recording uses OfflineRender
+      via OfflineAudioContext уже работает (см. LiveAudioEngine.renderOffline)."
+    owner: human:operator
+  - id: wavecode-loop-recorder-assumption-2
+    state: proven
+    statement: |
+      "decodeAudioData работает для blob'ов MediaRecorder (webm/mp4/ogg)
+      в Web Audio API; частоты дискретизации могут отличаться от
+      AudioContext, тогда playback автоматически ресэмплируется."
+      Evidence: "MDN BaseAudioContext.decodeAudioData() — accepts любые
+      blob'ы с audio MIME."
+    owner: human:operator
+  - id: wavecode-loop-recorder-assumption-3
+    state: proven
+    statement: |
+      "4 цвета достаточно для UX; Slot 5+ перегружает экран на mobile
+      и не добавляет сложных музыкальных сценариев (cover-band / live-DAW
+      обычно не больше 4 stems)."
+      Evidence: "Boss RC-505 reference design — 6 stereo tracks but
+      mobile-first tier-2 SPA ограничен 4-мя для совмещения с 4-колоночной
+      grid-layout."
+    owner: human:operator
+  - id: wavecode-loop-recorder-assumption-4
+    state: proven
+    statement: |
+      "Существующий AudioRecorder API остаётся backward-compat; новый
+      LoopRecorder — обёртка, не замена."
+      Evidence: "AGENTS.md §«Backward-compat обязателен», RecordButton.tsx
+      продолжает импортировать LiveRecorder из AudioRecorder (строки 7-11)."
+    owner: human:operator
+
+risk:
+  declared_triggers:
+    - offline-mix-main-thread-freeze
+    - decode-mime-mismatch-safari
+    - memory-pressure-4-regions-blob-cache
+  owner: human:operator
+
+reversal:
+  - signal: mix-down-blob-empty
+    action: revert
+  - signal: audio-recorder-tests-broken
+    action: halt
+  - signal: bundle-size-over-budget-50kb
+    action: halt
+
+relations:
+  extends:
+    - wavecode-audio-recording@1
