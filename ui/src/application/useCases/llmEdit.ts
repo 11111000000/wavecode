@@ -38,10 +38,17 @@ export const SYSTEM_PROMPT = [
   'Основные функции:',
   '  note("c4") / note("55 59 62")  — нота по имени или MIDI числами',
   '  n("...")                       — то же что note(), но только MIDI числа',
-  '  s("sawtooth")                 — форма волны (sine/sawtooth/square/triangle)',
-  '  s("sbd")                      — синтезированный bass drum (РАБОТАЕТ ВСЕГДА)',
-  '  sbd — единственный синтезированный ударный в Strudel по умолчанию.',
-  '  ⚠️ НЕ используй bd/sd/hh/oh/cp — это sample-based, требуют сеть.',
+  '  s("sawtooth")                  — форма волны (sawtooth/sine/square/triangle/white/brown)',
+  '  s("sbd")                       — синтезированный bass drum (superdough registerSynthSounds)',
+  '',
+  'Sample-based drums (требуют зарегистрированный sample bank):',
+  '  s("bd" | "sd" | "hh" | "oh" | "cp")           — короткие имена,',
+  '  s("drums_bd" | "drums_sd" | "drums_hh" | ...)  — bank-prefix,',
+  '  s("github:user/repo")                        — external sample pack.',
+  '  В wavecode банк "drums_*" загружается автоматически через SampleLoader;',
+  '  короткие "bd" / "sd" / "hh" / "oh" / "cp" без банка упадут с "sound not found".',
+  '  Используй sbd для гарантированного звука, drums_* для полноценного kit,',
+  '  и sawtooth/sine/square/triangle для не-ударных голосов.',
   '  .gain(0..1)   — громкость',
   '  .lpf(hz)      — low-pass фильтр',
   '  .slow(n)      — замедлить в n раз',
@@ -453,7 +460,7 @@ export const applyEditStream = (
     );
 
     const firstCleaned = cleanLLMResponse(firstRaw);
-    (window as unknown as { __wavecodeLastRaw?: string }).__wavecodeLastRaw = firstRaw;
+    setLastRawLLMResponse(firstRaw);
 
     const firstCheck = isScoreBroken(firstCleaned);
     if (!firstCheck.broken) {
@@ -504,9 +511,9 @@ export const applyEditStream = (
 
     const result: ApplyEditResult = { score: secondCleaned, wasHealed: true, attempts: 2 };
     // Stash the final (healed) response for the same diagnostic UI
-    // that reads `__wavecodeLastRaw` to surface "ИИ вернул пустой
-    // ответ" on hard failure.
-    (window as unknown as { __wavecodeLastRaw?: string }).__wavecodeLastRaw = secondRaw;
+    // that reads `getLastRawLLMResponse()` to surface "ИИ вернул
+    // пустой ответ" on hard failure.
+    setLastRawLLMResponse(secondRaw);
     callbacks.onComplete?.(result);
     return result;
   });
@@ -557,6 +564,13 @@ const readStream = (
  *     continue to work — the new function is purely additive.
  *   - When `context === null` the prompt is byte-identical to
  *     `applyEdit` (verified by `llmEdit.test.ts`).
+ *   - The streaming path now mirrors `applyEditStream`: tokens
+ *     are surfaced to `callbacks.onToken` (if provided) and the
+ *     final raw response is published via the same `getLastRawLLMResponse`
+ *     diagnostic accessor that `applyEditStream` uses. Previously
+ *     this function hand-rolled its own reader loop and ignored
+ *     streaming callbacks, which made the focused-context flow
+ *     visibly less responsive than the standard flow.
  *
  * The context shape mirrors `FocusedContext` from
  * `presentation/state/editorSelection.ts` but is inlined here
@@ -572,6 +586,7 @@ export const applyEditWithContext = (
   audioState: { status: string; lastError?: string } = { status: 'unknown' },
   options: { model?: 'smart' | 'fast'; thinking?: 'low' | 'high' | 'off' } = {},
   context: FocusedContextLike | null = null,
+  callbacks: ApplyEditCallbacks = {},
 ): Effect.Effect<string, Error | string, LLMClient> =>
   Effect.gen(function* () {
     const llm = yield* LLMClient;
@@ -592,35 +607,34 @@ export const applyEditWithContext = (
       },
     ];
 
-    const stream = yield* llm.streamCompletion({
-      model: options.model ?? 'smart',
-      thinking: options.thinking ?? 'low',
-      systemPrompt: SYSTEM_PROMPT,
-      messages,
-    });
+    const raw = yield* readStream(
+      llm,
+      {
+        model: options.model ?? 'smart',
+        thinking: options.thinking ?? 'low',
+        systemPrompt: SYSTEM_PROMPT,
+        messages,
+      },
+      callbacks.onToken,
+    );
 
-    const reader = stream.getReader();
-    const decoder = new TextDecoder();
-    let raw = '';
-
-    while (true) {
-      const { done, value } = yield* Effect.tryPromise(() => reader.read());
-      if (done) break;
-      if (value && value.type === 'text' && value.delta) {
-        raw += decoder.decode(new TextEncoder().encode(value.delta));
-      }
-    }
-
-    yield* Effect.tryPromise({
-      try: () => reader.cancel(),
-      catch: () => undefined,
-    }).pipe(Effect.ignore);
-
-    (window as unknown as { __wavecodeLastRaw?: string }).__wavecodeLastRaw = raw;
-
+    setLastRawLLMResponse(raw);
     return cleanLLMResponse(raw);
   });
 
-/** Last raw LLM response (для отладки/UI). */
-export const getLastRawLLMResponse = (): string =>
-  (window as unknown as { __wavecodeLastRaw?: string }).__wavecodeLastRaw ?? '';
+/**
+ * Last raw LLM response (для отладки/UI).
+ *
+ * Stored as a module-scope variable rather than on `window` so the
+ * value cannot leak via DevTools' `window.*` autocompletion and so
+ * parallel `applyEditStream` / `applyEditWithContext` invocations
+ * don't race on a global mutable property. Set via
+ * `setLastRawLLMResponse` (private) from the streaming effects.
+ */
+let lastRawLLMResponse = '';
+
+const setLastRawLLMResponse = (raw: string): void => {
+  lastRawLLMResponse = raw;
+};
+
+export const getLastRawLLMResponse = (): string => lastRawLLMResponse;
