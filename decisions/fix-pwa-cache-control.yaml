@@ -1,0 +1,174 @@
+---
+schema: math-coding/3.3
+id: fix-pwa-cache-control
+revision: 1
+state: active
+body_sha: "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+yaml_sha: "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+
+intent: |
+  2026-10-18 юзер на десктопе (Chrome, работал с wavecode.kosov.online
+  вчера) увидел зависший inline-`.boot` прелоадер с логотипом и баром
+  `boot 1.1 [▓▓▓▓░░]_`. На мобильном с другим интернетом — открывается
+  нормально. На сервере 0 ошибок: HTML отдаётся 200, JS-бандл
+  `/assets/index-2lNEOz6m.js` отдаётся 200, Strudel/CodeMirror/effect
+  прелоадятся 200, в моём чистом Chromium всё монтируется за ~2с.
+
+  Корневая причина — десктопный браузер имел v1 SW от вчерашнего
+  деплоя, и комбинация из (а) `vite-plugin-pwa` runtimeCaching
+  `CacheFirst` для всех `/assets/*.js` и (б) отсутствия `Cache-Control`
+  заголовков от Caddy приводила к тому, что SW отдавал вчерашний
+  `/assets/index-<OLD>.js` из кеша → 404 от сервера (файл уже
+  перезатёрт новым хешем) → main.tsx не загружается → `root.replaceChildren()`
+  не выполняется → `.boot` блок остаётся видимым навсегда.
+
+  На мобильном SW не было (первый заход / свежий профиль) → ни
+  одной ветки кода, где stale-state может застрять, нет.
+
+  Решение делает два конкретных изменения:
+
+  1. `ui/vite.config.ts` — сузить `runtimeCaching` с broad
+     `/\/assets\/.*\.js$/` (catch-all → CacheFirst) до whitelist
+     стабильных vendor-чанков из `manualChunks`:
+     `(strudel|vendor-solid|codemirror|effect)-*.js`. Main bundle
+     `index-*.js` больше не кешируется SW — Vite-хеш и так делает
+     каждый деплой новым URL (cache miss → network → 200), а SW
+     с CacheFirst + 30d expiration добавлял ровно ноль пользы
+     и создавал ловушку stale-state.
+
+  2. `~/Projects/AngaraConfig/services/kosov-reverse-proxy/default.nix`
+     — добавить per-path `Cache-Control` в vhost `wavecode`:
+     `index.html` и `sw.js` → `no-cache, must-revalidate`
+     (браузер всегда делает conditional GET → 304 если не изменился);
+     `/assets/*` → `public, max-age=31536000, immutable` (хэши
+     Vite безопасны для вечного кеша; `immutable` отключает
+     revalidation overhead).
+
+  Вместе это закрывает оба пути stale-state: SW-runtime-cache для
+  `/assets/*` (vite) и browser HTTP cache для `index.html` (Caddy).
+  Hard reload больше не нужен после deploy.
+
+commitment: |
+  Two changes: vite runtimeCaching narrowed from broad to vendor-only;
+  Caddy vhost wavecode gains per-path Cache-Control headers.
+  Both ship in the same deploy wave as the fix.
+
+antithesis: |
+  (1) «Достаточно одного из двух — либо SW fix, либо Caddy headers».
+  Возражение: они закрывают РАЗНЫЕ каналы stale-state. SW fix
+  закрывает stale-JS-bundle через runtime cache. Caddy fix
+  закрывает stale-html через browser HTTP cache (это путь,
+  которым бьёт в incognito, где SW не успел встать, и в
+  браузерах, где SW был unregister'нут). Один без другого
+  оставляет дыру.
+
+  (2) «`Cache-Control: no-cache` для html — это лишний round-trip
+  на каждую навигацию». Возражение: round-trip к localhost Caddy
+  на angara-1 — <5ms. Conditional GET с ETag возвращает 304
+  без body. Net cost ≈ ноль, gain = никаких stale-html байтов.
+
+  (3) «`Cache-Control: immutable` для /assets/* опасно — если
+  сервер отдаст новый URL с тем же именем, юзер навсегда
+  застрянет». Возражение: Vite content-hash в имени файла
+  гарантирует, что новый бандл ≠ старый URL. Если кто-то
+  случайно задеплоит без хеша — это уже separate bug class,
+  и с этим справляется `manualChunks` whitelist в vite.
+
+  (4) «SW fix ничего не даёт, потому что SW всё равно cache-first
+  для index.html навигаций». Возражение: Workbox precache
+  исключает index.html (см. globPatterns в vite.config.ts:39),
+  navigateFallback ходит в network каждый раз. SW не кеширует
+  HTML response by default. Канал stale-HTML — это browser
+  HTTP cache, не SW. SW fix закрывает stale-JS-bundle.
+
+  (5) «Юзер не должен страдать — давайте просто выкинем SW
+  совсем, PWA не нужен». Возражение: SW используется для
+  offline-first boot и LLM response caching
+  (см. decisions/wavecode-pwa-mobile). Полное удаление —
+  отдельное решение с собственным antithesis.
+
+counterexample: |
+  (1) «Юзер с отключённым JS увидит зависший .boot навсегда —
+  это и есть текущий симптом». Возражение: его JS ВКЛЮЧЁН,
+  но main.tsx не загружается. Это разные сценарии. Если JS
+  выключен, никакой client-side fix не поможет; это ответственность
+  SEO/no-JS фоллбэка (отдельный question, не этот пакет).
+
+  (2) «Браузер с отключённым SW всё равно не получит Cache-Control
+  от Caddy — это бессмысленно». Возражение: SW отвечает только
+  за runtime-cached JS. Cache-Control от Caddy — это HTTP
+  заголовки, которые читает browser HTTP cache. SW не при чём.
+  Это независимые слои.
+
+axiom_link:
+  - A3
+
+scope:
+  paths:
+    - "ui/vite.config.ts"
+    - "~/Projects/AngaraConfig/services/kosov-reverse-proxy/default.nix"
+
+outcomes:
+  - id: fix-pwa-cache-control-vendor-whitelist
+    statement: |
+      `vite-plugin-pwa` runtimeCaching в `ui/vite.config.ts`
+      применяет CacheFirst только к (strudel|vendor-solid|codemirror|effect)-*.js,
+      не к main bundle index-*.js.
+  - id: fix-pwa-cache-control-caddy-headers
+    statement: |
+      Caddy vhost для `wavecode.kosov.online` отдаёт
+      `Cache-Control: no-cache, must-revalidate` для index.html и
+      sw.js, и `public, max-age=31536000, immutable` для /assets/*.
+
+obligations:
+  - id: fix-pwa-cache-control-kernel-validates
+    claim: |
+      Decision file structurally valid under math-coding 3.3.
+    acceptance:
+      all:
+        - verifier: "mathc validate"
+          result: pass
+  - id: fix-pwa-cache-control-vite-build-succeeds
+    claim: |
+      `pnpm build` в `ui/` завершается без ошибок.
+    acceptance:
+      all:
+        - verifier: "shell:pwd=ui && pnpm build 2>&1 | tail -20"
+          result: pass
+  - id: fix-pwa-cache-control-caddy-headers-served
+    claim: |
+      После `nixos-rebuild switch` `curl -sI` на
+      `https://wavecode.kosov.online/index.html` показывает
+      `Cache-Control: no-cache, must-revalidate`, и на
+      `/assets/index-2lNEOz6m.js` — `Cache-Control: public, max-age=31536000, immutable`.
+    acceptance:
+      all:
+        - verifier: "shell:curl -sI https://wavecode.kosov.online/index.html | grep -i '^cache-control:'"
+          result: pass
+        - verifier: "shell:curl -sI https://wavecode.kosov.online/assets/index-2lNEOz6m.js | grep -i '^cache-control:'"
+          result: pass
+  - id: fix-pwa-cache-control-broken-clean
+    claim: |
+      Юзер с вчерашним SW на десктопе после deploy видит работающее
+      приложение на следующем визите БЕЗ hard reload.
+    acceptance:
+      all:
+        - verifier: "manual:operator-witness"
+          result: pass
+
+assumptions:
+  - Vite content-hash в имени файла остаётся source of truth для cache-busting.
+  - Caddy `header` директива в mkBackend корректно мерджится с file_server defaults.
+  - angara-1 не имеет отдельного proxy перед Caddy, который мог бы сбрасывать Cache-Control.
+
+risk:
+  declared_triggers:
+    - vite-plugin-pwa major upgrade может сломать Swow-string urlPattern matcher
+    - операционная ошибка в nix: header directive typo → Caddy refuses to adapt → весь server down
+  owner: human:operator
+
+relations:
+  addresses:
+    - wavecode-bootstrap-math-coding-3.3@1
+    - wavecode-pwa-auto-update@1
+    - wavecode-pwa-mobile@1

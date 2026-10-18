@@ -39,13 +39,40 @@ export default defineConfig({
         globPatterns: ['**/*.{js,css,svg,png,ico,webmanifest,woff2}'],
         navigateFallback: '/index.html',
         navigateFallbackDenylist: [/^\/api\//],
+        // navigationFallback / html cache strategy:
+        //   Workbox precache list excludes index.html (intentional — see
+        //   comment above globPatterns). For navigations, the SW fetches
+        //   /index.html from the network on every visit, so the browser
+        //   always sees the current bundle URL. The remaining stale-html
+        //   window is the BROWSER HTTP cache (no SW involvement): when
+        //   the SW has been unregistered or hasn't installed yet, the
+        //   browser can serve yesterday's html from disk cache. Fix lives
+        //   in Caddy: `Cache-Control: no-cache, must-revalidate` on
+        //   index.html forces a conditional GET every navigation, which
+        //   always returns the current html. See decisions/fix-pwa-cache-
+        //   control and AngaraConfig/services/kosov-reverse-proxy.
         runtimeCaching: [
+          // Stable vendor chunks only — filenames match the manualChunks
+          // aliases in rollupOptions.output.manualChunks. The browser cache
+          // (with `Cache-Control: immutable` from Caddy, see AngaraConfig
+          // kosov-reverse-proxy) is the long-term store; this SW layer is
+          // purely for offline-first boot when the browser cache is cold
+          // (first install) and the user is offline.
+          //
+          // Critical: the broad pattern `/assets/.*\.js$` was REMOVED.
+          // It used CacheFirst for ALL assets, including the main
+          // `index-<hash>.js` which changes every deploy. With CacheFirst
+          // + a 30-day expiration, the SW would happily serve a stale
+          // index bundle even after the server had rotated the filename.
+          // The vite hash already makes the new bundle a brand-new URL
+          // (cache miss → network → 200), so CacheFirst offered no real
+          // benefit for hashed bundles — only the false sense of safety.
           {
-            urlPattern: /\/assets\/.*\.js$/,
+            urlPattern: /\/assets\/(strudel|vendor-solid|codemirror|effect)-[A-Za-z0-9_-]+\.js$/,
             handler: 'CacheFirst',
             options: {
-              cacheName: 'strudel-vendor',
-              expiration: { maxEntries: 32, maxAgeSeconds: 60 * 60 * 24 * 30 },
+              cacheName: 'vendor-stable',
+              expiration: { maxEntries: 16, maxAgeSeconds: 60 * 60 * 24 * 30 },
             },
           },
           {
