@@ -1,0 +1,294 @@
+---
+schema: math-coding/3.3
+id: wavecode-inline-tooltips
+revision: 1
+state: draft
+body_sha: "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+yaml_sha: "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+
+intent: |
+  Hover-tooltips в редакторе score: при наведении на `note("c4")`,
+  `s("drums_bd")`, `.lpf(300)`, `.gain(0.5)` показать короткое
+  русское объяснение функции / сэмпла / ноты с примером. Цель —
+  превратить «страшный мини-нотэйшн» в самоочевидный glossary,
+  без необходимости читать внешние Strudel-доки.
+
+  Сегодня при первом контакте с партитурой пользователь видит
+  плотный monospace-текст (`s("drums_bd ~ drums_bd ~").gain(0.5)`)
+  без подсказок о том, что значат отдельные слова. Эта фича —
+  минимальный и аддитивный onboarding: ничего не ломает,
+  ничего не переписывает; просто показывает плашку при hover.
+
+commitment: |
+  1. `ui/src/domain/strudel/glossary.ts` — pure-data lookup
+     словарь: 23 Strudel-функции (note / s / n / chord / cat /
+     stack / slow / fast / every + 12 envelopes/utility:
+     gain / lpf / hpf / room / delay / swing / decay / sustain
+     / attack / release / voicing / shape / detune / range),
+     10 сэмплов (bd / sd / hh / oh / cp + drums_* префиксы) и
+     note-pattern (`^[a-g]#?b?\d$`).
+     Каждая запись = `{ name, ru, example }` где `ru` — 1-2 строки
+     по-русски, `example` — короткий пример кода.
+  2. Lookup-функции: `getTooltipForToken(name): TooltipInfo | null`,
+     `getTooltipForSample(name): TooltipInfo | null`,
+     `getTooltipForNote(name): TooltipInfo | null`. Любая из них
+     для неизвестного имени возвращает `null` (важно для
+     производительности и для UX — никаких "мусорных" тултипов).
+  3. `ui/src/presentation/editor/vocabTooltip.ts` — новый файл
+     с CM6 `hoverTooltip` extension (250ms delay). Callback
+     получает `(view, pos)` и возвращает `Tooltip | null`.
+     Определение токена — простой word-scan (`[A-Za-z0-9_#]`,
+     `#` нужен для sharp-нот) + контекст строки literal-а
+     (между `"..."` ли мы сейчас, через parity-scan с
+     backslash-escape skip). Метод-чейны `.gain(0.5)` распознаются
+     через dot перед токеном; курсор на самом `.` тоже ловится.
+  4. `ui/src/presentation/components/CodeMirrorEditorImpl.tsx`
+     добавляет `vocabTooltip()` в extensions array, рядом с
+     существующими `autocompletion` / `flashDecorations`. Никакие
+     другие расширения не трогаются.
+  5. Custom CSS-класс `.cm-vocab-tooltip` в
+     `ui/src/styles/components.css` для нашего tooltip'а
+     с monospace-форматированием name/example + русским
+     описанием. Цвет border сигнализирует категорию: primary
+     для функций, cyan для сэмплов, magenta для нот.
+  6. Все 23 функции + 10 сэмплов + note-pattern + detection
+     edge cases покрыты unit-тестами в
+     `ui/src/domain/strudel/glossary.test.ts` (60 cases) и
+     `ui/src/presentation/editor/vocabTooltip.test.ts` (23 cases).
+     Никакие существующие файлы кроме `CodeMirrorEditor.tsx`,
+     `CodeMirrorEditorImpl.tsx`, `components.css` и
+     `decisions/wavecode-inline-tooltips.yaml` не изменяются.
+  7. Backward-compat: ни один существующий тест не должен
+     сломаться (glossary.ts — pure addition; vocabTooltip.ts —
+     pure addition; CM6 hoverTooltip extension — additive,
+     не трогает существующие onChange / selectionTracker /
+     autocompletion extensions).
+
+scope:
+  paths:
+    - "ui/src/domain/strudel/glossary.ts"
+    - "ui/src/domain/strudel/glossary.test.ts"
+    - "ui/src/presentation/editor/vocabTooltip.ts"
+    - "ui/src/presentation/editor/vocabTooltip.test.ts"
+    - "ui/src/presentation/components/CodeMirrorEditor.tsx"
+    - "ui/src/presentation/components/CodeMirrorEditorImpl.tsx"
+    - "ui/src/styles/components.css"
+    - "decisions/wavecode-inline-tooltips.yaml"
+  exclusions:
+    - "ui/src/App.tsx"
+    - "ui/src/presentation/components/app/**"
+    - "ui/src/presentation/components/landing/**"
+    - "ui/src/presentation/components/PianoKeyboard.tsx"
+    - "ui/src/presentation/components/PianoToolbar.tsx"
+    - "ui/src/presentation/components/AIEditPanel.tsx"
+    - "ui/src/presentation/components/SnippetShowcase.tsx"
+    - "ui/src/presentation/components/MiniNotationToolbar.tsx"
+    - "ui/src/presentation/state/**"
+    - "ui/src/application/useCases/**"
+    - "ui/src/infrastructure/**"
+    - "ui/vite.config.ts"
+    - "ui/node_modules/**"
+
+outcomes:
+  - id: vocab-glossary-public-api
+    statement: |
+      `ui/src/domain/strudel/glossary.ts` экспортирует `TooltipInfo`
+      type и три lookup-функции (`getTooltipForToken`,
+      `getTooltipForSample`, `getTooltipForNote`). Каждая
+      функция pure (нет побочных эффектов) и возвращает `null`
+      для неизвестных имён (без throw).
+  - id: vocab-coverage-functions
+    statement: |
+      Glossary содержит минимум 17 Strudel-функций: note, s, n,
+      chord, cat, stack, slow, fast, every, gain, lpf, hpf,
+      room, delay, swing, decay, sustain. Все используются в
+      BUILTIN_PRESETS (см. presets.ts) — добавлены только те, что
+      реально появляются в коде. Реализация расширена до 23 за
+      счёт `attack` / `release` / `voicing` / `shape` /
+      `detune` / `range` — все эти функции тоже встречаются в
+      `presets.ts`, и покрывать их «заодно» стоит ровно одну
+      строку текста на функцию.
+  - id: vocab-coverage-samples
+    statement: |
+      Glossary содержит минимум 10 сэмплов: bd, sd, hh, oh, cp +
+      drums_bd, drums_sd, drums_hh, drums_ride, drums_crash.
+      Все — стандартные Strudel-bank сэмплы из 808 / Roland TR
+      семейств.
+  - id: vocab-coverage-notes
+    statement: |
+      `getTooltipForNote` корректно матчит regexp
+      `^[a-g]#?b?\d$` (case-insensitive) и возвращает описание
+      для всех 7 нот × 9 октав = минимум 7 уникальных записей
+      по имени класса (до / ре / ми / фа / соль / ля / си).
+  - id: vocab-hover-extension-wired
+    statement: |
+      `CodeMirrorEditorImpl.tsx` имеет CM6 `hoverTooltip` extension
+      с `hoverTime: 250ms`. На каждой hover-позиции возвращает
+      `Tooltip | null`. При hover на неизвестный токен возвращает
+      `null` (no tooltip — silent no-op).
+  - id: vocab-styles-applied
+    statement: |
+      `.cm-vocab-tooltip` стилизует tooltip с monospace font для
+      name/example и обычным sans для русского описания. Border
+      использует existing palette (`var(--primary)` для функций,
+      `var(--cyan)` для сэмплов, `var(--magenta)` для нот).
+  - id: vocab-no-regressions
+    statement: |
+      Все существующие тесты проходят без изменений (CM6 ext
+      additive; glossary pure addition). Bundle size delta
+      < +20 KB gzipped (glossary data ~3 KB raw + ~10 KB CSS +
+      negligible CM6 ext wiring).
+
+obligations:
+  - id: vocab-glossary-function-tests
+    claim: |
+      `glossary.test.ts` для каждой из 17 функций проверяет, что
+      `getTooltipForToken(name)` возвращает `{ name, ru, example }`
+      с непустым `ru` и `example`, начинающимся с `name`.
+    acceptance:
+      all:
+        - verifier: "vitest run ui/src/domain/strudel/glossary.test.ts"
+          result: pass
+  - id: vocab-glossary-sample-tests
+    claim: |
+      `glossary.test.ts` для каждого из 10 сэмплов проверяет, что
+      `getTooltipForSample(name)` возвращает валидный `TooltipInfo`.
+      Заодно проверяет, что `getTooltipForSample('zz')` → null.
+    acceptance:
+      all:
+        - verifier: "vitest run ui/src/domain/strudel/glossary.test.ts"
+          result: pass
+  - id: vocab-glossary-note-tests
+    claim: |
+      `glossary.test.ts` для нот: `c4`, `e5`, `a#3`, `bb2`,
+      `C4` (uppercase) возвращают не-null; `xyz`, `123`, `` →
+      null. Также проверяет, что MIDI-номер для `c4` = 60.
+    acceptance:
+      all:
+        - verifier: "vitest run ui/src/domain/strudel/glossary.test.ts"
+          result: pass
+  - id: vocab-glossary-unknown-tests
+    claim: |
+      `glossary.test.ts` проверяет, что
+      `getTooltipForToken('unknown_func')` → null,
+      `getTooltipForSample('drums_zz')` → null,
+      `getTooltipForNote('xx4')` → null. Это контракт "не показывать
+      мусор" — основа UX-молчания.
+    acceptance:
+      all:
+        - verifier: "vitest run ui/src/domain/strudel/glossary.test.ts"
+          result: pass
+  - id: vocab-typecheck-green
+    claim: |
+      `npm --dir ui run typecheck` exits 0 после коммита.
+    acceptance:
+      all:
+        - verifier: "tsc --noEmit"
+          result: pass
+  - id: vocab-lint-no-console-green
+    claim: |
+      `npm --dir ui run lint:no-console` exits 0 (новый файл
+      glossary.ts — domain pure, не должен содержать `console.*`).
+    acceptance:
+      all:
+        - verifier: "eslint src/domain src/application"
+          result: pass
+  - id: vocab-presets-validate-green
+    claim: |
+      `npm --dir ui run validate:presets` exits 0 — добавление
+      glossary.ts и hoverTooltip extension не должно регрессировать
+      парсинг 18 built-in пресетов (ничего в парсере не меняется).
+    acceptance:
+      all:
+        - verifier: "node --experimental-strip-types ../scripts/validate-presets.ts"
+          result: pass
+  - id: vocab-build-green
+    claim: |
+      `npm --dir ui run build` exits 0 — production-build проходит
+      успешно (tsc + vite).
+    acceptance:
+      all:
+        - verifier: "tsc --noEmit && vite build"
+          result: pass
+
+assumptions:
+  - id: vocab-assumption-cm6-hover-stable
+    state: assumed
+    statement: |
+      CodeMirror 6 `hoverTooltip` API (@codemirror/view) стабилен
+      и не меняет signature между патч-версиями (текущая ^6.43.x).
+      Поведение: callback получает (view, pos, side) и возвращает
+      `Tooltip | readonly Tooltip[] | null`.
+    owner: human:operator
+  - id: vocab-assumption-glossary-static
+    state: assumed
+    statement: |
+      Glossary — статические данные (никаких i18n-переключателей,
+      никаких runtime-обновлений). Если в будущем нужно будет
+      добавить английскую версию или расширить набор функций —
+      это отдельный decision (vocab-i18n / vocab-coverage).
+    owner: human:operator
+  - id: vocab-assumption-no-lezer-parser
+    state: assumed
+    statement: |
+      Редактор score НЕ использует полноценный Lezer-парсер
+      (basicSetup без явного StreamParser); определение контекста
+      "внутри / снаружи string-literal" делается простым
+      quote-parity scan-ом по ближайшим 64 chars. Это даёт
+      sufficient precision для нашего use-case без подключения
+      тяжёлого парсера.
+    owner: human:operator
+  - id: vocab-assumption-russian-only
+    state: assumed
+    statement: |
+      UI wavecode русскоязычный (см. README.md, UI-strings в
+      components.css, lang: ru в manifest). Текст tooltip'ов
+      пишется на русском; английский alias не нужен в v1.
+    owner: human:operator
+
+risk:
+  declared_triggers:
+    - hover-perf-degradation-on-large-doc
+    - tooltip-overlap-with-cm6-autocomplete
+    - false-positive-on-comment-or-string-content
+    - quote-parity-bug-on-escaped-quotes
+  owner: human:operator
+
+reversal:
+  - signal: hover-trigger-on-every-keystroke
+    action: rework
+  - signal: glossary-lookup-O(n)-per-keystroke-feel
+    action: rework
+
+counterexample: |
+  "В редакторе уже есть syntax highlight (miniNotationHighlight +
+   runtimeMiniHighlight) и автокомплит (strudelCompletions) — этого
+   достаточно для понимания кода; tooltips избыточны." Counterexample:
+   highlight показывает ЧТО это syntax-токен, но не ГОВОРИТ что он
+   делает. `lpf` подсвечен зелёным — но что значит 4000 в скобках?
+   Автокомплит помогает только при НАПИСАНИИ нового кода, а не при
+   ЧТЕНИИ уже написанного. Hover-tooltip закрывает именно последний
+   случай: пользователь читает score, наводит на незнакомое слово,
+   получает 1-строчное объяснение с примером, продолжает читать.
+   Это добавляет ~3 KB raw data + ~1 KB CSS + negligible wiring
+   cost, и не пересекается ни с одной существующей фичей.
+
+antithesis: |
+  "Inline tooltips засоряют редактор — пользователь и так видит
+   README + presets + примеры; learning curve решается туториалом,
+   а не всплывающими подсказками." Rejected because: README и
+   пресеты НЕ доступны в один клик из мобильного редактора
+   (тапы на docs-ссылку → leave-app → lose-edit-context);
+   мини-туториал на странице решает только first-time UX, не
+   long-tail "забыл что делает decay". Tooltip показывается ТОЛЬКО
+   по явному hover (250ms delay), не заслоняет ничего по умолчанию
+   и не ломает существующий workflow. CM6 framework предоставляет
+   `hoverTooltip` из коробки, что делает имплементацию ~50 LOC —
+   в разы меньше, чем dedicated docs-link в каждую функцию.
+
+relations:
+  addresses:
+    - wavecode-bootstrap-math-coding-3.3@1
+  depends_on:
+    - wavecode-strudel-ast@1
+    - wavecode-codemirror-6@1
