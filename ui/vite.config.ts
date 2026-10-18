@@ -96,7 +96,6 @@ export default defineConfig({
             '@strudel/mini',
             '@strudel/tonal',
             '@strudel/transpiler',
-            '@strudel/serial',
           ],
           // CodeMirror 6 (~386 KB raw, ~125 KB gz). Imported via
           // `lazy()` in CodeMirrorEditor.tsx — only loads when the user
