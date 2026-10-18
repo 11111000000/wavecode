@@ -237,8 +237,6 @@ describe('parseScore', () => {
 describe('string argument unescape', () => {
   it('unescapes \\n as a real newline character (not literal "n")', () => {
     const ast = parseScore('s("a\\nb")');
-    const stack = findTopStack(ast) as { args: ReadonlyArray<{ kind: string; value?: string }> } | null;
-    // The score is just `s("a\nb")` — no outer stack, so look at top-level call.
     const call = ast.nodes[0] as { kind: string; args: ReadonlyArray<{ kind: string; value?: string }> };
     expect(call.kind).toBe('call');
     expect(call.args[0]?.kind).toBe('string');

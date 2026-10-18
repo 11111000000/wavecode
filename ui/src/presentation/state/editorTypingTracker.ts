@@ -3,12 +3,12 @@ import { appStore } from './appStore';
 
 /**
  * Tracks score changes from manual typing and groups them into a single
- * undo checkpoint via commitHistoryCheckpoint.
+ * undo checkpoint via `coalesceLatestHistoryEntry`.
  *
  * Behavior:
  *   - On every appStore.score change, restart a 600ms debounce timer.
  *   - When the timer fires (typing paused for 600ms), dispatch
- *     `commitHistoryCheckpoint` so the reducer collapses the most
+ *     `coalesceLatestHistoryEntry` so the reducer drops the most
  *     recent intermediate history entry.
  *   - Programmatic replaceScore (e.g. preset load, undo/redo, IDB-load)
  *     goes through the same code path but the debounce absorbs rapid
@@ -22,7 +22,7 @@ import { appStore } from './appStore';
 
 export const TYPING_DEBOUNCE_MS = 600;
 
-export const installTypingTracker = (dispatch: (event: { readonly type: 'commitHistoryCheckpoint' }) => void): (() => void) => {
+export const installTypingTracker = (dispatch: (event: { readonly type: 'coalesceLatestHistoryEntry' }) => void): (() => void) => {
   const dispose = createRoot((disposeFn) => {
     let timer: ReturnType<typeof setTimeout> | undefined;
     let lastScore = untrack(() => appStore.score);
@@ -35,7 +35,7 @@ export const installTypingTracker = (dispatch: (event: { readonly type: 'commitH
       if (timer !== undefined) clearTimeout(timer);
       timer = setTimeout(() => {
         timer = undefined;
-        dispatch({ type: 'commitHistoryCheckpoint' });
+        dispatch({ type: 'coalesceLatestHistoryEntry' });
       }, TYPING_DEBOUNCE_MS);
     });
 
