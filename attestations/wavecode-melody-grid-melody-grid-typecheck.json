@@ -1,0 +1,19 @@
+{
+  "schema": "math-coding/attestation-3.0-alpha",
+  "kind": "attestation",
+  "subject": {
+    "decision": "wavecode-melody-grid",
+    "obligation": "melody-grid-typecheck",
+    "candidate_tree": "feat/feature-melody-grid",
+    "materials_digest": ""
+  },
+  "kind_": "build",
+  "producer": {
+    "identity": "agent:opencode"
+  },
+  "environment_class_level": 1,
+  "environment_class_label": "ci",
+  "result": "pass",
+  "issued_at": "2026-10-18T09:35:00Z",
+  "id": "sha256:0000000000000000000000000000000000000000000000000000000000000005"
+}

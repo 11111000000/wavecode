@@ -1051,6 +1051,262 @@ textarea.wc-input {
 }
 
 /* =========================================================================
+ *  MELODY GRID — 16-step × 36-pitch piano-roll (C3..B5)
+ *  Используется компонентом <MelodyGrid />. Стили адаптированы из
+ *  .step-grid-* (см. выше); cell = pitch × step, а не drum × step.
+ *
+ *  Y-axis: B5 вверху → C3 внизу (piano-roll convention).
+ *  X-axis: 16 шагов равной ширины через CSS grid.
+ *  Black-key rows (.melody-grid-row-label--black-key) подсвечиваются
+ *  фоном, чтобы пользователь мог быстро ориентироваться.
+ * ========================================================================= */
+
+.melody-grid {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  padding: var(--space-md) var(--space-lg);
+  background: var(--surface-1);
+  font-family: var(--font-mono);
+}
+
+.melody-grid-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+  align-items: center;
+}
+.melody-grid-toolbar .melody-grid-hint {
+  flex-basis: 100%;
+  font-size: var(--fs-xs);
+  color: var(--fg-dim);
+  line-height: var(--lh-relaxed);
+  margin-top: var(--space-2xs);
+}
+.melody-grid-toolbar .melody-grid-bpm {
+  margin-left: auto;
+  font-size: var(--fs-2xs);
+  color: var(--fg-ghost);
+  letter-spacing: var(--ls-wide);
+  text-transform: uppercase;
+}
+
+/* --- mode pill (view | sketch | edit) ---- borrowed from step-grid */
+.melody-grid-mode-pill {
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  background: var(--surface-2);
+}
+.melody-grid-mode-btn {
+  height: 36px;
+  padding: 0 var(--space-sm);
+  background: transparent;
+  border: 0;
+  color: var(--fg-dim);
+  font-family: inherit;
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+  cursor: pointer;
+  text-transform: lowercase;
+  letter-spacing: var(--ls-wide);
+  border-right: 1px solid var(--border);
+  min-height: var(--touch-target);
+  transition: background-color var(--dur-xs) var(--ease), color var(--dur-xs) var(--ease);
+}
+.melody-grid-mode-btn:last-child { border-right: 0; }
+.melody-grid-mode-btn:hover:not([disabled]) { color: var(--fg); background: var(--surface-3); }
+.melody-grid-mode-btn[data-active="true"] {
+  background: var(--primary);
+  color: var(--fg-inverse);
+}
+.melody-grid-mode-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  text-decoration: line-through;
+}
+.melody-grid-mode-btn[data-disabled="true"] {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* --- grid layout ---- 16 columns + 36 rows + 1 label column ---- */
+.melody-grid-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  background: var(--border);
+  padding: 1px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  overflow-x: auto;
+}
+.melody-grid-row {
+  display: grid;
+  /* 1 label column + 16 cell columns, set by inline style */
+  gap: 1px;
+}
+.melody-grid-row-header {
+  background: var(--surface-2);
+}
+.melody-grid-row-label {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 0 var(--space-xs);
+  font-size: var(--fs-2xs);
+  color: var(--fg-dim);
+  background: var(--surface-2);
+  text-transform: lowercase;
+}
+.melody-grid-row-label-header {
+  font-weight: var(--fw-semibold);
+  color: var(--fg-ghost);
+  text-transform: uppercase;
+  letter-spacing: var(--ls-wide);
+}
+.melody-grid-row-label--black-key {
+  background: var(--surface-3);
+  color: var(--primary);
+}
+.melody-grid-row-pitch {
+  font-weight: var(--fw-semibold);
+}
+.melody-grid-col-header {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--fs-2xs);
+  color: var(--fg-ghost);
+  background: var(--surface-2);
+  height: 18px;
+  letter-spacing: var(--ls-wide);
+  transition: background-color var(--dur-xs) var(--ease);
+}
+.melody-grid-col-header.beat {
+  background: var(--cyan-tint, rgba(0, 200, 255, 0.16));
+  color: var(--cyan);
+}
+
+/* --- buttons (reset, commit, confirm dialog) ---- borrowed from step-grid */
+.melody-grid-btn {
+  height: 36px;
+  padding: 0 var(--space-sm);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--fg-dim);
+  font-family: inherit;
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all var(--dur-xs) var(--ease);
+  min-height: var(--touch-target);
+}
+.melody-grid-btn:hover { border-color: var(--primary); color: var(--primary); }
+.melody-grid-btn:active { transform: scale(0.97); }
+.melody-grid-btn-primary {
+  background: var(--primary);
+  color: var(--fg-inverse);
+  border-color: var(--primary);
+}
+.melody-grid-btn-primary:hover {
+  background: var(--primary);
+  color: var(--fg-inverse);
+  border-color: var(--primary);
+}
+
+/* --- cell ---- pitch × step cell --------------------------- */
+.melody-cell {
+  position: relative;
+  height: 16px;
+  min-height: 16px;
+  background: var(--surface-2);
+  border: 0;
+  cursor: pointer;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition:
+    background-color var(--dur-xs) var(--ease),
+    box-shadow var(--dur-xs) var(--ease);
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+.melody-cell:hover { background: var(--surface-3); }
+.melody-cell.active {
+  background: var(--primary);
+  box-shadow: 0 0 4px var(--primary-glow);
+}
+.melody-cell.dirty {
+  outline: 1px solid var(--amber);
+  outline-offset: -1px;
+  box-shadow: 0 0 4px var(--amber);
+}
+.melody-cell.beat {
+  box-shadow: inset 0 0 0 1px var(--cyan);
+}
+.melody-cell.tap-flash {
+  animation: melody-cell-flash 200ms var(--ease-out);
+}
+.melody-cell-dot {
+  display: block;
+  width: 8px;
+  height: 8px;
+  background: var(--fg-inverse);
+  border-radius: var(--radius-full);
+  pointer-events: none;
+}
+@keyframes melody-cell-flash {
+  0%   { transform: scale(1.2); box-shadow: 0 0 10px var(--primary-glow); }
+  100% { transform: scale(1);   box-shadow: none; }
+}
+
+/* --- confirm dialog (close-with-dirty-draft) ---- mirrors step-grid */
+.melody-grid-confirm-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  z-index: 999;
+}
+.melody-grid-confirm-dialog {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 1000;
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-lg);
+  min-width: 280px;
+  max-width: 90vw;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  box-shadow: var(--shadow-modal);
+}
+.melody-grid-confirm-title {
+  margin: 0;
+  font-size: var(--fs-md);
+  color: var(--fg);
+}
+.melody-grid-confirm-body {
+  margin: 0;
+  font-size: var(--fs-sm);
+  color: var(--fg-dim);
+  line-height: var(--lh-relaxed);
+}
+.melody-grid-confirm-actions {
+  display: flex;
+  gap: var(--space-xs);
+  justify-content: flex-end;
+  margin-top: var(--space-sm);
+}
+
+/* =========================================================================
  *  PIANO — 2-octave on-screen keyboard (C3..B4)
  *  Используется компонентом <PianoKeyboard />. Белая клавиша = flex child,
  *  чёрная клавиша = position:absolute поверх (overlap -11px как в legacy).
