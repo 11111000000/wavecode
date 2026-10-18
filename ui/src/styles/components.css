@@ -5681,8 +5681,8 @@ textarea.ai-textarea:focus-visible {
   .tour-spotlight { transition: none; animation: none; }
 }
 
-}
-
+/* =========================================================================
+ *  PIANOROLL — DAW-style note editor in ScorePanel.
  *  <Pianoroll /> renders a Canvas (HTML5) timeline + side pitch labels.
  *  Toggle sibling: `.pianoroll-view-toggle` (text | roll) lives just
  *  under the editor area; default = text.
@@ -5832,7 +5832,9 @@ textarea.ai-textarea:focus-visible {
   min-height: 220px;
   border-radius: var(--radius-md);
   overflow: hidden;
+}
 
+/* =========================================================================
  *  LOOP RECORDER (wavecode-loop-recorder)
  *  Boss RC-505-style multi-track loop recorder UI.
  *  4 color-coded slots + punch-in timeline + mix-down.
@@ -6021,3 +6023,4 @@ textarea.ai-textarea:focus-visible {
   padding: var(--space-xs) var(--space-sm);
   background: var(--err-soft);
   border-radius: var(--radius-sm);
+}
