@@ -9,6 +9,8 @@ import { Panels } from './sections/Panels';
 import { TechStack } from './sections/TechStack';
 import { QuickStart } from './sections/QuickStart';
 import { Footer } from './sections/Footer';
+import { SampleProgressBadge } from '~/presentation/components/SampleProgressBadge';
+import { preloadLandingSamples } from './preloadLandingSamples';
 
 /**
  * Landing — корневой компонент лендинга.
@@ -22,6 +24,17 @@ import { Footer } from './sections/Footer';
  */
 export function Landing(): JSX.Element {
   onMount(() => {
+    // Pre-load sample banks in the background so SnippetShowcase
+    // preset previews (Creep, Hip-hop, Trap) play the full mix —
+    // kick/snare/hat included — instead of falling through
+    // getTrigger with "sound <X> not found". See
+    // `decisions/wavecode-landing-sample-preload.yaml`.
+    // The call is fire-and-forget: the dynamic import + worker
+    // decode run off the main thread; SampleLoader.loadAllSamples
+    // is idempotent so the later /#/app useAppBootstrap call is
+    // a free no-op.
+    preloadLandingSamples();
+
     document.body.classList.add('wc-landing-active');
 
     // Плавный scroll к якорным ссылкам внутри страницы
@@ -50,6 +63,9 @@ export function Landing(): JSX.Element {
 
   return (
     <div class="landing">
+      <div class="l-sample-progress-corner" data-testid="landing-sample-progress">
+        <SampleProgressBadge />
+      </div>
       <TopNav />
       <main>
         <Hero />
