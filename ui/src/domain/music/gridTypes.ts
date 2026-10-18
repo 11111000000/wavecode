@@ -91,7 +91,7 @@ export const isGridEmpty = (g: Grid): boolean =>
  *                whose first token is `s(`; otherwise the mode
  *                button is disabled.
  *
- * See `math/wavecode-step-grid-modes` for the design rationale.
+ * See decisions/wavecode-step-grid-modes.yaml for the design rationale.
  */
 export type GridMode = 'view' | 'sketch' | 'edit';
 

@@ -12,11 +12,11 @@
  * `unreadErrors`. Только `severity ∈ {'error', 'critical', 'fatal'}` —
  * иначе пользователь не сможет фильтровать шум.
  *
- * 'fatal' добавлен в Phase-2 Subagent-7 как часть console UX polish:
- * - LogLevel-union параллельно расширяется в Subagent-6 (`logger.ts`).
+ * 'fatal' добавлен в Phase-2 как часть console UX polish
+ * (see decisions/wavecode-logger-enhancements.yaml):
+ * - LogLevel-union расширен в `infrastructure/log/logger.ts`.
  * - Treat 'fatal' as equal-to 'critical' here: sticky TTL, increments
- *   unreadErrors, clickable to open the sheet. Никакой код consoleStore
- *   не нужен при merge Subagent-6 — `pushToast({ severity: 'fatal' })`
+ *   unreadErrors, clickable to open the sheet. `pushToast({ severity: 'fatal' })`
  *   уже валиден по типу.
  *
  * setConsoleOpen(true) побочно вызывает markAllRead — удобно для UI,

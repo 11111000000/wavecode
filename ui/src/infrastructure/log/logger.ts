@@ -44,7 +44,7 @@
  *    `presentation/components/consoleStore.ts` for the UI contract.
  *  • `fatal` is the "this kills the app" marker: consoleStore treats it
  *    the same as `critical` for `unreadErrors` increments and sticky
- *    toast TTL. The actual mapping lives in Subagent 7's territory; the
+ *    toast TTL. The actual mapping lives in `presentation/components/consoleStore.ts`; the
  *    level value is the public contract this module owns.
  *
  * Throttling (Phase 2 enhancement)

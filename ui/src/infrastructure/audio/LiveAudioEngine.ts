@@ -90,7 +90,7 @@ const patchCreatePeriodicWave = (): void => {
  * Idempotent per audioCtx (engine caches the AudioContext in
  * `__wavecodeAudioCtx` so this runs at most once per session).
  *
- * See packet `math/visualizer-tab` for the design rationale.
+ * See packet decisions/visualizer-tab.yaml for the design rationale.
  */
 const installAnalyserTap = (audioCtx: AudioContext, analyser: AnalyserNode): void => {
   const tag = (AudioNode.prototype as unknown as {
@@ -151,7 +151,7 @@ type ReplHandle = {
    * kicks in at the next lookahead window (~50ms @ cps=1).
    *
    * Used by `setLayerMix` for live mixer edits.
-   * See `math/wavecode-mixer-live-update`.
+   * See decisions/wavecode-mixer-live-update.yaml.
    */
   setPattern?: (pattern: unknown, autostart?: boolean) => Promise<unknown>;
   /** Strudel Cyclist scheduler — exposes `.pattern` (active Pattern). */
@@ -538,7 +538,7 @@ await repl.evaluate(snippet);
             // decorations start emitting. We call setActive unconditionally
             // and let the bridge filter — if the pattern is missing or
             // has no queryArc, bridge simply computes empty ranges.
-            // See `math/wavecode-runtime-mini-highlight`.
+            // See decisions/wavecode-runtime-mini-highlight.yaml.
             const livePattern = repl.scheduler?.pattern;
             const hasQueryArc = !!livePattern && typeof (livePattern as { queryArc?: unknown }).queryArc === 'function';
             // Diagnostic surface — published every eval so we can tell
@@ -600,7 +600,7 @@ await repl.evaluate(snippet);
           // playhead sticks at column 0. The inner repl.setCps
           // (ensureRepl::callable) also writes setDebug — that's
           // idempotent once repl exists. See packet
-          // math/wavecode-step-grid-autoload-and-sync.
+          // decisions/wavecode-step-grid-autoload-and-sync.yaml.
           setDebug({ cps });
           if (!cachedRepl) return;
           const repl = await cachedRepl;
@@ -682,7 +682,7 @@ await repl.evaluate(snippet);
       }).pipe(Effect.catchAll(() => Effect.void)),
     /**
      * Hot-swap a new score into the live scheduler. Used by StepGrid
-     * edit-mode per-tap (see `math/wavecode-step-grid-modes`).
+     * edit-mode per-tap (see decisions/wavecode-step-grid-modes.yaml).
      *
      * Flow is the same as `setLayerMix` but the input is a complete
      * score (not a mixer-state patch). We rebuild the snippet via

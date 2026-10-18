@@ -19,7 +19,7 @@ import { scheduleMixLive } from '../state/audioActions';
  * source of truth) И `scheduleMixLive(layerMix)` (debounced 50 ms
  * AudioEngine.setLayerMix — hot-swap через `repl.evaluate(newSnippet)`
  * без stop()). Listen-back в DAW-стиле без ручного ▶ Play.
- * Пакет: `math/wavecode-mixer-live-update`.
+ * Пакет: decisions/wavecode-mixer-live-update.yaml.
  */
 export function MixerPanel() {
   const layers = createMemo(() => parseStackTopLayers(appStore.score));

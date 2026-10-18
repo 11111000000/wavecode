@@ -8,7 +8,7 @@
  * `cm-mini-active c{color} {beat}` marks without competing with the
  * static `cm-mini-notation` syntax marker.
  *
- * Design contract: see `math/wavecode-runtime-mini-highlight/packet.md`.
+ * Design contract: see decisions/wavecode-runtime-mini-highlight.yaml.
  *
  * Decoration order:
  *   - cm-mini-notation (static, syntax) — provided by miniNotationHighlight

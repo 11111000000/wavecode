@@ -193,9 +193,9 @@ const ensureWorker = (): Worker => {
 /**
  * Per-URL AudioBuffer cache populated by `decodeInWorker`. Test-only
  * accessor `__getWarmCache()` exposes it for inspection. Production
- * consumers are `wrapSuperdoughLoadBuffer` (Phase 4 / Subagent 16),
- * which patches superdough's runtime `loadBuffer` to consult this
- * cache first.
+ * consumers are `wrapSuperdoughLoadBuffer` (Phase 4 — see decisions/
+ * wavecode-sample-pack.yaml), which patches superdough's runtime
+ * `loadBuffer` to consult this cache first.
  */
 const warmCache = new Map<string, AudioBuffer>();
 
@@ -331,7 +331,7 @@ const collectSampleUrls = (dict: SoundMapSnapshot): string[] => {
 const PRELOAD_CONCURRENCY = 4;
 
 /**
- * Phase 4 / Subagent 16: warm-cache fast path.
+ * Phase 4 / warm-cache fast path (see decisions/wavecode-sample-pack.yaml).
  *
  * When `preloadAllBuffers` populates the warm cache, the same
  * AudioBuffer objects are valid for the runtime as long as the

@@ -8,7 +8,7 @@ import type { LayerMix } from '~/domain/types';
  * edits to the live Strudel scheduler (without forcing a re-eval).
  * Three rapid edits from a slider drag must coalesce into a single
  * `AudioEngine.setLayerMix` call — otherwise the parser eats CPU on
- * every mouse-move at 60 Hz. See `math/wavecode-mixer-live-update`
+ * every mouse-move at 60 Hz. See decisions/wavecode-mixer-live-update.yaml
  * antithesis (3).
  *
  * Mocking strategy (mirrors `StepGrid.test.tsx`):
