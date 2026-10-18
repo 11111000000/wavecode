@@ -32,21 +32,18 @@
  * (Whisper-WASM) re-use the single-slot rule. See
  * `decisions/wavecode-voice-fab.yaml` outcome `mic-mutex-correct`.
  *
- * MVP LLM/Audio wiring — known limitation
- * ---------------------------------------
- * The orchestrator's `runRoute` Effect requires `LLMClient +
- * AudioEngine` in `R`. Wiring the production LiveLLMClient +
- * LiveAudioEngine here would require pulling infrastructure into
- * presentation (forbidden by the layer rule). For the MVP we
- * install a no-op stub pair; the score gets the user's utterance
- * transcript rendered but does NOT auto-apply via LLM. A future
- * task threads the `appStore.score` ref + `LiveAudioEngine` layer
- * into `initVoiceAI`, swapping the stub for the real services.
- * `decisions/wavecode-voice-fab.yaml` notes this explicitly as a
- * follow-up package.
+ * Service wiring
+ * --------------
+ * `LLMClient` + `AudioEngine` are extracted from `AppLayer` (the
+ * composition root) at `initVoiceAI` time, mirroring how
+ * `presentation/state/audioActions.ts` threads `AppLayer` into
+ * `Effect.provide`. The `currentScoreRef` keeps the orchestrator's
+ * view of the score in sync with `appStore.score` via a Solid
+ * `createEffect` (in its own `createRoot`) so consecutive utterances
+ * see the latest edits without re-init.
  */
 
-import { createSignal, onCleanup, untrack } from 'solid-js';
+import { createSignal, createEffect, createRoot, onCleanup, untrack } from 'solid-js';
 import * as Context from 'effect/Context';
 import { Effect, Layer, Ref, Stream } from 'effect';
 import { initialVoiceSession } from '~/domain/voice/voiceSession';
@@ -68,12 +65,12 @@ import {
 } from '~/application/voice/VoiceAISession';
 import {
   AudioEngine,
-  type LLMClient,
-  type CompletionChunk,
-  type CompletionRequest,
+  LLMClient,
 } from '~/domain/services';
 import type { MicBusyError } from '~/domain/audio/MicChannel';
 import { acquireMic, releaseMic } from './micMutexStore';
+import { appStore } from './appStore';
+import { AppLayer } from '~/infrastructure/composition';
 import { logger } from '~/infrastructure/log';
 
 export const [voiceAIState, setVoiceAIState] = createSignal<VoiceSessionState>(
@@ -103,52 +100,64 @@ export type VoiceAIStartOpts = {
 let handle: VoiceSessionHandle | null = null;
 let activeSessionId: string | null = null;
 let langAtInit: 'ru-RU' | string = 'ru-RU';
+let scoreSyncDispose: (() => void) | null = null;
 
 /**
- * Pull LLMClient + AudioEngine out of the provided layer so we can
- * build the orchestrator with concrete services rather than go
- * through `Effect.provide` (which doesn't work from a Solid module-
- * level Effect that needs `runSync`).
+ * Pull `LLMClient` + `AudioEngine` out of `AppLayer` so we can
+ * build the orchestrator with concrete services. `AppLayer` is the
+ * canonical composition root — the same one `audioActions.ts`
+ * threads through `Effect.provide`. `Layer.build` is sync for our
+ * layer graph (all tags are synchronous Layers), so `runSync` is
+ * safe.
  */
-const buildServicePair = (
-  audioLayer: Layer.Layer<AudioEngine, never, never>,
-): Effect.Effect<
-  {
-    readonly llm: Context.Tag.Service<typeof LLMClient>;
-    readonly audio: Context.Tag.Service<typeof AudioEngine>;
-    readonly scoreRef: Ref.Ref<string>;
-  },
-  never,
-  never
-> =>
-  Effect.gen(function* () {
-    const env = yield* Layer.build(audioLayer).pipe(Effect.scoped);
-    const audio = Context.get(env as Context.Context<AudioEngine>, AudioEngine);
-    // LLMClient is provided at the AppLayer level via `composition.ts`
-    // — for the MVP we install a no-op stub here and require the next
-    // package to wire the real `LLMClient` from
-    // `infrastructure/llm/LiveLLMClient`.
-    const llm: Context.Tag.Service<typeof LLMClient> = {
-      streamCompletion: (_req: CompletionRequest) =>
-        Effect.succeed(
-          new ReadableStream<CompletionChunk>({
-            start(c) {
-              c.close();
-            },
-          }),
-        ),
-    };
-    const scoreRef = yield* Ref.make<string>('');
-    return { llm, audio, scoreRef };
+const buildServicePair = (): {
+  readonly llm: Context.Tag.Service<typeof LLMClient>;
+  readonly audio: Context.Tag.Service<typeof AudioEngine>;
+  readonly scoreRef: Ref.Ref<string>;
+} => {
+  const built = Effect.runSync(
+    Effect.gen(function* () {
+      const env = (yield* Layer.build(AppLayer).pipe(
+        Effect.scoped,
+      )) as Context.Context<LLMClient | AudioEngine>;
+      return {
+        llm: Context.get(env, LLMClient),
+        audio: Context.get(env, AudioEngine),
+      };
+    }),
+  );
+  const scoreRef = Effect.runSync(Ref.make<string>(appStore.score));
+  return { ...built, scoreRef };
+};
+
+/**
+ * Subscribe to `appStore.score` and mirror every change into
+ * `currentScoreRef` so the orchestrator's next `routeIntent` call
+ * sees the latest score. Solid effects need an owner; `createRoot`
+ * provides one outside a component tree.
+ */
+const installScoreSync = (scoreRef: Ref.Ref<string>): void => {
+  if (scoreSyncDispose !== null) return;
+  scoreSyncDispose = createRoot((dispose) => {
+    createEffect(() => {
+      const score = appStore.score;
+      Effect.runSync(Ref.set(scoreRef, score));
+    });
+    return dispose;
   });
+};
 
 /**
  * Build the orchestrator handle. Idempotent: a second call is a
  * no-op so test reimport doesn't double-allocate Refs.
+ *
+ * Services are pulled from `AppLayer` (composition root). The
+ * `sttLayer` is provided by the caller because the live impl
+ * (`WebSpeechSTTLive`) is browser-specific and tests substitute
+ * fakes here.
  */
 export const initVoiceAI = (deps: {
   readonly sttLayer: Layer.Layer<STTEngine, never, never>;
-  readonly audioLayer?: Layer.Layer<AudioEngine, never, never>;
 }): void => {
   if (handle !== null) return;
   const sessionProgram = Effect.gen(function* () {
@@ -164,11 +173,7 @@ export const initVoiceAI = (deps: {
   const built = Effect.runSync(sessionProgram);
   setVoiceAISupported(built.supportedResult);
 
-  // Provide the audio layer (defaults to no-op service stub) — full
-  // LLM wiring is the next package, see the MVP note in the file
-  // header.
-  const audioLayer = deps.audioLayer ?? buildNoOpAudioLayer();
-  const services = Effect.runSync(buildServicePair(audioLayer));
+  const services = buildServicePair();
 
   const handleProgram = createVoiceAISession({
     stt: built.stt,
@@ -177,6 +182,8 @@ export const initVoiceAI = (deps: {
     currentScoreRef: services.scoreRef,
   });
   handle = Effect.runSync(handleProgram);
+
+  installScoreSync(services.scoreRef);
 
   Effect.runFork(
     Stream.runForEach(handle.stream, (s) =>
@@ -200,28 +207,6 @@ export const initVoiceAI = (deps: {
       ),
     ),
   );
-};
-
-/**
- * Build a no-op AudioEngine Layer so `initVoiceAI` works without
- * callers having to wire the production layer. The MVP does not
- * reach into `audio.eval` through the orchestrator (see the file
- * header for the wiring plan).
- */
-const buildNoOpAudioLayer = (): Layer.Layer<AudioEngine, never, never> => {
-  const audio: Context.Tag.Service<typeof AudioEngine> = {
-    eval: () => Effect.void,
-    stop: () => Effect.void,
-    compileAndQuery: () => Effect.succeed([]),
-    setCps: () => Effect.void,
-    setLayerMix: () => Effect.void,
-    setScore: () => Effect.void,
-    getCycleProgress: () => Effect.succeed(0),
-    getActiveHaps: () => Effect.succeed([]),
-    recordLive: () => Effect.die('voiceAIStore: recordLive not wired in MVP') as never,
-    renderOffline: () => Effect.die('voiceAIStore: renderOffline not wired in MVP') as never,
-  };
-  return Layer.succeed(AudioEngine, audio);
 };
 
 /* ── start / stop / commit / cancel ──────────────────────────────── */
