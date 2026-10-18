@@ -1,0 +1,312 @@
+---
+schema: math-coding/3.3
+id: wavecode-voice-fab
+revision: 1
+state: active
+body_sha: "sha256:c8be88b014bb073407ceaabf5a73d4dc0c52604a378542e9edb1f63a2bc216bc"
+yaml_sha: "sha256:c8be88b014bb073407ceaabf5a73d4dc0c52604a378542e9edb1f63a2bc216bc"
+
+axiom_link:
+  - A0
+  - A3
+
+intent: |
+  Вытащить AI и свист из-под табов TabBar в always-visible Floating
+  Action Button (FAB) — один большой FAB + два мини-FAB (voice-AI и
+  whistle). Voice-AI: push-to-talk + tap-to-session (continuous) →
+  Web Speech API (ru-RU) → llmEdit → eval, barge-in по дефолту.
+  Whistle: press-and-hold → существующий micCapture → snippet →
+  eval. Один MediaStream-канал на двоих через micChannelMutex
+  (mutext на уровне намерений; в MVP Chrome разделяет speech-api
+  и mic-direct физически). Архитектура с первого дня готова к
+  wake-word (WakeWordDetector interface), Whisper fallback
+  (STTEngine interface + WhisperSTTStub), voice transport /
+  preset / system intents (VoiceIntent tagged union + intentRouter),
+  voice history, persona, мультиязычности (stores объявлены пустыми).
+
+commitment: |
+  (1) 4-слойная архитектура (domain / application / infrastructure /
+  presentation) с Effect-TS, ESLint no-restricted-imports per layer
+  остаётся инвариантом — все новые модули подчиняются тем же правилам.
+  (2) STTEngine / WakeWordDetector / VoiceIntent — extension points
+  для последующих пакетов; MVP импл-ы (WebSpeechSTT, no-op
+  WakeWordDetector-stub, edit-score-only intentRouter) подключаются
+  без правок домена. (3) micChannelMutex — pure reducer в domain,
+  один mic-direct owner за раз; speech-api-internal (Chrome) сосуществует
+  с mic-direct. (4) tsc + eslint + vitest зелёные; mathc validate
+  + self-check зелёные.
+
+counterexample: |
+  «Всё это уже есть — MicPanel + AIEditPanel живут в TabBar, FAB
+  overengineering». Возражения: (a) TabBar = 8 табов на mobile-first
+  viewport 360px, иконки 20px — affordance "нажми чтобы управлять
+  голосом" теряется среди Step/Piano/Mixer/Visualize; (b) AIEditPanel
+  требует 4 шага до результата (открыть таб → написать → submit →
+  ждать), а не 1 (нажать FAB → сказать → слышать); (c) MicPanel
+  заставляет выбирать piano/synth/drums + slot перед первым
+  свистом — для elementary UX это лишнее трение.
+
+  «Web Speech API deprecated — лучше сразу Whisper». Возражения:
+  Web Speech API НЕ deprecated (активно поддерживается Chrome 33+,
+  Edge, текущая спецификация W3C); deprecation касался старого
+  webkitSpeechGrammarList, не основного API. Whisper-WASM = +30 MB
+  bundle, server-Whisper = +сетевой round-trip + cost. STTEngine
+  интерфейс готов к plug-in, fallback — отдельный пакет когда
+  появится спрос.
+
+  «Wake-word обязателен для hands-free elementary UX». Возражения:
+  wake-word требует (a) Porcupine/Snowboy (~2 MB WASM + license key)
+  и (b) постоянного listening = расход батареи + privacy concern.
+  Tap-on-FAB = 0.5s до начала записи, проще, не требует запоминания
+  фразы. Wake-word — отдельный opt-in пакет.
+
+antithesis: |
+  (1) «AI и Mic должны оставаться в табах — discoverability через
+  navigation». Возражения: navigation tabs в mobile-first layout —
+  для продвинутых настроек, а не для primary actions. Live-coding —
+  это primary action. Material Design / iOS HIG explicit: primary
+  action = FAB, не buried в navigation.
+
+  (2) «Whistle — фича для гиков, не нужна в MVP». Возражения:
+  уже работает (см. decisions/wavecode-mic-to-strudel@1), просто
+  закопана. Zero marginal cost пересадить из MicPanel в专用
+  мини-FAB без селекторов. Свист — наиболее естественный
+  free-hand input для тех, кто не имеет MIDI-клавиатуры.
+
+  (3) «micChannelMutex — overengineering, просто проверять флаг».
+  Возражения: гонка между arm()-проверкой и реальным start()
+  даёт двойную запись. Effect.Ref + mutex.reduce дают
+  typed busy-state + structured concurrency. 60 строк domain
+  кода, 8 строк теста — окупается при первом реальном
+  race-condition в Firefox (speech-api + mic-direct).
+
+  (4) «VoiceIntent classifier и intentRouter избыточны для MVP
+  где только edit-score». Возражения: 30 строк domain + 50 строк
+  application; добавление voice-transport / voice-preset в следующих
+  пакетах = +20 строк в router, ноль касаний STT / session / store.
+  Сейчас = investment в extensibility за 1 час работы.
+
+scope:
+  paths:
+    - "ui/src/domain/voice/**"
+    - "ui/src/domain/audio/MicChannel.ts"
+    - "ui/src/domain/audio/micChannelMutex.ts"
+    - "ui/src/domain/audio/whistleSession.ts"
+    - "ui/src/application/voice/**"
+    - "ui/src/infrastructure/stt/**"
+    - "ui/src/presentation/components/VoiceFAB.tsx"
+    - "ui/src/presentation/components/VoiceAIMiniFAB.tsx"
+    - "ui/src/presentation/components/WhistleMiniFAB.tsx"
+    - "ui/src/presentation/components/VoiceTranscriptOverlay.tsx"
+    - "ui/src/presentation/state/voiceAIStore.ts"
+    - "ui/src/presentation/state/whistleStore.ts"
+    - "ui/src/presentation/state/micMutexStore.ts"
+    - "ui/src/presentation/components/FAB.tsx"
+    - "ui/src/App.tsx"
+    - "ui/eslint.config.js"
+  exclusions:
+    - "ui/node_modules/**"
+    - "ui/dist/**"
+
+outcomes:
+  - id: voice-ai-fab-press-and-hold
+    statement: |
+      Press-and-hold на voice-mini-FAB → Web Speech API запускается
+      с lang='ru-RU' и interim=true; interim-транскрипт появляется
+      в VoiceTranscriptOverlay в течение 200ms; release →
+      final-транскрипт летит в intentRouter, классифицируется как
+      edit-score, applyEditStream вызывается, AudioEngine.eval
+      исполняет очищенный score, юзер слышит результат.
+  - id: voice-ai-fab-tap-continuous
+    statement: |
+      Tap (короткое нажатие) на voice-mini-FAB → стартует continuous
+      сессия: STT продолжает слушать между utterance-ами, каждая
+      новая фраза → apply + apply. Второй tap → disarm + idle.
+      Только один voice-AI mini-FAB активен за раз (mic mutex).
+  - id: voice-ai-fab-barge-in
+    statement: |
+      Если новая final-транскрипт приходит во время applying (state
+      = `applying`), текущий LLM-запрос отменяется через
+      Fiber.interrupt, новый запрос стартует немедленно. Музыка
+      не прерывается. Barge-in toggle в voice settings (default ON).
+  - id: whistle-fab-press-and-hold
+    statement: |
+      Press-and-hold на whistle-mini-FAB → существующий
+      `micCapture.startMic()` стартует (через whistleStore wrapper
+      без селекторов piano/synth/drums — дефолт piano); interim
+      preview нот в MicMeter. Release → `micSnippetFromBuffers` →
+      `appStore.dispatch({ type: 'replaceScore' })` (или append-stack,
+      по дефолту append) → AudioEngine.eval. Детектор отрабатывает
+      тот же MPM-pipeline, что и MicPanel.
+  - id: mic-mutex-correct
+    statement: |
+      `micChannelMutex.acquire({ owner: 'whistle' })` во время
+      активного voice-AI (если последний использует mic-direct —
+      Whisper-путь) — возвращает `MicBusy`. В MVP voice-AI
+      использует speech-api-internal → mutex фактически
+      не срабатывает; test suite покрывает оба пути для
+      forward-compat.
+  - id: transcript-overlay
+    statement: |
+      VoiceTranscriptOverlay показывает interim-транскрипт
+      ("🎙️ слышу: сделай по…") во время `listening`, final
+      ("✓ «сделай побыстрее»") во время `transcribing`,
+      скрывается в `idle` и `errored`. Floating под FAB,
+      не перекрывает critical UI (SafeArea bottom >= 16px).
+  - id: extension-points-stable
+    statement: |
+      STTEngine interface, WakeWordDetector interface, VoiceIntent
+      tagged union, intentRouter dispatcher, micChannelMutex
+      — все объявлены в MVP-имплах и стабильны. Добавление
+      Whisper / wake-word / voice-transport / voice-preset /
+      voice-undo = новый файл в infrastructure/ или новая case в
+      VoiceIntent union + route в intentRouter. Никаких правок
+      в domain / store / FAB components.
+  - id: eslint-layers-still-clean
+    statement: |
+      `pnpm -C ui lint` exit 0 после merge. ESLint rules per layer
+      (no-restricted-imports) применяются к новым файлам; новые
+      override-блоки не нужны.
+  - id: tsc-clean
+    statement: |
+      `pnpm -C ui typecheck` exit 0 после merge. Strict mode
+      TypeScript; новые типы exhaustive (VoiceIntent = noFallthrough
+      в switch; VoiceSessionState — `as const` union).
+  - id: tests-pass
+    statement: |
+      `pnpm -C ui test` exit 0, ≥30 тестов на новый код:
+      voiceSession, voiceIntentClassifier, micChannelMutex,
+      Transcript, WebSpeechSTT interface compliance,
+      intentRouter routing, VoiceAISession orchestrator
+      (с моками LLMClient + AudioEngine), WhistleSession,
+      presentation lifecycle (press/release/tap).
+
+obligations:
+  - id: domain-voice-tests
+    claim: |
+      vitest на `ui/src/domain/voice/*.test.ts` зелёный, ≥10 тестов
+      покрывают: Transcript transitions, voiceSession state machine
+      (idle → arming → listening → applying → idle + barge-in path),
+      voiceIntentClassifier (edit-score routing + unknown → null),
+      VoiceIntent exhaustive type tests.
+    acceptance:
+      all:
+        - verifier: vitest-run-domain-voice
+          result: pass
+  - id: domain-audio-tests
+    claim: |
+      vitest на `ui/src/domain/audio/MicChannel.test.ts`,
+      `micChannelMutex.test.ts`, `whistleSession.test.ts` зелёный,
+      ≥8 тестов покрывают: MicChannel ownership semantics,
+      mutex acquire/release/contention, whistleSession lifecycle.
+    acceptance:
+      all:
+        - verifier: vitest-run-domain-audio
+          result: pass
+  - id: stt-engine-interface
+    claim: |
+      `ui/src/application/voice/STTEngine.ts` экспортирует
+      `STTEngine` interface (Context.Tag) с методами `start`,
+      `stop`, `stream: Stream<TranscriptChunk>`. WebSpeechSTT
+      реализует его; компилируется через `implements STTEngine`
+      (type-check обязателен, не runtime check).
+    acceptance:
+      all:
+        - verifier: tsc-implements-check
+          result: pass
+  - id: web-speech-stt-fallback
+    claim: |
+      WebSpeechSTT определяет `isSupported(): boolean` (проверяет
+      `window.SpeechRecognition || window.webkitSpeechRecognition`);
+      WhisperSTTStub возвращает `isSupported() === false` и `start`
+      → `Effect.fail(SttUnsupportedError)`. Presentation ловит
+      ошибку и рендерит disabled FAB с tooltip "открой Chrome".
+    acceptance:
+      all:
+        - verifier: vitest-run-stt-web-speech
+          result: pass
+  - id: intent-router-routes-edit-score
+    claim: |
+      `intentRouter.route({ kind: 'edit-score', instruction: 'add bass' })`
+      вызывает `LLMClient.streamCompletion` с правильным system
+      prompt, парсит ответ, вызывает `AudioEngine.eval`. Тест с
+      мокнутыми LLMClient + AudioEngine подтверждает порядок и
+      аргументы.
+    acceptance:
+      all:
+        - verifier: vitest-run-intent-router
+          result: pass
+  - id: presentation-lifecycle
+    claim: |
+      `VoiceFAB.test.tsx` + `voiceAIStore.test.ts` +
+      `whistleStore.test.ts` + `micMutexStore.test.ts` зелёные,
+      покрывают: press-and-hold lifecycle (pointerdown → listening
+      → release → applying → idle), tap-continuous (tap → listening
+      → second tap → idle), error display (STT unsupported),
+      mutex contention (whistle active → voice-AI.start() rejected).
+    acceptance:
+      all:
+        - verifier: vitest-run-presentation-voice
+          result: pass
+  - id: typecheck-clean
+    claim: |
+      `pnpm -C ui typecheck` exit 0 после merge.
+    acceptance:
+      all:
+        - verifier: pnpm-ui-typecheck
+          result: pass
+  - id: eslint-clean
+    claim: |
+      `pnpm -C ui lint` exit 0; layer rules (no-restricted-imports)
+      не нарушены.
+    acceptance:
+      all:
+        - verifier: pnpm-ui-lint
+          result: pass
+  - id: mathc-validate-clean
+    claim: |
+      `mathc validate decisions/wavecode-voice-fab.yaml` exit 0;
+      `mathc self-check` exit 0 на коммите merge.
+    acceptance:
+      all:
+        - verifier: mathc-validate
+          result: pass
+        - verifier: mathc-self-check
+          result: pass
+  - id: no-cross-layer-regressions
+    claim: |
+      `grep -rE 'from .@strudel|from .@ai-sdk|from .idb-keyval' ui/src/domain/voice ui/src/domain/audio/MicChannel.ts ui/src/domain/audio/micChannelMutex.ts ui/src/domain/audio/whistleSession.ts ui/src/application/voice` returns no matches. Domain остаётся pure; infrastructure не импортит solid-js.
+    acceptance:
+      all:
+        - verifier: text-scan-no-cross-layer
+          result: pass
+  - id: preserves-micpanel-and-aieditpanel
+    claim: |
+      `ui/src/presentation/components/MicPanel.tsx` и
+      `ui/src/presentation/panels/AIEditPanel.tsx` НЕ удалены,
+      продолжают работать. MicPanel остаётся доступен через TabBar
+      "Mic" таб для продвинутых; AIEditPanel — через TabBar "AI"
+      для текстового ввода и настроек. FAB — дополнительный путь,
+      не замена.
+    acceptance:
+      all:
+        - verifier: text-scan-micpanel-aieditpanel-present
+          result: pass
+
+risk:
+  declared_triggers:
+    - web-speech-api-deprecates
+    - mic-permission-denied-on-mobile
+    - interim-transcript-stutters-during-noise
+    - llm-edit-stream-cancelled-by-barge-in-misses-partial-state
+    - double-fab-click-during-applying-causes-duplicate-request
+    - barge-in-cancels-in-progress-eval-leaves-corrupted-score
+  owner: human:operator
+
+relations:
+  addresses:
+    - wavecode-mic-to-strudel@1
+    - wavecode-effect-ts-architecture@1
+    - wavecode-strict-layering@1
+    - wavecode-ai-streaming-and-self-heal@1
+    - wavecode-ai-primary-layout@1

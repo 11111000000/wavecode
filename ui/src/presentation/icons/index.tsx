@@ -306,6 +306,34 @@ export const TabMicIcon = (p: Props): JSX.Element => (
   </svg>
 );
 
+/** Generic mic glyph for the VoiceAIMiniFAB. Same shape as
+ *  `TabMicIcon` but kept separate so the FAB styling can rotate
+ *  through context (size 16/18/20) without affecting tab-bar
+ *  metrics. */
+export const MicIcon = (p: Props): JSX.Element => (
+  <svg {...base(p.size ?? 18)} class={`wc-icon ${p.class ?? ''}`}>
+    <rect x="8" y="2" width="4" height="9" rx="2" />
+    <path d="M5 9 a3 3 0 0 0 3 3" />
+    <path d="M14 5 v4 a4 4 0 0 1 -4 4" />
+    <line x1="12" y1="13" x2="12" y2="15" />
+  </svg>
+);
+
+/** Whistle glyph for the WhistleMiniFAB: a music note with a
+ *  trailing breath line. Used as the canonical press-and-hold
+ *  affordance alongside the voice-AI mic. */
+export const WhistleIcon = (p: Props): JSX.Element => (
+  <svg {...base(p.size ?? 18)} class={`wc-icon ${p.class ?? ''}`}>
+    {/* Breath puff: short curve to the left */}
+    <path d="M3 6 Q4 5 4.5 6" />
+    <path d="M2.5 8 Q4 7 4.5 8" />
+    {/* Eighth note: head + stem + flag */}
+    <ellipse cx="11" cy="11" rx="2.6" ry="2.1" fill="currentColor" stroke="none" transform="rotate(-18 11 11)" />
+    <line x1="13.2" y1="9" x2="13.2" y2="3.5" />
+    <path d="M13.2 3.5 Q15.2 4.2 14.6 6.5" />
+  </svg>
+);
+
 export const DragHandleIcon = (p: Props): JSX.Element => (
   <svg {...base(p.size ?? 24)} class={`wc-icon ${p.class ?? ''}`}>
     <line x1="8" y1="5" x2="8" y2="5.01" />

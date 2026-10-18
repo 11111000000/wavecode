@@ -90,7 +90,7 @@ describe('MicMeter — when a meter frame is present', () => {
   it('bar data-listening is true when a frame is present', () => {
     const { container } = render(() => <MicMeter />);
     // Without a frame, not listening.
-    let bar = container.querySelector('.mic-ux-meter-bar');
+    const bar = container.querySelector('.mic-ux-meter-bar');
     expect(bar?.getAttribute('data-listening')).toBe('false');
   });
 });
