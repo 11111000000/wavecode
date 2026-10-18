@@ -224,3 +224,52 @@ describe('parseScore', () => {
     expect(validateForEdit('').ok).toBe(false);
   });
 });
+
+/**
+ * Regression tests for the string-unescape behaviour in `makeArg`.
+ * The original implementation used a naive `s.replace(/\\(.)/g, '$1')`
+ * which collapsed `s("a\nb")` (literal backslash + n) into `s("anb")`,
+ * corrupting the user's source on round-trip. Fix: delegate unescape
+ * to `JSON.parse` (which mirrors how Strudel would eval the string at
+ * run time) with a try/catch fallback to the naive algorithm for
+ * exotic escapes that JSON rejects (so the parser never throws).
+ */
+describe('string argument unescape', () => {
+  it('unescapes \\n as a real newline character (not literal "n")', () => {
+    const ast = parseScore('s("a\\nb")');
+    const stack = findTopStack(ast) as { args: ReadonlyArray<{ kind: string; value?: string }> } | null;
+    // The score is just `s("a\nb")` — no outer stack, so look at top-level call.
+    const call = ast.nodes[0] as { kind: string; args: ReadonlyArray<{ kind: string; value?: string }> };
+    expect(call.kind).toBe('call');
+    expect(call.args[0]?.kind).toBe('string');
+    expect(call.args[0]?.value).toBe('a\nb');
+  });
+
+  it('unescapes \\\\ as a single backslash', () => {
+    const ast = parseScore('s("a\\\\b")');
+    const call = ast.nodes[0] as { kind: string; args: ReadonlyArray<{ kind: string; value?: string }> };
+    expect(call.args[0]?.value).toBe('a\\b');
+  });
+
+  it('unescapes \\" without breaking the string boundary', () => {
+    const ast = parseScore('s("say \\"hi\\"")');
+    const call = ast.nodes[0] as { kind: string; args: ReadonlyArray<{ kind: string; value?: string }> };
+    expect(call.args[0]?.value).toBe('say "hi"');
+  });
+
+  it('unescapes \\t and \\u00e9', () => {
+    const ast = parseScore('s("\\tcaf\\u00e9")');
+    const call = ast.nodes[0] as { kind: string; args: ReadonlyArray<{ kind: string; value?: string }> };
+    expect(call.args[0]?.value).toBe('\tcafé');
+  });
+
+  it('falls back to raw text for unknown escapes (does not throw)', () => {
+    // \q is not a valid JSON escape — JSON.parse would throw. The
+    // parser must still return a value rather than crash.
+    const ast = parseScore('s("a\\qb")');
+    const call = ast.nodes[0] as { kind: string; args: ReadonlyArray<{ kind: string; value?: string }> };
+    expect(call.args[0]?.kind).toBe('string');
+    // Fallback path returns the naive-unscape (drops the backslash).
+    expect(call.args[0]?.value).toBe('aqb');
+  });
+});
