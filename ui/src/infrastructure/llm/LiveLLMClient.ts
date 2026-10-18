@@ -309,7 +309,7 @@ const synthesizeSingleChunkStream = (
  *   (or the proxy is starting up and both master_key and DB are unset).
  *   We surface this explicitly because it is silent: the SPA builds
  *   and deploys, the request reaches the proxy, but auth fails because
- *   the key is wrong. See math/wavecode-llm-public-auth-key-mismatch
+ *   the key is wrong. See decisions/wavecode-llm-public-auth-key-mismatch.yaml
  *   for the post-mortem.
  * - 401 "Malformed API Key" → key doesn't start with "sk-" (rare; we
  *   already log a warning at boot in this case).

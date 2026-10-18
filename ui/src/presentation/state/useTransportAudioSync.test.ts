@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 /**
  * useTransportAudioSync — swing re-eval trigger.
  *
- * Bug history (packet math/wavecode-swing-live-eval):
+ * Bug history (packet decisions/wavecode-swing-live-eval.yaml):
  *   installTransportAudioSync раньше подписывался только на cps()
  *   и звал `audio.setCps(c)`. Swing-слайдер двигал UI signal + reducer,
  *   но `audio.eval(swingWrappedSnippet)` никогда не вызывался — Strudel

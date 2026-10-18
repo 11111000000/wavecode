@@ -25,7 +25,7 @@
  *   4. Audio context        — state / sampleRate / currentTime polled @4Hz.
  *   5. Sample cache         — per-bank loaded/total via
  *                             SampleLoader.getSampleLoadProgress().
- *   6. Piano                — placeholder for live piano (Subagent 14).
+ *   6. Piano                — placeholder for live piano (see decisions/wavecode-piano-input.yaml).
  *
  * No side-effects beyond reading state + starting a single 250ms
  * interval. Safe to mount/unmount repeatedly.
@@ -317,7 +317,7 @@ const Admin: Component = () => {
           ]}
         />
         <p class="admin-hint">
-          Subagent 14 owns PianoKeyboard. Active notes & MIDI source
+          PianoKeyboard — see decisions/wavecode-piano-input.yaml. Active notes & MIDI source
           are read from `window.__wavecodePiano` when exposed by that
           component; until then we report zero / on-screen.
         </p>

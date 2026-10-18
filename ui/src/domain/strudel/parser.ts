@@ -317,7 +317,23 @@ const makeArg = (
   return { kind: 'expr', text: lexeme, span };
 };
 
-const unescape = (s: string): string => s.replace(/\\(.)/g, '$1');
+const unescape = (s: string): string => {
+  // JSON.parse is the most spec-correct unescape for our needs: it
+  // handles \n, \t, \", \\, \/ and \uXXXX correctly. The naive
+  // `s.replace(/\\(.)/g, '$1')` that lived here before would, for
+  // a source like `s("a\nb")` (literal backslash + n), produce
+  // `s("anb")` — a round-trip corruption of the user's intent.
+  // JSON.parse mirrors how the Strudel runtime would later eval
+  // the string at run time. We wrap in try/catch so an exotic
+  // escape (e.g. `\x41` that JSON accepts as `A`, or an unknown
+  // `\q` that JSON rejects) falls back to the raw text rather
+  // than throwing — the parser must never throw.
+  try {
+    return JSON.parse(`"${s}"`) as string;
+  } catch {
+    return s.replace(/\\(.)/g, '$1');
+  }
+};
 
 const makeOther = (text: string, span: Span): OtherNode => ({
   kind: 'other',

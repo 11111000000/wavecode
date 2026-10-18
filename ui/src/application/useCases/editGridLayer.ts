@@ -31,7 +31,7 @@ import {
  *   gridToScore(loadedScore(g)) when score is exactly 4 s-rows
  *   → synthesizes the same snippet back.
  *
- * See `math/wavecode-step-grid-modes/packet.md` synthesis (c).
+ * See decisions/wavecode-step-grid-modes.yaml synthesis (c).
  */
 
 /**

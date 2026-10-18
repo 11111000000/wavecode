@@ -71,7 +71,7 @@ export class AudioEngine extends Context.Tag('AudioEngine')<
      * continues uninterrupted.
      *
      * Companion of `setCps` — both are runtime state pushers.
-     * See `math/wavecode-mixer-live-update` for trade-offs.
+     * See decisions/wavecode-mixer-live-update.yaml for trade-offs.
      */
     readonly setLayerMix: (
       layerMix: ReadonlyArray<LayerMix>,
@@ -90,7 +90,7 @@ export class AudioEngine extends Context.Tag('AudioEngine')<
      * idempotent.
      *
      * Companion of `setLayerMix` — both are runtime state pushers.
-     * See `math/wavecode-step-grid-modes/packet.md` synthesis (d).
+     * See decisions/wavecode-step-grid-modes.yaml synthesis (d).
      */
     readonly setScore: (
       score: string,

@@ -75,7 +75,7 @@ npm run dev          # http://localhost:5173/
 ```sh
 cd ui
 npm run typecheck           # tsc --noEmit
-npm run test:run            # vitest (unit, 56 files, ~5 sec warm)
+npm run test:run            # vitest (unit, 78 files, ~5 sec warm)
 npm run lint:no-console      # fails if domain/application use console.*
 npm run validate:presets    # syntactic smoke test of every BUILTIN_PRESET
 ```
@@ -95,7 +95,7 @@ npm run build               # → ui/dist/
 
 ## Features
 
-- 🎵 **Strudel mini-notation** — 8 built-in presets (Creep, Für Elise, Smoke on the Water, …) plus custom ones via UI
+- 🎵 **Strudel mini-notation** — 15 built-in presets (Creep, EDM 4-on-floor, Hip-hop boom-bap, Jazz ii-V-I, Ambient drone, Bossa Nova, Trap Atlanta, Reggaetón, Step Grid demo, Piano ballad, 808 classic, Analog bass, 808 king, Retro lead, Toms funk) plus custom ones via UI
 - 🤖 **AI agent** — multi-turn chat, tool-calling (`edit_score`, `eval_snippet`, `undo_score`, `read_score`), two models (smart / fast)
 - 🎹 **Piano keyboard** with WebMIDI — polyphony, parallel recording, sustain pedal
 - 🥁 **Step sequencer** — grid editor (view/sketch/edit modes), live eval on score edit
@@ -112,7 +112,7 @@ npm run build               # → ui/dist/
 
 ## Architectural decisions
 
-Full traceability — every decision is captured as a YAML in `decisions/` under the **math-coding 3.3** schema (see [AGENTS.md § math-coding](AGENTS.md)). 88 decisions cover everything from stack choice down to per-source log throttling.
+Full traceability — every decision is captured as a YAML in `decisions/` under the **math-coding 3.3** schema (see [AGENTS.md § math-coding](AGENTS.md)). 97 decisions cover everything from stack choice down to per-source log throttling.
 
 **Foundational 16** (see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for details):
 
@@ -137,7 +137,7 @@ Full traceability — every decision is captured as a YAML in `decisions/` under
 | `wavecode-test-strategy` | draft | wavecode's test strategy is a pyramid: many unit tests on domain and application (vitest, no mocks), moderate coverage on infrastructure (vitest with mocked Layers), and a small set of e2e tests on Playwright for the critical user-… |
 <!-- END decisions-table -->
 
-> **Full list (88 decisions):** `ls decisions/*.yaml` or `python3 scripts/build-readme-decisions.py`. About `draft`/`active` states — see [math-coding AGENTS.md](../math-coding/AGENTS.md): in 3.3, `state: active` is assigned explicitly, migrated v1.0 packets remain `draft` until the next revision. This does **not** mean they don't apply — all of them are applied in code and backed by attestations.
+> **Full list (97 decisions):** `ls decisions/*.yaml` or `python3 scripts/build-readme-decisions.py`. About `draft`/`active` states — see [math-coding AGENTS.md](../math-coding/AGENTS.md): in 3.3, `state: active` is assigned explicitly, migrated v1.0 packets remain `draft` until the next revision. This does **not** mean they don't apply — all of them are applied in code and backed by attestations.
 
 ---
 
@@ -148,8 +148,8 @@ Full traceability — every decision is captured as a YAML in `decisions/` under
 | TypeScript strict | `strict: true` + `noUncheckedIndexedAccess` + `exactOptionalPropertyTypes` + `verbatimModuleSyntax` | `ui/tsconfig.json` |
 | ESLint per-layer | `no-restricted-imports` for domain / application / infrastructure / presentation | `ui/eslint.config.js` |
 | `no-console` in domain/application | enforced lint rule | `ui/eslint.config.js:47,76` |
-| Unit tests | 56 vitest files, ~5 sec warm | `ui/src/**/*.test.ts` |
-| E2E tests | 11 Playwright files | `ui/tests/e2e/` |
+| Unit tests | 78 vitest files, ~5 sec warm | `ui/src/**/*.test.{ts,tsx}` |
+| E2E tests | 19 Playwright files | `ui/tests/e2e/` |
 | Pre-commit hook | typecheck + vitest + lint:no-console + validate:presets | `scripts/pre-commit` |
 | CI | GitHub Actions: typecheck + vitest + lint + build | `.github/workflows/ci.yml` |
 | Deployment CI | GitVerse Actions → SSH to angara-1 | `.gitverse/workflows/deploy.yml` |
@@ -175,13 +175,13 @@ wavecode/
 ├── .github/               GitHub-specific: workflows, issue/PR templates, CODEOWNERS
 ├── .gitverse/             GitVerse Actions workflows (deploy, math-coding gate)
 ├── bin/                   deploy.sh, check-llm-key.sh
-├── decisions/             88 architectural decisions (math-coding 3.3 schema)
+├── decisions/             97 architectural decisions (math-coding 3.3 schema)
 ├── attestations/          evidence store for math-coding self-check
 ├── schemas/               JSON-schema for math-coding 3.3
 ├── scripts/               utilities: pre-commit, validate:presets, build-readme-decisions
 ├── docs/                  ARCHITECTURE.md, design.md, PLAN.md (internal)
 └── ui/                    browser SPA
-    ├── ARCHITECTURE.md    duplicate of docs/ARCHITECTURE.md (transitional, see issue #TBD)
+    ├── ARCHITECTURE.md    legacy duplicate of docs/ARCHITECTURE.md (transitional, to be removed after v0.1.0)
     ├── package.json
     ├── tsconfig.json
     ├── eslint.config.js

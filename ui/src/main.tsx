@@ -42,7 +42,7 @@ logger.install();
 // vite-plugin-pwa was a stub (only `navigator.serviceWorker.register`)
 // — Workbox never got the chance to call `location.reload()` on
 // `activated`, so users kept running the old bundle until a manual
-// hard reload. See math/wavecode-pwa-auto-update/packet.md.
+// hard reload. See decisions/wavecode-pwa-auto-update.yaml.
 useRegisterSW({
   onNeedRefresh() {
     consoleStore.pushToast({

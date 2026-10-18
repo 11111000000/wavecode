@@ -7,7 +7,7 @@ import type { LayerMix } from '~/domain/types';
  * produces a new score where each top-level layer is rewritten with
  * per-layer gain and solo/mute logic.
  *
- * Rules (see `math/wavecode-track-mixer/packet.md`):
+ * Rules (see decisions/wavecode-track-mixer.yaml):
  *   - If no `stack(...)` is detected, treat the whole score as a single
  *     layer and apply the FIRST layerMix entry (or noop if none).
  *   - For each top-level layer:

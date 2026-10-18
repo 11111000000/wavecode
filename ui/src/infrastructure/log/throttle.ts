@@ -32,7 +32,7 @@
  *      text — the caller decides whether to emit a synthetic
  *      "suppression" entry using it.
  *
- * Rationale: `math/wavecode-log-pipeline/packet.md` describes the
+ * Rationale: decisions/wavecode-log-pipeline.yaml describes the
  * earlier ring-buffer architecture; this module extends the same
  * pipeline with rate-limiting while staying decoupled from the
  * concrete buffer.

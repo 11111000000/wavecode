@@ -46,7 +46,8 @@ import * as SampleLoaderMod from '~/infrastructure/audio/SampleLoader';
  *
  * The route hash isn't relevant here — Admin is the page component and
  * is rendered directly. Hash routing is tested separately via the App
- * smoke (not in this file — Subagent 17 scope is the page only).
+ * smoke (not in this file — page component scope only; hash routing is
+ * tested separately in app-level e2e).
  */
 
 const stubAudioCtx = (overrides: Partial<AudioContext> | null): void => {

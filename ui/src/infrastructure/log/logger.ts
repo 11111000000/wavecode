@@ -44,7 +44,7 @@
  *    `presentation/components/consoleStore.ts` for the UI contract.
  *  • `fatal` is the "this kills the app" marker: consoleStore treats it
  *    the same as `critical` for `unreadErrors` increments and sticky
- *    toast TTL. The actual mapping lives in Subagent 7's territory; the
+ *    toast TTL. The actual mapping lives in `presentation/components/consoleStore.ts`; the
  *    level value is the public contract this module owns.
  *
  * Throttling (Phase 2 enhancement)
@@ -110,10 +110,27 @@ const THROTTLE_WINDOW_MS = 1000;
 const THROTTLE_LIMIT = 5;
 
 let installed = false;
-let buffer: LogEntry[] = [];
+/**
+ * Ring buffer for the global log sink.
+ *
+ * We use a head pointer + fixed-size storage instead of a plain array
+ * + `shift()` because shift is O(n): under a hot-loop (e.g. 10
+ * entries/sec at 500 cap) the previous implementation spent ~5000
+ * ops/sec on array head-removals. The ring version makes every push
+ * O(1). `getBuffer()` materialises the live window into a frozen
+ * array on read.
+ */
+const bufferCap = MAX_LOG_ENTRIES;
+const bufferStorage: LogEntry[] = new Array<LogEntry>(bufferCap);
+let bufferHead = 0;
+let bufferSize = 0;
 let sink: LogSink | null = null;
 let nextId = 0;
-let errorsBuffer: LogEntry[] = [];
+/** Errors-only ring (capped at 100). Same ring-buffer pattern. */
+const errorsCap = 100;
+const errorsStorage: LogEntry[] = new Array<LogEntry>(errorsCap);
+let errorsHead = 0;
+let errorsSize = 0;
 
 /** Per-source rolling history of (key, ts) for the throttle. */
 const throttleHistory = new Map<string, ReadonlyArray<readonly [string, number]>>();
@@ -154,8 +171,10 @@ const isThrottleable = (level: LogLevel): boolean =>
   level === 'warn' || level === 'error' || level === 'fatal';
 
 const pushEntry = (entry: LogEntry): void => {
-  buffer.push(entry);
-  if (buffer.length > MAX_LOG_ENTRIES) buffer.shift();
+  // Ring buffer write: O(1) head advance + overwrite.
+  bufferStorage[bufferHead] = entry;
+  bufferHead = (bufferHead + 1) % bufferCap;
+  if (bufferSize < bufferCap) bufferSize += 1;
 
   if (sink) {
     try {
@@ -166,10 +185,32 @@ const pushEntry = (entry: LogEntry): void => {
   }
 
   if (entry.level === 'error' || entry.level === 'fatal') {
-    errorsBuffer.push(entry);
-    if (errorsBuffer.length > 100) errorsBuffer.shift();
-    void savePersistedErrors(errorsBuffer);
+    errorsStorage[errorsHead] = entry;
+    errorsHead = (errorsHead + 1) % errorsCap;
+    if (errorsSize < errorsCap) errorsSize += 1;
+    // Materialise the live errors window for IDB persistence.
+    // O(cap) but cap is small (100) and writes are debounced by
+    // the throttle + caller frequency.
+    void savePersistedErrors(materialiseErrors());
   }
+};
+
+const materialiseBuffer = (): LogEntry[] => {
+  if (bufferSize < bufferCap) return bufferStorage.slice(0, bufferSize);
+  const out = new Array<LogEntry>(bufferCap);
+  for (let i = 0; i < bufferCap; i += 1) {
+    out[i] = bufferStorage[(bufferHead + i) % bufferCap]!;
+  }
+  return out;
+};
+
+const materialiseErrors = (): LogEntry[] => {
+  if (errorsSize < errorsCap) return errorsStorage.slice(0, errorsSize);
+  const out = new Array<LogEntry>(errorsCap);
+  for (let i = 0; i < errorsCap; i += 1) {
+    out[i] = errorsStorage[(errorsHead + i) % errorsCap]!;
+  }
+  return out;
 };
 
 const recordThrottleHistory = (key: string, ts: number): void => {
@@ -265,12 +306,16 @@ export const logger = {
   },
 
   getBuffer(): readonly LogEntry[] {
-    return Object.freeze(buffer.slice());
+    return Object.freeze(materialiseBuffer());
   },
 
   clear(): void {
-    buffer = [];
-    errorsBuffer = [];
+    bufferStorage.fill(undefined as unknown as LogEntry);
+    bufferHead = 0;
+    bufferSize = 0;
+    errorsStorage.fill(undefined as unknown as LogEntry);
+    errorsHead = 0;
+    errorsSize = 0;
     throttleHistory.clear();
   },
 
@@ -301,11 +346,23 @@ export const logger = {
    */
   prepend(entries: readonly LogEntry[]): void {
     if (entries.length === 0) return;
-    const newBuffer = [...entries, ...buffer];
-    if (newBuffer.length > MAX_LOG_ENTRIES) {
-      newBuffer.splice(0, newBuffer.length - MAX_LOG_ENTRIES);
+    // Prepend is rare (only the boot restore path) and demands a
+    // correct chronological merge, not a naive ring overwrite
+    // (which would lose the OLDEST entries first, the opposite of
+    // what a prepend semantically wants). So: materialise the live
+    // window, splice the new batch to the front, slice to cap,
+    // re-initialise the ring. O(cap) but only on boot.
+    const live = materialiseBuffer();
+    const merged = [...entries, ...live];
+    const trimmed = merged.length > bufferCap
+      ? merged.slice(merged.length - bufferCap)
+      : merged;
+    bufferStorage.fill(undefined as unknown as LogEntry);
+    for (let i = 0; i < trimmed.length; i += 1) {
+      bufferStorage[i] = trimmed[i]!;
     }
-    buffer = newBuffer;
+    bufferHead = trimmed.length % bufferCap;
+    bufferSize = trimmed.length;
     if (sink) {
       try {
         sink(entries[entries.length - 1]!);

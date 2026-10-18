@@ -18,7 +18,7 @@ const renderPanel = (
   />
 ));
 
-describe('TransportPanel — Play/Stop button (math/wavecode-play-in-control)', () => {
+describe('TransportPanel — Play/Stop button (decisions/wavecode-play-in-control.yaml)', () => {
   afterEach(() => cleanup());
 
   it('audioRunning=false → amber Play button with PlayIcon, aria-label="Запуск"', () => {

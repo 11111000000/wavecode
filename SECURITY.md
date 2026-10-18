@@ -7,7 +7,7 @@
 | 0.1.x   | ✅ active          |
 | 0.0.x   | ⚠️ best-effort only |
 
-wavecode is a single-person hobby project maintained by [Petr Kosov](https://github.com/11111000000). Security fixes are released as fast as possible after a confirmed report, with priority on the latest version.
+wavecode is a one-maintainer project maintained by [Petr Kosov](https://github.com/11111000000). Security fixes are released as fast as possible after a confirmed report, with priority on the latest version.
 
 ## Reporting a Vulnerability
 

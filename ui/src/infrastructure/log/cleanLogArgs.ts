@@ -33,7 +33,7 @@
  *   - `infrastructure/log/logger` — intercepts console.{log,info,warn,
  *     error} at install() time so the Console UI can render clean text.
  *
- * Rationale: `math/wavecode-log-pipeline-foundation/packet.md`.
+ * Rationale: decisions/wavecode-log-pipeline-foundation.yaml.
  *
  * Behavior
  * --------

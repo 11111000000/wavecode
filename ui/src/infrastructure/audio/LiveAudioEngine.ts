@@ -90,7 +90,7 @@ const patchCreatePeriodicWave = (): void => {
  * Idempotent per audioCtx (engine caches the AudioContext in
  * `__wavecodeAudioCtx` so this runs at most once per session).
  *
- * See packet `math/visualizer-tab` for the design rationale.
+ * See packet decisions/visualizer-tab.yaml for the design rationale.
  */
 const installAnalyserTap = (audioCtx: AudioContext, analyser: AnalyserNode): void => {
   const tag = (AudioNode.prototype as unknown as {
@@ -151,7 +151,7 @@ type ReplHandle = {
    * kicks in at the next lookahead window (~50ms @ cps=1).
    *
    * Used by `setLayerMix` for live mixer edits.
-   * See `math/wavecode-mixer-live-update`.
+   * See decisions/wavecode-mixer-live-update.yaml.
    */
   setPattern?: (pattern: unknown, autostart?: boolean) => Promise<unknown>;
   /** Strudel Cyclist scheduler — exposes `.pattern` (active Pattern). */
@@ -509,6 +509,50 @@ const extractFromHap = (
   }
 };
 
+/**
+ * Hot-swap helper shared by `setLayerMix` and `setScore`. Both methods
+ * build a new snippet (via `injectMix`), re-evaluate it through the
+ * live scheduler (no `repl.stop`, so the old pattern keeps sounding
+ * for one compile window), refresh the runtime highlight bridge with
+ * the existing playhead anchor (mix edits shouldn't shift the
+ * highlight phase), and silently roll back on parse failure (audio
+ * keeps playing the previous pattern). The two callers used to
+ * duplicate this 25-line body verbatim; extracting it removes the
+ * drift risk and keeps the contract in one place.
+ */
+const hotSwapPattern = async (newSnippet: string, _callerTag: string): Promise<void> => {
+  const audioCtx = unlockAudioContext();
+  const repl = await ensureRepl(audioCtx);
+  setDebug({ lastEvaluatedSnippet: newSnippet });
+  await repl.evaluate(newSnippet);
+  const livePattern = repl.scheduler?.pattern;
+  const anchor = debugState.lastEvalClock > 0 ? debugState.lastEvalClock : audioCtx.currentTime;
+  if (livePattern && typeof (livePattern as { queryArc?: unknown }).queryArc === 'function') {
+    setRuntimeHighlightActive({
+      pattern: livePattern as unknown as { queryArc(begin: number, end: number): ReadonlyArray<unknown> },
+      ctx: audioCtx,
+      anchor,
+      cps: debugState.cps > 0 ? debugState.cps : 1,
+      layerRanges: parseLayerRanges(newSnippet),
+    });
+  }
+};
+
+/**
+ * Catch handler for `setLayerMix` / `setScore`. Logs a warning at the
+ * engine level (so Debug > Console can surface the reason the user's
+ * mixer/grid edits didn't reach their ears) and returns a void
+ * sentinel so the wrapping `Effect.catchAll` can resolve cleanly.
+ */
+const silentRollback = (callerTag: string) => (err: unknown): null => {
+  const msg = err instanceof Error ? err.message : String(err);
+  console.warn(
+    `[wavecode/LiveAudioEngine.${callerTag}] parse failed, keeping previous pattern:`,
+    msg,
+  );
+  return null;
+};
+
 export const LiveAudioEngine: Layer.Layer<AudioEngine, never, never> = Layer.succeed(
   AudioEngine,
   {
@@ -538,7 +582,7 @@ await repl.evaluate(snippet);
             // decorations start emitting. We call setActive unconditionally
             // and let the bridge filter — if the pattern is missing or
             // has no queryArc, bridge simply computes empty ranges.
-            // See `math/wavecode-runtime-mini-highlight`.
+            // See decisions/wavecode-runtime-mini-highlight.yaml.
             const livePattern = repl.scheduler?.pattern;
             const hasQueryArc = !!livePattern && typeof (livePattern as { queryArc?: unknown }).queryArc === 'function';
             // Diagnostic surface — published every eval so we can tell
@@ -600,7 +644,7 @@ await repl.evaluate(snippet);
           // playhead sticks at column 0. The inner repl.setCps
           // (ensureRepl::callable) also writes setDebug — that's
           // idempotent once repl exists. See packet
-          // math/wavecode-step-grid-autoload-and-sync.
+          // decisions/wavecode-step-grid-autoload-and-sync.yaml.
           setDebug({ cps });
           if (!cachedRepl) return;
           const repl = await cachedRepl;
@@ -643,46 +687,13 @@ await repl.evaluate(snippet);
         try: async () => {
           const lastSnippet = debugState.lastEvaluatedSnippet;
           if (!lastSnippet.trim()) return;
-          const audioCtx = unlockAudioContext();
-          const repl = await ensureRepl(audioCtx);
-          const newSnippet = injectMix(lastSnippet, layerMix);
-          // Snapshot the rebuilt snippet synchronously so a subsequent
-          // `eval()` (e.g. user pressed ▶) picks up the same source —
-          // same contract as `eval()` itself.
-          setDebug({ lastEvaluatedSnippet: newSnippet });
-          await repl.evaluate(newSnippet);
-          // Refresh runtime highlight bridge — pattern was hot-swapped;
-          // the new miniLocations (from the re-transpile) must reach the
-          // editor. Use the lastEvalClock as anchor to keep playhead
-          // continuity (mix edits shouldn't shift the highlight phase).
-          const livePattern = repl.scheduler?.pattern;
-          const anchor = debugState.lastEvalClock > 0 ? debugState.lastEvalClock : audioCtx.currentTime;
-          if (livePattern && typeof (livePattern as { queryArc?: unknown }).queryArc === 'function') {
-            setRuntimeHighlightActive({
-              pattern: livePattern as unknown as { queryArc(begin: number, end: number): ReadonlyArray<unknown> },
-              ctx: audioCtx,
-              anchor,
-              cps: debugState.cps > 0 ? debugState.cps : 1,
-              layerRanges: parseLayerRanges(newSnippet),
-            });
-          }
+          await hotSwapPattern(injectMix(lastSnippet, layerMix), 'setLayerMix');
         },
-        catch: (err) => {
-          // Silent rollback — see packet antithesis (5). The existing
-          // `repl.scheduler.pattern` is left untouched and audio keeps
-          // playing. We log to console because failure here means the
-          // user's mixer edits don't reach their ears — they should be
-          // able to inspect why via Debug > Console.
-          const msg = err instanceof Error ? err.message : String(err);
-          console.warn('[wavecode/LiveAudioEngine.setLayerMix] parse failed, keeping previous pattern:', msg);
-          // Bridge keeps the previous active state — no rollback needed
-          // for highlight; the old pattern is still playing.
-          return null as null;
-        },
+        catch: silentRollback('setLayerMix'),
       }).pipe(Effect.catchAll(() => Effect.void)),
     /**
      * Hot-swap a new score into the live scheduler. Used by StepGrid
-     * edit-mode per-tap (see `math/wavecode-step-grid-modes`).
+     * edit-mode per-tap (see decisions/wavecode-step-grid-modes.yaml).
      *
      * Flow is the same as `setLayerMix` but the input is a complete
      * score (not a mixer-state patch). We rebuild the snippet via
@@ -700,33 +711,9 @@ await repl.evaluate(snippet);
       Effect.tryPromise({
         try: async () => {
           if (!score.trim()) return;
-          const audioCtx = unlockAudioContext();
-          const repl = await ensureRepl(audioCtx);
-          const newSnippet = injectMix(score, layerMix);
-          // Snapshot the rebuilt snippet so a subsequent `eval()` (e.g.
-          // user pressed ▶) picks up the same source — same contract
-          // as `eval()` itself.
-          setDebug({ lastEvaluatedSnippet: newSnippet });
-          await repl.evaluate(newSnippet);
-          // Refresh runtime highlight bridge — same path as setLayerMix.
-          const livePattern = repl.scheduler?.pattern;
-          const anchor = debugState.lastEvalClock > 0 ? debugState.lastEvalClock : audioCtx.currentTime;
-          if (livePattern && typeof (livePattern as { queryArc?: unknown }).queryArc === 'function') {
-            setRuntimeHighlightActive({
-              pattern: livePattern as unknown as { queryArc(begin: number, end: number): ReadonlyArray<unknown> },
-              ctx: audioCtx,
-              anchor,
-              cps: debugState.cps > 0 ? debugState.cps : 1,
-              layerRanges: parseLayerRanges(newSnippet),
-            });
-          }
+          await hotSwapPattern(injectMix(score, layerMix), 'setScore');
         },
-        catch: (err) => {
-          // Silent rollback — same contract as setLayerMix.
-          const msg = err instanceof Error ? err.message : String(err);
-          console.warn('[wavecode/LiveAudioEngine.setScore] parse failed, keeping previous pattern:', msg);
-          return null as null;
-        },
+        catch: silentRollback('setScore'),
       }).pipe(Effect.catchAll(() => Effect.void)),
     getCycleProgress: () =>
       Effect.sync(() => {

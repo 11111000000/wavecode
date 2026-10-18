@@ -23,7 +23,7 @@ import { logger } from '~/infrastructure/log';
  * Smaller = snappier slider feel, more parse cycles under fast drag.
  * Larger = less CPU but audible lag between drag and sound change.
  *
- * See `math/wavecode-mixer-live-update` packet — empirically tune on
+ * See decisions/wavecode-mixer-live-update.yaml packet — empirically tune on
  * iPhone SE if 50ms proves too aggressive.
  */
 export const MIX_DEBOUNCE_MS = 50;
@@ -38,8 +38,8 @@ let mixPending: ReadonlyArray<LayerMix> | null = null;
  * tap feel, more parse cycles during fast taps. Larger = less
  * CPU but audible lag between tap and scheduler update.
  *
- * See `math/wavecode-mixer-live-update` and
- * `math/wavecode-step-grid-modes` packets for trade-off.
+ * See decisions/wavecode-mixer-live-update.yaml and
+ * decisions/wavecode-step-grid-modes.yaml packets for trade-off.
  */
 export const GRID_EDIT_DEBOUNCE_MS = 50;
 

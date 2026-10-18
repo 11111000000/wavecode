@@ -41,7 +41,7 @@ const MAX_RIBBON_LAYERS = 6;
  *
  * Beat energy / cps читаются с частотой 60 fps через RAF.
  * NoteEvent-ы для track overview — debounced compileAndQuery
- * (тот же пайплайн, что MIDI-экспорт). See math/visualizer-tab.
+ * (тот же пайплайн, что MIDI-экспорт). See decisions/visualizer-tab.yaml.
  */
 export function VisualizerPanel(): JSX.Element {
   const [mode, setMode] = createSignal<Mode>('spectrum');

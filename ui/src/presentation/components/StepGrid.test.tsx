@@ -22,7 +22,7 @@ import {
  * and `effect`'s `Effect.runPromise` (so the RAF progress loop
  * deterministically surfaces our `getCycleProgress` mock value).
  *
- * Test matrix (per `math/wavecode-step-grid-modes/packet.md`):
+ * Test matrix (per decisions/wavecode-step-grid-modes.yaml):
  *   - view mode: tap → preview only, no state change.
  *   - sketch mode: tap → preview + toggle cell; commit button writes.
  *   - edit mode: tap → preview + splice + scheduleGridEdit (debounced).

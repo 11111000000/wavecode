@@ -9,7 +9,7 @@ import { getPreset } from './presetsStore';
  * useAppBootstrap гидрировал только `appStore.score` из IDB —
  * после релоада играла одна, в дропдауне светилась другая.
  *
- * Семантика «последний загруженный» (см. math/wavecode-preset-id-
+ * Семантика «последний загруженный» (см. decisions/wavecode-preset-id-.yaml
  * hydration/packet.md):
  *  - сигнал отражает последний пресет, который юзер явно выбрал;
  *  - правки score НЕ сбрасывают сигнал (Ableton-style);
