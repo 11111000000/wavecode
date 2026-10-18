@@ -41,9 +41,6 @@ importers:
       '@effect/schema':
         specifier: ^0.75.0
         version: 0.75.5(effect@3.22.2)
-      '@effect/typeclass':
-        specifier: ^0.41.0
-        version: 0.41.0(effect@3.22.2)
       '@lezer/common':
         specifier: ^1.5.3
         version: 1.5.3
@@ -55,9 +52,6 @@ importers:
         version: 1.2.6
       '@strudel/mini':
         specifier: ^1.2.6
-        version: 1.2.6
-      '@strudel/serial':
-        specifier: ^1.0.0
         version: 1.2.6
       '@strudel/tonal':
         specifier: ^1.2.6
@@ -739,11 +733,6 @@ packages:
     peerDependencies:
       effect: ^3.9.2
 
-  '@effect/typeclass@0.41.0':
-    resolution: {integrity: sha512-Tsv94iDPUWgmz/JsYUh7awx5mmFukEJZB+duyzlLRlCHxNUz5LHBBzTaEfUPNMzAE1s8FTUSVwdPSpL0DznXKg==}
-    peerDependencies:
-      effect: ^3.22.0
-
   '@esbuild/aix-ppc64@0.21.5':
     resolution: {integrity: sha512-1SDgH6ZSPTlggy1yI6+Dbkiz8xzpHJEVAlF/AM1tHPLsf5STom9rwtjE4hKAF20FfXXNTFqEYXyJNWh1GiZedQ==}
     engines: {node: '>=12'}
@@ -1236,10 +1225,6 @@ packages:
 
   '@strudel/mini@1.2.6':
     resolution: {integrity: sha512-I5GFPLHI3TPcJuD2RdDcurA+lTogaSQ0TB+EimKTgEtSAbU6ZMEkSUOXZIFO5eaAcJcMucgKaBcmTKpD4oZjPA==}
-    engines: {node: '>=18.0.0'}
-
-  '@strudel/serial@1.2.6':
-    resolution: {integrity: sha512-vaTkuMvIedBryfPOMLzM3lG1r0RfDDuA4fL8S6Ocsu/B2q6CDs7S96n/4XC++YDqvqqa8sfjOUwRd84M05qVbQ==}
     engines: {node: '>=18.0.0'}
 
   '@strudel/tonal@1.2.6':
@@ -3914,10 +3899,6 @@ snapshots:
       effect: 3.22.2
       fast-check: 3.23.2
 
-  '@effect/typeclass@0.41.0(effect@3.22.2)':
-    dependencies:
-      effect: 3.22.2
-
   '@esbuild/aix-ppc64@0.21.5':
     optional: true
 
@@ -4259,10 +4240,6 @@ snapshots:
       '@strudel/core': 1.2.6
 
   '@strudel/mini@1.2.6':
-    dependencies:
-      '@strudel/core': 1.2.6
-
-  '@strudel/serial@1.2.6':
     dependencies:
       '@strudel/core': 1.2.6
 
