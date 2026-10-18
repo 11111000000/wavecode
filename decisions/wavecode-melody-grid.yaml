@@ -1,0 +1,323 @@
+---
+schema: math-coding/3.3
+id: wavecode-melody-grid
+revision: 1
+state: draft
+body_sha: "sha256:dfa2647e8f1d38904afa765b52bb85606a2b63f8d4de269416bdb167ecd2c5c9"
+yaml_sha: "sha256:dfa2647e8f1d38904afa765b52bb85606a2b63f8d4de269416bdb167ecd2c5c9"
+
+intent: |
+  wavecode has a 4×8 drum-pad StepGrid (kick / snare / hihat / clap),
+  but no visual editor for melodies. Today the only melody workflows
+  are: (a) hand-write mini-notation in the editor, or (b) record a
+  piano take and transcribe (`🎼 transcribe` per the
+  `wavecode-piano-transcribe` packet). Both are great for power
+  users, but composers who think in pitch-and-step grids (piano roll
+  / tracker / Reason Kongen / FL Studio Channel Step sequencer)
+  want a third option: visually lay down 16 columns of note cells,
+  tap to toggle, hear the result, edit in place.
+
+  This packet adds a `MelodyGrid` sheet tab: 16 columns (one per
+  1/16 step) × 36 pitch rows (C3–B5 = MIDI 48–83), with the same
+  3-mode UI as the drum StepGrid (view / sketch / edit). It sits
+  beside the drum grid (independent sheet, independent state); the
+  two grids together cover the rhythm + lead authoring surface for
+  a typical pop loop.
+
+  The grid:
+    - IS a read-only mirror of the score's melody in view mode;
+      tap = preview the cell via Web Audio.
+    - IS a draft buffer in sketch mode; ↑ commit writes the draft
+      back to the score via `replaceLayerSources` so the rest of
+      the score (drums, bass, FX chains) is preserved byte-for-byte.
+    - IS an in-place editor in edit mode, gated on the score
+      having a top-level stack AND exactly one `note(...)` / `n(...)`
+      call to splice.
+
+  The melody grid never touches drum layers. Drum and melody
+  are independent domains; we deliberately do NOT merge with
+  `gridState.ts` (different state shape — sparse (step, midi)
+  tuples instead of a 2D boolean matrix; different AST target).
+
+commitment: |
+  1. `ui/src/domain/music/melodyGridTypes.ts` — pure types:
+     `MELODY_COLS = 16`, `MELODY_PITCH_RANGE = { low: 48, high: 83 }`
+     (C3..B5, 36 keys), `MelodyCell = { step, midi }`,
+     `MelodyMode = 'view' | 'sketch' | 'edit'`.
+  2. `ui/src/domain/music/melodyExtract.ts` — pure functions:
+     a. `extractMelodyFromScore(score) → { cells, ok, reason? }`
+        using `parseScore` + `findTopStackOf` +
+        `argLeadingName`/`argText`. Finds the first `note(…)` /
+        `n(…)` call inside the top-level stack; if it has a string
+        arg, parses tokens on whitespace (each token is a note
+        name like `"g3"` or `"~"` for rest) and emits `{ step,
+        midi }` tuples skipping rests. Falls back gracefully
+        (reason surfaced in the UI).
+     b. `commitMelodyToScore(score, melody, opts) → { ok, score }`
+        builds `note("<…>").s("<instrument>")` mini-notation
+        and uses `replaceLayerSources` to splice the first
+        `note(…)` / `n(…)` arg in place. Refuses to splice if
+        there is no note-call target inside the top stack
+        (returns `{ ok: false, reason }` so the UI can warn
+        instead of corrupting the score).
+  3. `ui/src/presentation/state/melodyGridState.ts` — parallel
+     to `gridState.ts`. Signals: `melodyMode`, `melodyDraft`,
+     `melodyLastCommitted`. Functions: `enterMelodyView`,
+     `enterMelodySketch`, `enterMelodyEdit`, `toggleMelodyCell`,
+     `commitMelodyDraft`, `applyMelodyEditToLayer`,
+     `clearMelodyDraft`, `dirtyMelodyCount`. NO shared module
+     state with the drum grid (different gate, different
+     lastCommitted snapshot).
+  4. `ui/src/presentation/components/MelodyGrid.tsx` —
+     `<MelodyGrid />` component, structurally identical to
+     `StepGrid` (3-mode pill, ↻ reset, ↑ commit button only
+     in sketch, beat column indicator synced to
+     `AudioEngine.getCycleProgress()`).
+  5. `ui/src/styles/components.css` — `.melody-grid`,
+     `.melody-grid-toolbar`, `.melody-grid-mode-pill`,
+     `.melody-grid-mode-btn`, `.melody-grid-rows`,
+     `.melody-grid-row`, `.melody-grid-row-label`,
+     `.melody-grid-btn`, `.melody-cell` and friends — adapted
+     from the drum StepGrid styles. No new CSS variables.
+  6. BPM display: derived from `appStore.transportState.cps`
+     (`bpm = cps × 60`, cycle = 1 beat) with default 120;
+     surfaced as a small text in the toolbar, NOT an input
+     (out of scope for this packet — the melody grid does not
+     retune the audio engine).
+  7. Edit-mode gate: `extractMelodyFromScore(score).ok === true`
+     (i.e. there's at least one `note(…)` or `n(…)` call in the
+     top stack). Otherwise the mode pill is disabled with a
+     tooltip explaining that the user must have a melody layer
+     to edit. Sketch mode is ALWAYS available (sketch + commit
+     can append a new melody layer when no note-call exists).
+
+scope:
+  paths:
+    - "ui/src/domain/music/melodyGridTypes.ts"
+    - "ui/src/domain/music/melodyExtract.ts"
+    - "ui/src/domain/music/melodyExtract.test.ts"
+    - "ui/src/presentation/state/melodyGridState.ts"
+    - "ui/src/presentation/components/MelodyGrid.tsx"
+    - "ui/src/presentation/components/MelodyGrid.test.tsx"
+    - "ui/src/styles/components.css"
+    - "decisions/wavecode-melody-grid.yaml"
+  exclusions:
+    - "ui/src/presentation/components/App.tsx"
+    - "ui/src/presentation/components/app/**"
+    - "ui/src/presentation/components/landing/**"
+    - "ui/src/presentation/components/CodeMirrorEditor.tsx"
+    - "ui/src/presentation/panels/**"
+    - "ui/src/presentation/components/PianoKeyboard.tsx"
+    - "ui/src/application/useCases/llmEdit.ts"
+    - "ui/src/domain/presets.ts"
+    - "ui/src/infrastructure/audio/**"
+    - "ui/vite.config.ts"
+    - "ui/src/domain/strudel/**"
+    - "ui/src/presentation/state/gridState.ts"
+
+outcomes:
+  - id: melody-grid-renders
+    statement: |
+      `<MelodyGrid />` renders as a 16-column × 36-row grid with
+      row labels (note names) and a 3-mode pill. In view mode
+      cells mirror the score's first `note(…)` string arg; in
+      sketch mode cells are user-toggled; in edit mode cells
+      auto-splice on every tap. Verified by unit tests.
+  - id: melody-grid-ast-extract
+    statement: |
+      `extractMelodyFromScore(score)` returns `{ cells, ok: true }`
+      for the built-in `creep` preset (8 columns of
+      `g3 b3 d4 b3 …` → 8 `{step, midi}` tuples); returns
+      `{ cells: [], ok: false, reason: 'no-note-call' }` for
+      a score that has only `s("…")` rows. Pure, no Effect.
+  - id: melody-grid-ast-commit
+    statement: |
+      `commitMelodyToScore(score, melody, opts)` returns
+      `{ ok: true, score: '<new>' }` after using
+      `replaceLayerSources` to swap the first `note(…)` /
+      `n(…)` arg in the top stack. The returned score preserves
+      every byte around the edited row (verified with a
+      regression test for the existing `splice.ts` test
+      contract). The grid's BPM-input is wired through
+      `opts.bpm` so the future mini-notation can encode
+      `<…>.fast(N)` if needed.
+  - id: melody-grid-edit-gate
+    statement: |
+      The `edit` mode pill is disabled when the score has no
+      top-level stack OR no `note(…)`/`n(…)` call inside it,
+      with a tooltip explaining the constraint (matches the
+      StepGrid edit-mode gate UX).
+  - id: melody-grid-sync-score
+    statement: |
+      `<MelodyGrid />` reads `appStore.score` on mount and
+      re-reads it whenever the score changes (via Solid
+      reactivity). Switching from sketch → view re-seeds the
+      cells from the live score, NOT from a stale draft.
+
+obligations:
+  - id: melody-grid-extract-unit
+    claim: |
+      `melodyExtract.test.ts` covers ≥ 6 cases: empty score,
+      bare `note("c4 e4 g4")` (3 cells), `n("…")` alias,
+      note-with-rests (`"<c4 ~ g4>"`-style splicing), drum-only
+      score → ok=false with reason, multi-stack with
+      `note(…)` deep inside.
+    acceptance:
+      all:
+        - verifier: "vitest run ui/src/domain/music/melodyExtract.test.ts"
+          result: pass
+  - id: melody-grid-commit-unit
+    claim: |
+      The same test file covers the commit path: round-trip
+      (extract → commit → extract yields same cells); commit
+      into a mixed score preserves `s(…)` rows verbatim
+      (use the existing splice-test fixture as a regression
+      sentinel); commit without note-call returns
+      `{ ok: false, reason: 'no-note-call' }`.
+    acceptance:
+      all:
+        - verifier: "vitest run ui/src/domain/music/melodyExtract.test.ts"
+          result: pass
+  - id: melody-grid-modes-unit
+    claim: |
+      `MelodyGrid.test.tsx` covers: view-mode tap → preview
+      only, no state change; sketch-mode tap → preview +
+      draft toggle; sketch-mode ↑ commit → `replaceScore` +
+      `evalScore`; edit-mode tap → `replaceScore` +
+      `scheduleGridEdit` (no eval); edit-mode disabled when
+      no note-call in score.
+    acceptance:
+      all:
+        - verifier: "vitest run ui/src/presentation/components/MelodyGrid.test.tsx"
+          result: pass
+  - id: melody-grid-playhead-sync
+    claim: |
+      The playhead column in `<MelodyGrid />` reflects
+      `AudioEngine.getCycleProgress()` every ~70ms via RAF,
+      matching the drum StepGrid's playhead sync contract.
+    acceptance:
+      all:
+        - verifier: "vitest run ui/src/presentation/components/MelodyGrid.test.tsx --grep playhead"
+          result: pass
+  - id: melody-grid-typecheck
+    claim: |
+      `npm --dir ui run typecheck` exits 0 after this commit.
+    acceptance:
+      all:
+        - verifier: "tsc --noEmit"
+          result: pass
+  - id: melody-grid-lint
+    claim: |
+      `npm --dir ui run lint:no-console` exits 0 — no
+      `console.*` in `src/domain` or `src/application`;
+      presentation-layer `console.warn` calls in the UI
+      component are tolerated.
+    acceptance:
+      all:
+        - verifier: "eslint src/domain src/application"
+          result: pass
+  - id: melody-grid-build
+    claim: |
+      `npm --dir ui run build` exits 0. Bundle-size diff
+      reported in the PR summary; main chunk should grow by
+      < 6 KB gzipped (CSS additions + component logic).
+    acceptance:
+      all:
+        - verifier: "vite build"
+          result: pass
+
+assumptions:
+  - id: melody-grid-assumption-creep-decomposable
+    state: assumed
+    statement: |
+      "The built-in creep preset contains a top-level `cat(...)`
+       whose first child is a `stack(...)` whose first arg is a
+       `note(\"g3 b3 d4 …\")` call. The AST walker surfaces this
+       as the 'first note(…) inside the first stack' and the
+       extract function will correctly read the 8 notes of the
+       verse arpeggio."
+    evidence: "ui/src/domain/presets.ts:42-93"
+    owner: agent
+  - id: melody-grid-assumption-replaceLayerSources-stable
+    state: assumed
+    statement: |
+      "`replaceLayerSources` is the public, AST-based splice API
+       and is the single source of truth for in-place byte-range
+       edits in wavecode (see wavecode-strudel-ast packet)."
+    evidence: "ui/src/domain/strudel/splice.ts:152"
+    owner: agent
+  - id: melody-grid-assumption-edits-once-per-call
+    state: assumed
+    statement: |
+      "Edit-mode taps emit one `commitMelodyToScore` call per
+       tap. We do NOT batch taps; we rely on the same 50ms
+       `scheduleGridEdit` debounce as the drum StepGrid."
+    evidence: "ui/src/presentation/state/audioActions.ts:60-81"
+    owner: agent
+  - id: melody-grid-assumption-bpm-120-default
+    state: assumed
+    statement: |
+      "BPM = 120 is a reasonable default for the synthesized
+       mini-notation; users composing at a different tempo
+       adjust the global tempo via the TransportPanel after
+       the melody is in place. The BPM display is read-only."
+    owner: human:operator
+
+risk:
+  declared_triggers:
+    - sheet-tab-explosion-creeps-ui
+    - chromatic-grid-too-wide
+    - wrong-note-call-writes-to-stacked-n-layer
+  owner: human:operator
+
+reversal:
+  - signal: melodyExtract.test.ts-fails
+    action: rework
+  - signal: edit-gate-too-restrictive
+    action: rework-to-allow-empty-note-call-and-skip-args
+  - signal: bundle-size-bloats
+    action: lazy-load-melody-grid
+
+counterexample: |
+  "Drum grid is enough — anyone composing melodies can just
+  record a piano take and transcribe (wavecode-piano-transcribe
+  packet) or write the mini-notation by hand."
+
+  Counter: piano transcribe is a CAPTURE tool, not a CREATION
+  tool — it needs the user to play the notes first. The
+  melody grid lets users who THINK in pitch-time coordinates
+  construct melodies note-by-note without a MIDI keyboard,
+  without handwriting mini-notation syntax, and without
+  recording-then-transcribing latency. It also surfaces the
+  harmonic structure of the score visually (pitch rows
+  reveal arpeggio patterns in two dimensions that the linear
+  score cannot), which is the primary use case for piano-roll
+  UIs since the Fairlight CMI (1979) and Bitwig's grid.
+
+antithesis: |
+  "(1) Just bolt on a note-roll overlay to the drum grid —
+  one grid, two cell types. Rejected: drum cells and
+  melody cells have different Y-axis dimensions (4 vs 36),
+  different gating (4 s-rows vs 1 note-row), different
+  preview semantics (drum sample vs midi note), and
+  different storage shape (boolean matrix vs (step, midi)
+  tuples). Forcing both into one matrix loses the
+  X-is-step / Y-is-pitch piano-roll convention that
+  everyone in tracker culture reads natively.
+
+  (2) Use the existing PianoKeyboard as the visual
+  melody editor. Rejected: piano is 2 octaves × 7 white-
+  keys with no step column. It's an INPUT device for
+  playback, not a sequencer."
+
+relations:
+  addresses:
+    - wavecode-bootstrap-math-coding-3.3@1
+    - wavecode-strudel-ast@1
+    - wavecode-step-grid-modes@1
+    - wavecode-piano-transcribe@1
+  depends_on:
+    - wavecode-bootstrap-math-coding-3.3@1
+    - wavecode-strudel-ast@1
+    - wavecode-step-grid-modes@1
+---
