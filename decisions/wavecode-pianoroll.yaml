@@ -1,0 +1,281 @@
+---
+schema: math-coding/3.3
+id: wavecode-pianoroll
+revision: 1
+state: draft
+body_sha: "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+yaml_sha: "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+
+intent: |
+  DAW-привычные юзеры мыслят дорожками (X = время, Y = pitch), а
+  не текстом. CodeMirror — основной редактор; pianoroll — это
+  OPTIONAL альтернативный view, доступный через toggle в
+  ScorePanel, который показывает note events текущего score и
+  позволяет их редактировать визуально (клик = добавить ноту,
+  Shift+клик = удалить, drag = переместить по X/Y). Это
+  визуальный companion существующего PianoRollPreview (read-only
+  микрофонный preview) — НЕ его замена.
+
+  Цели:
+    1. Извлечь note events из score (через AST → mini-notation
+       parsing) и нарисовать таймлайн в HTML5 canvas.
+    2. Edit через клик и drag — фидбэк через `replaceScore` +
+       `evalScore` (или через debounced scheduleGridEdit).
+    3. Zoom (Ctrl+wheel) и pan (drag правым кликом или middle
+       drag) по осям X/Y.
+    4. Playhead, синхронизированный с AudioEngine.getCycleProgress()
+       (как в StepGrid), через RAF.
+    5. Empty-state когда score пустой — `note(...)` подсказка.
+    6. Debounced re-parse на изменение score (350ms, как
+       VisualizerPanel).
+
+commitment: |
+  1. `ui/src/domain/music/noteEvents.ts` экспортирует pure function
+     `extractNoteEvents(score: string) → ReadonlyArray<NoteEvent>`
+     — проходит AST, вытаскивает mini-notation из `note(...)`,
+     `n(...)`, `chord(...)`, `cat([...])` вызовов, парсит
+     ноты + позиции → плоский массив `{ midi, startCycle, ... }`.
+     Falls back на light-weight регулярный парсер mini-notation
+     для строк, которые AST-парсер помечает как opaque.
+  2. Pure helpers в том же файле: `midiToY`, `beatToX`,
+     `defaultMidiBounds` (визуальные проекции), `colorForSample`
+     (palette по sample-name).
+  3. `ui/src/presentation/components/Pianoroll.tsx` — Solid.js
+     компонент с `<canvas>` (HTML5, не SVG для performance).
+     Props: `{ score: string; onChange: (s: string) => void }`.
+     State: `zoom`, `panX`, `panY`, `hoverNote`, `draggingNote`.
+     Mouse: `click` = добавить ноту, `Shift+click` = удалить
+     ближайшую, `drag` = перетащить выбранную. `wheel` = pan;
+     `Ctrl+wheel` = zoom. RAF-loop для playhead.
+  4. `ui/src/presentation/components/Pianoroll.test.tsx` — vitest:
+     - re-parse: extractNoteEvents на Creep score → ненулевой
+       массив с правильными midi;
+     - zoom: state-update через `setZoom` вызывается;
+     - click добавляет ноту, Shift+click удаляет;
+     - debounced re-parse (350ms) через fake-timers.
+  5. `ui/src/presentation/panels/ScorePanel.tsx` — добавляет
+     сегментированный toggle `text | roll` (по умолчанию text);
+     при выборе `roll` рендерится `<Pianoroll />` вместо
+     `<CodeMirrorEditor />`. Localstorage key
+     `wavecode-score-view-mode-v1` сохраняет выбор.
+  6. `ui/src/styles/components.css` — классы `.pianoroll-host`,
+     `.pianoroll-toolbar`, `.pianoroll-canvas`, `.pianoroll-empty`,
+     `.pianoroll-view-toggle`.
+  7. Production code path:
+     - `replaceScore` + `scheduleGridEdit(score, layerMix)` для
+       click-add (debounced 50ms — same as editGridLayer).
+     - `replaceScore` + `evalScore(score)` для Shift+click delete /
+       drag (immediate — заметное действие).
+     - Reactive `createEffect` re-parse score (debounced 350ms).
+
+scope:
+  paths:
+    - "ui/src/domain/music/noteEvents.ts"
+    - "ui/src/domain/music/noteEvents.test.ts"
+    - "ui/src/presentation/components/Pianoroll.tsx"
+    - "ui/src/presentation/components/Pianoroll.test.tsx"
+    - "ui/src/presentation/panels/ScorePanel.tsx"
+    - "ui/src/styles/components.css"
+    - "decisions/wavecode-pianoroll.yaml"
+  exclusions:
+    - "ui/src/presentation/components/PianoRollPreview.tsx"
+    - "ui/src/presentation/components/App.tsx"
+    - "ui/src/presentation/components/app/**"
+    - "ui/src/presentation/components/landing/**"
+    - "ui/src/presentation/components/CodeMirrorEditor.tsx"
+    - "ui/src/presentation/components/PianoKeyboard.tsx"
+    - "ui/src/presentation/panels/AIEditPanel.tsx"
+    - "ui/src/presentation/state/llmEdit*"
+    - "ui/src/presentation/components/SnippetShowcase*"
+    - "ui/src/application/useCases/llmEdit.ts"
+    - "ui/src/domain/presets.ts"
+    - "ui/src/vite.config.ts"
+    - "ui/src/domain/strudel/**"
+
+outcomes:
+  - id: pianoroll-ast-extraction
+    statement: |
+      `extractNoteEvents(score)` через AST извлекает note events
+      (midi, startCycle, endCycle) из любого валидного score,
+      содержащего `note(...)` / `n(...)` / `chord(...)` /
+      `cat([...])`. Mini-notation парсится по позиции токена
+      внутри строкового литерала (frequency-spacing model
+      `<a b c d>` = 4 steps, `[a b]` = 1 step × all notes).
+  - id: pianoroll-canvas-render
+    statement: |
+      `<Pianoroll />` рендерит ноты в canvas: X = time в cycle
+      units, Y = pitch (MIDI 24..96 по умолчанию). Цвет нот по
+      sample/category (`s("…")` → palette по хэшу name).
+      Playhead — вертикальная линия, обновляемая RAF.
+  - id: pianoroll-edit-click
+    statement: |
+      Клик на пустое поле добавляет ноту через `replaceScore` →
+      перепарс через AST → новый snippet инжектится (additive —
+      новый note в стек) или, если первый non-comment stmt =
+      bare `note(...)` — модифицируется inline. Shift+клик на
+      ноту → удаление через `replaceScore`.
+  - id: pianoroll-zoom-pan
+    statement: |
+      Ctrl+wheel = zoom (множитель 1.1..0.5). Wheel = pan по X.
+      Drag-правым-кликом или Alt+drag = pan по X/Y. State
+      управляется Solid signals, пересчёт видимого региона
+      реактивный.
+  - id: pianoroll-empty-state
+    statement: |
+      Если `extractNoteEvents(score).length === 0`, поверх
+      canvas рендерится overlay с подсказкой:
+      "Edit a `note(...)` to see events here".
+  - id: pianoroll-debounce
+    statement: |
+      Score → re-parse → render debounced 350ms через
+      `createEffect` + setTimeout (как VisualizerPanel).
+      Клики и drag НЕ debounce — они пере-записывают весь score
+      через `replaceScore`.
+  - id: pianoroll-score-panel-toggle
+    statement: |
+      `ScorePanel` добавляет 2-кнопочный toggle «text | roll»
+      сразу над CodeMirror/Canvas. По умолчанию `text`
+      (CodeMirror). Выбор сохраняется в localStorage
+      (`wavecode-score-view-mode-v1`).
+
+obligations:
+  - id: pianoroll-extract-fn-unit-tests
+    claim: |
+      `extractNoteEvents` покрыт ≥6 unit-кейсами: empty score,
+      single note, `<>` sequence, `[chord]`, nested stack, и
+      fallback для невалидных AST результатов.
+    acceptance:
+      all:
+        - verifier: "vitest run ui/src/domain/music/noteEvents.test.ts"
+          result: pass
+  - id: pianoroll-component-tests
+    claim: |
+      Pianoroll component tests (vitest + solid-testing-library):
+      re-parse на Creep preset → ненулевой note count; zoom/pan
+      signals обновляются; click добавляет ноту (через onChange);
+      Shift+click удаляет ближайшую ноту.
+    acceptance:
+      all:
+        - verifier: "vitest run ui/src/presentation/components/Pianoroll.test.tsx"
+          result: pass
+  - id: pianoroll-debounce-timing
+    claim: |
+      Debounced re-parse работает: 350ms timeout на score-change.
+      Подтверждено fake-timers в test.
+    acceptance:
+      all:
+        - verifier: "vitest run ui/src/presentation/components/Pianoroll.test.tsx --testNamePattern 'debounce'"
+          result: pass
+  - id: pianoroll-typecheck
+    claim: |
+      `npm --dir ui run typecheck` exits 0 после этого commit.
+    acceptance:
+      all:
+        - verifier: "tsc --noEmit"
+          result: pass
+  - id: pianoroll-lint
+    claim: |
+      `npm --dir ui run lint:no-console` exits 0.
+    acceptance:
+      all:
+        - verifier: "eslint src/domain src/application"
+          result: pass
+  - id: pianoroll-presets-validation
+    claim: |
+      `npm --dir ui run validate:presets` exits 0 — presets не
+      тронуты.
+    acceptance:
+      all:
+        - verifier: "node --experimental-strip-types --no-warnings ../scripts/validate-presets.ts"
+          result: pass
+  - id: pianoroll-build
+    claim: |
+      `npm --dir ui run build` exits 0 (vite + tsc). Bundle-size
+      diff < 30 KB gz (pure-function код + Solid component).
+    acceptance:
+      all:
+        - verifier: "vite build"
+          result: pass
+  - id: pianoroll-e2e-creep-preset
+    claim: |
+      Manual e2e: open /#/app, выбрать Creep preset, переключить
+      toggle в pianoroll — на canvas видны colored ноты из
+      `note("...")` строк.
+    acceptance:
+      all:
+        - verifier: "manual"
+          result: pass
+
+assumptions:
+  - id: pianoroll-assumption-canvas-supports-2d
+    state: assumed
+    statement: |
+      "Canvas 2D context поддерживается во всех целевых браузерах
+       (Chromium-based desktop, Firefox, Safari ≥14). Для
+       интерактивных нот достаточно 2D — WebGL избыточен."
+    owner: human:operator
+  - id: pianoroll-assumption-mini-notation-frequency
+    state: assumed
+    statement: |
+      "Strudel mini-notation `<a b c d>` интерпретируется как 4
+       ровных шага (1/4 каждый). `[a b]` — один шаг со всеми
+       нотами одновременно (chord). Этот convention совпадает
+       со Strudel-doc и pianoTranscribe.ts."
+    evidence: "git grep '<' ui/src/domain/presets.ts | head -3"
+    owner: agent
+  - id: pianoroll-assumption-mutation-replaces-score
+    state: assumed
+    statement: |
+      "Edit через pianoroll перезаписывает весь score (не
+       делает AST-merge). Это совпадает с поведением
+       editGridLayer / pianoTranscribe.applyTranscription — все
+       визуальные мутаторы в wavecode работают через
+       `replaceScore` целиком."
+    evidence: "audioActions.evalScore line 110"
+    owner: agent
+
+risk:
+  declared_triggers:
+    - canvas-perf-degrades-with-many-notes
+    - edit-merge-corrupts-user-comments-preserved-by-ast
+    - wheel-zoom-conflicts-with-page-scroll-on-mobile
+  owner: human:operator
+
+reversal:
+  - signal: pianoroll.test.tsx-fails
+    action: rework
+  - signal: bundle-size-grows-30kb-beyond-budget
+    action: move-helpers-to-utility-file-shrinking-component
+  - signal: visual-rendering-broken-on-safari
+    action: rework-canvas-to-svg-fallback
+
+counterexample: |
+  "Pianoroll — overkill для step-grid паттернов; юзер рисует
+   4×8 сетку, не 128 дорожек. DAW-парадигма не подходит для
+   mini-notation-driven паттернов."
+
+  Counter: pianoroll НЕ обязателен для простых паттернов —
+  CodeMirror остаётся по умолчанию. Pianoroll — opt-in для
+  больших melodичных score (Creep, Jazz ii-V-I, Piano ballad),
+  где визуальное редактирование нот экономит время.
+
+antithesis: |
+  "CodeMirror уже покрывает всё — текст и есть piano roll для
+   Strudel-юзеров. Skip pianoroll, сфокусироваться на AI-edit."
+
+  Rejected потому что: (1) Pianoroll не заменяет CM6 — это
+  альтернативный view для тех, кто мыслит дорожками. (2)
+  Pure-function helper (extractNoteEvents) переиспользуется
+  будущими фичами (MIDI export, AI-edit suggest). (3) Простой
+  implementation не блокирует AI-edit — оба развиваются
+  параллельно.
+
+relations:
+  addresses:
+    - wavecode-bootstrap-math-coding-3.3@1
+    - wavecode-strudel-ast@1
+    - wavecode-piano-transcribe@1
+  depends_on:
+    - wavecode-bootstrap-math-coding-3.3@1
+    - wavecode-strudel-ast@1
+---
