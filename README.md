@@ -75,7 +75,7 @@ npm run dev          # http://localhost:5173/
 ```sh
 cd ui
 npm run typecheck           # tsc --noEmit
-npm run test:run            # vitest (unit, 56 файлов, ~5 сек warm)
+npm run test:run            # vitest (unit, 78 файлов, ~5 сек warm)
 npm run lint:no-console      # проверяет domain/application на console.*
 npm run validate:presets    # синтаксический smoke test всех BUILTIN_PRESETS
 ```
@@ -95,7 +95,7 @@ npm run build               # → ui/dist/
 
 ## Возможности
 
-- 🎵 **Strudel mini-notation** — 8 встроенных пресетов (Creep, Für Elise, Smoke on the Water, …) + свои через UI
+- 🎵 **Strudel mini-notation** — 15 встроенных пресетов (Creep, EDM 4-on-floor, Hip-hop boom-bap, Jazz ii-V-I, Ambient drone, Bossa Nova, Trap Atlanta, Reggaetón, Step Grid demo, Piano ballad, 808 classic, Analog bass, 808 king, Retro lead, Toms funk) + свои через UI
 - 🤖 **AI-агент** — multi-turn чат, tool-calling (`edit_score`, `eval_snippet`, `undo_score`, `read_score`), 2 модели (smart / fast)
 - 🎹 **Piano keyboard** с WebMIDI — полифония, параллельная запись, sustain pedal
 - 🥁 **Step sequencer** — grid-редактор (view/sketch/edit modes), live eval при правке score
@@ -112,7 +112,7 @@ npm run build               # → ui/dist/
 
 ## Архитектурные решения
 
-Полная traceability — каждое решение зафиксировано как YAML в `decisions/` по схеме **math-coding 3.3** (см. [AGENTS.md § math-coding](AGENTS.md)). 88 решений покрывают всё: от выбора стека до throttle log-источника.
+Полная traceability — каждое решение зафиксировано как YAML в `decisions/` по схеме **math-coding 3.3** (см. [AGENTS.md § math-coding](AGENTS.md)). 97 решений покрывают всё: от выбора стека до throttle log-источника.
 
 **Базовые 16** (см. [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) для деталей):
 
@@ -137,7 +137,7 @@ npm run build               # → ui/dist/
 | `wavecode-test-strategy` | draft | Тестовая стратегия wavecode — пирамида: много unit-тестов на domain и application (vitest, без моков), умеренно на infrastructure (vitest с моками Layer), немного e2e на Playwright для critical user-… |
 <!-- END decisions-table -->
 
-> **Полный список (88 решений):** `ls decisions/*.yaml` или `python3 scripts/build-readme-decisions.py`. О состояниях `draft`/`active` — см. [math-coding AGENTS.md](../math-coding/AGENTS.md): в 3.3 `state: active` присваивается явно, мигрированные v1.0 пакеты остаются `draft` до следующей ревизии. Это **не означает, что они не действуют** — все они применены в коде и подтверждены attestations.
+> **Полный список (97 решений):** `ls decisions/*.yaml` или `python3 scripts/build-readme-decisions.py`. О состояниях `draft`/`active` — см. [math-coding AGENTS.md](../math-coding/AGENTS.md): в 3.3 `state: active` присваивается явно, мигрированные v1.0 пакеты остаются `draft` до следующей ревизии. Это **не означает, что они не действуют** — все они применены в коде и подтверждены attestations.
 
 ---
 
@@ -148,8 +148,8 @@ npm run build               # → ui/dist/
 | TypeScript strict | `strict: true` + `noUncheckedIndexedAccess` + `exactOptionalPropertyTypes` + `verbatimModuleSyntax` | `ui/tsconfig.json` |
 | ESLint per-layer | `no-restricted-imports` для domain / application / infrastructure / presentation | `ui/eslint.config.js` |
 | `no-console` в domain/application | enforced lint rule | `ui/eslint.config.js:47,76` |
-| Unit-тесты | 56 файлов vitest, ~5 сек warm | `ui/src/**/*.test.ts` |
-| E2E тесты | 11 файлов playwright | `ui/tests/e2e/` |
+| Unit-тесты | 78 файлов vitest, ~5 сек warm | `ui/src/**/*.test.{ts,tsx}` |
+| E2E тесты | 19 файлов playwright | `ui/tests/e2e/` |
 | Pre-commit hook | typecheck + vitest + lint:no-console + validate:presets | `scripts/pre-commit` |
 | CI | GitHub Actions: typecheck + vitest + lint + build | `.github/workflows/ci.yml` |
 | Deployment CI | GitVerse Actions → SSH на angara-1 | `.gitverse/workflows/deploy.yml` |
@@ -175,13 +175,13 @@ wavecode/
 ├── .github/               GitHub-specific: workflows, issue/PR templates, CODEOWNERS
 ├── .gitverse/             GitVerse Actions workflows (deploy, math-coding gate)
 ├── bin/                   deploy.sh, check-llm-key.sh
-├── decisions/             88 архитектурных решений (math-coding 3.3 schema)
+├── decisions/             97 архитектурных решений (math-coding 3.3 schema)
 ├── attestations/          evidence store для math-coding self-check
 ├── schemas/               JSON-schema для math-coding 3.3
 ├── scripts/               утилиты: pre-commit, validate:presets, build-readme-decisions
 ├── docs/                  ARCHITECTURE.md, design.md, PLAN.md (internal)
 └── ui/                    браузерный SPA
-    ├── ARCHITECTURE.md    дубликат docs/ARCHITECTURE.md (transitional, см. issue #TBD)
+    ├── ARCHITECTURE.md    устаревший дубликат docs/ARCHITECTURE.md (transitional, удалить после v0.1.0)
     ├── package.json
     ├── tsconfig.json
     ├── eslint.config.js
