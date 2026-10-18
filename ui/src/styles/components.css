@@ -5099,28 +5099,6 @@ textarea.ai-textarea:focus-visible {
   gap: var(--space-xs);
   margin-top: var(--space-xs);
 }
-.mic-ux-empty-demo {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2xs);
-  height: 32px;
-  padding: 0 var(--space-md);
-  background: var(--surface-2);
-  color: var(--cyan);
-  border: 1px solid var(--cyan);
-  border-radius: var(--radius-pill);
-  font-family: var(--font-mono);
-  font-size: var(--fs-xs);
-  font-weight: var(--fw-medium);
-  cursor: pointer;
-  transition: all var(--dur-xs) var(--ease);
-  min-height: var(--touch-target);
-}
-.mic-ux-empty-demo:hover {
-  background: var(--cyan);
-  color: var(--fg-inverse);
-  box-shadow: var(--shadow-glow-cyan);
-}
 .mic-ux-empty-help {
   display: inline-flex;
   align-items: center;
