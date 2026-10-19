@@ -14,6 +14,7 @@ import { consoleStore } from './consoleStore';
 import type { MicBusyError } from '~/domain/audio/MicChannel';
 import type { SttUnsupportedError } from '~/application/voice/STTEngine';
 
+
 type Props = {
   readonly lang?: 'ru-RU' | string;
 };
@@ -40,6 +41,15 @@ const formatError = (
     default:
       return 'Не удалось запустить голосовой ввод';
   }
+};
+
+/** True when the most recent voice-AI failure was permission-related.
+ *  Surfaced as a "blocked" badge on the FAB so the user knows why
+ *  the cluster isn't responding — no need to tap repeatedly. */
+const isPermissionBlocked = (): boolean => {
+  const e = voiceAIError();
+  if (e === null) return false;
+  return /permission|NotAllowed|microphone.*block/i.test(e);
 };
 
 /** Run a possibly-failing Effect with a user-facing toast on failure. */
@@ -143,6 +153,7 @@ export function VoiceAIMiniFAB(props: Props): JSX.Element {
       class="voice-mini-fab voice-mini-fab--ai"
       data-state={voiceAIState().tag}
       data-tap-mode={continuousActive ? 'continuous' : 'oneshot'}
+      data-permission-blocked={isPermissionBlocked() ? 'true' : 'false'}
       disabled={!voiceAISupported()}
       title={titleText()}
       onPointerDown={onPointerDown}
@@ -156,6 +167,11 @@ export function VoiceAIMiniFAB(props: Props): JSX.Element {
       <Show when={voiceAIState().tag === 'listening' || voiceAIState().tag === 'transcribing'}>
         <span class="voice-mini-fab__hint" aria-hidden="true">
           {voiceAITranscript().interim || voiceAITranscript().final || '…'}
+        </span>
+      </Show>
+      <Show when={isPermissionBlocked()}>
+        <span class="voice-mini-fab__badge" aria-hidden="true" title="Браузер блокирует микрофон">
+          !
         </span>
       </Show>
     </button>

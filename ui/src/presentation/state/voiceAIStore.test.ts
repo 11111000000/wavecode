@@ -10,6 +10,10 @@ import {
   startVoiceAI,
   stopVoiceAI,
   cancelVoiceAIInFlight,
+  enterVoiceAIReview,
+  sendVoiceAIReview,
+  cancelVoiceAIReview,
+  isVoiceAIInReview,
   __setVoiceAIHandleForTests,
   __dispatchVoiceAIForTests,
   __resetVoiceAIForTests,
@@ -49,6 +53,14 @@ const installFake = (): VoiceSessionHandle => {
       setVoiceAIError(null);
     }
   };
+  /**
+   * Test path goes through `voiceAIState()` directly — `__dispatchVoiceAIForTests`
+   * mutates only the Solid signal, not the fake's stateRef, so the
+   * fake's review-and-send helpers have to look at the same source
+   * of truth that tests assert against. Production code paths (the
+   * real orchestrator) still drive everything through stateRef; the
+   * divergence is intentional and limited to test wiring.
+   */
   const handle: VoiceSessionHandle = {
     stateRef,
     start: () =>
@@ -67,6 +79,35 @@ const installFake = (): VoiceSessionHandle => {
     cancelInFlight: () =>
       Effect.sync(() => {
         setState({ tag: 'idle' });
+      }),
+    enterReview: () =>
+      Effect.sync(() => {
+        const cur = voiceAIState();
+        if (cur.tag === 'listening' || cur.tag === 'transcribing' || cur.tag === 'paused') {
+          setState({
+            tag: 'review',
+            transcript: cur.transcript,
+            editedText: cur.transcript.final.trim(),
+          });
+        }
+      }),
+    sendReview: () =>
+      Effect.sync(() => {
+        const cur = voiceAIState();
+        if (cur.tag === 'review') {
+          setState({
+            tag: 'requesting',
+            transcript: { ...cur.transcript, final: cur.editedText },
+            continuous: false,
+          });
+        }
+      }),
+    cancelReview: () =>
+      Effect.sync(() => {
+        const cur = voiceAIState();
+        if (cur.tag === 'review') {
+          setState({ tag: 'idle' });
+        }
       }),
     stream: Effect.runSync(
       Effect.succeed(
@@ -155,5 +196,72 @@ describe('voiceAIStore — reducer-driven FSM', () => {
     // Verify the reducer is the source of truth:
     const s = voiceSessionReducer(voiceAIState(), { type: 'applied' });
     expect(s.tag).toBe('idle');
+  });
+
+  it('enterVoiceAIReview transitions listening → review (snapshot of transcript)', async () => {
+    installFake();
+    await Effect.runPromise(
+      startVoiceAI({ mode: 'continuous', lang: 'ru-RU' }),
+    );
+    // Seed transcript directly through the fake's Reducer-style hop.
+    // The fake flips stateRef + setVoiceAIState synchronously — so
+    // dispatching a final chunk leaves us in `transcribing` per the
+    // reducer rule.
+    __dispatchVoiceAIForTests({ type: 'chunk', chunk: {
+      kind: 'final',
+      text: 'сделай побыстрее',
+      confidence: 0.9,
+      lang: 'ru-RU',
+      timestampMs: 0,
+    } });
+    expect(voiceAIState().tag).toBe('transcribing');
+
+    await Effect.runPromise(enterVoiceAIReview());
+    expect(voiceAIState().tag).toBe('review');
+    expect(isVoiceAIInReview()).toBe(true);
+    const s = voiceAIState();
+    if (s.tag !== 'review') throw new Error('unreachable');
+    expect(s.editedText).toBe('сделай побыстрее');
+  });
+
+  it('sendVoiceAIReview from review → requesting via the fake', async () => {
+    installFake();
+    await Effect.runPromise(
+      startVoiceAI({ mode: 'continuous', lang: 'ru-RU' }),
+    );
+    __dispatchVoiceAIForTests({ type: 'chunk', chunk: {
+      kind: 'final',
+      text: 'сделай побыстрее',
+      confidence: 0.9,
+      lang: 'ru-RU',
+      timestampMs: 0,
+    } });
+    await Effect.runPromise(enterVoiceAIReview());
+    expect(isVoiceAIInReview()).toBe(true);
+
+    await Effect.runPromise(
+      sendVoiceAIReview('сделай побыстрее и добавь свинг'),
+    );
+    expect(voiceAIState().tag).toBe('requesting');
+  });
+
+  it('cancelVoiceAIReview returns to idle', async () => {
+    installFake();
+    await Effect.runPromise(
+      startVoiceAI({ mode: 'continuous', lang: 'ru-RU' }),
+    );
+    __dispatchVoiceAIForTests({ type: 'chunk', chunk: {
+      kind: 'final',
+      text: 'test',
+      confidence: 0.9,
+      lang: 'ru-RU',
+      timestampMs: 0,
+    } });
+    await Effect.runPromise(enterVoiceAIReview());
+    expect(isVoiceAIInReview()).toBe(true);
+
+    await Effect.runPromise(cancelVoiceAIReview());
+    expect(voiceAIState().tag).toBe('idle');
+    expect(isVoiceAIInReview()).toBe(false);
   });
 });

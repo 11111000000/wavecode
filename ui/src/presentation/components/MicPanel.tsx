@@ -159,6 +159,29 @@ export function MicPanel(): JSX.Element {
       data-listening={micListening()}
       data-empty={isEmpty() ? 'true' : 'false'}
     >
+      {/* Permission-denied banner — surfaced ABOVE the controls so
+          the user understands why START is a no-op. Previously lived
+          as a small inline pill at the bottom of the panel; users
+          hit it after pressing START, missed the pill, and gave up.
+          Now it's the first thing they see when getUserMedia rejects
+          the request (browser shows its own prompt only on a fresh
+          gesture; on repeat sessions with remembered-denied state
+          the panel needs to spell out the recovery path). */}
+      <Show when={micError() !== null && isMicPermissionError()}>
+        <div class="mic-permission-banner" role="alert">
+          <span class="mic-permission-banner__icon" aria-hidden="true">🎤</span>
+          <div class="mic-permission-banner__body">
+            <p class="mic-permission-banner__title">Браузер блокирует микрофон</p>
+            <p class="mic-permission-banner__msg">{micError()}</p>
+            <Show when={micPermissionUrl() === null} fallback={<PermissionHint />}>
+              <p class="mic-permission-banner__hint">
+                Откройте настройки браузера и разрешите доступ к микрофону для этого сайта.
+              </p>
+            </Show>
+          </div>
+        </div>
+      </Show>
+
       {/* Empty-state hint — a compact banner, not a full replacement.
           The controls below are ALWAYS visible so the user always has
           a way to start recording. */}
@@ -235,17 +258,12 @@ export function MicPanel(): JSX.Element {
 
       <MicMeter />
 
-      <Show when={micError() !== null}>
+      {/* Inline non-permission error pill — kept for non-permission
+          failures (e.g., `getUserMedia` timeout, AudioContext issues)
+          so the existing narrow feedback path stays intact. */}
+      <Show when={micError() !== null && !isMicPermissionError()}>
         <span class="mic-error-pill" role="alert">
           ✕ {micError()}
-          <Show when={isMicPermissionError()}>
-            <span class="mic-error-hint">
-              {' '}—{' '}
-              <Show when={micPermissionUrl() === null} fallback={<PermissionHint />}>
-                разрешите доступ к микрофону в настройках браузера
-              </Show>
-            </span>
-          </Show>
         </span>
       </Show>
     </div>

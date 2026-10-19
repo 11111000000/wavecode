@@ -2,6 +2,7 @@ import { type JSX } from 'solid-js';
 import { VoiceAIMiniFAB } from './VoiceAIMiniFAB';
 import { WhistleMiniFAB } from './WhistleMiniFAB';
 import { VoiceTranscriptOverlay } from './VoiceTranscriptOverlay';
+import { VoiceAITextReview } from './VoiceAITextReview';
 
 /**
  * VoiceFAB — voice-input control cluster, всегда виден в правом
@@ -23,7 +24,10 @@ import { VoiceTranscriptOverlay } from './VoiceTranscriptOverlay';
  *
  * Состояние записи транслируется через
  *   - data-state на самой кнопке (glow + pulse animation),
- *   - VoiceTranscriptOverlay (всплывает над кнопкой: 🎙️ + текст),
+ *   - VoiceTranscriptOverlay (всплывает над кнопкой: 🎙️ + текст +
+ *     кнопка «Открыть для проверки», если сессия активна),
+ *   - VoiceAITextReview (модал-проверка текста перед отправкой в ИИ;
+ *     появляется только когда FSM в `review`),
  *   - inline-hint «слушаю…» / расшифровка прямо в кнопке.
  */
 export function VoiceFAB(): JSX.Element {
@@ -36,6 +40,7 @@ export function VoiceFAB(): JSX.Element {
         </div>
       </div>
       <VoiceTranscriptOverlay />
+      <VoiceAITextReview />
     </>
   );
 }
