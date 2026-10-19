@@ -1,4 +1,4 @@
-import { Show, type JSX } from 'solid-js';
+import { Show, createEffect, createSignal, type JSX } from 'solid-js';
 import { Effect } from 'effect';
 import {
   voiceAIState,
@@ -21,6 +21,27 @@ type Props = {
 
 /** ms before a press is considered a "hold" instead of a "tap". */
 const HOLD_DEBOUNCE_MS = 50;
+
+/**
+ * Press-lifecycle FSM. Replaces the previous pair of `pressed` /
+ * `pressTimer` flags that couldn't distinguish "hold callback
+ * fired" from "timer was cancelled".
+ *
+ *   idle    — nothing pressed.
+ *   pending — pointerdown fired; debounce timer is queued.
+ *   holding — debounce fired; oneshot session running.
+ *   tapped  — pointerup before debounce; continuous session
+ *             was started in onPointerUp. Recording is active.
+ *
+ * The hint chip (`voice-mini-fab__hint`) is shown for any
+ * non-`idle` state so the user sees "I pressed it" instantly —
+ * even on the way to the debounce.
+ */
+type PressState =
+  | 'idle'
+  | 'pending'
+  | 'holding'
+  | 'tapped';
 
 /** Translate a typed fail reason into a user-facing message. */
 const formatError = (
@@ -87,10 +108,21 @@ const runEffectSafely = async (
  *   - Disabled (with tooltip) when `!voiceAISupported()`
  */
 export function VoiceAIMiniFAB(props: Props): JSX.Element {
+  // Press-lifecycle FSM. Replaces the previous pair of `pressed` /
+  // `pressTimer` flags that couldn't distinguish "hold callback
+  // fired" from "timer was cancelled". Old code inferred
+  // `wasHoldAlreadyFired` from `pressTimer === null`, but
+  // `clearTimer()` ALSO nulled that field — so a fast tap (which
+  // calls `clearTimer()` on `onPointerUp`) looked identical to a
+  // hold-already-fired. Result on mobile Chrome: every quick
+  // tap silently exited the handler without starting a session.
+  //
+  // We model the FSM as a Solid signal so the JSX bindings (data-press,
+  // hint visibility) re-render automatically. Plain `let` would also
+  // work in the closure-scoped event handlers, but the JSX refs need a
+  // tracked dep.
+  const [state, setState] = createSignal<PressState>('idle');
   let pressTimer: number | null = null;
-  let pressed = false;
-  /** Whether a tap (vs hold) was the trigger for the active session. */
-  let continuousActive = false;
 
   const clearTimer = (): void => {
     if (pressTimer !== null) {
@@ -101,13 +133,14 @@ export function VoiceAIMiniFAB(props: Props): JSX.Element {
 
   const onPointerDown = (): void => {
     if (!voiceAISupported()) return;
-    if (pressed) return;
-    pressed = true;
-    continuousActive = false;
+    if (state() !== 'idle') return;
+    setState('pending');
     pressTimer = window.setTimeout(() => {
-      pressTimer = null;
       // Hold threshold reached → start a oneshot session now.
       // Orchestrator auto-commits on the first final chunk.
+      if (state() !== 'pending') return;        // already released
+      pressTimer = null;
+      setState('holding');
       void runEffectSafely(
         startVoiceAI({ mode: 'oneshot', lang: props.lang ?? 'ru-RU' }),
       );
@@ -115,28 +148,54 @@ export function VoiceAIMiniFAB(props: Props): JSX.Element {
   };
 
   const onPointerUp = (): void => {
-    if (!pressed) return;
-    clearTimer();
-    const wasHoldAlreadyFired = pressTimer === null;
-    pressed = false;
-    if (wasHoldAlreadyFired) {
-      // Hold callback already fired (oneshot session running);
-      // release should NOT stop — auto-commit does.
+    if (state() === 'idle') return;
+    if (state() === 'holding') {
+      // The debounce fired while the finger was down — release does
+      // NOT stop the oneshot session (auto-commit does).
+      setState('idle');
       return;
     }
-    const state = voiceAIState();
-    if (state.tag !== 'idle' && state.tag !== 'errored') {
-      // Tap during an active session → stop.
-      void runEffectSafely(Effect.suspend(() => stopVoiceAI()));
-      continuousActive = false;
+    if (state() === 'pending') {
+      // Fast tap (< 50ms). Cancel the pending callback and start
+      // a continuous session NOW. Previously we cleared the timer
+      // AND asked `pressTimer === null` — that always returned
+      // `true`, so the handler bailed out without ever calling
+      // startVoiceAI. `clearTimer()` is fine for *cancelling* the
+      // debounce, but it must NOT signal "hold already fired";
+      // the explicit `state() === 'pending'` check below does that.
+      clearTimer();
+      setState('tapped');
+      const fsmState = voiceAIState();
+      if (fsmState.tag !== 'idle' && fsmState.tag !== 'errored') {
+        // Tap during an active session → stop.
+        void runEffectSafely(Effect.suspend(() => stopVoiceAI()));
+        setState('idle');
+        return;
+      }
+      void runEffectSafely(
+        startVoiceAI({ mode: 'continuous', lang: props.lang ?? 'ru-RU' }),
+      );
       return;
     }
-    // Idle + tap before threshold → start a continuous session.
-    continuousActive = true;
-    void runEffectSafely(
-      startVoiceAI({ mode: 'continuous', lang: props.lang ?? 'ru-RU' }),
-    );
+    // 'tapped' (user tapped again on an already-running session):
+    // the second onPointerUp is treated as "stop" only via the
+    // FSM-state check above. Reaching here means the session has
+    // already settled.
+    setState('idle');
   };
+
+  // Sync the local press FSM with the orchestrator FSM. When the
+  // session ends (FSM leaves `listening`/`transcribing`), drop our
+  // local pointer-state too so a subsequent tap isn't ignored.
+  createEffect(() => {
+    const tag = voiceAIState().tag;
+    if (state() === 'tapped' && (tag === 'idle' || tag === 'errored')) {
+      setState('idle');
+    }
+    if (state() === 'holding' && (tag === 'idle' || tag === 'errored')) {
+      setState('idle');
+    }
+  });
 
   const titleText = (): string => {
     if (!voiceAISupported()) {
@@ -147,26 +206,55 @@ export function VoiceAIMiniFAB(props: Props): JSX.Element {
     return 'Голос → ИИ (нажми и держи или тапни для сессии)';
   };
 
+  // Read this once per render; the helper returns a stable string
+  // for the press FSM. Used by `data-tap-mode` for both styling
+  // and test selectors; tests expect exactly the strings
+  // 'continuous' / 'oneshot', never 'pending' / 'holding'.
+  const tapModeAttr = (): 'continuous' | 'oneshot' => {
+    if (state() === 'tapped') return 'continuous';
+    return 'oneshot';
+  };
+
   return (
     <button
       type="button"
       class="voice-mini-fab voice-mini-fab--ai"
       data-state={voiceAIState().tag}
-      data-tap-mode={continuousActive ? 'continuous' : 'oneshot'}
+      data-tap-mode={tapModeAttr()}
       data-permission-blocked={isPermissionBlocked() ? 'true' : 'false'}
+      data-press={state()}
       disabled={!voiceAISupported()}
       title={titleText()}
       onPointerDown={onPointerDown}
       onPointerUp={onPointerUp}
-      onPointerLeave={() => { if (pressed) onPointerUp(); }}
-      onPointerCancel={() => { if (pressed) onPointerUp(); }}
+      onPointerLeave={() => { if (state() === 'pending' || state() === 'holding') onPointerUp(); }}
+      onPointerCancel={() => { if (state() === 'pending' || state() === 'holding') onPointerUp(); }}
       aria-label="Голосовое управление ИИ"
     >
       <MicIcon size={18} />
       <span class="voice-mini-fab__label" aria-hidden="true">Голос</span>
-      <Show when={voiceAIState().tag === 'listening' || voiceAIState().tag === 'transcribing'}>
-        <span class="voice-mini-fab__hint" aria-hidden="true">
-          {voiceAITranscript().interim || voiceAITranscript().final || '…'}
+      {/* Hint visible for any active orchestrator state OR while the
+          local press FSM is non-idle (pending / holding / tapped).
+          This is what closes the "did the press register?" window —
+          on `pointerdown` the user sees a "Слушаю…" chip instantly,
+          even before the first STT chunk arrives (which on mobile
+          Chrome can take 2-5s through Google's cloud STT). */}
+      <Show when={(() => {
+        if (state() !== 'idle') return true;
+        const tag = voiceAIState().tag;
+        return tag === 'listening' || tag === 'transcribing'
+          || tag === 'arming' || tag === 'requesting' || tag === 'applying';
+      })()}>
+        <span
+          class="voice-mini-fab__hint"
+          data-source={state() === 'idle' ? 'transcript' : 'press'}
+          aria-hidden="true"
+        >
+          {state() === 'idle'
+            ? (voiceAITranscript().interim || voiceAITranscript().final || '…')
+            : (state() === 'pending' || state() === 'holding'
+                ? 'Слушаю…'
+                : '')}
         </span>
       </Show>
       <Show when={isPermissionBlocked()}>
