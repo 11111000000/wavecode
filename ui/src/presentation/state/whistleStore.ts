@@ -35,7 +35,7 @@ import {
   type MicCaptureLike,
   type WhistleSessionHandle,
 } from '~/application/voice/WhistleSession';
-import { startMic, stopMic, micPreviewNotes } from './micStore';
+import { startMic, stopMic, micPreviewNotes, subscribeMicFrame } from './micStore';
 import { acquireMic, releaseMic } from './micMutexStore';
 import { logger } from '~/infrastructure/log';
 
@@ -58,6 +58,7 @@ export type WhistleStartOpts = {
 
 let handle: WhistleSessionHandle | null = null;
 let activeSessionId: string | null = null;
+let unsubscribeFrame: (() => void) | null = null;
 
 /**
  * Pull a fresh `AudioNote[]` from `micPreviewNotes` into the
@@ -105,6 +106,13 @@ export const initWhistle = (deps: {
       Effect.sync(() => {
         stopMic();
       }),
+    // The orchestrator's `handle.feed(frame)` is invoked by the live
+    // MicCapture pipeline through the subscription installed below —
+    // we KEEP this adapter as a no-op so the orchestrator doesn't
+    // double-feed (one feed through the subscription, one through the
+    // adapter). The orchestrator's FSM then sees every frame and the
+    // `commit()` path can transition from `recording` → `segmenting`
+    // with the accumulated `notes`.
     feed: () => Effect.void,
     getNotes: () =>
       Effect.sync(() => {
@@ -132,6 +140,21 @@ export const initWhistle = (deps: {
       ),
     ),
   );
+
+  // Bridge live MicCapture frames → orchestrator.handle.feed so the
+  // FSM accumulates notes during a press-and-hold whistle session.
+  // Without this, `handle.commit()` finds the FSM in `arming` and
+  // bails out of the `if (s.tag !== 'segmenting') return;` guard —
+  // net effect: the user whistles and NOTHING plays. See the test
+  // "whistle orchestrator end-to-end via subscribeMicFrame" added
+  // alongside this change.
+  if (unsubscribeFrame === null) {
+    unsubscribeFrame = subscribeMicFrame((frame) => {
+      if (handle !== null) {
+        void Effect.runPromise(handle.feed(frame));
+      }
+    });
+  }
 };
 
 /**
@@ -223,6 +246,10 @@ export const __setWhistleHandleForTests = (
 
 /** Test-only: reset module state. */
 export const __resetWhistleForTests = (): void => {
+  if (unsubscribeFrame !== null) {
+    unsubscribeFrame();
+    unsubscribeFrame = null;
+  }
   handle = null;
   activeSessionId = null;
   setWhistleState(initialWhistleSession());
@@ -231,6 +258,10 @@ export const __resetWhistleForTests = (): void => {
 };
 
 onCleanup(() => {
+  if (unsubscribeFrame !== null) {
+    unsubscribeFrame();
+    unsubscribeFrame = null;
+  }
   activeSessionId = null;
   handle = null;
 });
