@@ -6026,20 +6026,20 @@ textarea.ai-textarea:focus-visible {
 }
 
 /* =========================================================================
- *  VOICE FAB — speed-dial group + transcript overlay
+ *  VOICE FAB — voice-input mini-FAB stack + transcript overlay
  *
  *  Layout (mobile-first, bottom-right):
  *    ┌─────────────┐
  *    │   overlay   │  <- transcript chip (when voice-AI active)
  *    ├─────────────┤
- *    │ mini-AI     │  <- 56x56
+ *    │ mini-AI     │  <- 56x56 (mic icon, tap-to-toggle)
  *    ├─────────────┤
- *    │ mini-whistle│  <- 56x56
- *    ├─────────────┤
- *    │ primary FAB │  <- 64x64 (existing .wc-fab)
+ *    │ mini-whistle│  <- 56x56 (whistle icon, press-and-hold)
  *    └─────────────┘
- *  All anchored to right; primary FAB at the same position as
- *  `.wc-fab` so the existing styles keep applying.
+ *  Оба мини-FAB видны всегда (без speed-dial expansion) — раньше
+ *  primary-FAB-«меню» прятал их до первого тапа, и появление
+ *  «ещё одной кнопки с микрофоном» сбивало с толку (юзер не
+ *  понимал, на что нажал и записалось ли что-то).
  * ========================================================================= */
 
 .voice-fab-group {
@@ -6056,31 +6056,22 @@ textarea.ai-textarea:focus-visible {
 }
 .voice-fab-group > * { pointer-events: auto; }
 
-/* Overrides the existing .wc-fab fixed position so the group is the
- * anchor; the primary FAB becomes inline-flex within the group. */
+/* Overrides the existing .wc-fab fixed position if a primary FAB is
+ *  ever re-added inside the group (см. .voice-fab-group .wc-fab
+ *  ниже). Сейчас primary нет — правило no-op, оставлено на случай
+ *  будущей гибридной раскладки (e.g. overflow actions). */
 .voice-fab-group .wc-fab {
   position: relative;
   right: auto;
   bottom: auto;
 }
 
-/* Stack of mini-FABs above the primary. Hidden when [data-expanded=false]. */
+/* Stack of mini-FABs — always visible. */
 .voice-mini-fab-stack {
   display: flex;
   flex-direction: column;
   gap: var(--space-sm);
   align-items: flex-end;
-  opacity: 0;
-  transform: translateY(8px) scale(0.96);
-  pointer-events: none;
-  transition:
-    opacity var(--dur-xs) var(--ease),
-    transform var(--dur-xs) var(--ease-spring);
-}
-.voice-fab-group[data-expanded='true'] .voice-mini-fab-stack {
-  opacity: 1;
-  transform: translateY(0) scale(1);
-  pointer-events: auto;
 }
 
 /* Mini-FAB base: 56x56 (mobile-first touch target), square corners,
@@ -6160,8 +6151,31 @@ textarea.ai-textarea:focus-visible {
   50%      { box-shadow: var(--shadow-fab), var(--shadow-glow-primary), 0 0 32px var(--primary-glow); }
 }
 
+/* Inline label chip — always visible short name ("Голос" / "Свист"),
+ *  чтобы юзер сразу видел назначение кнопки, а не догадывался по
+ *  иконке. Positioned to the LEFT of the icon, smaller than the
+ *  transient `.voice-mini-fab__hint` (which shows live transcript). */
+.voice-mini-fab__label {
+  position: absolute;
+  top: 50%;
+  right: calc(100% + var(--space-xs));
+  transform: translateY(-50%);
+  white-space: nowrap;
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-medium);
+  padding: 2px var(--space-xs);
+  background: var(--surface-3);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  color: var(--fg);
+  pointer-events: none;
+  opacity: 0.85;
+}
+.voice-mini-fab--ai .voice-mini-fab__label     { color: var(--primary); border-color: var(--primary); }
+.voice-mini-fab--whistle .voice-mini-fab__label { color: var(--cyan);    border-color: var(--cyan); }
+
 /* Inline hint chip — shown while listening / recording. Positioned
- * to the LEFT of the icon so the waveform doesn't overlap the FAB. */
+ *  to the LEFT of the icon so the waveform doesn't overlap the FAB. */
 .voice-mini-fab__hint {
   position: absolute;
   top: 50%;

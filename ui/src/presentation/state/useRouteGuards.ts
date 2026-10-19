@@ -23,22 +23,34 @@ export type RouteGuards = {
   readonly onResetAll: () => void;
 };
 
+/**
+ * Создать новую композицию: именованный custom-пресет (см.
+ * `addCustomPreset`), активный пресет переключается на него,
+ * score заменяется, история диалогов очищается. Без подтверждения —
+ * используется из лендинга, где юзер уже явно нажал «Создать».
+ *
+ * Возвращает id нового пресета — нужно Hero/bridge'у, чтобы при
+ * желании можно было сразу вписать его в ?preset=… параметр.
+ *
+ * Если `initialScore` пуст/undefined, в качестве стартового
+ * содержимого берётся NEW_COMPOSITION_TEMPLATE — единая точка
+ * истины, чтобы «новая композиция» выглядела одинаково и в
+ * Toolbar-«Новая», и из лендинга.
+ */
+export const createNewComposition = (initialScore?: string): string => {
+  void stopAudio();
+  const preset = addCustomPreset(initialScore ?? NEW_COMPOSITION_TEMPLATE);
+  setSelectedPresetPersist(preset.id);
+  dispatch({ type: 'switchPreset', id: preset.id });
+  dispatch({ type: 'replaceScore', text: preset.score });
+  dispatch({ type: 'clearMessages' });
+  return preset.id;
+};
+
 export const useRouteGuards = (): RouteGuards => {
   const onNew = (): void => {
     if (!confirmNew()) return;
-    void stopAudio();
-    // Создаём ИМЕНОВАННЫЙ custom-пресет (см. addCustomPreset) — иначе
-    // после релоада дропдаун продолжал показывать прошлую композицию,
-    // а реально играл шаблон "Начни новую композицию здесь" (см.
-    // decisions/fix-new-composition-flow.yaml). Сейчас это полноценный
-    // custom-пресет с автогенерированным именем (например,
-    // "Новая композиция"); юзер может переименовать его через
-    // OverflowMenu → «Переименовать пресет».
-    const preset = addCustomPreset(NEW_COMPOSITION_TEMPLATE);
-    setSelectedPresetPersist(preset.id);
-    dispatch({ type: 'switchPreset', id: preset.id });
-    dispatch({ type: 'replaceScore', text: preset.score });
-    dispatch({ type: 'clearMessages' });
+    createNewComposition();
   };
 
   const onResetAll = (): void => {
