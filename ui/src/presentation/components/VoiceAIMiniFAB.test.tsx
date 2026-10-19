@@ -54,23 +54,64 @@ describe('VoiceAIMiniFAB — disabled state', () => {
 });
 
 describe('VoiceAIMiniFAB — pointer handlers drive the FSM', () => {
-  it('pointerdown then pointerup fires the start effect via the FSM fallback', async () => {
+  /** REGRESSION (2026-10-19): pre-fix code dispatched pointerdown then
+   *  pointerup synchronously. `clearTimer()` nulled `pressTimer`,
+   *  so the next line's `pressTimer === null` check read `true`,
+   *  made the handler think the hold had already fired, and
+   *  bailed before calling `startVoiceAI`. Result: every fast tap
+   *  silently exited with no session. Test pins the post-fix
+   *  behaviour: a fast pointerdown→up MUST land the FSM in a
+   *  non-idle state (the no-handle fallback makes it `errored`
+   *  since there's no real orchestrator, which is fine — the
+   *  critical assertion is "left idle"). */
+  it('fast pointerdown+pointerup (tap) does NOT silently exit', async () => {
+    const { container } = render(() => <VoiceAIMiniFAB lang="ru-RU" />);
+    const btn = container.querySelector<HTMLButtonElement>(
+      '.voice-mini-fab--ai',
+    )!;
+    // Synchronous — well under the 50ms debounce window.
+    fireEvent.pointerDown(btn);
+    fireEvent.pointerUp(btn);
+    await new Promise<void>((resolve) => setTimeout(resolve, 30));
+    const state = btn.getAttribute('data-state');
+    // The no-handle fallback in startVoiceAI dispatches `errored`,
+    // so data-state must reflect an active-tag (anything but 'idle').
+    expect(state).not.toBe('idle');
+  });
+
+  it('shows "Слушаю…" hint while the press FSM is non-idle, even before any STT chunk', async () => {
+    const { container } = render(() => <VoiceAIMiniFAB lang="ru-RU" />);
+    const btn = container.querySelector<HTMLButtonElement>(
+      '.voice-mini-fab--ai',
+    )!;
+    // Press FSM → 'pending' on pointerdown.
+    fireEvent.pointerDown(btn);
+    // Don't release — we want to confirm the hint is visible while
+    // we're still in the 50ms debounce window.
+    await new Promise<void>((resolve) => setTimeout(resolve, 10));
+    const hint = container.querySelector('.voice-mini-fab__hint');
+    expect(hint).toBeTruthy();
+    expect(hint?.textContent).toContain('Слушаю');
+    // And the data-press attribute mirrors the local FSM (helps
+    // E2E tests + future debugging).
+    expect(btn.getAttribute('data-press')).toBe('pending');
+    fireEvent.pointerUp(btn);
+  });
+
+  it('hold (>= 50ms) eventually starts a session via the FSM fallback', async () => {
+    // Pins the post-fix behaviour: a press of >= 50ms dispatches
+    // through the debounce to `startVoiceAI({mode:'oneshot'})`. In
+    // the no-handle fallback that lands the orchestrator FSM in
+    // `errored` and resets our local FSM back to idle (the auto-sync
+    // effect) — but the IMPORTANT proof is that SOMETHING started
+    // (i.e. data-state left `idle`), which the OLD bug prevented.
     const { container } = render(() => <VoiceAIMiniFAB lang="ru-RU" />);
     const btn = container.querySelector<HTMLButtonElement>(
       '.voice-mini-fab--ai',
     )!;
     fireEvent.pointerDown(btn);
-    // The 50ms tap-debounce timer should NOT have fired yet (we
-    // immediately release), so the FAB starts a continuous session.
+    await new Promise<void>((resolve) => setTimeout(resolve, 100));
+    expect(btn.getAttribute('data-state')).not.toBe('idle');
     fireEvent.pointerUp(btn);
-    // Allow async Effect.runPromise to settle.
-    await new Promise<void>((resolve) => setTimeout(resolve, 50));
-    // `stop` was not called (continuous session stays), so FSM
-    // should still reflect continuous — under the no-handle
-    // fallback this lands in `arming`. Either way the FSM leaves
-    // `idle` once the pointer-down effect runs.
-    // Defensive: just assert the button still has its expected class.
-    const stillThere = container.querySelector('.voice-mini-fab--ai');
-    expect(stillThere).toBeTruthy();
   });
 });
