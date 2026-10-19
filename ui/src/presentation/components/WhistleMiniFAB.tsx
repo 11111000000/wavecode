@@ -88,6 +88,7 @@ export function WhistleMiniFAB(): JSX.Element {
       aria-label="Свист → музыка"
     >
       <WhistleIcon size={18} />
+      <span class="voice-mini-fab__label" aria-hidden="true">Свист</span>
       <Show when={showHint && (whistleState().tag === 'arming' || whistleState().tag === 'recording')}>
         <span class="voice-mini-fab__hint" aria-hidden="true">
           слушаю…

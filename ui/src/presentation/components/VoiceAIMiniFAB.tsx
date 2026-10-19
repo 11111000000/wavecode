@@ -152,6 +152,7 @@ export function VoiceAIMiniFAB(props: Props): JSX.Element {
       aria-label="Голосовое управление ИИ"
     >
       <MicIcon size={18} />
+      <span class="voice-mini-fab__label" aria-hidden="true">Голос</span>
       <Show when={voiceAIState().tag === 'listening' || voiceAIState().tag === 'transcribing'}>
         <span class="voice-mini-fab__hint" aria-hidden="true">
           {voiceAITranscript().interim || voiceAITranscript().final || '…'}

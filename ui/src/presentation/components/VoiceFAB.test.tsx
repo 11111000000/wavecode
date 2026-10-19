@@ -1,9 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { render, cleanup, fireEvent } from '@solidjs/testing-library';
+import { render, cleanup } from '@solidjs/testing-library';
 import { VoiceFAB } from './VoiceFAB';
 import {
   __resetVoiceAIForTests,
-  __dispatchVoiceAIForTests,
 } from '../state/voiceAIStore';
 import { __resetWhistleForTests } from '../state/whistleStore';
 import { resetMicMutexForTests } from '../state/micMutexStore';
@@ -11,11 +10,11 @@ import { resetMicMutexForTests } from '../state/micMutexStore';
 /**
  * VoiceFAB render tests.
  *
- *   1. Renders the primary FAB + the speed-dial group.
- *   2. Tap-to-expand: clicking the primary reveals the two
- *      mini-FABs; clicking again collapses them.
- *   3. Auto-expand: when voice-AI leaves idle the mini-FABs render
- *      even without a tap.
+ *   1. Renders the FAB cluster with both mini-FABs (voice-AI and
+ *      whistle) immediately — no speed-dial expansion needed.
+ *   2. Both mini-FABs have their always-visible label so the user
+ *      can tell them apart at a glance.
+ *   3. Each mini-FAB carries the correct modifier class.
  */
 
 beforeEach(() => {
@@ -31,52 +30,34 @@ afterEach(() => {
   resetMicMutexForTests();
 });
 
-describe('VoiceFAB — primary FAB renders', () => {
-  it('renders the speed-dial group with the primary button', () => {
+describe('VoiceFAB — cluster renders without expansion', () => {
+  it('renders the voice-fab-group cluster', () => {
     const { container } = render(() => <VoiceFAB />);
     const group = container.querySelector('.voice-fab-group');
     expect(group).toBeTruthy();
-    const primary = group!.querySelector('.wc-fab');
-    expect(primary).toBeTruthy();
   });
 
-  it('does NOT show the mini-FABs when nothing is active', () => {
+  it('renders both mini-FABs immediately on first render (no expand needed)', () => {
     const { container } = render(() => <VoiceFAB />);
-    expect(container.querySelector('.voice-mini-fab')).toBeNull();
-  });
-});
-
-describe('VoiceFAB — expand / collapse', () => {
-  it('clicking the primary FAB reveals the mini-FAB stack', () => {
-    const { container } = render(() => <VoiceFAB />);
-    const group = container.querySelector('.voice-fab-group')!;
-    expect(group.getAttribute('data-expanded')).toBe('false');
-    const primary = group.querySelector('.wc-fab')!;
-    fireEvent.click(primary);
-    expect(group.getAttribute('data-expanded')).toBe('true');
     const minis = container.querySelectorAll('.voice-mini-fab');
     expect(minis.length).toBe(2);
   });
 
-  it('clicking again collapses the mini-FABs', () => {
+  it('shows both always-visible labels "Голос" and "Свист"', () => {
     const { container } = render(() => <VoiceFAB />);
-    const group = container.querySelector('.voice-fab-group')!;
-    const primary = group.querySelector('.wc-fab')!;
-    fireEvent.click(primary);
-    fireEvent.click(primary);
-    expect(group.getAttribute('data-expanded')).toBe('false');
-    expect(container.querySelectorAll('.voice-mini-fab')).toHaveLength(0);
+    const labels = container.querySelectorAll('.voice-mini-fab__label');
+    const texts = Array.from(labels).map((el) => el.textContent?.trim());
+    expect(texts).toContain('Голос');
+    expect(texts).toContain('Свист');
   });
-});
 
-describe('VoiceFAB — auto-expand on activity', () => {
-  it('expands automatically when voice-AI leaves idle', () => {
-    __dispatchVoiceAIForTests({ type: 'arm' });
-    __dispatchVoiceAIForTests({ type: 'stt-ready' });
+  it('renders one voice-AI and one whistle mini-FAB', () => {
     const { container } = render(() => <VoiceFAB />);
-    const group = container.querySelector('.voice-fab-group')!;
-    expect(group.getAttribute('data-expanded')).toBe('true');
-    const minis = container.querySelectorAll('.voice-mini-fab');
-    expect(minis.length).toBe(2);
+    expect(
+      container.querySelector('.voice-mini-fab--ai'),
+    ).toBeTruthy();
+    expect(
+      container.querySelector('.voice-mini-fab--whistle'),
+    ).toBeTruthy();
   });
 });
