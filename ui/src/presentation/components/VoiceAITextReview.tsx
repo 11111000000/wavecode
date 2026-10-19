@@ -12,7 +12,7 @@ import { MicIcon, SendIcon, CloseIcon } from '../icons';
  * VoiceAITextReview — panel that appears when the user pauses the
  * voice-AI session for review-and-edit before sending to the LLM.
  *
- * Triggered by the "Review" affordance in `VoiceTranscriptOverlay`
+ * Triggered by the "Review" affordance in `RecordingPanel`
  * (or by tapping the VoiceAIMiniFAB while the session is active).
  * The orchestrator's `enterReview` stops the STT stream and
  * snapshots the transcript into `review.editedText` (which seeds
@@ -36,12 +36,12 @@ import { MicIcon, SendIcon, CloseIcon } from '../icons';
  * `useKeyboardShortcuts`.
  *
  * Why it's a separate component (not just folded into
- * VoiceTranscriptOverlay)
+ * RecordingPanel)
  * -----------------------------------------------------------------------
- * `VoiceTranscriptOverlay` is the always-on live-transcript chip
- * with a single fixed layout; the review state needs a much richer
- * layout (textarea + 3 actions) and longer-lived focus. Splitting
- * them keeps both readable and lets us polish the overlay
+ * `RecordingPanel` is the always-on live-status card
+ * with a fixed layout (head + body + actions); the review state needs
+ * a much richer layout (textarea + 3 actions) and longer-lived focus.
+ * Splitting them keeps both readable and lets us polish the panel
  * separately.
  */
 

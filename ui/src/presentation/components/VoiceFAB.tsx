@@ -1,7 +1,7 @@
 import { type JSX } from 'solid-js';
 import { VoiceAIMiniFAB } from './VoiceAIMiniFAB';
 import { WhistleMiniFAB } from './WhistleMiniFAB';
-import { VoiceTranscriptOverlay } from './VoiceTranscriptOverlay';
+import { RecordingPanel } from './RecordingPanel';
 import { VoiceAITextReview } from './VoiceAITextReview';
 
 /**
@@ -24,11 +24,15 @@ import { VoiceAITextReview } from './VoiceAITextReview';
  *
  * Состояние записи транслируется через
  *   - data-state на самой кнопке (glow + pulse animation),
- *   - VoiceTranscriptOverlay (всплывает над кнопкой: 🎙️ + текст +
- *     кнопка «Открыть для проверки», если сессия активна),
+ *   - RecordingPanel (панель внизу: 🎙️ + transcript + заметки
+ *     + кнопки; единая для voice-AI и whistle — раньше для whistle
+ *     панели не было вовсе),
  *   - VoiceAITextReview (модал-проверка текста перед отправкой в ИИ;
  *     появляется только когда FSM в `review`),
  *   - inline-hint «слушаю…» / расшифровка прямо в кнопке.
+ *
+ * VoiceTranscriptOverlay (старый чип-оверлей) удалён — RecordingPanel
+ * его заменяет для voice-AI и расширяет функциональность для whistle.
  */
 export function VoiceFAB(): JSX.Element {
   return (
@@ -39,7 +43,7 @@ export function VoiceFAB(): JSX.Element {
           <WhistleMiniFAB />
         </div>
       </div>
-      <VoiceTranscriptOverlay />
+      <RecordingPanel />
       <VoiceAITextReview />
     </>
   );

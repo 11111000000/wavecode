@@ -310,3 +310,51 @@ describe('micStore — startMic / stopMic lifecycle (no mode selector)', () => {
     expect(w.micPrunedCount()).toBe(0);
   });
 });
+
+describe('micStore — subscribeMicFrame hook', () => {
+  it('forwards every detected frame to subscribers', async () => {
+    // Mocked MicCapture exposes a detector whose `getState` returns
+    // 'streaming', but it does NOT call our onFrame. We exercise the
+    // subscription path by driving the live pipeline manually through
+    // `startMic` and a synthetic frame. Since the MicCapture mock
+    // doesn't actually deliver frames, we use the exported
+    // `feedMicFrame` shim to drive `onMicFrame` directly.
+    const w = await importStore();
+    const frames: number[] = [];
+    const unsub = w.subscribeMicFrame((f) => {
+      frames.push(f.hz ?? -1);
+    });
+    w.feedMicFrame({ hz: 261.6, clarity: 0.95, rms: 0.5, timestampMs: 100 });
+    w.feedMicFrame({ hz: 349.2, clarity: 0.95, rms: 0.5, timestampMs: 200 });
+    expect(frames).toEqual([261.6, 349.2]);
+    unsub();
+    w.feedMicFrame({ hz: 440, clarity: 0.95, rms: 0.5, timestampMs: 300 });
+    expect(frames).toEqual([261.6, 349.2]);
+  });
+
+  it('multiple subscribers each receive every frame', async () => {
+    const w = await importStore();
+    const a: number[] = [];
+    const b: number[] = [];
+    w.subscribeMicFrame((f) => { a.push(f.timestampMs); });
+    w.subscribeMicFrame((f) => { b.push(f.timestampMs); });
+    w.feedMicFrame({ hz: 440, clarity: 0.9, rms: 0.4, timestampMs: 42 });
+    expect(a).toEqual([42]);
+    expect(b).toEqual([42]);
+  });
+
+  it('subscribeMicFrame returns an unsubscribe that detaches only that listener', async () => {
+    const w = await importStore();
+    const a: number[] = [];
+    const b: number[] = [];
+    const unsubA = w.subscribeMicFrame((f) => { a.push(f.timestampMs); });
+    w.subscribeMicFrame((f) => { b.push(f.timestampMs); });
+    w.feedMicFrame({ hz: 440, clarity: 0.9, rms: 0.4, timestampMs: 1 });
+    expect(a).toEqual([1]);
+    expect(b).toEqual([1]);
+    unsubA();
+    w.feedMicFrame({ hz: 440, clarity: 0.9, rms: 0.4, timestampMs: 2 });
+    expect(a).toEqual([1]);
+    expect(b).toEqual([1, 2]);
+  });
+});

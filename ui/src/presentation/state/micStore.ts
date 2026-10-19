@@ -125,6 +125,31 @@ export const [micPrunedCount, setMicPrunedCount] = createSignal<number>(0);
 let segState: MicState = initialMicState();
 let detector: MicCaptureHandle | null = null;
 
+/**
+ * Per-frame subscriber list. Lets external orchestrators (notably the
+ * whistle session's `MicCaptureLike.feed` adapter) observe every
+ * detected frame without re-routing the MicCapture pipeline or
+ * duplicating the worker / AnalyserNode. Subscribers are called in
+ * registration order, after the live `segState` is updated and the
+ * `micPreviewNotes` signal is published — so a subscriber can read
+ * `micPreviewNotes()` synchronously and see the latest state.
+ *
+ * Returning the unsubscribe from `subscribeMicFrame` makes the
+ * lifecycle explicit at the call site; if a subscriber forgets to
+ * unsubscribe, the listener leaks (no semantic damage — just memory),
+ * but the module-level `frameListeners` set is intentionally
+ * short-lived (cleared on module teardown via `onCleanup`).
+ */
+type MicFrameListener = (frame: PitchFrame) => void;
+const frameListeners = new Set<MicFrameListener>();
+
+export const subscribeMicFrame = (cb: MicFrameListener): (() => void) => {
+  frameListeners.add(cb);
+  return () => {
+    frameListeners.delete(cb);
+  };
+};
+
 export const micSlotLabel = (slot: MicSlot): string => {
   switch (slot) {
     case 'append-stack': return 'конец стека';
@@ -179,6 +204,28 @@ const recordNotePeak = (timestampMs: number): void => {
   prunePeakTimes(timestampMs);
 };
 
+/**
+ * Public feed hook for callers outside the MicCapture pipeline (e.g.
+ * the whistle orchestrator's `MicCaptureLike.feed` adapter) that
+ * still want to drive the live `segState` / `micPreviewNotes` buffer.
+ * Mirrors `onMicFrame` byte-for-byte so callers see identical state
+ * transitions; the only difference is that this version is exposed on
+ * the module surface (no getUserMedia / RAF / Worker required).
+ *
+ * Why this exists: `whistleStore.ts` previously had
+ * `feed: () => Effect.void` in its `MicCaptureLike` adapter, which
+ * meant the whistle orchestrator's FSM never received any frames and
+ * `commit()` always bailed out of the `if (s.tag !== 'segmenting')
+ * return;` guard. By re-routing the live MicCapture's `onFrame`
+ * callback through the orchestrator's `handle.feed(frame)` (which in
+ * turn calls this function via the adapter), both the live preview
+ * pill AND the orchestrator's commit path see the same accumulated
+ * notes.
+ */
+export const feedMicFrame = (frame: PitchFrame): void => {
+  onMicFrame(frame);
+};
+
 const onMicFrame = (frame: PitchFrame): void => {
   setMicCurrentHz(frame.hz);
   setMicCurrentRms(frame.rms);
@@ -194,6 +241,12 @@ const onMicFrame = (frame: PitchFrame): void => {
   // live meter overlay so the user sees their sung notes land.
   if (segState.notes.length > beforeNotes) {
     recordNotePeak(frame.timestampMs);
+  }
+  // Fan out to per-frame subscribers (whistle orchestrator etc.).
+  // Iterating over a copy so a listener that unsubscribes itself
+  // mid-fan-out doesn't shift the iterator.
+  for (const listener of [...frameListeners]) {
+    listener(frame);
   }
 };
 
