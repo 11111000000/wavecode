@@ -17,7 +17,7 @@ import {
   createVoiceAISession,
   type VoiceSessionDeps,
 } from './VoiceAISession';
-import type { STTEngine, SttStartOptions } from './STTEngine';
+import type { STTEngine, SttStartOptions, SttUnsupportedError } from './STTEngine';
 import {
   LLMClient,
   AudioEngine,
@@ -264,5 +264,93 @@ describe('createVoiceAISession — barge-in', () => {
     await new Promise<void>((resolve) => setTimeout(resolve, 10));
     const final = await Effect.runPromise(Ref.get(handle.stateRef));
     expect(final.tag).toBe('idle');
+  });
+});
+
+describe('createVoiceAISession — review-and-edit', () => {
+  /**
+   * `enterReview` is the opt-in branch: it does NOT kill the auto-commit
+   * for STT streams that haven't yielded a final chunk yet (chunks keep
+   * coming in `listening`). For these tests we pass a stream that holds
+   * open indefinitely so we can prove the reviewer owns the FSM.
+   */
+  const holdingStt = (): ContextNs.Tag.Service<typeof STTEngine> => ({
+    isSupported: () => Effect.succeed(true),
+    start: (_opts: SttStartOptions) =>
+      Effect.succeed(
+        Stream.fromEffect(Effect.never) as unknown as Stream.Stream<TranscriptChunk, SttUnsupportedError>,
+      ),
+    stop: () => Effect.void,
+  });
+
+  it('enterReview from listening transitions to review (and stops STT)', async () => {
+    const { layer } = buildServices('unused');
+    const stt = holdingStt();
+    const { deps } = await buildDeps(stt, layer);
+    const handle = await Effect.runPromise(createVoiceAISession(deps));
+
+    await Effect.runPromise(
+      handle.start({ mode: 'continuous', lang: 'ru-RU', bargeInMode: 'replace' }),
+    );
+    await waitForState(handle, (s) => s.tag === 'listening');
+    await Effect.runPromise(handle.enterReview());
+    const after = await waitForState(handle, (s) => s.tag === 'review');
+    if (after.tag !== 'review') throw new Error('unreachable');
+    expect(after.transcript.lang).toBe('ru-RU');
+    expect(after.editedText).toBe('');
+  });
+
+  it('sendReview routes the edited text through the LLM+audio path', async () => {
+    const response = 's("hh*4")';
+    const { layer, rec } = buildServices(response);
+    const stt = holdingStt();
+    const { deps } = await buildDeps(stt, layer);
+    const handle = await Effect.runPromise(createVoiceAISession(deps));
+
+    await Effect.runPromise(
+      handle.start({ mode: 'continuous', lang: 'ru-RU', bargeInMode: 'replace' }),
+    );
+    await waitForState(handle, (s) => s.tag === 'listening');
+    await Effect.runPromise(handle.enterReview());
+    await waitForState(handle, (s) => s.tag === 'review');
+
+    await Effect.runPromise(handle.sendReview('сделай хай-хэт побыстрее'));
+    const final = await waitForState(handle, (s) => s.tag === 'idle');
+    expect(final.tag).toBe('idle');
+    expect(rec.llmCalls).toBe(1);
+    expect(rec.evalInputs[0]).toBe(response);
+  });
+
+  it('cancelReview returns to idle without invoking the LLM', async () => {
+    const { layer, rec } = buildServices('s("bd")');
+    const stt = holdingStt();
+    const { deps } = await buildDeps(stt, layer);
+    const handle = await Effect.runPromise(createVoiceAISession(deps));
+
+    await Effect.runPromise(
+      handle.start({ mode: 'continuous', lang: 'ru-RU', bargeInMode: 'replace' }),
+    );
+    await waitForState(handle, (s) => s.tag === 'listening');
+    await Effect.runPromise(handle.enterReview());
+    await waitForState(handle, (s) => s.tag === 'review');
+
+    await Effect.runPromise(handle.cancelReview());
+    await new Promise<void>((resolve) => setTimeout(resolve, 20));
+    const after = await Effect.runPromise(Ref.get(handle.stateRef));
+    expect(after.tag).toBe('idle');
+    expect(rec.llmCalls).toBe(0);
+  });
+
+  it('sendReview from non-review state is a no-op (no LLM call)', async () => {
+    const { layer, rec } = buildServices('s("bd")');
+    const stt = holdingStt();
+    const { deps } = await buildDeps(stt, layer);
+    const handle = await Effect.runPromise(createVoiceAISession(deps));
+    // Never started: still idle.
+    await Effect.runPromise(handle.sendReview('whatever'));
+    await new Promise<void>((resolve) => setTimeout(resolve, 10));
+    const after = await Effect.runPromise(Ref.get(handle.stateRef));
+    expect(after.tag).toBe('idle');
+    expect(rec.llmCalls).toBe(0);
   });
 });

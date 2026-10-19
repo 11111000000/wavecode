@@ -4944,6 +4944,57 @@ textarea.ai-textarea:focus-visible {
   font-size: var(--fs-3xs);
 }
 
+/* Permission-denied banner — full-row alert above the controls.
+ * Bigger than the inline mic-error-pill so the user can't miss it,
+ * with a clearly labeled "how to fix" path (browser-specific link
+ * via `micPermissionUrl`). Shows ONLY when `isMicPermissionError()`
+ * is true (i.e., the deny/timeout came from the getUserMedia path,
+ * not from AudioContext or some downstream pipeline failure). */
+.mic-permission-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-sm);
+  padding: var(--space-sm) var(--space-md);
+  margin-bottom: var(--space-sm);
+  border: 1px solid var(--err);
+  border-left-width: 4px;
+  border-radius: var(--radius-md);
+  background: color-mix(in oklab, var(--err) 8%, var(--surface-1));
+  color: var(--fg);
+  font-family: var(--font-sans);
+}
+.mic-permission-banner__icon {
+  font-size: 22px;
+  line-height: 1;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+.mic-permission-banner__body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+  min-width: 0;
+}
+.mic-permission-banner__title {
+  margin: 0;
+  font-weight: var(--fw-semibold);
+  font-size: var(--fs-sm);
+  color: var(--err);
+}
+.mic-permission-banner__msg {
+  margin: 0;
+  font-size: var(--fs-xs);
+  color: var(--fg-muted);
+  line-height: var(--lh-base);
+}
+.mic-permission-banner__hint {
+  margin: 0;
+  font-size: var(--fs-xs);
+  color: var(--fg-dim);
+  line-height: var(--lh-base);
+}
+
 /* =========================================================================
  *  MIC UX REDESIGN (feat/ux-ui)
  *  New 4-row mobile-first layout for the Mic feature.
@@ -6146,6 +6197,36 @@ textarea.ai-textarea:focus-visible {
   background: var(--err-soft);
 }
 
+/* Inline permission-blocked badge — a small "!" pill that surfaces
+ * on the VoiceAIMiniFAB when STT / mic access is denied by the
+ * browser. Pinpoints the cluster as the broken element (vs.
+ * silently deading buttons) without forcing another toast. */
+.voice-mini-fab__badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  width: 18px;
+  height: 18px;
+  border-radius: var(--radius-full);
+  background: var(--err);
+  color: var(--fg-inverse);
+  font-size: var(--fs-3xs);
+  font-weight: var(--fw-bold);
+  line-height: 18px;
+  text-align: center;
+  pointer-events: none;
+  animation: voice-mini-fab-badge-pulse 1.6s ease-in-out infinite;
+}
+@keyframes voice-mini-fab-badge-pulse {
+  0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 var(--err-soft); }
+  50%      { transform: scale(1.06); box-shadow: 0 0 0 4px transparent; }
+}
+.voice-mini-fab--ai[data-permission-blocked='true'] {
+  border-color: var(--err);
+  color: var(--err);
+  background: color-mix(in oklab, var(--err) 8%, var(--surface-2));
+}
+
 @keyframes voice-mini-fab-pulse {
   0%, 100% { box-shadow: var(--shadow-fab), var(--shadow-glow-primary), 0 0 20px var(--primary-glow); }
   50%      { box-shadow: var(--shadow-fab), var(--shadow-glow-primary), 0 0 32px var(--primary-glow); }
@@ -6228,9 +6309,189 @@ textarea.ai-textarea:focus-visible {
 }
 .voice-transcript-overlay__error { font-weight: var(--fw-medium); }
 
+/* Inline review-action button — appears next to the transcript
+ * text while voice-AI is actively listening/applying. Tapping it
+ * dispatches `enter-review` on the orchestrator (see
+ * VoiceTranscriptOverlay.tsx) which freezes STT and opens the
+ * review-and-edit modal. Visual: ghost-button with right-arrow so
+ * it reads as "next step →" rather than a destructive action. */
+.voice-transcript-overlay__btn {
+  margin-left: var(--space-xs);
+  padding: 2px var(--space-xs);
+  background: transparent;
+  border: 1px solid var(--border-strong);
+  color: var(--primary);
+  border-radius: var(--radius-md);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-medium);
+  font-family: var(--font-sans);
+  cursor: pointer;
+  transition:
+    background var(--dur-2xs) var(--ease),
+    border-color var(--dur-2xs) var(--ease),
+    color var(--dur-2xs) var(--ease);
+}
+.voice-transcript-overlay__btn:hover {
+  background: var(--primary-soft);
+  border-color: var(--primary);
+}
+.voice-transcript-overlay[data-state='errored'] .voice-transcript-overlay__btn {
+  display: none;
+}
+
 @keyframes voice-transcript-overlay-in {
   from { opacity: 0; transform: translate(-50%, 8px); }
   to   { opacity: 1; transform: translate(-50%, 0); }
+}
+
+/* =========================================================================
+ *  VOICE REVIEW PANEL — modal-like prompt shown when the user pauses the
+ *  voice-AI session to edit the dictated text before sending it to the LLM.
+ *
+ *  Renders ONLY when FSM is in `review`; parents (`VoiceFAB`) toggle it
+ *  via Solid's `<Show>`. Position: bottom-center, just above the voice
+ *  FAB cluster so it never overlaps the editor or the TabBar.
+ * ========================================================================= */
+.voice-review-panel {
+  position: fixed;
+  left: 50%;
+  bottom: calc(var(--tabbar-h) + 200px + var(--safe-bottom));
+  transform: translateX(-50%);
+  width: min(540px, calc(100vw - 32px));
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  padding: var(--space-md);
+  background: var(--surface-2);
+  border: 1px solid var(--primary);
+  border-radius: var(--radius-lg);
+  color: var(--fg);
+  font-family: var(--font-sans);
+  box-shadow: var(--shadow-pop), var(--shadow-glow-primary);
+  z-index: calc(var(--z-sheet) + 6);
+  animation: voice-review-panel-in var(--dur-xs) var(--ease-spring);
+}
+@keyframes voice-review-panel-in {
+  from { opacity: 0; transform: translate(-50%, 12px); }
+  to   { opacity: 1; transform: translate(-50%, 0); }
+}
+.voice-review-panel__head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+.voice-review-panel__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: var(--radius-full);
+  background: var(--primary-soft);
+  color: var(--primary);
+}
+.voice-review-panel__title {
+  flex: 1;
+  margin: 0;
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+  color: var(--fg);
+}
+.voice-review-panel__close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  background: transparent;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  color: var(--fg-muted);
+  cursor: pointer;
+  transition:
+    background var(--dur-2xs) var(--ease),
+    color var(--dur-2xs) var(--ease);
+}
+.voice-review-panel__close:hover {
+  background: var(--surface-3);
+  color: var(--fg);
+}
+.voice-review-panel__textarea {
+  width: 100%;
+  min-height: 96px;
+  max-height: 240px;
+  resize: vertical;
+  padding: var(--space-sm);
+  background: var(--surface-1);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  color: var(--fg);
+  font-family: var(--font-sans);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-base);
+}
+.voice-review-panel__textarea:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px var(--primary-soft);
+}
+.voice-review-panel__interim {
+  margin: 0;
+  font-size: var(--fs-xs);
+  color: var(--fg-muted);
+  font-style: italic;
+}
+.voice-review-panel__actions {
+  display: flex;
+  align-items: stretch;
+  gap: var(--space-xs);
+  justify-content: flex-end;
+}
+.voice-review-panel__btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px var(--space-sm);
+  background: var(--surface-3);
+  color: var(--fg);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  font-family: var(--font-sans);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-medium);
+  cursor: pointer;
+  transition:
+    background var(--dur-2xs) var(--ease),
+    border-color var(--dur-2xs) var(--ease),
+    color var(--dur-2xs) var(--ease);
+}
+.voice-review-panel__btn:hover:not(:disabled) {
+  background: var(--surface-1);
+}
+.voice-review-panel__btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.voice-review-panel__btn--ghost {
+  background: transparent;
+  color: var(--fg-muted);
+}
+.voice-review-panel__btn--ghost:hover:not(:disabled) {
+  color: var(--err);
+  border-color: var(--err);
+}
+.voice-review-panel__btn--secondary {
+  color: var(--fg);
+}
+.voice-review-panel__btn--primary {
+  background: var(--primary);
+  color: var(--fg-inverse);
+  border-color: var(--primary);
+}
+.voice-review-panel__btn--primary:hover:not(:disabled) {
+  background: var(--primary);
+  filter: brightness(1.08);
+  border-color: var(--primary);
 }
 
 @media (prefers-reduced-motion: reduce) {

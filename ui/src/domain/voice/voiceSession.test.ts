@@ -317,3 +317,115 @@ describe('voiceSessionReducer — full press-and-talk flow', () => {
     expect(final).toEqual({ tag: 'idle' });
   });
 });
+
+describe('voiceSessionReducer — review-and-edit flow', () => {
+  const seedTranscript = {
+    chunks: [finalChunk('сделай побыстрее', 500)],
+    interim: '',
+    final: 'сделай побыстрее',
+    startedAtMs: 100,
+    stoppedAtMs: null,
+    lang: 'ru-RU',
+  } as const;
+
+  it('listening + enter-review → review with editedText=transcript.final', () => {
+    const start: VoiceSessionState = {
+      tag: 'listening',
+      transcript: seedTranscript,
+      continuous: true,
+    };
+    const next = voiceSessionReducer(start, { type: 'enter-review' });
+    expect(next.tag).toBe('review');
+    if (next.tag !== 'review') throw new Error('unreachable');
+    expect(next.editedText).toBe('сделай побыстрее');
+    expect(next.transcript).toBe(seedTranscript);
+  });
+
+  it('transcribing + enter-review → review (same transcript, same edited seed)', () => {
+    const start: VoiceSessionState = { tag: 'transcribing', transcript: seedTranscript };
+    const next = voiceSessionReducer(start, { type: 'enter-review' });
+    expect(next.tag).toBe('review');
+    if (next.tag !== 'review') throw new Error('unreachable');
+    expect(next.transcript).toBe(seedTranscript);
+    expect(next.editedText).toBe('сделай побыстрее');
+  });
+
+  it('paused + enter-review → review', () => {
+    const start: VoiceSessionState = { tag: 'paused', transcript: seedTranscript };
+    const next = voiceSessionReducer(start, { type: 'enter-review' });
+    expect(next.tag).toBe('review');
+  });
+
+  it('review + edit-review(text) → review with editedText=text', () => {
+    const start: VoiceSessionState = {
+      tag: 'review',
+      transcript: seedTranscript,
+      editedText: 'сделай побыстрее',
+    };
+    const next = voiceSessionReducer(start, {
+      type: 'edit-review',
+      text: 'сделай побыстрее и добавь свинг',
+    });
+    expect(next.tag).toBe('review');
+    if (next.tag !== 'review') throw new Error('unreachable');
+    expect(next.editedText).toBe('сделай побыстрее и добавь свинг');
+  });
+
+  it('review + edit-review(same) → unchanged reference (cheap eq)', () => {
+    const start: VoiceSessionState = {
+      tag: 'review',
+      transcript: seedTranscript,
+      editedText: 'foo',
+    };
+    const next = voiceSessionReducer(start, { type: 'edit-review', text: 'foo' });
+    expect(next).toBe(start);
+  });
+
+  it('review + send-review(text) → requesting with transcript.final=text', () => {
+    const start: VoiceSessionState = {
+      tag: 'review',
+      transcript: seedTranscript,
+      editedText: 'побыстрее и со свингом',
+    };
+    const next = voiceSessionReducer(start, {
+      type: 'send-review',
+      text: 'побыстрее и со свингом',
+    });
+    expect(next.tag).toBe('requesting');
+    if (next.tag !== 'requesting') throw new Error('unreachable');
+    expect(next.transcript.final).toBe('побыстрее и со свингом');
+    expect(next.continuous).toBe(false);
+  });
+
+  it('review + cancel-review → idle', () => {
+    const start: VoiceSessionState = {
+      tag: 'review',
+      transcript: seedTranscript,
+      editedText: 'anything',
+    };
+    const next = voiceSessionReducer(start, { type: 'cancel-review' });
+    expect(next).toEqual({ tag: 'idle' });
+  });
+
+  it('review + arm → listening (resume dictation from where we left off)', () => {
+    const start: VoiceSessionState = {
+      tag: 'review',
+      transcript: seedTranscript,
+      editedText: 'edited',
+    };
+    const next = voiceSessionReducer(start, { type: 'arm' });
+    expect(next.tag).toBe('listening');
+    if (next.tag !== 'listening') throw new Error('unreachable');
+    expect(next.continuous).toBe(true);
+    expect(next.transcript).toBe(seedTranscript);
+  });
+
+  it('review + barge-in → idle', () => {
+    const start: VoiceSessionState = {
+      tag: 'review',
+      transcript: seedTranscript,
+      editedText: 'foo',
+    };
+    expect(voiceSessionReducer(start, { type: 'barge-in' })).toEqual({ tag: 'idle' });
+  });
+});

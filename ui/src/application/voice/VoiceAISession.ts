@@ -83,6 +83,18 @@ export type VoiceSessionHandle = {
   readonly stream: Stream.Stream<VoiceSessionState, never, never>;
   /** Barge-in: cancel any in-flight route and reset the FSM to `idle`. */
   readonly cancelInFlight: () => Effect.Effect<void, never, never>;
+  /** Pause STT and freeze the transcript for the user to edit before
+   *  sending. Safe to call from listening / transcribing / paused —
+   *  from any other state it's a no-op (we keep the FSM total). */
+  readonly enterReview: () => Effect.Effect<void, never, never>;
+  /** Send the (possibly edited) text to the LLM as if it were a
+   *  finalised transcript. Skips the rule-based classifier — the
+   *  user has already shaped the instruction, so we route the text
+   *  verbatim via `routeIntent`. Must be called from the `review`
+   *  state; calling it elsewhere is a no-op. */
+  readonly sendReview: (text: string) => Effect.Effect<void, never, never>;
+  /** Drop the review buffer and return to idle. */
+  readonly cancelReview: () => Effect.Effect<void, never, never>;
 };
 
 /**
@@ -155,6 +167,30 @@ export const createVoiceAISession = (
         // through `transcribing → commit` as `continuous: false` per
         // the reducer design — the orchestrator does not re-arm here.
       });
+
+    /**
+     * Run the route from the `review` sink with a user-edited text.
+     * Branched off `runRoute` so the auto-commit path stays free of
+     * review-specific bookkeeping — the FSM does the bookkeeping
+     * (review → requesting via `send-review`), and this just makes
+     * sure the audio eval / LLM call is identical to the auto path.
+     *
+     * The orchestrator's `sendReview` dispatches `send-review(text)`
+     * first; if we're not in `review`, the reducer's no-op branch
+     * applies and we drop the request before it ever starts an LLM
+     * call (preventing accidental work after a stale render).
+     */
+    const runRouteFromReview = (
+      text: string,
+    ): Effect.Effect<void, never, never> => {
+      const t = Date.now();
+      return Effect.gen(function* () {
+        const prev = yield* Ref.get(stateRef);
+        if (prev.tag !== 'review') return;
+        yield* dispatch({ type: 'send-review', text });
+        yield* runRoute(text, t);
+      });
+    };
 
     // Subscribe to the STT chunk stream. For each chunk: dispatch a
     // `chunk` event; if the chunk is final and the FSM is in
@@ -245,6 +281,30 @@ export const createVoiceAISession = (
           const cleared = yield* Ref.modify(inFlightRef, (curr) => [curr, null] as const);
           if (cleared !== null) yield* Fiber.interrupt(cleared);
           yield* dispatch({ type: 'barge-in' });
+        }),
+      enterReview: () =>
+        Effect.gen(function* () {
+          // Stop the STT stream + subscriber so the FSM doesn't
+          // accumulate more chunks during review. The reducer
+          // decides which states can enter review (any except
+          // armed-flow + errored); for the rest it's a no-op.
+          const cleared = yield* Ref.modify(subscriberRef, (curr) => [curr, null] as const);
+          if (cleared !== null) {
+            yield* Fiber.interrupt(cleared);
+          }
+          yield* deps.stt.stop();
+          yield* dispatch({ type: 'enter-review' });
+        }),
+      sendReview: (text: string) =>
+        Effect.gen(function* () {
+          // `runRouteFromReview` checks the state under a `Ref.get`
+          // first so a stale `review → requesting` triggered after
+          // the user has already cancelled cannot spawn a route.
+          yield* runRouteFromReview(text);
+        }),
+      cancelReview: () =>
+        Effect.gen(function* () {
+          yield* dispatch({ type: 'cancel-review' });
         }),
     };
 

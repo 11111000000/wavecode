@@ -3,9 +3,10 @@
  *
  * Models the lifecycle of a single voice-AI session, from `idle`
  * through `arming` → `listening` → `transcribing` → `requesting` →
- * `applying`, with `paused` and `errored` escape hatches. The
- * reducer takes the current state plus an event and returns the
- * next state; it performs no IO and uses no wall-clock time.
+ * `applying`, with `paused`, `errored`, and `review` escape
+ * hatches. The reducer takes the current state plus an event and
+ * returns the next state; it performs no IO and uses no wall-clock
+ * time.
  *
  * Why a separate reducer (not Effect.gen orchestration in the
  * application layer)
@@ -39,6 +40,8 @@
  *   - `applying`      = LLM returned, AudioEngine.eval in progress
  *   - `paused`        = user explicitly paused (resumable)
  *   - `errored`       = unrecoverable failure (stt-init / llm / eval)
+ *   - `review`        = STT stopped, transcript frozen for user
+ *                       review-and-edit before send-to-AI
  */
 
 import {
@@ -56,6 +59,7 @@ export type VoiceSessionState =
   | { readonly tag: 'requesting'; readonly transcript: TranscriptState; readonly continuous: boolean }
   | { readonly tag: 'applying'; readonly transcript: TranscriptState; readonly score: string; readonly continuous: boolean }
   | { readonly tag: 'paused'; readonly transcript: TranscriptState }
+  | { readonly tag: 'review'; readonly transcript: TranscriptState; readonly editedText: string }
   | { readonly tag: 'errored'; readonly error: string; readonly transcript: TranscriptState };
 
 export type VoiceSessionEvent =
@@ -69,7 +73,11 @@ export type VoiceSessionEvent =
   | { readonly type: 'pause' }
   | { readonly type: 'resume' }
   | { readonly type: 'error'; readonly message: string }
-  | { readonly type: 'dismiss' };
+  | { readonly type: 'dismiss' }
+  | { readonly type: 'enter-review' }
+  | { readonly type: 'edit-review'; readonly text: string }
+  | { readonly type: 'send-review'; readonly text: string }
+  | { readonly type: 'cancel-review' };
 
 /**
  * Fresh session. `transcript` is allocated lazily so the
@@ -113,6 +121,8 @@ export const voiceSessionReducer = (
       return fromApplying(state, event);
     case 'paused':
       return fromPaused(state, event);
+    case 'review':
+      return fromReview(state, event);
     case 'errored':
       return fromErrored(state, event);
   }
@@ -175,6 +185,9 @@ const fromListening = (
   if (event.type === 'barge-in') {
     return { tag: 'idle' };
   }
+  if (event.type === 'enter-review') {
+    return enterReviewFrom(state.transcript);
+  }
   return state;
 };
 
@@ -201,6 +214,9 @@ const fromTranscribing = (
       return { tag: 'transcribing', transcript: next };
     }
     return state;
+  }
+  if (event.type === 'enter-review') {
+    return enterReviewFrom(state.transcript);
   }
   return state;
 };
@@ -265,6 +281,64 @@ const fromPaused = (
     };
   }
   if (event.type === 'dismiss') return { tag: 'idle' };
+  if (event.type === 'enter-review') {
+    return enterReviewFrom(state.transcript);
+  }
+  return state;
+};
+
+/**
+ * Review is the "user-edit-then-send" sink — the STT stream is
+ * stopped (orchestrator's `enterReview` handler does that), and
+ * the editable buffer starts as the joined text of all final
+ * chunks. From here the user can:
+ *   - `edit-review(text)`     write into the buffer
+ *   - `send-review(text)`     go to requesting with the edited text
+ *                             (orchestrator runs the route without
+ *                             re-classifying — user already shaped it)
+ *   - `cancel-review`         return to idle, drop the buffer
+ *   - `arm`                   resume STT (re-runs from the
+ *                             orchestrator's start path) and append
+ *                             more transcript to the existing buffer
+ */
+const fromReview = (
+  state: {
+    readonly tag: 'review';
+    readonly transcript: TranscriptState;
+    readonly editedText: string;
+  },
+  event: VoiceSessionEvent,
+): VoiceSessionState => {
+  if (event.type === 'edit-review') {
+    if (event.text === state.editedText) return state;
+    return {
+      tag: 'review',
+      transcript: state.transcript,
+      editedText: event.text,
+    };
+  }
+  if (event.type === 'send-review') {
+    return {
+      tag: 'requesting',
+      transcript: { ...state.transcript, final: event.text },
+      continuous: false,
+    };
+  }
+  if (event.type === 'cancel-review') {
+    return { tag: 'idle' };
+  }
+  if (event.type === 'arm') {
+    // Resume listening from where we left off. The orchestrator
+    // re-runs the STT pipeline (we stop the previous one in
+    // `enterReview`); the transcript is preserved so final chunks
+    // append on top.
+    return {
+      tag: 'listening',
+      transcript: state.transcript,
+      continuous: true,
+    };
+  }
+  if (event.type === 'barge-in') return { tag: 'idle' };
   return state;
 };
 
@@ -289,6 +363,8 @@ const pauseFrom = (state: VoiceSessionState): VoiceSessionState => {
       return { tag: 'paused', transcript: state.transcript };
     case 'paused':
       return state;
+    case 'review':
+      return state;
     case 'errored':
       return state;
     case 'arming':
@@ -298,10 +374,7 @@ const pauseFrom = (state: VoiceSessionState): VoiceSessionState => {
   }
 };
 
-const errorFrom = (
-  state: VoiceSessionState,
-  message: string,
-): VoiceSessionState => {
+const errorFrom = (state: VoiceSessionState, message: string): VoiceSessionState => {
   if (state.tag === 'errored') {
     if (message === state.error) return state;
     return { tag: 'errored', error: message, transcript: state.transcript };
@@ -315,6 +388,20 @@ const errorFrom = (
     case 'requesting':
     case 'applying':
     case 'paused':
+    case 'review':
       return { tag: 'errored', error: message, transcript: state.transcript };
   }
 };
+
+/**
+ * Shared helper for the listen-ing / transcribing / paused arms
+ * of `enter-review`: snapshot the current transcript and seed the
+ * editable buffer with the joined final chunks (finals already
+ * contain the polished STT output — the user can then trim /
+ * rephrase before sending).
+ */
+const enterReviewFrom = (transcript: TranscriptState): VoiceSessionState => ({
+  tag: 'review',
+  transcript,
+  editedText: transcript.final.trim(),
+});

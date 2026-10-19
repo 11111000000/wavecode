@@ -169,6 +169,17 @@ export const CloseIcon = (p: Props): JSX.Element => (
   </svg>
 );
 
+/** "Send" arrow glyph used by the voice-review panel's primary
+ *  action: an upward-tilted paper plane that reads "submit" at
+ *  glance distance. 14×14 viewBox so it pairs cleanly with the
+ *  CloseIcon size class. */
+export const SendIcon = (p: Props): JSX.Element => (
+  <svg {...base(p.size ?? 14)} class={`wc-icon ${p.class ?? ''}`}>
+    <path d="M1.5 7 L12.5 1.5 L9 12.5 L7.4 8.4 Z" />
+    <line x1="7.4" y1="8.4" x2="12.5" y2="1.5" />
+  </svg>
+);
+
 /** Expand chevron (sheet collapsed → tap to expand). Points up = развернуть. */
 export const ExpandIcon = (p: Props): JSX.Element => (
   <svg {...base(p.size ?? 16)} class={`wc-icon ${p.class ?? ''}`}>

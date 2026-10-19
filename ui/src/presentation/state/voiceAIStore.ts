@@ -195,6 +195,7 @@ export const initVoiceAI = (deps: {
               || s.tag === 'requesting'
               || s.tag === 'applying'
               || s.tag === 'paused'
+              || s.tag === 'review'
               || s.tag === 'errored') {
             setVoiceAITranscript(s.transcript);
           }
@@ -307,6 +308,55 @@ export const cancelVoiceAIInFlight = (): Effect.Effect<void, never, never> => {
   });
 };
 
+/**
+ * Pause the live STT stream and freeze the transcript so the user
+ * can edit it before sending to the LLM. Mic channel is NOT
+ * released — we keep `speech-api-internal` reserved so a "Record
+ * more" button can re-arm without contention. The user-facing
+ * VoiceAITextReview component drives `sendReview` / `cancelReview`
+ * once the buffer is shaped.
+ */
+export const enterVoiceAIReview = (): Effect.Effect<void, never, never> => {
+  if (handle === null) {
+    return Effect.void;
+  }
+  return Effect.gen(function* () {
+    yield* handle!.enterReview();
+  });
+};
+
+/** Send the (user-edited) text to the LLM. Must be called from the
+ *  `review` state — orchestrator's `sendReview` no-ops if not. */
+export const sendVoiceAIReview = (text: string): Effect.Effect<void, never, never> => {
+  if (handle === null) {
+    return Effect.void;
+  }
+  return Effect.gen(function* () {
+    yield* handle!.sendReview(text);
+  });
+};
+
+/** Drop the review buffer and return to idle. Mic channel is
+ *  released because the user explicitly aborts. */
+export const cancelVoiceAIReview = (): Effect.Effect<void, never, never> => {
+  if (handle === null) {
+    return Effect.void;
+  }
+  return Effect.gen(function* () {
+    yield* handle!.cancelReview();
+    const sid = activeSessionId;
+    if (sid !== null) {
+      releaseMic(sid);
+      activeSessionId = null;
+    }
+    return;
+  });
+};
+
+/** Read-only accessor for `voiceAIState.tag === 'review'` (used by
+ *  VoiceAITextReview to render conditionally). */
+export const isVoiceAIInReview = (): boolean => voiceAIState().tag === 'review';
+
 /* ── internal ────────────────────────────────────────────────────── */
 
 const cryptoRandomId = (): string => {
@@ -335,15 +385,28 @@ export const __dispatchVoiceAIForTests = (event: VoiceSessionEvent): void => {
         : initial;
       case 'stt-ready': return initial.tag === 'arming'
         ? {
-            tag: 'listening' as const,
-            transcript: initialTranscriptState('ru-RU'),
-            continuous: false,
-          }
+          tag: 'listening' as const,
+          transcript: initialTranscriptState('ru-RU'),
+          continuous: false,
+        }
         : initial;
       case 'chunk':
-        return initial.tag === 'listening'
-          ? { ...initial, transcript: initial.transcript }
-          : initial;
+        // Mirrors the real reducer: listening + final chunk →
+        // `transcribing` with `transcript.final` updated from the
+        // chunk text; otherwise listening stays listening.
+        if (initial.tag === 'listening') {
+          if (event.chunk.kind === 'final') {
+            const nextFinal = initial.transcript.final
+              ? `${initial.transcript.final} ${event.chunk.text}`.trim()
+              : event.chunk.text;
+            return {
+              tag: 'transcribing' as const,
+              transcript: { ...initial.transcript, final: nextFinal, interim: '' },
+            };
+          }
+          return { ...initial, transcript: initial.transcript };
+        }
+        return initial;
       case 'commit':
         return initial.tag === 'listening' || initial.tag === 'transcribing'
           ? { tag: 'requesting' as const, transcript: initial.transcript, continuous: false }
@@ -370,6 +433,37 @@ export const __dispatchVoiceAIForTests = (event: VoiceSessionEvent): void => {
         };
       case 'dismiss':
         return { tag: 'idle' as const };
+      case 'enter-review':
+        if (initial.tag === 'listening' || initial.tag === 'transcribing' || initial.tag === 'paused') {
+          return {
+            tag: 'review' as const,
+            transcript: initial.transcript,
+            editedText: initial.transcript.final.trim(),
+          };
+        }
+        return initial;
+      case 'edit-review':
+        if (initial.tag === 'review' && initial.editedText !== event.text) {
+          return {
+            tag: 'review' as const,
+            transcript: initial.transcript,
+            editedText: event.text,
+          };
+        }
+        return initial;
+      case 'send-review':
+        if (initial.tag === 'review') {
+          return {
+            tag: 'requesting' as const,
+            transcript: { ...initial.transcript, final: event.text },
+            continuous: false,
+          };
+        }
+        return initial;
+      case 'cancel-review':
+        return initial.tag === 'review'
+          ? { tag: 'idle' as const }
+          : initial;
       default:
         return initial;
     }
