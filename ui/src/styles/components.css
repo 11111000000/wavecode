@@ -6505,3 +6505,226 @@ textarea.ai-textarea:focus-visible {
   }
 }
 
+/* =========================================================================
+ *  VOICE RECORDING PANEL — bottom-anchored status card visible while
+ *  voice-AI OR whistle is active. Replaces the previous voice-AI
+ *  transcript chip (now folded into the unified panel) and adds
+ *  whistle feedback that didn't exist before (no bottom panel for
+ *  whistle = unsafe).
+ *
+ *  Layout (mobile-first, bottom-center, just above the FAB group):
+ *    ┌───────────────────────────────────────────┐
+ *    │ [icon] Title                  [✕ stop]    │  ← head
+ *    │ ────────────────────────────────────────  │
+ *    │ live transcript / notes strip             │  ← body
+ *    │ ────────────────────────────────────────  │
+ *    │ [primary btn]  [rms]  [count]             │  ← actions
+ *    └───────────────────────────────────────────┘
+ *
+ *  Width is capped via `width: min(...)` so it never overflows the
+ *  viewport on phones. The panel is `position: fixed` so it floats
+ *  above the editor / TabBar / FAB cluster without affecting them.
+ * ========================================================================= */
+.voice-recording-panel {
+  position: fixed;
+  left: 50%;
+  bottom: calc(var(--tabbar-h) + 240px + var(--safe-bottom));
+  transform: translateX(-50%);
+  width: min(540px, calc(100vw - 32px));
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  padding: var(--space-md);
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  color: var(--fg);
+  font-family: var(--font-sans);
+  font-size: var(--fs-sm);
+  box-shadow: var(--shadow-pop);
+  z-index: calc(var(--z-sheet) + 4);
+  animation: voice-recording-panel-in var(--dur-xs) var(--ease-spring);
+}
+.voice-recording-panel[data-mode='voice-ai'] {
+  border-color: var(--primary);
+  box-shadow: var(--shadow-pop), var(--shadow-glow-primary);
+}
+.voice-recording-panel[data-mode='whistle'] {
+  border-color: var(--cyan);
+  box-shadow: var(--shadow-pop), var(--shadow-glow-cyan);
+}
+.voice-recording-panel[data-state='errored'] {
+  border-color: var(--err);
+  box-shadow: var(--shadow-pop), 0 0 16px var(--err-glow);
+}
+@keyframes voice-recording-panel-in {
+  from { opacity: 0; transform: translate(-50%, 12px); }
+  to   { opacity: 1; transform: translate(-50%, 0); }
+}
+
+.voice-recording-panel__head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+.voice-recording-panel__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-full);
+}
+.voice-recording-panel__icon--ai {
+  background: var(--primary-soft);
+  color: var(--primary);
+}
+.voice-recording-panel__icon--whistle {
+  background: var(--cyan-soft);
+  color: var(--cyan);
+}
+.voice-recording-panel__title {
+  flex: 1;
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+  color: var(--fg);
+}
+.voice-recording-panel__err-pill {
+  font-size: var(--fs-xs);
+  padding: 2px var(--space-xs);
+  background: var(--err-soft);
+  color: var(--err);
+  border: 1px solid var(--err);
+  border-radius: var(--radius-md);
+  font-weight: var(--fw-medium);
+}
+.voice-recording-panel__close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  background: transparent;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  color: var(--fg-muted);
+  cursor: pointer;
+  transition: background var(--dur-2xs) var(--ease), color var(--dur-2xs) var(--ease);
+}
+.voice-recording-panel__close:hover {
+  background: var(--surface-3);
+  color: var(--fg);
+}
+
+.voice-recording-panel__body {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-sm);
+  flex-wrap: wrap;
+}
+.voice-recording-panel__stage {
+  font-weight: var(--fw-medium);
+  color: var(--fg);
+}
+.voice-recording-panel__transcript {
+  font-family: var(--font-sans);
+  color: var(--fg);
+  word-break: break-word;
+  min-height: 1.4em;
+}
+.voice-recording-panel__error {
+  color: var(--err);
+  font-weight: var(--fw-medium);
+}
+.voice-recording-panel__hz {
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  color: var(--fg-muted);
+  background: var(--surface-3);
+  padding: 2px var(--space-xs);
+  border-radius: var(--radius-md);
+}
+
+.voice-recording-panel__strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2xs);
+  align-items: center;
+}
+.voice-recording-panel__note {
+  display: inline-block;
+  padding: 2px var(--space-xs);
+  background: var(--cyan-soft);
+  border: 1px solid var(--cyan);
+  border-radius: var(--radius-md);
+  color: var(--cyan);
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-medium);
+}
+
+.voice-recording-panel__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  flex-wrap: wrap;
+}
+.voice-recording-panel__btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2xs);
+  padding: var(--space-xs) var(--space-sm);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-strong);
+  background: transparent;
+  color: var(--fg);
+  font-family: var(--font-sans);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-medium);
+  cursor: pointer;
+  transition:
+    background var(--dur-2xs) var(--ease),
+    border-color var(--dur-2xs) var(--ease),
+    color var(--dur-2xs) var(--ease);
+}
+.voice-recording-panel__btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.voice-recording-panel__btn--primary {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+.voice-recording-panel__btn--primary:hover:not(:disabled) {
+  background: var(--primary-soft);
+}
+.voice-recording-panel__hint {
+  font-size: var(--fs-xs);
+  color: var(--fg-muted);
+}
+.voice-recording-panel__rms {
+  flex: 1;
+  min-width: 60px;
+  max-width: 160px;
+  height: 6px;
+  border-radius: var(--radius-full);
+  background: var(--surface-3);
+  overflow: hidden;
+}
+.voice-recording-panel__rms-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--cyan), var(--primary));
+  transition: width var(--dur-2xs) var(--ease);
+}
+.voice-recording-panel__count {
+  font-size: var(--fs-xs);
+  color: var(--fg-muted);
+  font-family: var(--font-mono);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .voice-recording-panel {
+    animation: none;
+  }
+}
+
