@@ -11,33 +11,57 @@
  * Google's cloud and the UI feels live. It is also unavailable on
  * iOS Safari and Firefox, where `window.SpeechRecognition` simply
  * does not exist — those browsers had no voice input at all before
- * this file. ServerWhisper is the *fallback*, not a replacement: it
- * costs one HTTP round-trip of 5-9 s measured on the 4-vCPU host
- * (encode is a fixed 30 s window, so the cost barely moves with clip
- * length) and it needs no Google account on the device.
+ * this file. ServerWhisper is the *fallback*, not a replacement:
+ * each round-trip is 5-9 s measured on the 4-vCPU host (encode is a
+ * fixed 30 s window, so the cost barely moves with clip length) and
+ * it needs no Google account on the device.
  *
- * Why one POST per utterance, not every 2 seconds
- * ----------------------------------------------
- * The server answers only when the whole clip is done, so a periodic
- * partial upload buys nothing except a fresh 5-9 s wait per
- * partial — on a 4-vCPU box the STT route is single-flight, so
- * overlapping partials simply 503. Instead this engine buffers the
- * whole utterance and POSTs it exactly once, when the utterance is
- * over. "Over" is detected client-side as 1.3 s of silence after
- * speech (RMS through an `AnalyserNode`); the UI shows
- * «Записываю… N с» meanwhile instead of pretending to stream.
+ * Two upload cadences
+ * -------------------
+ * The previous revision uploaded once per utterance, on silence, and
+ * the UI honestly admitted "записываю… N с" until the first result
+ * appeared. That is the lowest-fidelity path this engine can offer:
+ * the user gets no live feedback, just a counter.
  *
- * Why the upload is triggered by the engine, not by `stop()`
- * --------------------------------------------------
- * Measured, not guessed: `VoiceAISession.stop()` interrupts the
- * chunk-consumer fiber *before* calling `stt.stop()`, so anything an
- * engine emits afterwards lands in a closed mailbox and is dropped
- * (verified with a scratch harness against the real orchestrator:
- * FSM ended `paused` with an empty transcript). A final chunk
- * therefore has to be emitted while the consumer is still alive —
- * which is exactly what the silence timer does. `stop()` here means
- * "cancel": release the mic, drop the buffer, upload nothing. That
- * also matches user intent on the panel's ✕.
+ * This revision layers a *periodic interim upload* on top of the
+ * silent-flush final upload:
+ *   - The first upload fires after `TICK_MS` of speech; each
+ *     subsequent tick fires at `TICK_MS` intervals if no request is
+ *     already in flight. Each tick's text replaces the panel's
+ *     "interim" field, like a Web Speech interim.
+ *   - The silence flush still happens once the user has been quiet
+ *     for `SILENCE_FLUSH_MS`; it waits for any in-flight tick to
+ *     complete (server is single-flight — overlapping POSTs 503),
+ *     then sends the remaining audio as a `final` chunk that the
+ *     reducer's auto-commit routes to the LLM.
+ *
+ * The interim is `kind: 'interim'` so `appendChunk` only updates the
+ * `interim` field; the orchestrator never auto-commits on interm. The
+ * final flush is the *only* thing that promotes to the LLM. This is
+ * what the bug-fix commit "live transcript" decides: see
+ * `decisions/wavecode-voice-live-transcript.yaml`.
+ *
+ * Single-flight rule
+ * ------------------
+ * The server is single-flight (`asyncio.Semaphore(1)` measured:
+ * overlapping POSTs return 503). The client keeps AT MOST ONE
+ * request in flight: while a tick is awaiting its response, the
+ * next meter-tick's "fire upload" branch is a no-op. The silence
+ * flush blocks (with a `FLUSH_WAIT_MAX_MS` ceiling) on the
+ * in-flight flag for the same reason. This naturally throttles
+ * uploads to the server's throughput (~one every 6 s) without
+ * needing an explicit "tick every N seconds" timer.
+ *
+ * Empty-speech guard
+ * ------------------
+ * `sawSpeech` is a sticky latch — once the meter sees RMS above
+ * `SPEECH_RMS_THRESHOLD`, the engine is willing to upload at all.
+ * This is the same guard as the silence-flush path: whisper on
+ * digital silence hallucinates ("Редактор субтитров А. Синцевская"
+ * measured on a 3-s zero clip), and an upload of silence can only
+ * produce a hallucination or a wait, never useful text. The meter
+ * also refuses to fire ticks while the silence timer is in range,
+ * to keep the last interim from becoming a final-flush duplicate.
  *
  * Notes for the next reader
  * -------------------------
@@ -48,6 +72,10 @@
  *   WebSpeechSTT returns `recognition.abort()` from its register,
  *   which fires immediately after `start()`; that is a pre-existing
  *   bug in that file, deliberately not replicated here.
+ * - The `inFlight` flag is a plain closure `let`, not a `Ref`,
+ *   because the `Stream.emit` surface is single-threaded by
+ *   Effect's runtime (callbacks fire on the fiber that subscribed).
+ *   A `Ref` would buy us nothing and add ceremony.
  * - `infrastructure/` never imports `solid-js` (ESLint
  *   `no-restricted-imports`), so the elapsed-time readout lives in
  *   the presentation store, not here.
@@ -111,19 +139,36 @@ const SPEECH_RMS_THRESHOLD = 0.02;
  *  take mid-sentence. */
 const SILENCE_FLUSH_MS = 1300;
 
+/**
+ * Incremental upload cadence. 2.5 s is the smallest window where a
+ * tick can be useful on the server path: response time is 5-9 s
+ * (`decisions/wavecode-server-stt`), so the next tick has either
+ * completed or been skipped (server single-flight) before this one
+ * fires.
+ */
+const TICK_MS = 2_500;
+
 /** Hard cap on one utterance. The server rejects clips longer than
  *  120 s with 400; we stop at 100 s and start a fresh clip on the
  *  next utterance rather than failing the request. */
 const MAX_UTTERANCE_MS = 100_000;
 
 /** RMS polling cadence — 10 Hz is plenty for a boundary test and
- *  costs ~0.1 ms per tick. */
+ *  costs ~0.1 ms per tick. The incremental-upload gate piggybacks on
+ *  this same timer rather than spinning up a second one. */
 const METER_POLL_MS = 100;
 
 /** `MediaRecorder.start(timeslice)` cadence. Without it Chrome only
  *  fires `dataavailable` once, at `stop()`, and a tab that gets
  *  killed mid-utterance loses everything. */
 const RECORDER_TIMESLICE_MS = 1000;
+
+/** Hard ceiling on how long the silence flush will wait for an
+ *  in-flight tick before surfacing the (silent)primary error. 10 s
+ *  covers two server round-trips' worth of patience; past that the
+ *  server is so stuck the user is better off with an error than
+ *  with another silent panel. */
+const FLUSH_WAIT_MAX_MS = 10_000;
 
 const ANALYSER_FFT_SIZE = 1024;
 
@@ -458,15 +503,21 @@ const makeService = (
         );
       }
 
-      // `opts.interim` has no meaning here: the server cannot produce
-      // partials, so pretending otherwise would only teach the UI to
-      // wait for text that never arrives.
+      // `opts.interim` IS meaningful now: this engine emits real
+      // interim chunks during speech. WebSpeechSTT respects the same
+      // flag, so a caller asking for `interim: false` gets the
+      // legacy one-shot-on-silence behaviour without the periodic
+      // uploads — the meter gate suppresses the tick path while
+      // silent and `sawSpeech` would still flip on speech, so the
+      // safest interpretation is to skip ticks entirely when the
+      // caller does not want interim at all.
       logger.push('info', [
         '[stt-server] start',
         `lang=${opts.lang}`,
         `mime=${mimeType}`,
-        `interim=${String(opts.interim)}(ignored)`,
+        `interim=${String(opts.interim)}`,
       ]);
+      const interimWanted = opts.interim;
 
       return Stream.asyncPush<TranscriptChunk, SttUnsupportedError>(
         (emit: EmitOps) =>
@@ -481,6 +532,11 @@ const makeService = (
             let meterTimer: number | null = null;
             let released = false;
             let flushing = false;
+            // Single-flight flag for the periodic uploads (and the
+            // final flush). Plain `let`, not `Ref`: the emit surface
+            // and the meter callback run on the same fiber.
+            let inFlight = false;
+            let lastTickStartMs = 0;
 
             const recorder = new MediaRecorder(micStream, { mimeType });
             recorder.ondataavailable = (event: BlobEvent): void => {
@@ -508,17 +564,139 @@ const makeService = (
             };
 
             /**
-             * Close the clip, upload it once, emit the answer. Runs
-             * outside any Effect (timer callback), so it catches its
-             * own exceptions and reports through `emit.fail` — the
-             * orchestrator only ever sees `SttUnsupportedError`.
+             * One upload. Used both for the periodic interim tick
+             * and the silence-flush final. The caller prepares the
+             * blob (the interim tick takes a snapshot of the current
+             * parts; the silence flush takes its own snapshot after
+             * `recorder.stop()` produces the final chunk) and is
+             * responsible for clearing `parts` at the right moment.
+             * Returns without emitting on empty blob or transport
+             * failure — the orchestrator gets one failure per
+             * session from the final flush's `emit.fail`, not from
+             * interim hiccups (which only matter as a log).
              */
+            const upload = async (
+              kind: 'interim' | 'final',
+              blob: Blob,
+            ): Promise<void> => {
+              if (inFlight) return;
+              if (blob.size === 0) return;
+              inFlight = true;
+              try {
+                const outcome = await transcribe(config, blob, opts.lang);
+                if (!outcome.ok) {
+                  if (kind === 'final') {
+                    logger.push('warn', ['[stt-server] ✗', outcome.error.message]);
+                    emit.fail(outcome.error);
+                  } else {
+                    logger.push('warn', [
+                      '[stt-server] interim ✗',
+                      outcome.error.message,
+                    ]);
+                  }
+                  return;
+                }
+                const text = outcome.text.trim();
+                if (text.length === 0) {
+                  if (kind === 'final') {
+                    logger.push('info', ['[stt-server] empty transcript']);
+                  }
+                  return;
+                }
+                if (released) return;
+                if (kind === 'interim') {
+                  logger.push('info', [
+                    '[stt-server] interim',
+                    `${blob.size}B`,
+                    `${text.length} chars`,
+                    text.slice(0, 40) + (text.length > 40 ? '…' : ''),
+                  ]);
+                } else {
+                  logger.push('info', [
+                    '[stt-server] ✓ transcript',
+                    `${blob.size}B`,
+                    `${text.length} chars`,
+                  ]);
+                }
+                emit.single({
+                  kind,
+                  text,
+                  confidence: 1,
+                  lang: opts.lang,
+                  timestampMs: Date.now(),
+                });
+              } catch (err) {
+                if (kind === 'final') {
+                  logger.push('error', ['[stt-server] flush crashed', String(err)]);
+                  emit.fail(
+                    sttError(
+                      'network',
+                      err instanceof Error ? err.message : 'flush failed',
+                    ),
+                  );
+                } else {
+                  logger.push('warn', [
+                    '[stt-server] interim crashed',
+                    String(err),
+                  ]);
+                }
+              } finally {
+                inFlight = false;
+              }
+            };
+
+            /**
+             * Build a snapshot of the current `parts` (does NOT
+             * clear them — interim uploads keep accumulating so the
+             * server transcribes with the full context) and ship it.
+             */
+            const tickOnce = (): void => {
+              if (parts.length === 0) return;
+              const blob = new Blob(parts, { type: mimeType });
+              void upload('interim', blob);
+            };
+
+            /**
+             * Wait for any in-flight tick to complete so the final
+             * upload doesn't 503 against the single-flight queue.
+             * Surfaces an error after `FLUSH_WAIT_MAX_MS` rather
+             * than letting the user stare at a silent panel
+             * forever.
+             */
+            const waitForInFlight = async (): Promise<boolean> => {
+              if (!inFlight) return true;
+              const waitStart = Date.now();
+              while (inFlight) {
+                if (Date.now() - waitStart >= FLUSH_WAIT_MAX_MS) {
+                  return false;
+                }
+                await new Promise<void>((resolve) =>
+                  window.setTimeout(resolve, 50),
+                );
+              }
+              return true;
+            };
+
             const flush = async (): Promise<void> => {
               if (flushing || released) return;
               flushing = true;
               if (meterTimer !== null) {
                 window.clearInterval(meterTimer);
                 meterTimer = null;
+              }
+              const cleared = await waitForInFlight();
+              if (!cleared) {
+                logger.push('warn', [
+                  '[stt-server] flush timed out waiting for in-flight upload',
+                ]);
+                emit.fail(
+                  sttError(
+                    'network',
+                    'Сервер распознавания не ответил, повторите ещё раз',
+                  ),
+                );
+                release();
+                return;
               }
               try {
                 await new Promise<void>((resolve) => {
@@ -536,28 +714,7 @@ const makeService = (
                   emit.end();
                   return;
                 }
-                const outcome = await transcribe(config, blob, opts.lang);
-                if (!outcome.ok) {
-                  logger.push('warn', ['[stt-server] ✗', outcome.error.message]);
-                  emit.fail(outcome.error);
-                  return;
-                }
-                const text = outcome.text.trim();
-                logger.push('info', [
-                  '[stt-server] ✓ transcript',
-                  `${blob.size}B`,
-                  `${text.length} chars`,
-                ]);
-                if (text.length > 0) {
-                  const chunk: TranscriptChunk = {
-                    kind: 'final',
-                    text,
-                    confidence: 1,
-                    lang: opts.lang,
-                    timestampMs: Date.now(),
-                  };
-                  emit.single(chunk);
-                }
+                await upload('final', blob);
                 emit.end();
               } catch (err) {
                 logger.push('error', ['[stt-server] flush crashed', String(err)]);
@@ -598,6 +755,23 @@ const makeService = (
               // simply not worth a 5-9 s round-trip either.
               if (sawSpeech && now - lastVoiceAtMs >= SILENCE_FLUSH_MS) {
                 void flush();
+                return;
+              }
+              // Incremental-upload gate. Piggies-backs on the meter
+              // cadence to avoid a second timer, and the silent
+              // branch above will flip into `flush()` before any
+              // more ticks can fire. `interimWanted` mirrors what
+              // the caller asked for; `inFlight` enforces the
+              // single-flight rule from `decisions/
+              // wavecode-voice-live-transcript`.
+              if (
+                interimWanted
+                && !inFlight
+                && sawSpeech
+                && now - lastTickStartMs >= TICK_MS
+              ) {
+                lastTickStartMs = now;
+                tickOnce();
               }
             }, METER_POLL_MS);
 

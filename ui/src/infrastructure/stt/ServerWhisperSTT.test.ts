@@ -52,6 +52,10 @@ class FakeMediaRecorder {
   /** How many times `stop()` was called — used to assert that
    *  `stop()` after a flush does not re-stop a dead recorder. */
   stopCalls = 0;
+  /** Periodic `dataavailable` timer — the real MediaRecorder fires
+   *  every `timeslice` ms; without this the incremental-upload path
+   *  has nothing in `parts` to upload mid-recording. */
+  private timesliceTimer: number | null = null;
 
   constructor(stream: MediaStream, opts?: { mimeType?: string }) {
     this.mimeType = opts?.mimeType ?? '';
@@ -59,13 +63,23 @@ class FakeMediaRecorder {
     void stream;
   }
 
-  start(): void {
+  start(timeslice?: number): void {
     this.state = 'recording';
+    if (typeof timeslice === 'number' && timeslice > 0) {
+      this.timesliceTimer = window.setInterval(() => {
+        if (this.state !== 'recording') return;
+        this.ondataavailable?.({ data: new Blob([AUDIO_CHUNK], { type: this.mimeType }) });
+      }, timeslice);
+    }
   }
 
   stop(): void {
     this.stopCalls += 1;
     this.state = 'inactive';
+    if (this.timesliceTimer !== null) {
+      window.clearInterval(this.timesliceTimer);
+      this.timesliceTimer = null;
+    }
     this.ondataavailable?.({ data: new Blob([AUDIO_CHUNK], { type: this.mimeType }) });
     this.onstop?.();
   }
@@ -368,5 +382,141 @@ describe('ServerWhisperSTT — recording path (stubbed browser)', () => {
     expect(JSON.stringify(second.cause)).toContain('"reason":"aborted"');
     await stopEngine(layer);
     await interrupt(first);
+  });
+});
+
+/**
+ * Live-transcript path (`decisions/wavecode-voice-live-transcript`):
+ * incremental interim uploads before silence, single-flight, and the
+ * empty-speech guard for `sawSpeech`. Each test is wired to the
+ * meter's `TICK_MS = 2_500` boundary directly so the cadence is
+ * obvious from the timeline, not from magic numbers.
+ */
+describe('ServerWhisperSTT — live transcript (interim uploads)', () => {
+  const layer = makeServerWhisperSTT({
+    endpoint: 'https://stt.test/v1/audio/transcriptions',
+    apiKey: 'sk-test',
+  });
+
+  // Mirror the constant in `ServerWhisperSTT.ts`. Hard-coding here on
+  // purpose: a drift in the source number is exactly what the test
+  // contract should make obvious, not silently absorb.
+  const TICK_MS = 2_500;
+
+  beforeEach(() => {
+    installBrowserFakes();
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it('emits a POST after TICK_MS of continuous speech (interim)', async () => {
+    const fetchMock = vi.fn(async () => transcriptionResponse('промежуточно'));
+    vi.stubGlobal('fetch', fetchMock);
+    const fiber = await forkStream(layer);
+    // give the fiber time to set up the meter (getUserMedia
+    // microtask + startMeter) before mutating fakeAnalyser.
+    await vi.advanceTimersByTimeAsync(0);
+    expect(fakeAnalyser).not.toBeNull();
+    fakeAnalyser!.rms = 0.4;
+    // 100 ms past TICK_MS: the first tick fires upload(). Stop
+    // BEFORE silence-flush can fire, so the only POST is the
+    // interim one.
+    await vi.advanceTimersByTimeAsync(TICK_MS + 100);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    await stopEngine(layer);
+    await interrupt(fiber);
+  });
+
+  it('no speech → no tick upload (sawSpeech guard)', async () => {
+    const fetchMock = vi.fn(async () => transcriptionResponse('галлюцинация'));
+    vi.stubGlobal('fetch', fetchMock);
+    const fiber = await forkStream(layer);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(fakeAnalyser).not.toBeNull();
+    // rms stays at 0.001 — no speech ever happens. TICK cadence passes
+    // many times but the gate refuses to upload.
+    fakeAnalyser!.rms = 0.001;
+    await vi.advanceTimersByTimeAsync(TICK_MS * 4);
+    expect(fetchMock).not.toHaveBeenCalled();
+    await stopEngine(layer);
+    await interrupt(fiber);
+  });
+
+  it('two ticks while a request is in flight → only one POST (single-flight)', async () => {
+    const deferred: { resolve?: (r: Response) => void } = {};
+    const fetchMock = vi.fn(
+      () => new Promise<Response>((resolve) => {
+        deferred.resolve = resolve;
+      }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    const fiber = await forkStream(layer);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(fakeAnalyser).not.toBeNull();
+    fakeAnalyser!.rms = 0.4;
+
+    // Drive past the first tick: POST#1 leaves.
+    await vi.advanceTimersByTimeAsync(TICK_MS + 100);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    // Drive past the second tick while POST#1 is still hanging
+    // (deferred.resolve is undefined). The meter gate must skip the
+    // upload.
+    await vi.advanceTimersByTimeAsync(TICK_MS);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    // Drive past a third tick. Still one POST.
+    await vi.advanceTimersByTimeAsync(TICK_MS);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    // Now release POST#1 so the engine unwinds cleanly. Stop before
+    // silence-flush can run; we only assert the single-flight rule
+    // here.
+    if (deferred.resolve !== undefined) {
+      deferred.resolve(transcriptionResponse('interim'));
+    }
+    await vi.advanceTimersByTimeAsync(0);
+    await stopEngine(layer);
+    await interrupt(fiber);
+  });
+
+  it('when interim POST completes, the next TICK fires a new POST', async () => {
+    let callIdx = 0;
+    const deferred: { resolve?: (r: Response) => void } = {};
+    const fetchMock = vi.fn(() => {
+      callIdx += 1;
+      return new Promise<Response>((resolve) => {
+        deferred.resolve = () =>
+          resolve(transcriptionResponse(`interim #${callIdx}`));
+      });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const fiber = await forkStream(layer);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(fakeAnalyser).not.toBeNull();
+    fakeAnalyser!.rms = 0.4;
+
+    // Past TICK_MS → POST#1 fires.
+    await vi.advanceTimersByTimeAsync(TICK_MS + 100);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    if (deferred.resolve !== undefined) {
+      deferred.resolve(transcriptionResponse('один'));
+    }
+    await vi.advanceTimersByTimeAsync(0);
+
+    // After it completes, the next TICK fires POST#2.
+    await vi.advanceTimersByTimeAsync(TICK_MS);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+
+    if (deferred.resolve !== undefined) {
+      deferred.resolve(transcriptionResponse('два'));
+    }
+    await vi.advanceTimersByTimeAsync(0);
+    await stopEngine(layer);
+    await interrupt(fiber);
   });
 });

@@ -2,7 +2,6 @@ import { type JSX } from 'solid-js';
 import { VoiceAIMiniFAB } from './VoiceAIMiniFAB';
 import { WhistleMiniFAB } from './WhistleMiniFAB';
 import { RecordingPanel } from './RecordingPanel';
-import { VoiceAITextReview } from './VoiceAITextReview';
 
 /**
  * VoiceFAB — voice-input control cluster, всегда виден в правом
@@ -24,15 +23,18 @@ import { VoiceAITextReview } from './VoiceAITextReview';
  *
  * Состояние записи транслируется через
  *   - data-state на самой кнопке (glow + pulse animation),
- *   - RecordingPanel (панель внизу: 🎙️ + transcript + заметки
- *     + кнопки; единая для voice-AI и whistle — раньше для whistle
- *     панели не было вовсе),
- *   - VoiceAITextReview (модал-проверка текста перед отправкой в ИИ;
- *     появляется только когда FSM в `review`),
+ *   - RecordingPanel (панель внизу: 🎙️ + transcript + заметки;
+ *     единая для voice-AI и whistle — раньше для whistle
+ *     панели не было вовсе).
  *   - inline-hint «слушаю…» / расшифровка прямо в кнопке.
  *
  * VoiceTranscriptOverlay (старый чип-оверлей) удалён — RecordingPanel
  * его заменяет для voice-AI и расширяет функциональность для whistle.
+ * VoiceAITextReview (модал-проверка текста перед отправкой в ИИ)
+ * удалён в `decisions/wavecode-voice-live-transcript`: live interim
+ * chunks (`interim` kind) делают панель самодостаточной, отдельный
+ * review-шаг больше не нужен. FSM-тег `review` всё ещё существует в
+ * редукторе для будущих расширений, но UI-аффорданса нет.
  */
 export function VoiceFAB(): JSX.Element {
   return (
@@ -44,7 +46,6 @@ export function VoiceFAB(): JSX.Element {
         </div>
       </div>
       <RecordingPanel />
-      <VoiceAITextReview />
     </>
   );
 }

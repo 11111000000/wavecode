@@ -36,13 +36,13 @@ import { initialWhistleSession } from '~/domain/audio/whistleSession';
  *     body visible (this is the new behaviour — used to be silent).
  *   - whistle wins over voice-AI when both happen to be active.
  *
- * «Проверить» affordance (wavecode-voice-ux-fixes):
- *   - absent from the DOM in `listening` / `transcribing` /
- *     `requesting` / `applying` / `errored` — push-to-talk is the
- *     primary loop and auto-commits, so a review button there is a
- *     redundant click;
- *   - present and enabled in `paused` (reached by the panel's ✕),
- *     which is the deliberate escape hatch into the review modal.
+ * «Проверить» affordance (`wavecode-voice-live-transcript`): the
+ * live-transcript path (interim chunks arriving mid-speech) makes the
+ * panel self-sufficient — the user sees what they said before the
+ * auto-commit, so the "review before send" affordance is no longer
+ * part of the primary loop. The button is absent from the DOM in
+ * every voice-AI state, including `paused` / `review` (the FSM tag
+ * stays; the UI affordance doesn't).
  */
 
 const FINAL_CHUNK = {
@@ -216,11 +216,12 @@ describe('RecordingPanel — voice-AI body content', () => {
     expect(body?.textContent).toBe('слышу: сделай');
   });
 
-  it('does NOT show the review affordance while listening (push-to-talk owns the primary loop)', () => {
+  it('does NOT show the review affordance while listening (live transcript owns the primary loop)', () => {
     // decisions/wavecode-voice-fab, outcome `voice-ai-fab-press-and-hold`:
-    // press → speak → auto-commit on the final chunk. A «Проверить»
-    // button during `listening` inserted a redundant click into that
-    // gesture, so it must not be in the DOM at all — not merely
+    // press → speak → auto-commit on the final chunk. The
+    // `wavecode-voice-live-transcript` path makes the transcript
+    // visible on the panel itself — a separate «Проверить» button is
+    // redundant. The button must not be in the DOM at all — not merely
     // disabled, which still renders a visible target.
     armAndListen();
     expect(voiceAIState().tag).toBe('listening');
@@ -254,22 +255,19 @@ describe('RecordingPanel — voice-AI body content', () => {
     expect(applying.container.querySelector('.voice-recording-panel__btn--primary')).toBeNull();
   });
 
-  it('offers «Проверить» once the session is paused (the ✕ escape hatch)', () => {
-    // `stopVoiceAI` → `handle.stop()` dispatches `pause`, so pressing
-    // the panel's ✕ is what lands the FSM in `paused`. That is the one
-    // moment the user has explicitly asked to stop talking and wants to
-    // read the transcript before it goes to the LLM.
+  it('does NOT show the review affordance in paused either (live transcript made it redundant)', () => {
+    // After `wavecode-voice-live-transcript`, the panel's transcript
+    // area carries the latest interim or final text directly. The
+    // «Проверить» escape hatch into the review modal is gone — the
+    // user reads their words on the panel itself. The FSM `paused`
+    // tag is still reachable via ✕ but has no UI affordance any more.
     armAndListen();
     __dispatchVoiceAIForTests({ type: 'chunk', chunk: FINAL_CHUNK });
     __dispatchVoiceAIForTests({ type: 'pause' });
     expect(voiceAIState().tag).toBe('paused');
     const { container } = render(() => <RecordingPanel />);
-    const btn = container.querySelector('.voice-recording-panel__btn--primary');
-    expect(btn).toBeTruthy();
-    expect(btn?.textContent).toContain('Проверить');
-    // Present means usable — the old markup shipped this button already
-    // disabled in exactly this state, which made the hatch a dead end.
-    expect((btn as HTMLButtonElement).disabled).toBe(false);
+    expect(container.querySelector('.voice-recording-panel__btn--primary')).toBeNull();
+    expect(container.querySelector('.voice-recording-panel__actions')).toBeNull();
   });
 
   it('hides the review affordance when the session errored', () => {
