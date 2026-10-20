@@ -180,6 +180,60 @@ type DebugState = {
   lastEvaluatedSnippet: string;
 };
 
+/**
+ * Minimal superdough surface `ensureRepl` needs. Declared separately so
+ * the boot sequence can be unit-tested with a recording double.
+ */
+type SuperdoughRuntime = typeof WebaudioModule & {
+  registerSynthSounds: () => void;
+  initAudio: (opts?: { maxPolyphony?: number; multiChannelOrbits?: boolean }) => Promise<void>;
+  setAudioContext: (ctx: AudioContext) => void;
+};
+
+/**
+ * Point superdough at OUR AudioContext, THEN load its worklets.
+ *
+ * ORDER IS LOAD-BEARING. `initAudio()` internally calls superdough's
+ * private `getAudioContext()`, which lazily creates a brand-new
+ * `AudioContext` when none has been set, and calls
+ * `audioWorklet.addModule(...)` on whatever it gets back. AudioWorklet
+ * processors are registered per-BaseAudioContext — `new
+ * AudioWorkletNode` throws `NotSupportedError` for a name missing from
+ * that context's registry.
+ *
+ * So calling `initAudio()` before pinning the context loads the worklet
+ * modules onto a throwaway context, and the `webaudioRepl({audioContext})`
+ * call that follows re-points superdough at the app context, whose
+ * worklet registry is then empty. Every worklet-backed node throws on
+ * every hap:
+ *
+ *   [getTrigger] error: Failed to construct 'AudioWorkletNode'
+ *
+ * once per hap, dozens of times a second. Audio survived because
+ * superdough builds the source graph before applying the effect chain,
+ * so effects that are merely in parallel still sounded — but `.shape()`,
+ * `.djf()`, `s("supersaw")` and ladder filtering were silently DEAD in
+ * production. Creep calls `.shape(0.6)` in every chorus stack.
+ *
+ * Set first, load second: `addModule` then lands on the context that
+ * will actually be used, and the later `webaudioRepl` call re-sets the
+ * same value as a no-op.
+ *
+ * Exported for the ordering regression test; not part of the public API.
+ */
+export const primeSuperdoughAudio = async (
+  runtime: SuperdoughRuntime,
+  audioCtx: AudioContext,
+): Promise<void> => {
+  runtime.setAudioContext(audioCtx);
+  try {
+    await runtime.initAudio();
+    console.log('[wavecode] initAudio done (worklets loaded)');
+  } catch (err) {
+    console.warn('[wavecode] initAudio failed (will continue without worklets):', err);
+  }
+};
+
 let cachedRepl: Promise<ReplHandle> | null = null;
 let modulesPromise: Promise<StrudelModules> | null = null;
 let debugState: DebugState = {
@@ -282,23 +336,13 @@ const ensureRepl = (audioCtx: AudioContext): Promise<ReplHandle> => {
       await modules.core.evalScope(modules.core, modules.mini, modules.tonal);
       console.log('[wavecode] evalScope done — stack/note/n/s on globalThis');
 
-      // Install the warm-cache wrapper on superdough's loadBuffer so
-      // the runtime hap path consults SampleLoader's warm cache first.
-      // Idempotent — safe to call on every ensureRepl invocation.
-      // The cache itself is populated by SampleLoader.preloadAllBuffers
-      // (called from useAppBootstrap onMount) and shared across all
-      // banks. The wrap is installed AFTER modules load so the
-      // dynamic import inside the wrap resolves to the same module
-      // instance that the runtime uses.
-      //
-      // Lazy-import: keep the top-of-file import surface of
-      // LiveAudioEngine free of SampleLoader so unit tests for
-      // upstream callers (audioActions, TransportPanel) don't
-      // transitively pull the CJS-only `@kabelsalat/web` into the
-      // Vitest ESM resolver. The dynamic import is async and
-      // resolves inside `ensureRepl`, which is already async.
-      const { wrapSuperdoughLoadBuffer } = await import('./SampleLoader');
-      wrapSuperdoughLoadBuffer();
+      // (The warm-cache wrapper that used to be installed here was
+      // removed 2026-10-20: patching `loadBuffer` on the
+      // `@strudel/webaudio` module namespace can never succeed — spec
+      // hardwires `[[Set]]`/`[[DefineOwnProperty]]` to `false` on a
+      // module namespace object — and it targets a symbol superdough
+      // calls as a module-local const anyway. See the long note in
+      // SampleLoader.ts for the full post-mortem.)
 
       // Inject chord-symbol aliases (min7 → m7, maj7 → ^7, …) into every
       // voicing dictionary BEFORE any preset using `.voicing()` is evaluated.
@@ -329,17 +373,37 @@ const ensureRepl = (audioCtx: AudioContext): Promise<ReplHandle> => {
       const superdoughRuntime = modules.webaudio as typeof WebaudioModule & {
         registerSynthSounds: () => void;
         initAudio: (opts?: { maxPolyphony?: number; multiChannelOrbits?: boolean }) => Promise<void>;
+        setAudioContext: (ctx: AudioContext) => void;
       };
       superdoughRuntime.registerSynthSounds();
       console.log('[wavecode] synth sounds registered');
 
-      // Загружаем worklet'ы (reverb, delay, djf) — нужно для synth с эффектами.
-      try {
-        await superdoughRuntime.initAudio();
-        console.log('[wavecode] initAudio done (worklets loaded)');
-      } catch (err) {
-        console.warn('[wavecode] initAudio failed (will continue without worklets):', err);
-      }
+      // Point superdough's module-global AudioContext at OURS *before*
+      // loading worklets. This ordering is load-bearing.
+      //
+      // `initAudio()` calls superdough's private `getAudioContext()`,
+      // which lazily creates its OWN AudioContext if none was set, and
+      // then calls `audioWorklet.addModule(...)` on whatever it got.
+      // AudioWorklet processors are registered per-BaseAudioContext, not
+      // process-wide, and `new AudioWorkletNode` throws NotSupportedError
+      // for a name absent from that context's registry.
+      //
+      // The bug this fixes: `webaudioRepl({audioContext})` below calls
+      // superdough's `setAudioContext()` and re-points every subsequent
+      // trigger at OUR context — but the worklet modules had already been
+      // added to superdough's throwaway context. Ours had an empty
+      // registry, so every worklet-backed node threw at trigger time:
+      //   [getTrigger] error: Failed to construct 'AudioWorkletNode'
+      // once per hap, dozens of times a second. Audio kept playing
+      // because superdough connects the source graph before the effect
+      // chain, but `.shape()`, `.djf()`, `s("supersaw")` and ladder
+      // filtering were SILENTLY DEAD in production — Creep uses
+      // `.shape(0.6)` in every chorus stack.
+      //
+      // Setting the context first means `addModule` lands on the context
+      // that will actually be used. `webaudioRepl` below then sets the
+      // same value, which is a no-op.
+      await primeSuperdoughAudio(superdoughRuntime, audioCtx);
 
       const repl = modules.webaudio.webaudioRepl({
         audioContext: audioCtx,

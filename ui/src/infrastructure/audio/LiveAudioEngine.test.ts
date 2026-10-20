@@ -47,3 +47,61 @@ describe('AudioEngine.setCps — race against cachedRepl', () => {
     expect(p).toBeLessThanOrEqual(1);
   });
 });
+/**
+ * Boot-order invariant for superdough's AudioWorklet modules.
+ *
+ * `initAudio()` resolves superdough's AudioContext internally and calls
+ * `audioWorklet.addModule()` on it, creating its own context if none is
+ * set. Worklet processors live in a per-BaseAudioContext registry, so
+ * pinning the context AFTER the worklets load leaves the app context
+ * with an empty registry and every worklet-backed node throws per hap:
+ *
+ *   [getTrigger] error: Failed to construct 'AudioWorkletNode'
+ *
+ * Nothing covered this ordering before, which is how the bug shipped.
+ */
+describe('primeSuperdoughAudio — worklet context ordering', () => {
+  const fakeCtx = {} as AudioContext;
+
+  const makeRuntime = () => {
+    const calls: string[] = [];
+    const contexts: unknown[] = [];
+    return {
+      calls,
+      contexts,
+      runtime: {
+        registerSynthSounds: () => calls.push('registerSynthSounds'),
+        setAudioContext: (ctx: AudioContext) => {
+          calls.push('setAudioContext');
+          contexts.push(ctx);
+        },
+        initAudio: async () => {
+          calls.push('initAudio');
+        },
+      } as unknown as Parameters<typeof import('./LiveAudioEngine').primeSuperdoughAudio>[0],
+    };
+  };
+
+  it('pins the app AudioContext BEFORE loading worklet modules', async () => {
+    const { primeSuperdoughAudio } = await import('~/infrastructure/audio/LiveAudioEngine');
+    const { calls, contexts, runtime } = makeRuntime();
+    await primeSuperdoughAudio(runtime, fakeCtx);
+    expect(calls).toEqual(['setAudioContext', 'initAudio']);
+    expect(contexts).toEqual([fakeCtx]);
+  });
+
+  it('does not throw when initAudio fails — audio must still start', async () => {
+    const { primeSuperdoughAudio } = await import('~/infrastructure/audio/LiveAudioEngine');
+    const { calls, runtime } = makeRuntime();
+    const failing = {
+      ...runtime,
+      initAudio: async () => {
+        calls.push('initAudio');
+        throw new Error('worklet load failed');
+      },
+    } as unknown as Parameters<typeof import('./LiveAudioEngine').primeSuperdoughAudio>[0];
+    await expect(primeSuperdoughAudio(failing, fakeCtx)).resolves.toBeUndefined();
+    // The context was still pinned first, so a later retry can succeed.
+    expect(calls).toEqual(['setAudioContext', 'initAudio']);
+  });
+});
