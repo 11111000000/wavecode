@@ -4205,6 +4205,8 @@ textarea.ai-textarea:focus-visible {
   border-radius: var(--radius-xl);
   padding: var(--space-lg);
   width: min(480px, 92vw);
+  max-height: 88vh;
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: var(--space-md);
@@ -4222,6 +4224,82 @@ textarea.ai-textarea:focus-visible {
   font-family: var(--font-mono);
   font-size: var(--fs-sm);
   resize: vertical;
+}
+.share-modal-title {
+  margin: 0;
+  font-size: var(--fs-lg);
+  font-weight: var(--fw-semibold);
+  color: var(--fg);
+}
+.share-modal-inner {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+.share-url {
+  width: 100%;
+  padding: var(--space-sm) var(--space-md);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  color: var(--primary);
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+}
+.share-url:focus-visible {
+  border-color: var(--primary);
+  outline: none;
+}
+.share-modal-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+.share-modal-size {
+  color: var(--fg-dim);
+  font-size: var(--fs-sm);
+}
+.share-modal-btn {
+  min-height: 44px;
+  padding: var(--space-sm) var(--space-md);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--fg);
+  font-family: var(--font-sans);
+  font-size: var(--fs-sm);
+  cursor: pointer;
+}
+.share-modal-btn:hover:not(:disabled) { border-color: var(--primary); color: var(--fg); }
+.share-modal-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.share-modal-copy,
+.share-modal-load {
+  margin-left: auto;
+  border-color: var(--primary);
+  color: var(--primary);
+}
+.share-modal-warn,
+.share-modal-err {
+  padding: var(--space-sm) var(--space-md);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+  border: 1px solid var(--warn);
+  color: var(--fg);
+  font-size: var(--fs-sm);
+}
+.share-modal-err { border-color: var(--err); }
+.share-modal-pending {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  padding: var(--space-md);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+}
+.share-modal-pending-msg {
+  color: var(--fg-dim);
+  font-size: var(--fs-sm);
 }
 .share-modal-actions {
   display: flex;

@@ -57,7 +57,11 @@ export function TopBar(props: TopBarProps): JSX.Element {
         onPointerUp={cancelPress}
         onPointerLeave={cancelPress}
         onPointerCancel={cancelPress}
-        title="Удерживайте 3 секунды для админки"
+        title={
+          import.meta.env.DEV
+            ? 'Удерживайте 3 секунды для админки'
+            : 'wavecode'
+        }
       >
         <WavecodeLogo size={22} />
       </span>

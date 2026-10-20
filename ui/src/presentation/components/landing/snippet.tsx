@@ -12,20 +12,27 @@ export type SnippetLine = ReadonlyArray<
 
 /**
  * Живой снипплет Strudel mini-notation для лендинга.
+ *
  * Не eval-ится (AudioContext заблокирован до user-gesture); показывается
- * ради красивой подсветки. Редактор (/) загрузит этот же snippet, если
- * пользователь кликнет «Открыть редактор».
+ * ради красивой подсветки.
+ *
+ * Держим его в синхроне с реальным пресетом `creep`
+ * (`ui/src/domain/presets.ts`): раньше здесь лежала старая версия
+ * verse-стека (без `.lpf(4000)`, `.gain(0.3)`, и вообще без chorus),
+ * и посетитель лендинга видел в редакторе не тот код, который ему
+ * только что показали. Показываем первые два такта verse и первый
+ * такт chorus — этого хватает, чтобы стало видно и `note()`, и `s()`.
  */
 export const HERO_SNIPPET: ReadonlyArray<SnippetLine> = [
   [
-    { t: 'comment', text: '// Creep (Radiohead) — G → B → C → Cm, ~92 BPM' },
+    { t: 'comment', text: '// Creep (Radiohead) — G → B → C → Cm (I–III–IV–iv), ~92 BPM' },
   ],
   [
     { t: 'code', text: 'cat(' },
   ],
   [
     { t: 'code', text: '  ' },
-    { t: 'comment', text: '// verse: clean arpeggio, один аккорд на такт' },
+    { t: 'comment', text: '// ===== VERSE (4 bars) — clean arpeggio + bass, no drums =====' },
   ],
   [
     { t: 'code', text: '  stack(' },
@@ -33,18 +40,48 @@ export const HERO_SNIPPET: ReadonlyArray<SnippetLine> = [
   [
     { t: 'code', text: '    note(' },
     { t: 'mini',  text: '"g3 b3 d4 b3 g3 b3 d4 b3"' },
-    { t: 'code', text: ').s("triangle").decay(.28).sustain(0).gain(0.16).room(.5),' },
+    { t: 'code', text: ').s("triangle").decay(.28).sustain(0).gain(0.16).lpf(4000).room(.5),' },
   ],
   [
     { t: 'code', text: '    note(' },
     { t: 'mini',  text: '"g2"' },
-    { t: 'code', text: ').s("sawtooth").gain(0.3).lpf(300),' },
+    { t: 'code', text: ').s("sawtooth").gain(0.30).lpf(300)' },
   ],
   [
     { t: 'code', text: '  ),' },
   ],
   [
-    { t: 'comment', text: '  // … B, C, Cm, затем chorus: distorted triads + drums' },
+    { t: 'comment', text: '  // … ещё 3 такта, потом B, C, Cm —' },
+  ],
+  [
+    { t: 'code', text: '  ' },
+    { t: 'comment', text: '// ===== CHORUS (4 bars) — distorted triads + full kit =====' },
+  ],
+  [
+    { t: 'code', text: '  stack(' },
+  ],
+  [
+    { t: 'code', text: '    note(' },
+    { t: 'mini',  text: '"[g3,b3,d4]"' },
+    { t: 'code', text: ').s("sawtooth").shape(0.6).gain(0.16).lpf(2200).room(.4),' },
+  ],
+  [
+    { t: 'code', text: '    s(' },
+    { t: 'mini',  text: '"drums_bd ~ drums_bd ~"' },
+    { t: 'code', text: ').gain(0.5),' },
+  ],
+  [
+    { t: 'code', text: '    s(' },
+    { t: 'mini',  text: '"drums_hh*8"' },
+    { t: 'code', text: ').decay(.04).sustain(0).gain(0.14),' },
+  ],
+  [
+    { t: 'code', text: '    s(' },
+    { t: 'mini',  text: '"drums_crash ~ ~ ~ ~ ~ ~ ~"' },
+    { t: 'code', text: ').gain(0.26)' },
+  ],
+  [
+    { t: 'code', text: '  )' },
   ],
   [
     { t: 'code', text: ').slow(1.3)' },
