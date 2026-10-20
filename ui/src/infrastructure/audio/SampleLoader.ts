@@ -200,23 +200,6 @@ const ensureWorker = (): Worker => {
 const warmCache = new Map<string, AudioBuffer>();
 
 /**
- * Reference held by the wrapped `loadBuffer`. `setWarmCache(cache)`
- * installs (or clears) the reference. The wrapper consults it on
- * every call; when the URL is present AND the cached AudioBuffer
- * was created on the same AudioContext as the caller's, the cached
- * buffer is returned directly without a fetch + decode.
- *
- * Why a separate `warmCacheRef`: the same cache is mutated by
- * `decodeInWorker` (additions). Holding a `Map` reference (not a
- * copy) means the wrapper always sees the latest entries.
- */
-let warmCacheRef: Map<string, AudioBuffer> | null = null;
-
-export const setWarmCache = (cache: Map<string, AudioBuffer> | null): void => {
-  warmCacheRef = cache;
-};
-
-/**
  * Reconstruct the main-thread AudioBuffer from a Worker reply's
  * raw Float32Array buffer. Channel-major layout: ch0 samples
  * (length), then ch1 samples (length), etc. — exactly what
@@ -252,10 +235,34 @@ const reconstructBuffer = (out: DecodeOk): AudioBuffer => {
  * exists so Phase 2 (wrapping superdough's loadBuffer) can short-
  * circuit the runtime decode path without re-fetching.
  */
+/**
+ * In-flight decodes keyed by URL, so two callers asking for the same
+ * file share one Worker round-trip instead of two fetches + two decodes.
+ *
+ * `inflightDecodes` above is keyed by a monotonic id because it is the
+ * main-thread↔Worker correlation map; it cannot dedupe. This map can.
+ *
+ * Callers get the SAME AudioBuffer instance for a given URL, which is
+ * also what `warmCache` does — so the returned object is shared, not
+ * cloned. That is already true (see `reconstructBuffer` writing into
+ * `warmCache` and the runtime reading from it), so sharing here changes
+ * nothing observable; it only stops the duplicate work.
+ *
+ * Race that motivated this: `registerBank` runs the three banks
+ * concurrently and each one calls `addBareAliases()`, which mutates
+ * the SINGLE global soundMap. A later bank therefore re-collects URLs
+ * an earlier bank already collected. `collectSampleUrls` dedupes within
+ * one call; this dedupes across them.
+ */
+const inflightByUrl = new Map<string, Promise<AudioBuffer>>();
+
 const decodeInWorker = (url: string, sampleRate: number): Promise<AudioBuffer> => {
+  const existing = inflightByUrl.get(url);
+  if (existing) return existing;
+
   const w = ensureWorker();
   const id = ++nextDecodeId;
-  return new Promise<AudioBuffer>((resolve, reject) => {
+  const promise = new Promise<AudioBuffer>((resolve, reject) => {
     inflightDecodes.set(id, {
       resolve: (out) => {
         const audioBuffer = reconstructBuffer(out);
@@ -265,7 +272,12 @@ const decodeInWorker = (url: string, sampleRate: number): Promise<AudioBuffer> =
       reject,
     });
     w.postMessage({ type: 'decode', id, url, sampleRate });
+  }).finally(() => {
+    inflightByUrl.delete(url);
   });
+
+  inflightByUrl.set(url, promise);
+  return promise;
 };
 
 type BankState = {
@@ -343,198 +355,96 @@ const normalizeSampleUrl = (url: string): string | null => {
   return collapsed;
 };
 
-const collectSampleUrls = (dict: SoundMapSnapshot): string[] => {
-  const urls: string[] = [];
-  const push = (raw: unknown): void => {
-    if (typeof raw !== 'string') return;
-    const url = normalizeSampleUrl(raw);
-    if (url !== null) urls.push(url);
-  };
-  for (const [, entry] of Object.entries(dict)) {
+/**
+ * Every distinct sample URL in the sound map, in first-seen order.
+ *
+ * Dedupe is load-bearing, not cosmetic. `addBareAliases()` registers a
+ * bare alias next to every `bank_sound` entry, and it deliberately
+ * reuses the SAME `entry` object — so the alias and the original share
+ * one `data.samples` array. Without dedupe, `collectSampleUrls` yields
+ * each MP3 exactly twice (72 entries for 36 files against the shipped
+ * manifests), the decode Worker fetches and decodes every file twice,
+ * and `state.total` over-reports the progress bar 2×.
+ *
+ * The three boot fetches per MP3 decomposed as: Worker (original key),
+ * Worker (alias key), superdough runtime fetch. This function collapses
+ * the first two; the third is addressed by the service-worker cache.
+ */
+const collectSampleUrls = (dict: SoundMapSnapshot, keys?: ReadonlySet<string>): string[] => {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const [key, entry] of Object.entries(dict)) {
+    // `keys` scopes the walk to one bank. superdough's `soundMap` is a
+    // single GLOBAL map shared by all three banks, and `registerBank`
+    // runs them concurrently — without this filter each bank re-walks
+    // (and re-collects, and re-attributes to its own progress bar) the
+    // URLs the other banks already registered.
+    if (keys !== undefined && !keys.has(key)) continue;
     const data = entry.data as { type?: string; samples?: unknown };
     if (data.type !== 'sample' || !data.samples) continue;
     const samples = data.samples;
     if (Array.isArray(samples)) {
-      for (const url of samples) push(url);
+      for (const url of samples) {
+        if (typeof url !== 'string') continue;
+        const norm = normalizeSampleUrl(url);
+        if (norm === null || seen.has(norm)) continue;
+        seen.add(norm);
+        out.push(norm);
+      }
     } else if (typeof samples === 'object' && samples !== null) {
       for (const urlList of Object.values(samples as Record<string, unknown>)) {
-        if (Array.isArray(urlList)) {
-          for (const url of urlList) push(url);
+        if (!Array.isArray(urlList)) continue;
+        for (const url of urlList) {
+          if (typeof url !== 'string') continue;
+          const norm = normalizeSampleUrl(url);
+          if (norm === null || seen.has(norm)) continue;
+          seen.add(norm);
+          out.push(norm);
         }
       }
     }
   }
-  return urls;
+  return out;
 };
 
 const PRELOAD_CONCURRENCY = 4;
 
 /**
- * Phase 4 / warm-cache fast path (see decisions/wavecode-sample-pack.yaml).
+ * (Warm-cache short-circuit removed 2026-10-20 — it never worked.)
  *
- * When `preloadAllBuffers` populates the warm cache, the same
- * AudioBuffer objects are valid for the runtime as long as the
- * runtime uses the same AudioContext (which wavecode does —
- * one shared `__wavecodeAudioCtx`). This wrap short-circuits
- * superdough's loadBuffer for cached URLs, eliminating the
- * "loading sound X took too long" warning that plagued
- * piano-ballad and similar fast-tempo presets.
+ * The previous implementation tried to patch `loadBuffer` on the
+ * `@strudel/webaudio` namespace so superdough's runtime sampler would
+ * reuse the buffers this module pre-decodes. It was dead code, and not
+ * for the reason the old warning claimed:
  *
- * SCOPE: only short-circuits when the cached buffer was
- * created on the same AudioContext as the runtime's. If the
- * contexts differ, falls through to the original loadBuffer.
- * The sample-rate mismatch across contexts is a known
- * limitation; wavecode's single-context architecture sidesteps
- * it entirely.
+ *   - `@strudel/webaudio` is `export * from "superdough"`, so
+ *     `loadBuffer` lives on a **module namespace exotic object**. Per
+ *     spec those hardwire `[[Set]]` and `[[DefineOwnProperty]]` to
+ *     `false`. Both `mod.loadBuffer = …` and
+ *     `Object.defineProperty(mod, …)` throw `TypeError` — in dev,
+ *     prod, and tests alike. The descriptor *reports* `writable: true`,
+ *     which is what made this look plausible.
+ *   - Even a successful assignment would not have helped. superdough's
+ *     sample path is intra-module: `sampler.mjs:47` calls a
+ *     module-local `const loadBuffer` declared at `sampler.mjs:86`. It
+ *     is not reachable through the namespace object at all.
+ *   - The old warning blamed "Cyclist captured original reference".
+ *     Cyclist never touches `loadBuffer` (it receives `doughTrigger`);
+ *     it was simply the wrong diagnosis, printed on every boot.
  *
- * Implementation notes:
+ * Why it survived green: the tests mocked `@strudel/webaudio` as a
+ * plain object literal, whose properties ARE writable — so all five
+ * wrap tests exercised a mechanism that cannot exist in the browser.
+ * See the regression test in SampleLoader.test.ts that asserts the
+ * real, immutable-namespace behaviour.
  *
- * - `originalLoadBuffer` is bound to `mod` (superdough's
- *   namespace module) so the function still resolves its
- *   closure-private `loadCache` / `bufferCache` maps correctly
- *   even after we overwrite `mod.loadBuffer`.
- * - The wrap is idempotent: subsequent calls return early. This
- *   matters because `LiveAudioEngine.ensureRepl` may re-enter on
- *   module reload (HMR) and we must not stack wraps.
- * - The wrap is installed ASYNCHRONOUSLY because
- *   `@strudel/webaudio` is dynamically imported (Vite bundles it
- *   on demand). We must wait for the dynamic import to resolve
- *   before monkey-patching. The race window is microseconds in
- *   practice — the first hap is always seconds later — but we
- *   guard against double-install via the `originalLoadBuffer`
- *   sentinel.
- * - The wrap falls through gracefully when `warmCacheRef` is
- *   null (setWarmCache(null) on teardown). It also falls through
- *   when the URL is not in the cache or the cached buffer lives
- *   on a different AudioContext than the runtime's.
+ * What this module still does, and why the preload is worth its cost:
+ * the Worker fetch populates the browser's HTTP cache, so superdough's
+ * own runtime `fetch` of each MP3 is a cache hit rather than a network
+ * round-trip; the decoded `AudioBuffer`s remain available for
+ * diagnostics via `__getWarmCacheSize()`; and `collectSampleUrls` +
+ * `decodeInWorker` dedupe now keep the Worker to one decode per file.
  */
-let originalLoadBuffer:
-  | ((url: string, ac: AudioContext, label: string, n?: number) => Promise<AudioBuffer>)
-  | null = null;
-let wrapInstalled = false;
-
-/**
- * Patched `loadBuffer` that consults `warmCacheRef` first. When
- * the URL is present and the cached AudioBuffer's `__ctx`
- * (stamped by `reconstructBuffer`) matches the caller's
- * AudioContext, returns the cached buffer directly. Otherwise
- * falls through to the original superdough implementation.
- */
-const wrappedLoadBuffer = async (
-  url: string,
-  ac: AudioContext,
-  label: string,
-  n: number = 0,
-): Promise<AudioBuffer> => {
-  const cache = warmCacheRef;
-  if (cache !== null) {
-    const cached = cache.get(url);
-    if (cached !== undefined) {
-      // The cached AudioBuffer carries a non-standard `__ctx`
-      // property stamped by `reconstructBuffer` (which knows
-      // which AudioContext created it). Real AudioBuffer does
-      // not expose `.context`, so we attach our own.
-      const stamped = (cached as unknown as { __ctx?: AudioContext }).__ctx;
-      if (stamped === ac) {
-        return cached;
-      }
-      // Context mismatch (e.g. multi-context consumer): fall
-      // through to the original loadBuffer. The PCM data is the
-      // same — but we'd need to re-decode to the new context's
-      // sampleRate, which is the original's job.
-    }
-  }
-  if (originalLoadBuffer !== null) {
-    return originalLoadBuffer(url, ac, label, n);
-  }
-  // Wrap not installed yet (dynamic import still pending). Fall
-  // through to the live `mod.loadBuffer` so callers aren't blocked.
-  const mod = await import('@strudel/webaudio');
-  return mod.loadBuffer(url, ac, label, n);
-};
-
-/**
- * Install the warm-cache wrapper on `@strudel/webaudio`'s
- * `loadBuffer` (re-exported from superdough). Idempotent: a
- * second call returns without re-patching. Safe to call from
- * `LiveAudioEngine.ensureRepl` once modules are loaded.
- */
-export const wrapSuperdoughLoadBuffer = (): void => {
-  if (wrapInstalled) return;
-  void (async () => {
-    const mod = await import('@strudel/webaudio');
-    if (wrapInstalled) return;
-    if (typeof mod.loadBuffer !== 'function') {
-      console.warn('[SampleLoader] @strudel/webaudio.loadBuffer not a function — wrap skipped');
-      return;
-    }
-    originalLoadBuffer = mod.loadBuffer.bind(mod);
-    // `@strudel/webaudio` is `export * from "superdough"`. The
-    // module-namespace binding is effectively read-only at the point
-    // Cyclist captures it: in dev (Vite) the descriptor says
-    // writable:true / configurable:false but assignment is a silent
-    // no-op (Cyclist holds the original reference); in production
-    // (rollup) the namespace is `Object.freeze`'d and both
-    // assignment and defineProperty throw. Either way the patch
-    // can't reach Cyclist's `onTrigger` callback, so the wrap is
-    // purely a no-op. Verify by checking the swap actually landed;
-    // if not, log and skip.
-    try {
-    mod.loadBuffer = wrappedLoadBuffer as typeof mod.loadBuffer;
-    } catch {
-      /* Object.freeze'd namespace in prod. */
-    }
-    try {
-      Object.defineProperty(mod, 'loadBuffer', {
-        value: wrappedLoadBuffer,
-        writable: true,
-        configurable: true,
-        enumerable: true,
-      });
-    } catch {
-      /* configurable:false in dev. */
-    }
-    if (mod.loadBuffer === wrappedLoadBuffer) {
-      wrapInstalled = true;
-    } else {
-      console.warn(
-        '[SampleLoader] could not patch @strudel/webaudio.loadBuffer — warm-cache short-circuit disabled (Cyclist captured original reference).',
-      );
-    }
-  })();
-};
-
-/**
- * Test-only reset for the wrap state. Production callers use
- * `setWarmCache(null)` for cache teardown; this also undoes the
- * patch so subsequent tests start from a clean slate.
- */
-export const __resetLoadBufferWrapForTests = (): void => {
-  if (originalLoadBuffer !== null) {
-    void import('@strudel/webaudio').then((mod) => {
-      // Match the install strategy: try direct assignment first
-      // (dev: writable:true, configurable:false), fall back to
-      // defineProperty (rarely needed), swallow otherwise.
-      try {
-        mod.loadBuffer = originalLoadBuffer as typeof mod.loadBuffer;
-      } catch {
-        try {
-          Object.defineProperty(mod, 'loadBuffer', {
-            value: originalLoadBuffer,
-            writable: true,
-            configurable: true,
-            enumerable: true,
-          });
-        } catch {
-          /* frozen namespace — tests on those will not see the wrap anyway. */
-        }
-      }
-    }).catch(() => undefined);
-  }
-  originalLoadBuffer = null;
-  wrapInstalled = false;
-  warmCacheRef = null;
-};
 
 type PreloadState = {
   loaded: number;
@@ -576,7 +486,10 @@ type PreloadState = {
  * bad URL does not block the rest of the bank. The total is
  * computed once at the start of the preload.
  */
-const preloadAllBuffers = async (state: PreloadState): Promise<void> => {
+const preloadAllBuffers = async (
+  state: PreloadState,
+  keys?: ReadonlySet<string>,
+): Promise<void> => {
   const dict = soundMap.get() as SoundMapSnapshot;
   // Touch the audio context so `getAudioContext()` returns a live ctx that
   // can call `createBuffer`. If the user hasn't interacted yet,
@@ -584,15 +497,8 @@ const preloadAllBuffers = async (state: PreloadState): Promise<void> => {
   // works on it. `unlockAudioContext()` is invoked later by
   // LiveAudioEngine.eval() once the user clicks Play.
   const ac = getAudioContext();
-  // Install the cache reference for the wrapper. The wrapper is
-  // installed (separately) by `wrapSuperdoughLoadBuffer()` —
-  // typically from `LiveAudioEngine.ensureRepl` once modules load.
-  // Even before the wrap is installed, populating the reference is
-  // safe: `warmCacheRef === null` keeps the wrapper in fall-through
-  // mode.
-  setWarmCache(warmCache);
-  state.total = collectSampleUrls(dict).length;
-  const urls = state.total > 0 ? collectSampleUrls(dict) : [];
+  const urls = collectSampleUrls(dict, keys);
+  state.total = urls.length;
   // Touch `ac` so the variable is used and the type check sees the
   // `import` non-dead even when SAMPLES_URLS is empty.
   void ac;
@@ -617,6 +523,15 @@ const preloadAllBuffers = async (state: PreloadState): Promise<void> => {
   });
 };
 
+/**
+ * Bank name encoded in a manifest URL (`/samples/drums/strudel.json`
+ * → `drums`). Used to scope a bank's preload to its own soundMap keys.
+ */
+const bankOf = (manifestUrl: string): string => {
+  const m = /\/samples\/([^/]+)\//.exec(manifestUrl);
+  return m?.[1] ?? '';
+};
+
 const registerBank = (
   manifestUrl: string,
   state: BankState,
@@ -635,6 +550,24 @@ const registerBank = (
     try {
       await samples(manifestUrl);
       addBareAliases();
+      // Scope the preload to THIS bank's keys.
+      //
+      // superdough's `soundMap` is one GLOBAL map and `registerBank`
+      // fans the three banks out concurrently, so snapshotting the key
+      // set before `samples()` is not enough: both banks would observe
+      // the pre-call state and then claim each other's keys. Deriving
+      // ownership from the manifest URL instead is race-free — the
+      // `bank_sound` convention is what `addBareAliases` already relies
+      // on, and the bank name is right there in the path.
+      const bank = bankOf(manifestUrl);
+      const prefix = `${bank}_`;
+      const mine = new Set<string>();
+      for (const key of Object.keys(soundMap.get() as SoundMapSnapshot)) {
+        if (!key.startsWith(prefix)) continue;
+        mine.add(key);
+        const idx = key.indexOf('_');
+        if (idx > 0) mine.add(key.slice(idx + 1)); // bare alias
+      }
       const preloadState: PreloadState = {
         loaded: 0,
         total: 0,
@@ -642,7 +575,7 @@ const registerBank = (
         onProgressEvent: (e) => emit(e.loaded, e.total, e.status),
       };
       emit(0, 0, 'loading');
-      await preloadAllBuffers(preloadState);
+      await preloadAllBuffers(preloadState, mine);
       state.loaded = preloadState.loaded;
       state.total = preloadState.total;
       state.status = 'loaded';
@@ -722,6 +655,6 @@ export const __resetForTests = (): void => {
   workerInstance = null;
   nextDecodeId = 0;
   inflightDecodes.clear();
+  inflightByUrl.clear();
   warmCache.clear();
-  setWarmCache(null);
 };

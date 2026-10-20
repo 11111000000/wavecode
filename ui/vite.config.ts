@@ -84,6 +84,21 @@ export default defineConfig({
               expiration: { maxEntries: 16, maxAgeSeconds: 60 * 60 * 24 * 30 },
             },
           },
+          // Sample banks. `globPatterns` deliberately excludes mp3, so
+          // without this rule every MP3 hits the network twice per boot:
+          // once from the decode Worker and once more from superdough's
+          // own runtime fetch at first hap. CacheFirst makes the second
+          // one a cache hit. The manifest JSON is bundled alongside the
+          // samples it describes, so cache it with them.
+          {
+            urlPattern: /\/samples\/[^/]+\/(strudel\.json|[^/]+\.mp3)$/,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'sample-banks',
+              expiration: { maxEntries: 128, maxAgeSeconds: 60 * 60 * 24 * 90 },
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
           {
             urlPattern: ({ url }) => url.hostname === 'llm.kosov.online',
             handler: 'NetworkFirst',

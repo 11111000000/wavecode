@@ -6858,3 +6858,35 @@ textarea.ai-textarea:focus-visible {
   }
 }
 
+
+/* Web MIDI permission was declined / request timed out — the pill now
+   carries an explicit cause and a retry affordance instead of a bare
+   "no device" dead end. */
+.piano-midi-retry {
+  margin-left: var(--space-xs);
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--surface-2);
+  color: var(--primary);
+  font-size: var(--fs-xs);
+  line-height: 1;
+  cursor: pointer;
+}
+.piano-midi-retry:hover { border-color: var(--primary); }
+
+/* Mobile-mode radio: name plus the effect it has, so the choice is
+   comprehensible without applying it first. */
+.wc-overflow-mobile {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  text-align: left;
+}
+.wc-overflow-mobile__hint {
+  font-size: var(--fs-xs);
+  color: var(--fg-dim);
+  opacity: 0.85;
+}

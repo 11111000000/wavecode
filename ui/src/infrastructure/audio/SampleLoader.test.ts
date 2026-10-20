@@ -490,7 +490,8 @@ describe('SampleLoader — Strudel API contract (samples, soundMap, static impor
     // Phase-2 worktree: preload now goes through the Worker, NOT
     // superdough's in-thread `loadBuffer`. We assert `postMessage`
     // on the decode Worker for every non-cached URL in the drums
-    // bank. 14 originals + 10 bare aliases = 24 distinct messages.
+    // bank. 14 distinct files — bare aliases no longer duplicate the
+    // decode work (they used to make this 24).
     const { loadDrumSamples } = await loadSampleLoader();
     await loadDrumSamples();
     const drumFilenames = [
@@ -505,13 +506,13 @@ describe('SampleLoader — Strudel API contract (samples, soundMap, static impor
   });
 
   it('preloadAllBuffers dispatches every URL via postMessage eventually', async () => {
-    // With PRELOAD_CONCURRENCY = 4, all 24 URLs must reach the
-    // Worker by the time loadDrumSamples resolves. Auto-reply is on
-    // so each postMessage resolves into a free slot.
+    // With PRELOAD_CONCURRENCY = 4, all 14 distinct URLs must reach
+    // the Worker by the time loadDrumSamples resolves. Auto-reply is
+    // on so each postMessage resolves into a free slot.
     const { loadDrumSamples } = await loadSampleLoader();
     await loadDrumSamples();
     const w = getMockWorker();
-    expect(w.postMessageSpy).toHaveBeenCalledTimes(24);
+    expect(w.postMessageSpy).toHaveBeenCalledTimes(14);
   });
 
   it('preloadAllBuffers uses PRELOAD_CONCURRENCY (≤4) via withConcurrency', async () => {
@@ -523,18 +524,19 @@ describe('SampleLoader — Strudel API contract (samples, soundMap, static impor
     const { loadDrumSamples } = await loadSampleLoader();
     await loadDrumSamples();
     const w = getMockWorker();
-    expect(w.postMessageSpy.mock.calls.length).toBe(24);
+    // 14 distinct drum files; bare aliases no longer duplicate the work.
+    expect(w.postMessageSpy.mock.calls.length).toBe(14);
   });
 
-  it('onProgress fires for each buffer (24 events: 14 originals + 10 bare aliases)', async () => {
+  it('onProgress fires once per distinct buffer (14 events)', async () => {
     const events: Array<{ loaded: number; total: number }> = [];
     const { loadDrumSamples } = await loadSampleLoader();
     await loadDrumSamples({ onProgress: (loaded, total) => { events.push({ loaded, total }); } });
     expect(events[0]?.loaded).toBe(0);
-    expect(events[0]?.total).toBe(24);
+    expect(events[0]?.total).toBe(14);
     const last = events[events.length - 1];
-    expect(last?.loaded).toBe(24);
-    expect(last?.total).toBe(24);
+    expect(last?.loaded).toBe(14);
+    expect(last?.total).toBe(14);
     for (let i = 1; i < events.length; i += 1) {
       expect(events[i]!.loaded).toBeGreaterThanOrEqual(events[i - 1]!.loaded);
     }
@@ -551,11 +553,11 @@ describe('SampleLoader — Strudel API contract (samples, soundMap, static impor
     expect(areAllSamplesLoaded()).toBe(false);
     await loadDrumSamples();
     const after = getSampleLoadProgress();
-    expect(after.perBank.drums).toEqual({ loaded: 24, total: 24 });
+    expect(after.perBank.drums).toEqual({ loaded: 14, total: 14 });
     expect(after.perBank.piano).toEqual({ loaded: 0, total: 0 });
     expect(after.perBank.synth).toEqual({ loaded: 0, total: 0 });
-    expect(after.loaded).toBe(24);
-    expect(after.total).toBe(24);
+    expect(after.loaded).toBe(14);
+    expect(after.total).toBe(14);
     expect(areAllSamplesLoaded()).toBe(false);
   });
 
@@ -647,12 +649,11 @@ describe('SampleLoader — Strudel API contract (samples, soundMap, static impor
     await loadDrumSamples();
     const calledUrls = postedUrls();
     expect(calledUrls).not.toContain(cachedUrl);
-    // bd.mp3 appears twice (drums_bd + bare alias) → 2 skipped.
-    // 24 - 2 = 22 worker calls.
-    expect(getMockWorker().postMessageSpy).toHaveBeenCalledTimes(22);
+    // 14 distinct files, 1 served from the SW cache → 13 worker calls.
+    expect(getMockWorker().postMessageSpy).toHaveBeenCalledTimes(13);
     const progress = getSampleLoadProgress();
-    expect(progress.perBank.drums.total).toBe(24);
-    expect(progress.perBank.drums.loaded).toBe(24);
+    expect(progress.perBank.drums.total).toBe(14);
+    expect(progress.perBank.drums.loaded).toBe(14);
   });
 
 // ---- malformed URLs from upstream soundMap entries ----
@@ -722,6 +723,50 @@ describe('SampleLoader — Strudel API contract (samples, soundMap, static impor
       piano_c7: ['/samples/piano/C7.mp3'],
     }, 'piano');
     expect(urls).toEqual(['/samples/piano/A1.mp3', '/samples/piano/C7.mp3']);
+  });
+
+  // ---- regression net for the removed warm-cache wrapper ----
+  //
+  // `addBareAliases` registers a bare alias beside every `bank_sound`
+  // entry and REUSES the same entry object, so both keys share one
+  // `data.samples` array. The old `collectSampleUrls` pushed both, so
+  // the Worker fetched and decoded every MP3 twice and the progress
+  // total over-reported 2x. The wrapper tests around here used to mock
+  // `@strudel/webaudio` as a plain object literal whose properties are
+  // writable, which is why a patch that can never land in a browser
+  // passed its own suite. These cases pin the part that is testable.
+
+  it('collects each distinct URL once despite bare aliases', async () => {
+    const { loadDrumSamples, getSampleLoadProgress } = await loadSampleLoader();
+    await loadDrumSamples();
+    // public/samples/drums/strudel.json ships 14 files; the alias pass
+    // doubles the key count but must not double the collected set.
+    expect(getSampleLoadProgress().perBank.drums.total).toBe(14);
+  });
+
+  it('progress total counts distinct URLs, not soundMap keys', async () => {
+    const { loadDrumSamples, getSampleLoadProgress } = await loadSampleLoader();
+    await loadDrumSamples();
+    expect(getSampleLoadProgress().perBank.drums.total).toBe(14);
+  });
+
+  it('banks running concurrently still decode each URL once', async () => {
+    // registerBank fans the three banks out in parallel against ONE
+    // global soundMap, so the same URL can be collected again before the
+    // first decode settles. decodeInWorker dedupes in flight by URL.
+    const { loadDrumSamples, loadSynthSamples, getSampleLoadProgress } = await loadSampleLoader();
+    await Promise.all([loadDrumSamples(), loadSynthSamples()]);
+    expect(getSampleLoadProgress().perBank.drums.total).toBe(14);
+    expect(getSampleLoadProgress().perBank.synth.total).toBe(12);
+    expect(getSampleLoadProgress().total).toBe(26);
+  });
+
+  it('exports no patch-installing hook for superdough', async () => {
+    const mod = await import('./SampleLoader');
+    const surface = Object.keys(mod);
+    expect(surface).not.toContain('wrapSuperdoughLoadBuffer');
+    expect(surface).not.toContain('setWarmCache');
+    expect(surface).not.toContain('__resetLoadBufferWrapForTests');
   });
 });
 
@@ -1042,211 +1087,17 @@ vi.doMock('./decodeWorker?worker', () => ({
  * `__ctx` field, mirroring what `reconstructBuffer` does). Call
  * the (now-patched) `loadBuffer` and assert the right path was taken.
  */
-describe('SampleLoader — wrapSuperdoughLoadBuffer (warm-cache fast path)', () => {
-  let samplesMock: ReturnType<typeof vi.fn>;
-  let loadBufferMock: ReturnType<typeof vi.fn>;
-  let warmCacheFixture: Map<string, AudioBuffer>;
-  let fakeCtx: AudioContext;
-
-  // Local FakeDecodeWorker — the Worker integration surface suite
-  // above has its own, scoped to its describe block. The wrap suite
-  // doesn't dispatch any decodes, but `loadSampleLoader()` still
-  // imports `./decodeWorker?worker` via Vite's worker factory, so we
-  // need a stub class to satisfy the import.
-  class FakeDecodeWorker {
-    static all: FakeDecodeWorker[] = [];
-    static factoryCalls = 0;
-    postMessageSpy = vi.fn();
-    messageHandlers: Array<(e: { data: unknown }) => void> = [];
-    autoReply = true;
-    constructor() {
-      FakeDecodeWorker.all.push(this);
-    }
-    postMessage(msg: unknown): void {
-      this.postMessageSpy(msg);
-      if (this.autoReply) {
-        const id = (msg as { id?: number }).id;
-        const reply = {
-          type: 'decode:ok',
-          id,
-          buffer: new ArrayBuffer(64),
-          sampleRate: 44100,
-          numberOfChannels: 1,
-          duration: 0.001,
-        };
-        queueMicrotask(() => this.triggerReply(reply));
-      }
-    }
-    triggerReply(reply: unknown): void {
-      for (const h of this.messageHandlers) h({ data: reply });
-    }
-    addEventListener(type: string, handler: (e: { data: unknown }) => void): void {
-      if (type === 'message') this.messageHandlers.push(handler);
-    }
-  }
-
-  beforeEach(async () => {
-    vi.resetModules();
-    FakeDecodeWorker.all = [];
-    FakeDecodeWorker.factoryCalls = 0;
-    Object.defineProperty(globalThis, 'caches', { value: undefined, configurable: true, writable: true });
-
-    samplesMock = vi.fn().mockResolvedValue(undefined);
-    loadBufferMock = vi.fn().mockImplementation(
-      async (_url: string, _ac: AudioContext, _label: string) => {
-        // Original superdough path: build a fresh AudioBuffer.
-        return fakeCtx.createBuffer(1, 16, 44100);
-      },
-    );
-    warmCacheFixture = new Map();
-    fakeCtx = {
-      sampleRate: 44100,
-      decodeAudioData: vi.fn(),
-      createBuffer: (channels: number, length: number, sampleRate: number): AudioBuffer => ({
-        numberOfChannels: channels,
-        length,
-        sampleRate,
-        duration: length / sampleRate,
-        copyToChannel: vi.fn(),
-        getChannelData: (): Float32Array => new Float32Array(length),
-      } as unknown as AudioBuffer),
-    } as unknown as AudioContext;
-
-    vi.doMock('@strudel/webaudio', () => ({
-      samples: samplesMock,
-      soundMap: { get: () => ({}), set: vi.fn() },
-      getAudioContext: () => fakeCtx,
-      loadBuffer: loadBufferMock,
-    }));
-    vi.doMock('./decodeWorker?worker', () => ({
-      default: class FakeWorkerCtor {
-        constructor() {
-          return new FakeDecodeWorker();
-        }
-      },
-    }));
-  });
-
-  // Stamp a fresh fake AudioBuffer with the `__ctx` marker, then
-  // install it in the warm cache. Returns the buffer for inspection.
-  const installCachedBuffer = (url: string, ctx: AudioContext): AudioBuffer => {
-    const buf = ctx.createBuffer(1, 16, 44100);
-    (buf as unknown as { __ctx: AudioContext }).__ctx = ctx;
-    warmCacheFixture.set(url, buf);
-    return buf;
-  };
-
-  const loadSampleLoader = async () => {
-    const mod = await import('./SampleLoader');
-    return {
-      wrapSuperdoughLoadBuffer: mod.wrapSuperdoughLoadBuffer,
-      setWarmCache: mod.setWarmCache,
-      __resetLoadBufferWrapForTests: mod.__resetLoadBufferWrapForTests,
-      __resetForTests: mod.__resetForTests,
-      __getWarmCacheSize: mod.__getWarmCacheSize,
-    };
-  };
-
-  // The wrap installs asynchronously (it awaits `import('@strudel/webaudio')`).
-  // After calling `wrapSuperdoughLoadBuffer()` we must flush microtasks
-  // for the dynamic import to resolve and `mod.loadBuffer` to be
-  // patched. Helper waits one tick.
-  const flushWrap = async () => {
-    await Promise.resolve();
-    await Promise.resolve();
-  };
-
-  it('wrapSuperdoughLoadBuffer is idempotent — second call does not stack wraps', async () => {
-    const { wrapSuperdoughLoadBuffer } = await loadSampleLoader();
-    wrapSuperdoughLoadBuffer();
-    await flushWrap();
-    const mod = await import('@strudel/webaudio');
-    const firstWrapped = mod.loadBuffer;
-    wrapSuperdoughLoadBuffer();
-    wrapSuperdoughLoadBuffer();
-    await flushWrap();
-    const secondWrapped = mod.loadBuffer;
-    expect(secondWrapped).toBe(firstWrapped);
-    // The original loadBufferMock was never restored — meaning the
-    // wrap didn't double-patch (which would have replaced the wrap
-    // with another wrap; the original would have been lost).
-    expect(mod.loadBuffer).not.toBe(loadBufferMock);
-  });
-
-  it('after wrap: a URL in the warm cache returns the cached AudioBuffer directly', async () => {
-    const { wrapSuperdoughLoadBuffer, setWarmCache } = await loadSampleLoader();
-    const cached = installCachedBuffer('bd.mp3', fakeCtx);
-    setWarmCache(warmCacheFixture);
-    wrapSuperdoughLoadBuffer();
-    await flushWrap();
-    const mod = await import('@strudel/webaudio');
-    const result = await mod.loadBuffer('bd.mp3', fakeCtx, 'bd');
-    // Returned buffer must be the cached one (identity check).
-    expect(result).toBe(cached);
-    // The original was bypassed — no fetch+decode path ran.
-    expect(loadBufferMock).not.toHaveBeenCalled();
-  });
-
-  it('after wrap: a URL NOT in the warm cache falls through to the original loadBuffer', async () => {
-    const { wrapSuperdoughLoadBuffer, setWarmCache } = await loadSampleLoader();
-    installCachedBuffer('bd.mp3', fakeCtx);
-    setWarmCache(warmCacheFixture);
-    wrapSuperdoughLoadBuffer();
-    await flushWrap();
-    const mod = await import('@strudel/webaudio');
-    const result = await mod.loadBuffer('other.mp3', fakeCtx, 'other');
-    // The original loadBufferMock DID run for the unknown URL.
-    expect(loadBufferMock).toHaveBeenCalledTimes(1);
-    expect(loadBufferMock).toHaveBeenCalledWith('other.mp3', fakeCtx, 'other', 0);
-    // Returned value came from the original (a freshly created buffer,
-    // NOT the cached one for bd.mp3).
-    expect(result).not.toBe(warmCacheFixture.get('bd.mp3'));
-  });
-
-  it('after setWarmCache(null): all calls fall through to the original', async () => {
-    const { wrapSuperdoughLoadBuffer, setWarmCache } = await loadSampleLoader();
-    const cached = installCachedBuffer('bd.mp3', fakeCtx);
-    setWarmCache(warmCacheFixture);
-    wrapSuperdoughLoadBuffer();
-    await flushWrap();
-    // Now wipe the cache reference — simulates teardown.
-    setWarmCache(null);
-    const mod = await import('@strudel/webaudio');
-    const result = await mod.loadBuffer('bd.mp3', fakeCtx, 'bd');
-    expect(loadBufferMock).toHaveBeenCalledTimes(1);
-    // Result came from the original (NOT the cached buffer).
-    expect(result).not.toBe(cached);
-  });
-
-  it('after wrap: a different AudioContext on the caller falls through (no short-circuit)', async () => {
-    // Cache holds a buffer stamped with fakeCtx.
-    const { wrapSuperdoughLoadBuffer, setWarmCache } = await loadSampleLoader();
-    const cached = installCachedBuffer('bd.mp3', fakeCtx);
-    setWarmCache(warmCacheFixture);
-    wrapSuperdoughLoadBuffer();
-    await flushWrap();
-    // The caller passes a DIFFERENT AudioContext (the wavecode
-    // runtime uses __wavecodeAudioCtx which equals fakeCtx in this
-    // mock — but if some future caller uses a different context,
-    // we must not return a buffer created on another ctx).
-    const otherCtx = {
-      sampleRate: 48000,
-      decodeAudioData: vi.fn(),
-      createBuffer: (channels: number, length: number, sampleRate: number): AudioBuffer => ({
-        numberOfChannels: channels,
-        length,
-        sampleRate,
-        duration: length / sampleRate,
-        copyToChannel: vi.fn(),
-        getChannelData: (): Float32Array => new Float32Array(length),
-      } as unknown as AudioBuffer),
-    } as unknown as AudioContext;
-    const mod = await import('@strudel/webaudio');
-    const result = await mod.loadBuffer('bd.mp3', otherCtx, 'bd');
-    // Original ran (because context mismatch).
-    expect(loadBufferMock).toHaveBeenCalledTimes(1);
-    // Cached buffer was NOT returned (other ctx can't use a buffer
-    // created on fakeCtx without re-decode).
-    expect(result).not.toBe(cached);
-  });
-});
+/**
+ * Regression net for the removed warm-cache wrapper.
+ *
+ * The old suite mocked `@strudel/webaudio` as a plain object literal
+ * (`{ samples, soundMap, getAudioContext, loadBuffer }`), whose
+ * properties ARE writable — so `mod.loadBuffer = …` succeeded in tests
+ * while it can NEVER succeed against the real module namespace. Five
+ * tests therefore validated a mechanism that cannot exist in a browser,
+ * and the dead patch shipped green for months.
+ *
+ * These tests pin the two properties that actually mattered and are
+ * still true: the runtime sample path is unreachable through the
+ * namespace object, and the preload must not duplicate work.
+ */

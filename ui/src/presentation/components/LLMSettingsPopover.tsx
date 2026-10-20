@@ -1,20 +1,15 @@
 import { Show, For, createSignal, onMount, onCleanup, type JSX } from 'solid-js';
-import { getLLMSettings, setModel, setThinking, type Model, type Thinking } from '~/presentation/state/llmSettings';
+import {
+  getLLMSettings, setModel, setThinking, modelLabel, thinkingLabel,
+  MODEL_TIERS, type Model, type Thinking,
+} from '~/presentation/state/llmSettings';
 import { SettingsIcon } from '~/presentation/icons';
-
-const MODEL_OPTIONS: ReadonlyArray<{ value: Model; label: string; hint: string }> = [
-  { value: 'smart', label: 'M3', hint: 'умнее, медленнее' },
-  { value: 'fast', label: 'M2.1', hint: 'быстрее, проще' },
-];
 
 const THINKING_OPTIONS: ReadonlyArray<{ value: Thinking; label: string }> = [
   { value: 'low', label: 'мало' },
   { value: 'high', label: 'много' },
   { value: 'off', label: 'выкл' },
 ];
-
-const modelLabel = (m: Model): string => m === 'smart' ? 'M3' : 'M2.1';
-const thinkingLabel = (t: Thinking): string => t === 'low' ? 'low' : t === 'high' ? 'high' : 'off';
 
 /**
  * LLMSettingsPopover — кнопка `⚙ M3 · high` + popover с выбором
@@ -79,8 +74,11 @@ export function LLMSettingsPopover(): JSX.Element {
           <label class="wc-llm-popover__field">
             <span class="wc-llm-popover__label">Модель</span>
             <select class="llm-select" value={settings().model} onChange={onModelChange}>
-              <For each={MODEL_OPTIONS}>
-                {(o) => <option value={o.value}>{o.label} — {o.hint}</option>}
+              <For each={MODEL_TIERS}>
+                {/* `routesTo` is surfaced on purpose: the wire value is the
+                    tier, not the label, so showing what the proxy actually
+                    serves keeps the UI honest when routing changes. */}
+                {(o) => <option value={o.value}>{o.label} — {o.hint} ({o.routesTo})</option>}
               </For>
             </select>
           </label>

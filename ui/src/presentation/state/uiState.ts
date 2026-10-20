@@ -48,6 +48,24 @@ const compactState: UIState = {
   layout: defaultLayout(),
 };
 
+/**
+ * Mobile-mode options with the effect spelled out.
+ *
+ * `auto` in particular is opaque from the label alone: it follows the
+ * `matchMedia('(max-width: 720px)')` breakpoint rather than doing
+ * anything visibly different on a given device, and the old radio gave
+ * the user no way to know that before committing to a pick.
+ */
+export const MOBILE_MODES: ReadonlyArray<{
+  readonly value: MobileMode;
+  readonly label: string;
+  readonly hint: string;
+}> = [
+  { value: 'auto', label: 'Авто', hint: 'сам решит по ширине экрана' },
+  { value: 'compact', label: 'Компактно', hint: 'всё в один столбец' },
+  { value: 'full', label: 'Полно', hint: 'панели во всю ширину' },
+];
+
 const isMobileViewport = (): boolean => {
   if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
     return false;
