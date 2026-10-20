@@ -3,7 +3,6 @@ import {
   voiceAIState,
   voiceAITranscript,
   voiceAIElapsedSec,
-  enterVoiceAIReview,
   stopVoiceAI,
 } from '../state/voiceAIStore';
 import {
@@ -17,7 +16,7 @@ import {
   micCurrentHz,
   micCurrentRms,
 } from '../state/micStore';
-import { MicIcon, WhistleIcon, CloseIcon, SendIcon } from '../icons';
+import { MicIcon, WhistleIcon, CloseIcon } from '../icons';
 import { Effect } from 'effect';
 import type { AudioNote } from '~/domain/audio/micCapture';
 import { noteNumberToName } from '~/domain/music/notes';
@@ -115,38 +114,21 @@ const VoiceAIBody = (): JSX.Element => {
   /* Push-to-talk is the default loop (decisions/wavecode-voice-fab,
    * outcome `voice-ai-fab-press-and-hold`): press → speak → the final
    * chunk auto-commits, the user just hears the result. A «Проверить»
-   * button sitting in the panel during `listening` invited a second,
-   * redundant step into the primary gesture — it was enabled in
-   * exactly the states where the user is already mid-sentence and
-   * mid-utterance.
-   *
-   * The affordance is now the *escape hatch* out of that loop, so it
-   * renders only once the recording is already stopped:
-   *   - `paused`  — reached by the panel's ✕ (`stopVoiceAI` →
-   *                `handle.stop()` dispatches `pause`): "I'm done
-   *                talking, let me fix the wording first";
-   *   - `review`  — already in the review modal; the button stays as
-   *                a re-entry point (dispatching `enter-review` from
-   *                `review` is a no-op in the reducer).
-   * In `listening` / `transcribing` / `requesting` / `applying` /
-   * `errored` nothing is rendered at all — not a disabled button. */
-  const canReview = createMemo<boolean>(() => {
-    const tag = voiceAIState().tag;
-    return tag === 'paused' || tag === 'review';
-  });
-
-  const onReview = async (): Promise<void> => {
-    try {
-      await Effect.runPromise(enterVoiceAIReview());
-    } catch {
-      /* orchestrator handles error recovery */
-    }
-  };
+   * button sitting in the panel invited a second, redundant step into
+   * that loop, so the live transcript is now self-sufficient: interim
+   * chunks appear as the server returns them (or Web Speech's
+   * interims), the user sees what they said before the final commit,
+   * and the only controls are ✕ (cancel — `stopVoiceAI` →
+   * `handle.stop()` dispatches `pause`) at every active state. The
+   * `review` state and its modal are still wired through the reducer
+   * (`decisions/wavecode-voice-fab`) but have no UI affordance any
+   * more — a clean rollback path exists if a future iteration wants a
+   * deliberate "review" step. */
   const onStop = async (): Promise<void> => {
     try {
       await Effect.runPromise(stopVoiceAI());
     } catch {
-      /* ditto */
+      /* orchestrator handles error recovery */
     }
   };
 
@@ -188,29 +170,16 @@ const VoiceAIBody = (): JSX.Element => {
               || (voiceAIState().tag === 'applying' ? 'применяю правку…'
                 : voiceAIState().tag === 'requesting' ? 'жду ответ ИИ…'
                 : voiceAIState().tag === 'paused' ? 'на паузе'
-                : voiceAIState().tag === 'review' ? 'проверь и отправь'
                 : (voiceAIState().tag === 'listening' || voiceAIState().tag === 'arming')
-                  // Server STT has no interim text to show — one
-                  // upload covers the whole utterance. The counter is
-                  // the honest signal that the mic is hot.
+                  // Server STT may take seconds before the first
+                  // interim chunk (5-9 s round-trip); the counter is
+                  // the honest signal that the mic is hot while we
+                  // wait.
                   ? `записываю… ${voiceAIElapsedSec()} с`
                 : '…')}
           </span>
         </Show>
       </div>
-      <Show when={canReview()}>
-        <div class="voice-recording-panel__actions">
-          <button
-            type="button"
-            class="voice-recording-panel__btn voice-recording-panel__btn--primary"
-            aria-label="Открыть для проверки и редактирования перед отправкой"
-            title="Остановить запись и показать текст для редактирования"
-            onClick={() => { void onReview(); }}
-          >
-            Проверить <SendIcon size={12} />
-          </button>
-        </div>
-      </Show>
     </>
   );
 };
