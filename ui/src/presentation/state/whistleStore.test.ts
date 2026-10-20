@@ -105,6 +105,40 @@ describe('whistleStore — start / stop lifecycle', () => {
   });
 });
 
+describe('whistleStore — replaceScore dispatch', () => {
+  it('commit splices the buffered notes into appStore.score via replaceScore', async () => {
+    // Preload `micPreviewNotes` BEFORE the commit dispatch — the
+    // presentation-layer commit path reads this signal synchronously
+    // and would silently no-op without notes (matching the
+    // `micStore.applyToScore` pattern: state first, action second).
+    const { setMicPreviewNotes } = await import('./micStore');
+    const { appStore, dispatch } = await import('./appStore');
+    installFake();
+    setMicPreviewNotes([
+      { midi: 60, cents: 0, startMs: 0, durationMs: 500, vibratoCents: 0 },
+    ]);
+    dispatch({ type: 'replaceScore', text: '' });
+    await Effect.runPromise(startWhistle({ sessionId: 'sess-c2' }));
+    await Effect.runPromise(commitWhistle());
+    // Empty score → `appendToTopStack` returns the snippet verbatim.
+    expect(appStore.score).toMatch(/^note\(/);
+    expect(appStore.score).toContain('c4');
+    expect(appStore.score).toContain('s("piano")');
+  });
+
+  it('commit is a no-op when no notes are buffered (replaceScore untouched)', async () => {
+    const { setMicPreviewNotes } = await import('./micStore');
+    const { appStore, dispatch } = await import('./appStore');
+    installFake();
+    setMicPreviewNotes([]);
+    dispatch({ type: 'replaceScore', text: 'note("e4 g4")' });
+    const before = appStore.score;
+    await Effect.runPromise(startWhistle({ sessionId: 'sess-c3' }));
+    await Effect.runPromise(commitWhistle());
+    expect(appStore.score).toBe(before);
+  });
+});
+
 describe('whistleStore — mic mutex contention', () => {
   it('start fails with MicBusyError when another mic-direct owner holds the channel', async () => {
     installFake();
