@@ -22,7 +22,7 @@
 ## ▶ Try it
 
 * **Live demo:** <https://wavecode.kosov.online/> (also available over Tailscale: <https://wavecode.tail347ae6.ts.net/>)
-* **Stable build:** auto-deploys from `master` — see [CI/CD](docs/ARCHITECTURE.md)
+* **Stable build:** deployed from the dev host with `./bin/deploy.sh` — there is no auto-deploy
 * **PWA:** installable as a standalone app (Chrome / Edge / Safari iOS 16.4+)
 
 > **First run:** open `#/app` (skipping the landing), wait ~5 seconds for Strudel samples to load from the ServiceWorker cache. The "Loaded N/M samples" badge in the top bar shows progress. Audio only starts on the ▶ click (browser autoplay policy).
@@ -152,7 +152,7 @@ Full traceability — every decision is captured as a YAML in `decisions/` under
 | E2E tests | 19 Playwright files | `ui/tests/e2e/` |
 | Pre-commit hook | typecheck + vitest + lint:no-console + validate:presets | `scripts/pre-commit` |
 | CI | GitHub Actions: typecheck + vitest + lint + build | `.github/workflows/ci.yml` |
-| Deployment CI | GitVerse Actions → SSH to angara-1 | `.gitverse/workflows/deploy.yml` |
+| Deployment | local on angara-1: `./bin/deploy.sh` (no auto-deploy) | `bin/deploy.sh` |
 
 **Layered architecture:** `ui/src/{domain,application,infrastructure,presentation}/` — each layer has explicit import contracts, enforced by eslint. Domain is pure functions (no `fetch` / `AudioContext` / `solid-js`), application is Effect-typed use-cases, infrastructure implements `LLMClient` / `AudioEngine` / `Repo`, presentation is Solid components.
 
@@ -173,7 +173,7 @@ wavecode/
 ├── CHANGELOG.md           release history
 ├── SECURITY.md            vulnerability policy
 ├── .github/               GitHub-specific: workflows, issue/PR templates, CODEOWNERS
-├── .gitverse/             GitVerse Actions workflows (deploy, math-coding gate)
+├── .gitverse/             GitVerse Actions: math-coding gate only (no deploy)
 ├── bin/                   deploy.sh, check-llm-key.sh
 ├── decisions/             97 architectural decisions (math-coding 3.3 schema)
 ├── attestations/          evidence store for math-coding self-check

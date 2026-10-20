@@ -152,7 +152,7 @@ npm run build               # → ui/dist/
 | E2E тесты | 19 файлов playwright | `ui/tests/e2e/` |
 | Pre-commit hook | typecheck + vitest + lint:no-console + validate:presets | `scripts/pre-commit` |
 | CI | GitHub Actions: typecheck + vitest + lint + build | `.github/workflows/ci.yml` |
-| Deployment CI | GitVerse Actions → SSH на angara-1 | `.gitverse/workflows/deploy.yml` |
+| Deployment | локально на angara-1: `./bin/deploy.sh` (auto-deploy нет) | `bin/deploy.sh` |
 
 **Layered architecture:** `ui/src/{domain,application,infrastructure,presentation}/` — каждый слой имеет явный контракт импортов, enforced eslint'ом. Domain — pure functions (без `fetch`/`AudioContext`/`solid-js`), application — Effect-typed use-cases, infrastructure — реализация `LLMClient`/`AudioEngine`/`Repo`, presentation — Solid-компоненты.
 
@@ -173,7 +173,7 @@ wavecode/
 ├── CHANGELOG.md           история релизов
 ├── SECURITY.md            политика уязвимостей
 ├── .github/               GitHub-specific: workflows, issue/PR templates, CODEOWNERS
-├── .gitverse/             GitVerse Actions workflows (deploy, math-coding gate)
+├── .gitverse/             GitVerse Actions: только math-coding gate (деплоя нет)
 ├── bin/                   deploy.sh, check-llm-key.sh
 ├── decisions/             97 архитектурных решений (math-coding 3.3 schema)
 ├── attestations/          evidence store для math-coding self-check
