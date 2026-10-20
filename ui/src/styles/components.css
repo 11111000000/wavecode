@@ -4196,6 +4196,11 @@ textarea.ai-textarea:focus-visible {
   display: flex;
   align-items: center;
   justify-content: center;
+  /* Portal-mounted, so --z-modal (60) competes at the ROOT stacking
+     context and beats the transport bar (--z-sheet + 12 = 52). The
+     previous in-tree placement inherited the topbar's context
+     (z = --z-sheet + 5 = 45), so the bar painted over the modal and
+     swallowed every click on «Закрыть». */
   z-index: var(--z-modal);
   backdrop-filter: blur(4px);
 }
