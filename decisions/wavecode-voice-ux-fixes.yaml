@@ -1,0 +1,308 @@
+---
+schema: math-coding/3.3
+id: wavecode-voice-ux-fixes
+revision: 1
+state: active
+body_sha: "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+yaml_sha: "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+
+axiom_link:
+  - A0
+  - A3
+
+intent: |
+  Починить три UX-бага голосового ввода, найденные при ручном
+  осмотре в браузере (viewport 780×493):
+
+  (1) `.voice-recording-panel` и `.voice-review-panel` держали
+  `bottom: calc(var(--tabbar-h) + 240px + var(--safe-bottom))`
+  (у review-panel — 200px). Реальная высота FAB-кластера —
+  196px, поэтому панель уезжала на ~44px выше кластера, целиком
+  попадала под `.app-transport-bar` (z-index z-sheet+12 против
+  z-sheet+4 у панели) и перехватывала все клики по своим же
+  кнопкам. Замерено: панель top=76.2/bottom=193 при
+  transport body top=101/bottom=164.
+
+  (2) Кнопка «Проверить» рендерилась (и была активна) в
+  `listening`/`transcribing`, вставляя лишний клик в основной
+  жест. По outcome `voice-ai-fab-press-and-hold` из
+  wavecode-voice-fab@1 цикл «нажал → сказал → услышал» должен
+  быть одним жестом с auto-commit на final-чанке.
+
+  (3) Инструмент свиста хардкодился в `whistleStore.ts` как
+  `'piano'` и не отображался нигде: чип показывал только
+  «слушаю…», и юзер не понимал, что на выходе будет пианино.
+commitment: |
+  (1) Четырёхслойная архитектура (domain / application /
+  infrastructure / presentation) и правила ESLint
+  no-restricted-imports per layer остаются инвариантом: все
+  правки — presentation (компоненты, стор, CSS-токены), ни один
+  слой не импортирует наружу. (2) Геометрия плавающих
+  голосовых панелей выражается именованными токенами
+  (`--voice-fab-cluster-h`, `--voice-panel-max-h`), а не
+  литералами в пикселях: значение выводится из измеренной
+  высоты FAB-кластера, поэтому переезд кластера не может снова
+  рассинхронизировать панель с ним. (3) `tsc` + `vitest` +
+  `eslint` зелёные; `mathc validate` на этом файле зелёный.
+  (4) Ни один из трёх фиксов не меняет доменный контракт
+  голосового ввода: `VoiceIntent`, `intentRouter`, FSM-события
+  и порядок auto-commit остаются как были.
+
+counterexample: |
+  «Панель и так работает — юзер просто видит её поверх панели
+  транспорта, это мелкое косметическое перекрытие». Возражения:
+  измерение в браузере опровергает «мелкое». Панель занимает
+  y=76…193, transport body — y=101…164: панель не просто
+  перекрывает вид, она накрывает transport body целиком, а
+  transport bar стоит выше по z-index, поэтому
+  `document.elementFromPoint` в центре кнопок «Остановить
+  запись» и «Проверить» возвращает элемент транспортного бара.
+  Юзер физически не может нажать «стоп» — запись нельзя
+  прервать. Это ломающая функция, а не косметика.
+
+  «Кнопку «Проверить» надо просто задизейблить в listening, а не
+  убирать — disabled-кнопка видна и подсказывает, что проверка
+  существует». Возражения: disabled-кнопка в первичном жесте —
+  это ровно тот «лишний клик» в two clicks, который и жаловались
+  убрать; пользователь видит призыв, который не сработает, и
+  тратит внимание на тупик.
+
+  «Инструмент свиста можно вынести в селектор обратно, раз
+  есть куча места». Возражения: исходное решение
+  (wavecode-voice-fab@1, `whistle-fab-press-and-hold») явно
+  убрало селекторы piano/synth/drums из мини-FAB, чтобы свист
+  стал одним жестом без выбора. Возвращать селектор —
+  откат этого решения, а не фикс этого бага. Показываем
+  название, выбора не добавляем.
+
+  «Дублировать `'piano'` в компоненте проще, чем тянуть сигнал
+  из стора». Возражения: это и есть исходный баг — значение
+  живёт в сторе, а UI его не знает. Вторая копия разъедется
+  при первом же добавлении селектора, и чип начнёт врать о том,
+  что реально коммитит `notesToSnippet`.
+
+antithesis: |
+  (1) «Поднять панель ещё выше (например 280px), раз
+  транспорт всего 164px сверху — хватит». Возражения: это
+  та же магия с другим числом. При 280px панель уедет под
+  TopBar на низких viewport, а на мобильном (где
+  safe-area-inset-bottom добавляет ещё ~34px) вообще уедет за
+  экран. Токен, вычисленный из измеренной геометрии, не ломается
+  при изменении входных данных; литерал — ломается.
+
+  (2) «Поднять z-index панели над транспортным баром —
+  тогда клики пройдут, и править позиционирование не нужно».
+  Возражения: панель — временный оверлей поверх активной
+  записи, транспортный бар — постоянный орган управления
+  (Play, BPM, CPS). Поднимать панель над ним значит на время
+  записи перекрыть Play кнопку, то есть поменять одну поломку
+  на другую и более заметную. Правильная геометрия не создаёт
+  конфликта, поэтому поднимать стек не нужно.
+
+  (3) «Раз панель всё равно может вырасти, обрежь её
+  `overflow: hidden` и не думай». Возражения: обрезка без
+  прокрутки прячет текст расшифровки. Текст — главное, ради
+  чего панель существует; он должен доезжать скроллом внутри
+  панели, а controls (✕, «Проверить») остаются закреплёнными.
+
+scope:
+  paths:
+    - "ui/src/styles/tokens.css"
+    - "ui/src/styles/components.css"
+    - "ui/src/presentation/components/RecordingPanel.tsx"
+    - "ui/src/presentation/components/RecordingPanel.test.tsx"
+    - "ui/src/presentation/components/WhistleMiniFAB.tsx"
+    - "ui/src/presentation/components/WhistleMiniFAB.test.tsx"
+    - "ui/src/presentation/state/whistleStore.ts"
+    - "ui/src/presentation/state/voiceAIStore.ts"
+  exclusions:
+    - "ui/node_modules/**"
+    - "ui/dist/**"
+    - "ui/src/domain/**"
+    - "ui/src/application/**"
+    - "ui/src/infrastructure/**"
+
+outcomes:
+  - id: voice-panel-anchored-to-fab-cluster
+    statement: |
+      `.voice-recording-panel` и `.voice-review-panel`
+      используют `bottom: var(--voice-fab-cluster-h)`, где
+      токен = tabbar-h + space-lg + safe-bottom + (2 ×
+      --voice-mini-fab-size + space-sm) = 196px на десктопе.
+      Панель стоит вплотную над `.voice-mini-fab-stack` и не
+      пересекается с `.app-transport-bar`: замер после фикса на
+      780×493 — панель top=180/bottom=297 при
+      transport-bar bottom=164, зазор 16px; оба её controls
+      возвращаются из `document.elementFromPoint` как элементы
+      самой панели, а не транспортного бара.
+  - id: voice-panel-cannot-grow-into-transport
+    statement: |
+      Обе панели ограничены `max-height: var(--voice-panel-max-h)`
+      и скроллят содержимое; `.voice-recording-panel__head` и
+      `__actions` (и head/textarea/footer панели проверки) имеют
+      `flex-shrink: 0` / `min-height: 0`, поэтому длинная
+      расшифровка скроллится внутри панели, а кнопка ✕ и
+      «Проверить» остаются видимыми и кликабельными.
+  - id: review-button-only-when-paused
+    statement: |
+      Кнопка «Проверить» рендерится через `<Show when={canReview()}>`
+      только при `voiceAIState().tag === 'paused' || 'review'`; в
+      `listening`, `transcribing`, `requesting`, `applying`,
+      `errored` она отсутствует в DOM (а не `disabled`). В
+      `paused` кнопка активна — раньше она была disabled именно в
+      этом состоянии, то есть выход в review-модалку был тупиком.
+      Путь до `paused` — кнопка ✕ панели: `stopVoiceAI` →
+      `handle.stop()` → dispatch `pause`.
+  - id: whistle-instrument-visible-from-store
+    statement: |
+      `whistleStore` экспортирует `WHISTLE_INSTRUMENT`,
+      сигнал `whistleInstrument` и функцию
+      `whistleInstrumentLabel()`. `startWhistle` берёт значение из
+      `WHISTLE_INSTRUMENT` (единственное место, где записан
+      `'piano'`), обновляет сигнал (в т.ч. при переопределении
+      через `opts.instrument`) и передаёт то же значение в
+      оркестратор. `WhistleMiniFAB` печатает чип
+      «слушаю… · пианино», заголовок панели — «Свист · пианино».
+  - id: whistle-hint-chip-actually-renders
+    statement: |
+      `WhistleMiniFAB`'s `showHint` — сигнал (`createSignal`),
+      а не обычная `let`-переменная. До фикса `<Show when={showHint ...}>`
+      вычислялся один раз при рендере (false) и никогда не
+      обновлялся, то есть чип не появлялся вообще — правка
+      инструмента без этой правки была бы мёртвым кодом.
+  - id: precommit-gate-green
+    statement: |
+      `cd ui && npm run test:precommit` (tsc --noEmit + vitest +
+      eslint lint:no-console + validate:presets) завершается
+      exit 0; 111 test-файлов / 1756 тестов зелёные.
+      `npx vite build` exit 0.
+
+obligations:
+  - id: panel-css-has-no-magic-offset
+    claim: |
+      В `ui/src/styles/components.css` нет ни одного
+      `calc(var(--tabbar-h) + <число>px` для
+      `.voice-recording-panel` / `.voice-review-panel` /
+      `.voice-transcript-overlay` — все три используют
+      `var(--voice-fab-cluster-h)`.
+    acceptance:
+      all:
+        - verifier: text-scan-no-magic-voice-offset
+          result: pass
+  - id: panel-ceiling-cascade-correct
+    claim: |
+      Мобильное переопределение `--voice-panel-max-h`
+      (`@media (max-width: 720px)`) объявлено в
+      `tokens.css`, то есть в том же `@layer tokens`, что и
+      базовое значение: `index.css` импортирует stylesheets в
+      именованные слои (`@layer tokens, base, components, …`),
+      и более поздний слой побеждает независимо от
+      specificity. В собранном CSS-бандле оба определения лежат
+      внутри `layer(tokens)`, базовое раньше медиа-оверрайда.
+    acceptance:
+      all:
+        - verifier: text-scan-voice-ceiling-in-tokens-layer
+          result: pass
+  - id: review-button-gated-by-fsm
+    claim: |
+      vitest на `RecordingPanel.test.tsx` подтверждает, что
+      `.voice-recording-panel__btn--primary` отсутствует в
+      `listening`, `transcribing`, `requesting`, `applying`,
+      `errored`, присутствует и `disabled === false` в
+      `paused`. (10+ тестов в файле, все зелёные.)
+    acceptance:
+      all:
+        - verifier: vitest-run-recording-panel
+          result: pass
+  - id: pause-reachable-through-test-seam
+    claim: |
+      `__dispatchVoiceAIForTests` обрабатывает `pause` так же,
+      как доменный `pauseFrom` в `ui/src/domain/voice/voiceSession.ts`
+      (listening/transcribing/requesting/applying → paused),
+      а `resume` — как ветка `fromPaused`. До фикса оба
+      случая возвращали `initial`, из-за чего состояние
+      `paused` было недостижимо ни из одного теста, и
+      «Проверить» нельзя было проверить.
+    acceptance:
+      all:
+        - verifier: vitest-run-voiceai-store-seam
+          result: pass
+  - id: instrument-single-source
+    claim: |
+      `'piano'` как строковый литерал для сессии свиста
+      встречается в `ui/src/presentation/state/whistleStore.ts`
+      ровно один раз (в `WHISTLE_INSTRUMENT`); ни
+      `WhistleMiniFAB.tsx`, ни `RecordingPanel.tsx` не содержат
+      собственной копии названия инструмента.
+    acceptance:
+      all:
+        - verifier: text-scan-single-instrument-source
+          result: pass
+  - id: voice-review-send-untouched
+    claim: |
+      «Отправить в ИИ» в `VoiceAITextReview.tsx` продолжает
+      работать: файл не изменён этим пакетом, его 5 тестов
+      (`VoiceAITextReview.test.tsx`) зелёные, кнопка по-прежнему
+      вызывает `sendVoiceAIReview(text)` и остаётся disabled на
+      пустом драфте.
+    acceptance:
+      all:
+        - verifier: vitest-run-voice-text-review
+          result: pass
+  - id: hint-chip-reactive
+    claim: |
+      `WhistleMiniFAB.test.tsx` содержит тест, который после
+      удержания FAB дольше `HOLD_NOTICE_MS` находит
+      `.voice-mini-fab__hint` в DOM и проверяет, что он
+      содержит и «слушаю…», и `whistleInstrumentLabel()`.
+    acceptance:
+      all:
+        - verifier: vitest-run-whistle-mini-fab
+          result: pass
+  - id: layer-boundaries-untouched
+    claim: |
+      Ни один файл в `ui/src/domain/`, `ui/src/application/`
+      или `ui/src/infrastructure/` не изменён этим пакетом, и
+      ни одна правка не добавляет импорт через слой. Правки
+      ограничены presentation (компоненты + стор) и CSS.
+    acceptance:
+      all:
+        - verifier: text-scan-no-domain-layer-change
+          result: pass
+  - id: typecheck-lint-green
+    claim: |
+      `npm run typecheck`, `npm run lint:no-console` и
+      `npm run validate:presets` завершаются exit 0.
+    acceptance:
+      all:
+        - verifier: pnpm-ui-typecheck
+          result: pass
+        - verifier: pnpm-ui-lint
+          result: pass
+  - id: mathc-validate-clean
+    claim: |
+      `mathc validate decisions/wavecode-voice-ux-fixes.yaml`
+      завершается exit 0 без `MC-*` reject-диагностик.
+    acceptance:
+      all:
+        - verifier: mathc-validate
+          result: pass
+
+risk:
+  declared_triggers:
+    - fab-cluster-grows-beyond-two-mini-fabs-and-token-goes-stale
+    - transport-bar-height-token-diverges-from-rendered-height
+    - safe-area-inset-bottom-changes-cluster-anchor-on-notched-devices
+    - landscape-phone-viewport-shorter-than-fixed-chrome
+    - review-modal-and-recording-panel-anchor-to-the-same-offset
+  owner: human:operator
+
+reversal:
+  - signal: panel-anchor-drifts-when-fab-cluster-is-reordered
+    action: revert
+  - signal: ceiling-clamp-truncates-transcript-before-user-can-read-it
+    action: halt
+
+relations:
+  addresses:
+    - wavecode-voice-fab@1
