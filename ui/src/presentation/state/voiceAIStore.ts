@@ -422,9 +422,22 @@ export const __dispatchVoiceAIForTests = (event: VoiceSessionEvent): void => {
       case 'barge-in':
         return { tag: 'idle' as const };
       case 'pause':
-        return initial;
+        // Mirrors `pauseFrom` in domain/voice/voiceSession.ts: STT
+        // stops but the transcript survives, which is what lets the
+        // recording panel offer «Проверить». This case used to return
+        // `initial`, leaving `paused` unreachable from every test.
+        return initial.tag === 'listening' || initial.tag === 'transcribing'
+          || initial.tag === 'requesting' || initial.tag === 'applying'
+          ? { tag: 'paused' as const, transcript: initial.transcript }
+          : initial;
       case 'resume':
-        return initial;
+        return initial.tag === 'paused'
+          ? {
+            tag: 'listening' as const,
+            transcript: initial.transcript,
+            continuous: true,
+          }
+          : initial;
       case 'error':
         return {
           tag: 'errored' as const,

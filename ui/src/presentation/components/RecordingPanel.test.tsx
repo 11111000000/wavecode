@@ -34,7 +34,29 @@ import { initialWhistleSession } from '~/domain/audio/whistleSession';
  *   - whistle in `arming` / `recording` / `segmenting` → whistle
  *     body visible (this is the new behaviour — used to be silent).
  *   - whistle wins over voice-AI when both happen to be active.
+ *
+ * «Проверить» affordance (wavecode-voice-ux-fixes):
+ *   - absent from the DOM in `listening` / `transcribing` /
+ *     `requesting` / `applying` / `errored` — push-to-talk is the
+ *     primary loop and auto-commits, so a review button there is a
+ *     redundant click;
+ *   - present and enabled in `paused` (reached by the panel's ✕),
+ *     which is the deliberate escape hatch into the review modal.
  */
+
+const FINAL_CHUNK = {
+  kind: 'final' as const,
+  text: 'сделай потише',
+  confidence: 0.9,
+  lang: 'ru-RU',
+  timestampMs: 0,
+};
+
+/** Drive the voice-AI FSM into `listening`. */
+const armAndListen = (): void => {
+  __dispatchVoiceAIForTests({ type: 'arm' });
+  __dispatchVoiceAIForTests({ type: 'stt-ready' });
+};
 
 const resetMicStore = (): void => {
   setMicPreviewNotes([]);
@@ -66,8 +88,7 @@ describe('RecordingPanel — visibility', () => {
   });
 
   it('renders the voice-AI body when voice-AI is listening', () => {
-    __dispatchVoiceAIForTests({ type: 'arm' });
-    __dispatchVoiceAIForTests({ type: 'stt-ready' });
+    armAndListen();
     expect(voiceAIState().tag).toBe('listening');
     const { container } = render(() => <RecordingPanel />);
     const panel = container.querySelector('.voice-recording-panel');
@@ -90,7 +111,11 @@ describe('RecordingPanel — visibility', () => {
     const panel = container.querySelector('.voice-recording-panel');
     expect(panel).toBeTruthy();
     expect(panel?.getAttribute('data-mode')).toBe('whistle');
-    expect(panel?.querySelector('.voice-recording-panel__title')?.textContent).toBe('Свист');
+    // Whistle has no instrument selector, so the panel title is the
+    // only place the timbre shows up — and it reads it from
+    // whistleStore, not from a copy local to this component.
+    expect(panel?.querySelector('.voice-recording-panel__title')?.textContent)
+      .toBe('Свист · пианино');
   });
 });
 
@@ -156,21 +181,74 @@ describe('RecordingPanel — whistle body content', () => {
 
 describe('RecordingPanel — voice-AI body content', () => {
   it('shows the listening state with placeholder text', () => {
-    __dispatchVoiceAIForTests({ type: 'arm' });
-    __dispatchVoiceAIForTests({ type: 'stt-ready' });
+    armAndListen();
     const { container } = render(() => <RecordingPanel />);
     const body = container.querySelector('.voice-recording-panel__transcript');
     expect(body).toBeTruthy();
     expect(body?.textContent).toBe('…');
   });
 
-  it('shows the review affordance only in active states', () => {
-    __dispatchVoiceAIForTests({ type: 'arm' });
-    __dispatchVoiceAIForTests({ type: 'stt-ready' });
+  it('does NOT show the review affordance while listening (push-to-talk owns the primary loop)', () => {
+    // decisions/wavecode-voice-fab, outcome `voice-ai-fab-press-and-hold`:
+    // press → speak → auto-commit on the final chunk. A «Проверить»
+    // button during `listening` inserted a redundant click into that
+    // gesture, so it must not be in the DOM at all — not merely
+    // disabled, which still renders a visible target.
+    armAndListen();
+    expect(voiceAIState().tag).toBe('listening');
+    const { container } = render(() => <RecordingPanel />);
+    expect(container.querySelector('.voice-recording-panel__btn--primary')).toBeNull();
+    expect(container.querySelector('.voice-recording-panel__actions')).toBeNull();
+    // The rest of the panel keeps working — we hid a button, not the card.
+    expect(container.querySelector('.voice-recording-panel__close')).toBeTruthy();
+  });
+
+  it('keeps the review affordance hidden through transcribing / requesting / applying', () => {
+    const toTranscribing = (): void => {
+      armAndListen();
+      __dispatchVoiceAIForTests({ type: 'chunk', chunk: FINAL_CHUNK });
+    };
+    toTranscribing();
+    expect(voiceAIState().tag).toBe('transcribing');
+    const transcribing = render(() => <RecordingPanel />);
+    expect(transcribing.container.querySelector('.voice-recording-panel__btn--primary')).toBeNull();
+    cleanup();
+
+    __dispatchVoiceAIForTests({ type: 'commit' });
+    expect(voiceAIState().tag).toBe('requesting');
+    const requesting = render(() => <RecordingPanel />);
+    expect(requesting.container.querySelector('.voice-recording-panel__btn--primary')).toBeNull();
+    cleanup();
+
+    __dispatchVoiceAIForTests({ type: 'request-sent', score: 's("bd")' });
+    expect(voiceAIState().tag).toBe('applying');
+    const applying = render(() => <RecordingPanel />);
+    expect(applying.container.querySelector('.voice-recording-panel__btn--primary')).toBeNull();
+  });
+
+  it('offers «Проверить» once the session is paused (the ✕ escape hatch)', () => {
+    // `stopVoiceAI` → `handle.stop()` dispatches `pause`, so pressing
+    // the panel's ✕ is what lands the FSM in `paused`. That is the one
+    // moment the user has explicitly asked to stop talking and wants to
+    // read the transcript before it goes to the LLM.
+    armAndListen();
+    __dispatchVoiceAIForTests({ type: 'chunk', chunk: FINAL_CHUNK });
+    __dispatchVoiceAIForTests({ type: 'pause' });
+    expect(voiceAIState().tag).toBe('paused');
     const { container } = render(() => <RecordingPanel />);
     const btn = container.querySelector('.voice-recording-panel__btn--primary');
     expect(btn).toBeTruthy();
     expect(btn?.textContent).toContain('Проверить');
+    // Present means usable — the old markup shipped this button already
+    // disabled in exactly this state, which made the hatch a dead end.
+    expect((btn as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it('hides the review affordance when the session errored', () => {
+    __dispatchVoiceAIForTests({ type: 'arm' });
+    __dispatchVoiceAIForTests({ type: 'error', message: 'permission denied' });
+    const { container } = render(() => <RecordingPanel />);
+    expect(container.querySelector('.voice-recording-panel__btn--primary')).toBeNull();
   });
 
   it('shows the error pill when FSM is in errored', () => {

@@ -49,6 +49,46 @@ export const [whistleNotes, setWhistleNotes] = createSignal<
 
 export const [whistleError, setWhistleError] = createSignal<string | null>(null);
 
+/**
+ * The Strudel sample a whistle session commits its notes to. There is
+ * deliberately no selector for it — the mini-FAB dropped piano/synth/
+ * drums to make whistle a one-gesture action — so this constant is the
+ * only place the choice is written down. `startWhistle` forwards it to
+ * the orchestrator and both surfaces that mention the timbre
+ * (`WhistleMiniFAB`'s hint chip, `RecordingPanel`'s whistle body) read
+ * `whistleInstrumentLabel()` rather than restating the name; a second
+ * hardcoded copy in a component is how the label starts lying about
+ * what `notesToSnippet` actually emits.
+ */
+export const WHISTLE_INSTRUMENT = 'piano';
+
+/** Instrument of the session that is running right now. A signal and
+ *  not a plain constant because `startWhistle` accepts an override —
+ *  the UI must show what was committed, not what we default to. */
+export const [whistleInstrument, setWhistleInstrument] = createSignal<string>(
+  WHISTLE_INSTRUMENT,
+);
+
+/** Russian instrument names for the hint chips. Covers the whole
+ *  `PianoInstrument` union even though whistle has no selector today,
+ *  so an override passed to `startWhistle` still renders a name. */
+const INSTRUMENT_LABEL: Readonly<Record<string, string>> = {
+  piano: 'пианино',
+  casio: 'казино',
+  guitar: 'гитара',
+  synth: 'синтезатор',
+  triangle: 'треугольник',
+  sine: 'синус',
+  sawtooth: 'пила',
+  square: 'меандр',
+};
+
+/** Display name of the instrument the session will commit to. Falls
+ *  through to the raw name for an unknown instrument rather than
+ *  rendering `undefined` into the chip. */
+export const whistleInstrumentLabel = (): string =>
+  INSTRUMENT_LABEL[whistleInstrument()] ?? whistleInstrument();
+
 /** Options for `startWhistle`. */
 export type WhistleStartOpts = {
   readonly sessionId: string;
@@ -181,6 +221,7 @@ export const startWhistle = (
     yield* Effect.sync(() => {
       setWhistleError(null);
       setWhistleNotes(micPreviewNotes());
+      setWhistleInstrument(opts.instrument ?? WHISTLE_INSTRUMENT);
     });
     if (handle === null) {
       // Fallback path: orchestrator not yet built. Mirror the FSM
@@ -198,7 +239,7 @@ export const startWhistle = (
     // doesn't match the public `MicBusyError` signature, so we
     // catchAll and degrade gracefully (the wavecode-MicPanel still
     // works through its own dedicated UI).
-    yield* handle.start({ instrument: opts.instrument ?? 'piano' }).pipe(
+    yield* handle.start({ instrument: opts.instrument ?? WHISTLE_INSTRUMENT }).pipe(
       Effect.catchAll((err) =>
         Effect.sync(() => {
           setWhistleError(err.message);
@@ -255,6 +296,7 @@ export const __resetWhistleForTests = (): void => {
   setWhistleState(initialWhistleSession());
   setWhistleNotes([]);
   setWhistleError(null);
+  setWhistleInstrument(WHISTLE_INSTRUMENT);
 };
 
 onCleanup(() => {

@@ -1,8 +1,9 @@
-import { Show, type JSX } from 'solid-js';
+import { Show, createSignal, type JSX } from 'solid-js';
 import { Effect } from 'effect';
 import {
   whistleState,
   whistleError,
+  whistleInstrumentLabel,
   startWhistle,
   commitWhistle,
   stopWhistle,
@@ -39,7 +40,7 @@ const MIN_HOLD_BEFORE_RELEASE_OK_MS = 80;
 export function WhistleMiniFAB(): JSX.Element {
   let sessionId: string | null = null;
   let pressed = false;
-  let showHint = false;
+  const [showHint, setShowHint] = createSignal(false);
   let hintTimer: number | null = null;
   /** Wall-clock ms when the user pressed down. Used to gate the
    *  `pointerup` / `pointerleave` / `pointercancel` branches: only
@@ -60,11 +61,11 @@ export function WhistleMiniFAB(): JSX.Element {
     if (pressed) return;
     pressed = true;
     pressedAtMs = Date.now();
-    showHint = false;
+    setShowHint(false);
     if (hintTimer !== null) window.clearTimeout(hintTimer);
     hintTimer = window.setTimeout(() => {
       hintTimer = null;
-      showHint = true;
+      setShowHint(true);
     }, HOLD_NOTICE_MS);
     const sid = ensureSessionId();
     void runEffectSafely(
@@ -92,7 +93,7 @@ export function WhistleMiniFAB(): JSX.Element {
       window.clearTimeout(hintTimer);
       hintTimer = null;
     }
-    showHint = false;
+    setShowHint(false);
     void runEffectSafely(
       Effect.gen(function* () {
         yield* commitWhistle();
@@ -122,9 +123,13 @@ export function WhistleMiniFAB(): JSX.Element {
     >
       <WhistleIcon size={18} />
       <span class="voice-mini-fab__label" aria-hidden="true">Свист</span>
-      <Show when={showHint && (whistleState().tag === 'arming' || whistleState().tag === 'recording')}>
+      <Show when={showHint() && (whistleState().tag === 'arming' || whistleState().tag === 'recording')}>
+        {/* The instrument belongs in the chip: whistle has no selector,
+         * so «слушаю…» alone left the user guessing what would come out
+         * of the speakers. `whistleInstrumentLabel` reads the same
+         * store signal the session was started with. */}
         <span class="voice-mini-fab__hint" aria-hidden="true">
-          слушаю…
+          слушаю… · {whistleInstrumentLabel()}
         </span>
       </Show>
     </button>

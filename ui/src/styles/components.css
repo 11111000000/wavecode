@@ -6262,8 +6262,8 @@ textarea.ai-textarea:focus-visible {
   align-items: center;
   justify-content: center;
   position: relative;
-  height: 56px;
-  min-width: 56px;
+  height: var(--voice-mini-fab-size);
+  min-width: var(--voice-mini-fab-size);
   padding: 0;
   background: var(--surface-2);
   color: var(--fg);
@@ -6408,7 +6408,7 @@ textarea.ai-textarea:focus-visible {
 /* Transcript overlay — bottom-center, just above the FAB group. */
 .voice-transcript-overlay {
   position: fixed;
-  bottom: calc(var(--tabbar-h) + 240px + var(--safe-bottom));
+  bottom: var(--voice-fab-cluster-h);
   left: 50%;
   transform: translateX(-50%);
   display: inline-flex;
@@ -6479,13 +6479,18 @@ textarea.ai-textarea:focus-visible {
  *  voice-AI session to edit the dictated text before sending it to the LLM.
  *
  *  Renders ONLY when FSM is in `review`; parents (`VoiceFAB`) toggle it
- *  via Solid's `<Show>`. Position: bottom-center, just above the voice
- *  FAB cluster so it never overlaps the editor or the TabBar.
+ *  via Solid's `<Show>`. Position: bottom-center, anchored to
+ *  `--voice-fab-cluster-h` (the real measured height of the two-FAB
+ *  cluster) so it sits flush on top of the cluster and nowhere else,
+ *  and capped by `--voice-panel-max-h` so its textarea + footer can
+ *  never grow up under the fixed TopBar / transport bar.
  * ========================================================================= */
 .voice-review-panel {
   position: fixed;
   left: 50%;
-  bottom: calc(var(--tabbar-h) + 200px + var(--safe-bottom));
+  bottom: var(--voice-fab-cluster-h);
+  max-height: var(--voice-panel-max-h);
+  overflow-y: auto;
   transform: translateX(-50%);
   width: min(540px, calc(100vw - 32px));
   display: flex;
@@ -6509,6 +6514,9 @@ textarea.ai-textarea:focus-visible {
   display: flex;
   align-items: center;
   gap: var(--space-xs);
+  /* Same reasoning as .voice-recording-panel__head: the ✕ must stay
+   * reachable when the panel is squeezed against the transport bar. */
+  flex-shrink: 0;
 }
 .voice-review-panel__icon {
   display: inline-flex;
@@ -6550,6 +6558,11 @@ textarea.ai-textarea:focus-visible {
   width: 100%;
   min-height: 96px;
   max-height: 240px;
+  /* Grows into the panel's spare height and shrinks with it, so the
+   * footer buttons stay visible on a short viewport. The 96px floor is
+   * deliberate (one and a half lines of dictated text); below that the
+   * panel's own `overflow-y: auto` takes over as the backstop. */
+  flex: 1 1 auto;
   resize: vertical;
   padding: var(--space-sm);
   background: var(--surface-1);
@@ -6576,6 +6589,7 @@ textarea.ai-textarea:focus-visible {
   align-items: stretch;
   gap: var(--space-xs);
   justify-content: flex-end;
+  flex-shrink: 0;
 }
 .voice-review-panel__btn {
   display: inline-flex;
@@ -6654,11 +6668,25 @@ textarea.ai-textarea:focus-visible {
  *  Width is capped via `width: min(...)` so it never overflows the
  *  viewport on phones. The panel is `position: fixed` so it floats
  *  above the editor / TabBar / FAB cluster without affecting them.
+ *
+ *  wavecode-voice-ux-fixes: `bottom` is `--voice-fab-cluster-h`, the
+ *  measured height of the two-FAB cluster, instead of the old literal
+ *  `calc(var(--tabbar-h) + 240px + ...)`. The literal overshot by
+ *  ~44px and, once the panel grew tall enough, slid its buttons under
+ *  `.app-transport-bar` — whose z-index (z-sheet+12) beats the panel's
+ *  (z-sheet+4), so the ✕ / «Проверить» became unclickable. The panel
+ *  now sits flush above the cluster and `--voice-panel-max-h` keeps a
+ *  long transcript scrolling inside the panel rather than pushing it
+ *  into the transport bar.
  * ========================================================================= */
 .voice-recording-panel {
   position: fixed;
   left: 50%;
-  bottom: calc(var(--tabbar-h) + 240px + var(--safe-bottom));
+  bottom: var(--voice-fab-cluster-h);
+  /* Cap the height so a long transcript scrolls inside the panel
+   * instead of growing it upward into the fixed transport bar. */
+  max-height: var(--voice-panel-max-h);
+  overflow-y: auto;
   transform: translateX(-50%);
   width: min(540px, calc(100vw - 32px));
   display: flex;
@@ -6696,6 +6724,10 @@ textarea.ai-textarea:focus-visible {
   display: flex;
   align-items: center;
   gap: var(--space-sm);
+  /* Pin the ✕ against the transport bar: only the transcript below
+   * scrolls, so the control that stops the session can never be
+   * pushed out of the panel by a long dictated sentence. */
+  flex-shrink: 0;
 }
 .voice-recording-panel__icon {
   display: inline-flex;
@@ -6751,6 +6783,12 @@ textarea.ai-textarea:focus-visible {
   align-items: baseline;
   gap: var(--space-sm);
   flex-wrap: wrap;
+  /* Flex items default to `min-height: auto`, which refuses to shrink
+   * below the content — that is what let a long transcript push the
+   * actions row under the transport bar. `min-height: 0` lets this
+   * row absorb the shrink and scroll instead. */
+  min-height: 0;
+  overflow-y: auto;
 }
 .voice-recording-panel__stage {
   font-weight: var(--fw-medium);
@@ -6798,6 +6836,7 @@ textarea.ai-textarea:focus-visible {
   align-items: center;
   gap: var(--space-sm);
   flex-wrap: wrap;
+  flex-shrink: 0;
 }
 .voice-recording-panel__btn {
   display: inline-flex;
