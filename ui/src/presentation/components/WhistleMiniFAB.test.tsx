@@ -1,7 +1,12 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { render, cleanup, fireEvent } from '@solidjs/testing-library';
 import { WhistleMiniFAB } from './WhistleMiniFAB';
-import { __resetWhistleForTests, whistleState } from '../state/whistleStore';
+import {
+  __resetWhistleForTests,
+  whistleState,
+  setWhistleState,
+  whistleInstrumentLabel,
+} from '../state/whistleStore';
 import { __resetVoiceAIForTests } from '../state/voiceAIStore';
 import { resetMicMutexForTests } from '../state/micMutexStore';
 
@@ -46,6 +51,28 @@ describe('WhistleMiniFAB — render', () => {
     const btn = container.querySelector('.voice-mini-fab')!;
     const svg = btn.querySelector('svg.wc-icon');
     expect(svg).toBeTruthy();
+  });
+});
+
+describe('WhistleMiniFAB — hint chip names the instrument', () => {
+  it('shows "слушаю… · пианино" while recording', async () => {
+    // Whistle dropped its instrument selector, so before this the chip
+    // said only "слушаю…" and the user had no way to know what would
+    // come out of the speakers. The chip now names the instrument.
+    setWhistleState({
+      tag: 'recording',
+      micState: { openNote: null, notes: [], lastClosedMs: null, notesPrunedCount: 0 },
+      startedAtMs: 0,
+      lastFrameMs: 0,
+    });
+    const { container } = render(() => <WhistleMiniFAB />);
+    fireEvent.pointerDown(container.querySelector<HTMLButtonElement>('.voice-mini-fab--whistle')!);
+    // The chip only appears after HOLD_NOTICE_MS of held state.
+    await new Promise<void>((resolve) => setTimeout(resolve, HOLD_GUARD_MS + 200));
+    const hint = container.querySelector('.voice-mini-fab__hint');
+    expect(hint?.textContent).toContain('слушаю…');
+    expect(hint?.textContent).toContain(whistleInstrumentLabel());
+    expect(hint?.textContent).toContain('пианино');
   });
 });
 
