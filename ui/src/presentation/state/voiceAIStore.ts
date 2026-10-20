@@ -27,10 +27,13 @@
  * orchestrator's `cancelInFlight` Effect.
  *
  * Mic channel policy: voice-AI uses `speech-api-internal` (Chrome
- * shares its internal pipeline with our AudioContext). The mutex
- * still tracks the session so future mic-direct paths
- * (Whisper-WASM) re-use the single-slot rule. See
- * `decisions/wavecode-voice-fab.yaml` outcome `mic-mutex-correct`.
+ * shares its internal pipeline with our AudioContext). When the
+ * resolved STT engine is the server relay — it opens the mic itself
+ * — voice-AI additionally claims `mic-direct`, so the whistle cannot
+ * grab the same device mid-dictation. The mutex still tracks the
+ * session so future mic-direct paths re-use the single-slot rule.
+ * See `decisions/wavecode-voice-fab.yaml` outcome
+ * `mic-mutex-correct`.
  *
  * Service wiring
  * --------------
@@ -69,6 +72,7 @@ import {
 } from '~/domain/services';
 import type { MicBusyError } from '~/domain/audio/MicChannel';
 import { acquireMic, releaseMic } from './micMutexStore';
+import { resolveSttEngineKind } from '~/infrastructure/stt/selectSttLayer';
 import { appStore } from './appStore';
 import { AppLayer } from '~/infrastructure/composition';
 import { logger } from '~/infrastructure/log';
@@ -88,6 +92,36 @@ export const [voiceAIError, setVoiceAIError] = createSignal<string | null>(
 export const [voiceAISupported, setVoiceAISupported] = createSignal<boolean>(
   true,
 );
+
+/**
+ * Seconds since the current dictation started.
+ *
+ * Web Speech streams partials, so the user always sees words while
+ * the mic is hot. The server relay cannot: it answers once, after
+ * the whole clip is uploaded (5-9 s). A bare "записываю" with no
+ * counter reads as a hang, so the panel shows this instead of
+ * pretending there is live text.
+ */
+export const [voiceAIElapsedSec, setVoiceAIElapsedSec] = createSignal<number>(0);
+
+let elapsedTimer: number | null = null;
+
+const startElapsedTimer = (): void => {
+  if (elapsedTimer !== null) return;
+  setVoiceAIElapsedSec(0);
+  elapsedTimer = window.setInterval(
+    () => { setVoiceAIElapsedSec((s) => s + 1); },
+    1000,
+  );
+};
+
+const stopElapsedTimer = (): void => {
+  if (elapsedTimer !== null) {
+    window.clearInterval(elapsedTimer);
+    elapsedTimer = null;
+  }
+  setVoiceAIElapsedSec(0);
+};
 
 export type VoiceAIStartOpts = {
   readonly mode: 'oneshot' | 'continuous';
@@ -217,7 +251,14 @@ export const initVoiceAI = (deps: {
  *
  *   1. Acquire `speech-api-internal` channel under the `voice-ai`
  *      owner. Failure surfaces as `MicBusyError`.
- *   2. Run the orchestrator's `start` Effect.
+ *   2. If the resolved STT engine is the server relay, also claim
+ *      `mic-direct`: that engine calls `getUserMedia` itself, so
+ *      without the second claim the whistle could open the same
+ *      device mid-dictation. This is the case `decisions/
+ *      wavecode-voice-fab` deferred to "when voice-AI is
+ *      mic-direct" (outcome `mic-mutex-correct`); Chrome keeps the
+ *      single channel it has always used.
+ *   3. Run the orchestrator's `start` Effect.
  */
 export const startVoiceAI = (
   opts: VoiceAIStartOpts,
@@ -236,11 +277,29 @@ export const startVoiceAI = (
       ]);
       return yield* Effect.fail(claimed.error);
     }
+    if (resolveSttEngineKind() === 'server') {
+      const direct = acquireMic({
+        kind: 'mic-direct',
+        owner: { kind: 'voice-ai', sessionId },
+        sessionId,
+      });
+      if (!direct.ok) {
+        // Both claims belong to the same sessionId, so one release
+        // takes the whole thing back down.
+        releaseMic(sessionId);
+        logger.push('warn', [
+          'voiceAIStore.startVoiceAI: mic-direct busy',
+          direct.error.conflictingChannel.owner.kind,
+        ]);
+        return yield* Effect.fail(direct.error);
+      }
+    }
     activeSessionId = sessionId;
     langAtInit = opts.lang;
     yield* Effect.sync(() => {
       setVoiceAIError(null);
       setVoiceAITranscript(initialTranscriptState(opts.lang));
+      startElapsedTimer();
     });
     if (handle === null) {
       // Degraded path: orchestrator not built (e.g., unsupported
@@ -288,6 +347,7 @@ export const commitVoiceAI = (): Effect.Effect<void, never, never> => {
 /** Stop the session and release `speech-api-internal`. */
 export const stopVoiceAI = (): Effect.Effect<void, never, never> =>
   Effect.gen(function* () {
+    stopElapsedTimer();
     if (handle !== null) {
       yield* handle.stop();
     }
@@ -304,6 +364,7 @@ export const cancelVoiceAIInFlight = (): Effect.Effect<void, never, never> => {
     return Effect.void;
   }
   return Effect.gen(function* () {
+    stopElapsedTimer();
     yield* handle!.cancelInFlight();
   });
 };
@@ -349,6 +410,7 @@ export const cancelVoiceAIReview = (): Effect.Effect<void, never, never> => {
       releaseMic(sid);
       activeSessionId = null;
     }
+    stopElapsedTimer();
     return;
   });
 };
@@ -488,6 +550,7 @@ export const __dispatchVoiceAIForTests = (event: VoiceSessionEvent): void => {
 export const __resetVoiceAIForTests = (): void => {
   handle = null;
   activeSessionId = null;
+  stopElapsedTimer();
   setVoiceAIState(initialVoiceSession());
   setVoiceAITranscript(initialTranscriptState());
   setVoiceAIError(null);
@@ -497,4 +560,5 @@ export const __resetVoiceAIForTests = (): void => {
 onCleanup(() => {
   activeSessionId = null;
   handle = null;
+  stopElapsedTimer();
 });

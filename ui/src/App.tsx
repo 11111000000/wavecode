@@ -20,7 +20,7 @@ import { WelcomeTour } from './presentation/components/tour/WelcomeTour';
 import { VoiceFAB } from './presentation/components/VoiceFAB';
 import { initVoiceAI } from './presentation/state/voiceAIStore';
 import { initWhistle } from './presentation/state/whistleStore';
-import { WebSpeechSTTLive } from './infrastructure/stt/WebSpeechSTT';
+import { selectSttLayer } from './infrastructure/stt/selectSttLayer';
 import { AppLayer } from './infrastructure/composition';
 
 export function App(): JSX.Element {
@@ -42,7 +42,11 @@ function AppShell(): JSX.Element {
   const [mobileMode, setMobileModeSignal] = createSignal<MobileMode>(getMobileMode());
   const presetId = getSelectedPresetId;
 
-  initVoiceAI({ sttLayer: WebSpeechSTTLive });
+  // Web Speech where the browser really has it (fast cloud path),
+  // server Whisper everywhere else — see infrastructure/stt/
+  // selectSttLayer.ts for the decision table and the
+  // VITE_STT_BACKEND override.
+  initVoiceAI({ sttLayer: selectSttLayer() });
   initWhistle({ audioLayer: AppLayer });
 
   const undo = (): void => { void stopAudio(); dispatch({ type: 'undoScore' }); };
