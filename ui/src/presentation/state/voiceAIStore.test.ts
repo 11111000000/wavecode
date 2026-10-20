@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { Effect, Ref } from 'effect';
 import {
   voiceAIState,
@@ -23,6 +23,7 @@ import { initialTranscriptState } from '~/domain/voice/Transcript';
 import type { VoiceSessionHandle } from '~/application/voice/VoiceAISession';
 import type { VoiceSessionState } from '~/domain/voice/voiceSession';
 import { initialVoiceSession } from '~/domain/voice/voiceSession';
+import { micMutexState, resetMicMutexForTests } from './micMutexStore';
 
 /**
  * voiceAIStore tests — exercise the presentation-layer wrapping of
@@ -123,6 +124,9 @@ const installFake = (): VoiceSessionHandle => {
 
 beforeEach(() => {
   __resetVoiceAIForTests();
+  // Sessions that a test abandons without `stopVoiceAI()` would keep
+  // their channel claims; the mutex is module state, so reset it.
+  resetMicMutexForTests();
 });
 
 describe('voiceAIStore — initial state', () => {
@@ -174,6 +178,41 @@ describe('voiceAIStore — start / stop lifecycle', () => {
     // Run real Effect.
     await Effect.runPromise(cancelVoiceAIInFlight());
     expect(voiceAIState().tag).toBe('idle');
+  });
+});
+
+describe('voiceAIStore — mic channel claim follows the STT engine', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('claims only speech-api-internal when no STT engine can record (jsdom)', async () => {
+    installFake();
+    await Effect.runPromise(startVoiceAI({ mode: 'oneshot', lang: 'ru-RU' }));
+    expect(micMutexState().speechApiInternal).toHaveLength(1);
+    expect(micMutexState().micDirect).toBeNull();
+    await Effect.runPromise(stopVoiceAI());
+  });
+
+  it('also claims mic-direct when the server STT engine is selected', async () => {
+    // The server engine calls getUserMedia itself, so the whistle
+    // must see the device as taken (decisions/wavecode-voice-fab,
+    // outcome `mic-mutex-correct`).
+    vi.stubGlobal('MediaRecorder', class {
+      static isTypeSupported(): boolean { return true; }
+    });
+    Object.defineProperty(globalThis.navigator, 'mediaDevices', {
+      value: { getUserMedia: () => Promise.resolve({}) },
+      configurable: true,
+    });
+    installFake();
+    await Effect.runPromise(startVoiceAI({ mode: 'oneshot', lang: 'ru-RU' }));
+    expect(micMutexState().speechApiInternal).toHaveLength(1);
+    expect(micMutexState().micDirect?.kind).toBe('mic-direct');
+    // One release takes both channels back down.
+    await Effect.runPromise(stopVoiceAI());
+    expect(micMutexState().speechApiInternal).toHaveLength(0);
+    expect(micMutexState().micDirect).toBeNull();
   });
 });
 

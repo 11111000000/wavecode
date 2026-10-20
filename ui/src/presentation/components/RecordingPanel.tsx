@@ -2,6 +2,7 @@ import { Show, For, createMemo, type JSX } from 'solid-js';
 import {
   voiceAIState,
   voiceAITranscript,
+  voiceAIElapsedSec,
   enterVoiceAIReview,
   stopVoiceAI,
 } from '../state/voiceAIStore';
@@ -188,6 +189,11 @@ const VoiceAIBody = (): JSX.Element => {
                 : voiceAIState().tag === 'requesting' ? 'жду ответ ИИ…'
                 : voiceAIState().tag === 'paused' ? 'на паузе'
                 : voiceAIState().tag === 'review' ? 'проверь и отправь'
+                : (voiceAIState().tag === 'listening' || voiceAIState().tag === 'arming')
+                  // Server STT has no interim text to show — one
+                  // upload covers the whole utterance. The counter is
+                  // the honest signal that the mic is hot.
+                  ? `записываю… ${voiceAIElapsedSec()} с`
                 : '…')}
           </span>
         </Show>

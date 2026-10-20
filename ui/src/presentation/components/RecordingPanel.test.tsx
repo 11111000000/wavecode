@@ -9,6 +9,7 @@ import {
 import {
   __resetVoiceAIForTests,
   voiceAIState,
+  setVoiceAITranscript,
   __dispatchVoiceAIForTests,
 } from '../state/voiceAIStore';
 import { resetMicMutexForTests } from '../state/micMutexStore';
@@ -180,12 +181,39 @@ describe('RecordingPanel — whistle body content', () => {
 });
 
 describe('RecordingPanel — voice-AI body content', () => {
-  it('shows the listening state with placeholder text', () => {
+  it('shows a recording counter while listening with no transcript yet', () => {
+    // Server STT has no interim text: one upload covers the whole
+    // utterance, so the only honest signal that the mic is hot is
+    // the elapsed-seconds counter (decisions/wavecode-server-stt).
     armAndListen();
     const { container } = render(() => <RecordingPanel />);
     const body = container.querySelector('.voice-recording-panel__transcript');
     expect(body).toBeTruthy();
-    expect(body?.textContent).toBe('…');
+    expect(body?.textContent).toBe('записываю… 0 с');
+  });
+
+  it('prefers the transcript over the counter once text arrives', () => {
+    armAndListen();
+    // `setVoiceAITranscript` rather than `__dispatchVoiceAIForTests`:
+    // the panel reads the transcript signal, which in production is
+    // fed by `initVoiceAI`'s subscription to the FSM stream.
+    setVoiceAITranscript({
+      chunks: [{
+        kind: 'interim',
+        text: 'слышу: сделай',
+        confidence: 0.8,
+        lang: 'ru-RU',
+        timestampMs: 0,
+      }],
+      interim: 'слышу: сделай',
+      final: '',
+      startedAtMs: 0,
+      stoppedAtMs: null,
+      lang: 'ru-RU',
+    });
+    const { container } = render(() => <RecordingPanel />);
+    const body = container.querySelector('.voice-recording-panel__transcript');
+    expect(body?.textContent).toBe('слышу: сделай');
   });
 
   it('does NOT show the review affordance while listening (push-to-talk owns the primary loop)', () => {
