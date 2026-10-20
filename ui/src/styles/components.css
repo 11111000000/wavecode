@@ -3948,6 +3948,12 @@ textarea.ai-textarea:focus-visible {
   align-items: center;
 }
 .mixer-summary:hover { color: var(--fg); }
+.mixer-sections-hint {
+  margin-left: auto;
+  color: var(--fg-dim);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-regular);
+}
 .mixer-empty {
   padding: var(--space-sm) var(--space-md);
   color: var(--fg-dim);
@@ -3960,6 +3966,47 @@ textarea.ai-textarea:focus-visible {
   gap: var(--space-xs);
   max-height: 360px;
   overflow-y: auto;
+}
+/* Multi-section presets: one collapsible group per stack(...) so a
+   44-layer arrangement (edm-house) stays scannable. */
+.mixer-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+.mixer-section + .mixer-section {
+  border-top: 1px solid var(--border);
+  padding-top: var(--space-xs);
+  margin-top: var(--space-xs);
+}
+.mixer-section-toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  width: 100%;
+  min-height: 44px;
+  padding: var(--space-xs) var(--space-sm);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  color: var(--fg-dim);
+  font-family: var(--font-sans);
+  font-size: var(--fs-sm);
+  text-align: left;
+  cursor: pointer;
+}
+.mixer-section-toggle:hover { color: var(--fg); background: var(--surface-2); }
+.mixer-section-caret { width: 12px; color: var(--primary); }
+.mixer-section-count {
+  margin-left: auto;
+  font-size: var(--fs-xs);
+  opacity: 0.75;
+}
+.mixer-rows {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  padding-left: var(--space-sm);
 }
 .mixer-row {
   display: flex;
@@ -4149,6 +4196,11 @@ textarea.ai-textarea:focus-visible {
   display: flex;
   align-items: center;
   justify-content: center;
+  /* Portal-mounted, so --z-modal (60) competes at the ROOT stacking
+     context and beats the transport bar (--z-sheet + 12 = 52). The
+     previous in-tree placement inherited the topbar's context
+     (z = --z-sheet + 5 = 45), so the bar painted over the modal and
+     swallowed every click on «Закрыть». */
   z-index: var(--z-modal);
   backdrop-filter: blur(4px);
 }
@@ -4158,6 +4210,8 @@ textarea.ai-textarea:focus-visible {
   border-radius: var(--radius-xl);
   padding: var(--space-lg);
   width: min(480px, 92vw);
+  max-height: 88vh;
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: var(--space-md);
@@ -4175,6 +4229,82 @@ textarea.ai-textarea:focus-visible {
   font-family: var(--font-mono);
   font-size: var(--fs-sm);
   resize: vertical;
+}
+.share-modal-title {
+  margin: 0;
+  font-size: var(--fs-lg);
+  font-weight: var(--fw-semibold);
+  color: var(--fg);
+}
+.share-modal-inner {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+.share-url {
+  width: 100%;
+  padding: var(--space-sm) var(--space-md);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  color: var(--primary);
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+}
+.share-url:focus-visible {
+  border-color: var(--primary);
+  outline: none;
+}
+.share-modal-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+.share-modal-size {
+  color: var(--fg-dim);
+  font-size: var(--fs-sm);
+}
+.share-modal-btn {
+  min-height: 44px;
+  padding: var(--space-sm) var(--space-md);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--fg);
+  font-family: var(--font-sans);
+  font-size: var(--fs-sm);
+  cursor: pointer;
+}
+.share-modal-btn:hover:not(:disabled) { border-color: var(--primary); color: var(--fg); }
+.share-modal-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.share-modal-copy,
+.share-modal-load {
+  margin-left: auto;
+  border-color: var(--primary);
+  color: var(--primary);
+}
+.share-modal-warn,
+.share-modal-err {
+  padding: var(--space-sm) var(--space-md);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+  border: 1px solid var(--warn);
+  color: var(--fg);
+  font-size: var(--fs-sm);
+}
+.share-modal-err { border-color: var(--err); }
+.share-modal-pending {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  padding: var(--space-md);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+}
+.share-modal-pending-msg {
+  color: var(--fg-dim);
+  font-size: var(--fs-sm);
 }
 .share-modal-actions {
   display: flex;

@@ -1,16 +1,23 @@
 import type { LayerMix } from '~/domain/types';
+import { collectStacksOf } from '~/domain/strudel/walker';
+import { argText } from '~/domain/strudel/parser';
+import type { Arg } from '~/domain/strudel/ast';
 
 /**
  * injectMix — pure application use case.
  *
- * Takes a `score` (typically `stack(l1, l2, ...)`) and a `layerMix` array,
- * produces a new score where each top-level layer is rewritten with
- * per-layer gain and solo/mute logic.
+ * Takes a `score` and a `layerMix` array, produces a new score where
+ * each top-level layer of every `stack(...)` is rewritten with per-layer
+ * gain and solo/mute logic.
  *
  * Rules (see decisions/wavecode-track-mixer.yaml):
  *   - If no `stack(...)` is detected, treat the whole score as a single
  *     layer and apply the FIRST layerMix entry (or noop if none).
- *   - For each top-level layer:
+ *   - `layerMix` is indexed by the SAME enumeration order as
+ *     `validateForMixer`: rows are grouped per `stack(...)` in source
+ *     order, so row `i` addresses the `i`-th layer across the whole
+ *     score, not the `i`-th layer of the first stack.
+ *   - For each layer:
  *       • if any layer is `soloed`, non-soloed layers are muted → `.gain(0)`;
  *       • else if a layer is `muted`, that layer is muted → `.gain(0)`;
  *       • otherwise, the layer's effective gain = `layerMix[i].gain`.
@@ -19,10 +26,20 @@ import type { LayerMix } from '~/domain/types';
  *   - `.gain()` accepts scalar numbers 0..1.5; we always emit a literal
  *     number for determinism and predictable replay.
  *
- * The function does not import `@strudel/transpiler` — the eslint
- * `application/` rule forbids direct strudel deps. Paren-aware parsing
- * mirrors `domain/layers/parseStack.ts` (same trade-off: see that file's
- * header for the rationale).
+ * Multi-section scores: the previous implementation located a single
+ * `stack(` with a regex and rewrote only that one, so a preset like
+ * `cat(stack(…), stack(…), …)` had its gain edits applied to section 1
+ * only. Rows 3+ (the mixer's own output) were then silently dropped —
+ * the control moved a fader and nothing happened. Rewriting every
+ * collected stack keeps the two in sync.
+ *
+ * Layer detection runs through the AST walker (`domain/strudel/`),
+ * which treats comments and string literals as opaque — the previous
+ * hand-rolled paren counter had to re-implement that and could be
+ * fooled by a `stack(` appearing inside a string. The function does
+ * not import `@strudel/transpiler` — the eslint `application/` rule
+ * forbids direct strudel deps; `domain/strudel/` is a pure-TS AST with
+ * no strudel imports.
  */
 
 const GAIN_RE = /\.gain\s*\(\s*([+-]?\d+(?:\.\d+)?)\s*\)/g;
@@ -61,126 +78,93 @@ const formatGain = (gain: number): string => {
   return Number(clamped.toFixed(4)).toString();
 };
 
-type StackSpan = { open: number; close: number };
-
-const findOutermostStack = (score: string): StackSpan | null => {
-  const re = /\bstack\s*\(/g;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(score)) !== null) {
-    const open = m.index + m[0].length - 1;
-    let depth = 1;
-    let i = open + 1;
-    let inSingle = false;
-    let inDouble = false;
-    let inTemplate = false;
-    let inLine = false;
-    let inBlock = false;
-    while (i < score.length && depth > 0) {
-      const ch = score[i];
-      const prev = i > 0 ? score[i - 1] : '';
-      if (inLine) { if (ch === '\n') inLine = false; i += 1; continue; }
-      if (inBlock) { if (prev === '*' && ch === '/') inBlock = false; i += 1; continue; }
-      if (inSingle) { if (ch === "'" && prev !== '\\') inSingle = false; i += 1; continue; }
-      if (inDouble) { if (ch === '"' && prev !== '\\') inDouble = false; i += 1; continue; }
-      if (inTemplate) { if (ch === '`' && prev !== '\\') inTemplate = false; i += 1; continue; }
-      if (ch === '/' && score[i + 1] === '/') { inLine = true; i += 2; continue; }
-      if (ch === '/' && score[i + 1] === '*') { inBlock = true; i += 2; continue; }
-      if (ch === "'") { inSingle = true; i += 1; continue; }
-      if (ch === '"') { inDouble = true; i += 1; continue; }
-      if (ch === '`') { inTemplate = true; i += 1; continue; }
-      if (ch === '(') depth += 1;
-      else if (ch === ')') {
-        depth -= 1;
-        if (depth === 0) return { open, close: i };
-      }
-      i += 1;
-    }
-  }
-  return null;
-};
-
-const splitTopLevel = (body: string): ReadonlyArray<{ start: number; end: number; text: string }> => {
-  const parts: Array<{ start: number; end: number; text: string }> = [];
-  let depth = 0;
-  let inSingle = false;
-  let inDouble = false;
-  let inTemplate = false;
-  let inLine = false;
-  let inBlock = false;
-  let start = 0;
-  for (let i = 0; i < body.length; i += 1) {
-    const ch = body[i];
-    const prev = i > 0 ? body[i - 1] : '';
-    if (inLine) { if (ch === '\n') inLine = false; continue; }
-    if (inBlock) { if (prev === '*' && ch === '/') inBlock = false; continue; }
-    if (inSingle) { if (ch === "'" && prev !== '\\') inSingle = false; continue; }
-    if (inDouble) { if (ch === '"' && prev !== '\\') inDouble = false; continue; }
-    if (inTemplate) { if (ch === '`' && prev !== '\\') inTemplate = false; continue; }
-    if (ch === '/' && body[i + 1] === '/') { inLine = true; continue; }
-    if (ch === '/' && body[i + 1] === '*') { inBlock = true; continue; }
-    if (ch === "'") { inSingle = true; continue; }
-    if (ch === '"') { inDouble = true; continue; }
-    if (ch === '`') { inTemplate = true; continue; }
-    if (ch === '(' || ch === '[' || ch === '{') depth += 1;
-    else if (ch === ')' || ch === ']' || ch === '}') depth -= 1;
-    else if (ch === ',' && depth === 0) {
-      parts.push({ start, end: i, text: body.slice(start, i) });
-      start = i + 1;
-    }
-  }
-  parts.push({ start, end: body.length, text: body.slice(start) });
-  return parts;
-};
+/**
+ * Absolute byte range of every top-level segment of a stack body.
+ *
+ * A comment-only segment yields empty text once comments are stripped —
+ * callers emit it verbatim without consuming a mixer row.
+ */
+const splitSegments = (
+  bodyStart: number,
+  args: ReadonlyArray<Arg>,
+): ReadonlyArray<{ start: number; end: number }> =>
+  args.map((arg) => ({ start: arg.span.start - bodyStart, end: arg.span.end - bodyStart }));
 
 const anySoloed = (mix: ReadonlyArray<LayerMix>): boolean =>
   mix.some((m) => m.soloed);
 
+/**
+ * Absolute byte offset of the `(` that opens a stack's body.
+ *
+ * `StackNode.span.start` points at the `stack` IDENT, not the paren —
+ * `+1` would land inside the word. Scanning forward for the first
+ * `(` is safe because the tokenizer only emits LPAREN as a real token,
+ * so nothing between the ident and the paren can be a paren.
+ */
+const openParenAt = (score: string, stackStart: number): number => {
+  const i = score.indexOf('(', stackStart);
+  return i === -1 ? stackStart : i;
+};
+
+/** One pending text replacement, expressed in absolute score offsets. */
+type Edit = {
+  readonly start: number;
+  readonly end: number;
+  readonly text: string;
+};
+
 export const injectMix = (score: string, layerMix: ReadonlyArray<LayerMix>): string => {
   if (!score.trim()) return score;
   const soloActive = anySoloed(layerMix);
-  const stack = findOutermostStack(score);
-  if (!stack) {
+  const stacks = collectStacksOf(score);
+
+  if (stacks.length === 0) {
     if (layerMix.length === 0) return score;
     const only = layerMix[0]!;
     const muted = only.muted || (soloActive && !only.soloed);
     const gain = muted ? 0 : only.gain;
     return replaceGain(score, gain);
   }
-  // Re-parse inside stack — we need char offsets relative to `body`,
-  // then map back to absolute `score` positions for the rebuild.
-  const body = score.slice(stack.open + 1, stack.close);
-  const parts = splitTopLevel(body);
-  const bodyStart = stack.open + 1;
-  const out: string[] = [];
-  let cursor = bodyStart;
+
+  const edits: Edit[] = [];
   let index = 0;
-  for (const part of parts) {
-    const trimmed = part.text.replace(/\/\/.*$/gm, '').trim();
-    if (!trimmed) {
-      // Preserve empty slots as-is.
-      out.push(score.slice(cursor, bodyStart + part.end));
-      cursor = bodyStart + part.end;
-      continue;
-    }
-    const mix = layerMix[index];
-    out.push(score.slice(cursor, bodyStart + part.start));
-    if (mix === undefined) {
-      // No mixer state for this layer — keep original.
-      out.push(part.text);
-    } else {
+
+  for (const ref of stacks) {
+    const bodyStart = openParenAt(score, ref.start) + 1;
+    const segments = splitSegments(bodyStart, ref.args);
+
+    for (const seg of segments) {
+      const raw = score.slice(bodyStart + seg.start, bodyStart + seg.end);
+      const trimmed = raw.replace(/\/\/.*$/gm, '').trim();
+      if (!trimmed) {
+        // Comment-only or empty slot — preserve as-is, no row consumed.
+        continue;
+      }
+      const mix = layerMix[index];
+      index += 1;
+      if (mix === undefined) continue;
       // Solo cascade: if any layer is soloed, only soloed layers are
       // audible. Soloed layers ignore their own `muted` flag (standard
       // DAW behaviour: solo forces the track on).
       const isAudible = soloActive ? mix.soloed : !mix.muted;
       const gain = isAudible ? mix.gain : 0;
-      out.push(replaceGain(part.text, gain));
+      edits.push({
+        start: bodyStart + seg.start,
+        end: bodyStart + seg.end,
+        text: replaceGain(raw, gain),
+      });
     }
-    cursor = bodyStart + part.end;
-    index += 1;
   }
-  // Tail after the last part (e.g. trailing whitespace, comments).
-  out.push(score.slice(cursor, stack.close));
-  const head = score.slice(0, stack.open + 1);
-  const tail = score.slice(stack.close);
-  return `${head}${out.join('')}${tail}`;
+
+  if (edits.length === 0) return score;
+  // Apply right-to-left so earlier offsets stay valid.
+  edits.sort((a, b) => b.start - a.start);
+  let out = score;
+  for (const e of edits) {
+    out = `${out.slice(0, e.start)}${e.text}${out.slice(e.end)}`;
+  }
+  return out;
 };
+
+/** Re-exported for tests that need the raw arg text of a layer. */
+export const __argText = argText;

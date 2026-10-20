@@ -654,6 +654,75 @@ describe('SampleLoader — Strudel API contract (samples, soundMap, static impor
     expect(progress.perBank.drums.total).toBe(24);
     expect(progress.perBank.drums.loaded).toBe(24);
   });
+
+// ---- malformed URLs from upstream soundMap entries ----
+//
+// At boot the real app issued three guaranteed 404s, one per bank:
+//   /samples/piano//samples/piano/
+//   /samples/drums//samples/drums/
+//   /samples/synth//samples/synth/
+// The upstream `@strudel/webaudio` soundMap exposes one entry whose
+// `samples` is the bank's base path rather than a file list. We can't
+// patch that from here, so `collectSampleUrls` filters it out — a
+// directory URL can never decode, and feeding it to the worker only
+// buys a 404 plus a wasted round-trip.
+
+  /** Override the mocked soundMap, then run one bank's loader.
+   *  `addBareAliases` also registers `bank_sound` → `sound`, so every
+   *  fixture entry appears TWICE in the worker's URL list. Compare
+   *  unique URLs — the alias duplicates are expected behaviour, not
+   *  the double-fetch this suite is about. */
+  const preloadWithEntries = async (
+    entries: Record<string, unknown>,
+    load: 'piano' | 'drums' | 'synth',
+  ): Promise<ReadonlyArray<string>> => {
+    const mod = await loadSampleLoader();
+    samplesMock.mockImplementationOnce(async () => {
+      for (const [k, samples] of Object.entries(entries)) {
+        soundMapStore[k] = { onTrigger: vi.fn(), data: { type: 'sample', samples } };
+      }
+    });
+    if (load === 'piano') await mod.loadPianoSamples();
+    else if (load === 'drums') await mod.loadDrumSamples();
+    else await mod.loadSynthSamples();
+    return [...new Set(postedUrls())].sort();
+  };
+
+  it('drops directory-shaped URLs (base concatenated with itself)', async () => {
+    const urls = await preloadWithEntries({
+      piano_base: ['/samples/piano//samples/piano/'],
+      piano_a1: ['/samples/piano/A1.mp3'],
+    }, 'piano');
+    expect(urls).toEqual(['/samples/piano/A1.mp3']);
+  });
+
+  it('drops URLs with no file extension', async () => {
+    const urls = await preloadWithEntries({
+      drums_root: ['/samples/drums/'],
+      drums_bare: ['drums'],
+      drums_bd: ['/samples/drums/bd.mp3'],
+    }, 'drums');
+    expect(urls).toEqual(['/samples/drums/bd.mp3']);
+  });
+
+  it('collapses duplicate slashes in the path but keeps the scheme intact', async () => {
+    const urls = await preloadWithEntries({
+      synth_messy: ['https://cdn.example.com//samples//synth//lead-e4.mp3'],
+      synth_plain: ['/samples/synth/brass-c3.mp3'],
+    }, 'synth');
+    expect(urls).toEqual([
+      'https://cdn.example.com/samples/synth/lead-e4.mp3',
+      '/samples/synth/brass-c3.mp3',
+    ].sort());
+  });
+
+  it('leaves well-formed entries untouched', async () => {
+    const urls = await preloadWithEntries({
+      piano_a1: ['/samples/piano/A1.mp3'],
+      piano_c7: ['/samples/piano/C7.mp3'],
+    }, 'piano');
+    expect(urls).toEqual(['/samples/piano/A1.mp3', '/samples/piano/C7.mp3']);
+  });
 });
 
 /**

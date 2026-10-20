@@ -305,22 +305,61 @@ const addBareAliases = (): number => {
   return Object.keys(updates).length;
 };
 
+/**
+ * Reject URLs that cannot possibly decode, and normalise the rest.
+ *
+ * A sample URL always points at a FILE — `A1.mp3`, `bd.mp3`. Two
+ * shapes showed up in the network log at boot, one per bank:
+ *
+ *   /samples/piano//samples/piano/    ← 404, base concatenated with itself
+ *   /samples/piano//samples/piano/
+ *
+ * Three of them, one for each manifest, arriving from the decode
+ * worker right after `samples(manifestUrl)` resolved. The upstream
+ * `@strudel/webaudio` `soundMap` hands back one entry whose `samples`
+ * is the bank's base path rather than a file list; we cannot patch
+ * that from here, and it is upstream-version-dependent. What we CAN
+ * do is refuse to feed it to `decodeAudioData`:
+ *
+ *   1. a URL with no file extension cannot be a sample — dropping it
+ *      removes three guaranteed 404s and one wasted worker round-trip;
+ *   2. collapsing `//` → `/` fixes the same URL if it ever arrives in
+ *      a decodable-looking form.
+ *
+ * Both filters are no-ops for well-formed manifests, so the hot path
+ * (73 real URLs) is untouched.
+ */
+const normalizeSampleUrl = (url: string): string | null => {
+  if (typeof url !== 'string' || url.length === 0) return null;
+  // Collapse duplicate slashes in the PATH only — `https://` must
+  // survive, so split off the scheme first.
+  const schemeMatch = /^([a-zA-Z][a-zA-Z0-9+.-]*:\/\/)(.*)$/.exec(url);
+  const prefix = schemeMatch?.[1] ?? '';
+  const rest = schemeMatch?.[2] ?? url;
+  const collapsed = `${prefix}${rest.replace(/\/{2,}/g, '/')}`;
+  const lastSegment = collapsed.slice(collapsed.lastIndexOf('/') + 1);
+  if (lastSegment.length === 0) return null;                 // trailing slash → directory
+  if (!/\.[A-Za-z0-9]{1,5}$/.test(lastSegment)) return null; // no file extension
+  return collapsed;
+};
+
 const collectSampleUrls = (dict: SoundMapSnapshot): string[] => {
   const urls: string[] = [];
+  const push = (raw: unknown): void => {
+    if (typeof raw !== 'string') return;
+    const url = normalizeSampleUrl(raw);
+    if (url !== null) urls.push(url);
+  };
   for (const [, entry] of Object.entries(dict)) {
     const data = entry.data as { type?: string; samples?: unknown };
     if (data.type !== 'sample' || !data.samples) continue;
     const samples = data.samples;
     if (Array.isArray(samples)) {
-      for (const url of samples) {
-        if (typeof url === 'string') urls.push(url);
-      }
+      for (const url of samples) push(url);
     } else if (typeof samples === 'object' && samples !== null) {
       for (const urlList of Object.values(samples as Record<string, unknown>)) {
         if (Array.isArray(urlList)) {
-          for (const url of urlList) {
-            if (typeof url === 'string') urls.push(url);
-          }
+          for (const url of urlList) push(url);
         }
       }
     }

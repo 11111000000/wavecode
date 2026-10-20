@@ -1,18 +1,19 @@
 import { For, type JSX } from 'solid-js';
 import { WavecodeLogo } from '~/presentation/components/landing/icons';
+import { APP_VERSION } from '~/version';
 
 type Link = {
   readonly label: string;
   readonly href: string;
   readonly external?: boolean;
-  readonly route?: boolean;     // true → /app (SPA-навигация), false → #anchor или ext
+  readonly route?: boolean;     // true → #/app (SPA-навигация), false → #anchor или ext
 };
 
 const SECTIONS: ReadonlyArray<{ title: string; links: ReadonlyArray<Link> }> = [
   {
     title: 'Продукт',
     links: [
-      { label: 'Открыть редактор',  href: '/app',         route: true },
+      { label: 'Открыть редактор',  href: '#/app',        route: true },
       { label: 'Пресеты',            href: '#snippet' },
       { label: 'Архитектура',        href: '#architecture' },
       { label: 'Quick start',        href: '#start' },
@@ -79,7 +80,7 @@ export function Footer(): JSX.Element {
       </div>
 
       <div class="l-footer__bottom">
-        <span>© 2026 wavecode · pure-frontend SPA · v0.1</span>
+        <span>© 2026 wavecode · pure-frontend SPA · {`v${APP_VERSION}`}</span>
         <span class="l-footer__bottom-links">
           <span>Geist Sans + Geist Mono</span>
           <span>Webkit · Chrome · Firefox · Safari 16+</span>

@@ -13,7 +13,7 @@ export function EditorMockup(): JSX.Element {
   return (
     <section id="mockup" class="l-section" aria-labelledby="mockup-title">
       <header class="l-section__head">
-        <span class="l-section__kicker">03 · editor</span>
+        <span class="l-section__kicker">02 · редактор</span>
         <h2 class="l-section__title" id="mockup-title">
           То, что ты увидишь через секунду после клика.
         </h2>

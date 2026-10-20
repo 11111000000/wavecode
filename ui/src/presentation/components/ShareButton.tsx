@@ -1,4 +1,5 @@
 import { Show, createSignal } from 'solid-js';
+import { Portal } from 'solid-js/web';
 import { appStore, dispatch } from '../state/appStore';
 import {
   shareState,
@@ -56,17 +57,34 @@ const formatBytes = (n: number): string => {
 export function ShareButton() {
   const [copied, setCopied] = createSignal(false);
   const [error, setError] = createSignal<string | null>(null);
+  const [open, setOpen] = createSignal(false);
+  let panel: HTMLDivElement | undefined;
 
   const onOpen = (): void => {
     setCopied(false);
     setError(null);
     openShareModal(appStore.score);
+    setOpen(true);
+    // Focus the panel so the keydown handler is reachable without a
+    // pointer event first — Esc must work immediately on open.
+    queueMicrotask(() => panel?.focus());
   };
 
   const onClose = (): void => {
     setCopied(false);
     setError(null);
+    setOpen(false);
     closeShareModal();
+  };
+
+  // Esc closes the modal. Without a keyboard escape the only way out
+  // is the «Закрыть» button, which on short viewports sits under the
+  // transport-bar overlay and swallows the click — the modal then
+  // traps the user.
+  const onKeyDown = (e: KeyboardEvent): void => {
+    if (e.key !== 'Escape') return;
+    e.stopPropagation();
+    onClose();
   };
 
   const onCopy = async (): Promise<void> => {
@@ -111,70 +129,85 @@ export function ShareButton() {
         🔗
       </button>
 
-      <Show when={shareState.shareUrl() !== null || tooLarge()}>
-        <div class="share-modal" role="dialog" aria-label="Поделиться партитурой">
-          <div class="share-modal-inner">
-            <h3 class="share-modal-title">🔗 Поделиться партитурой</h3>
+      <Show when={open() && (shareState.shareUrl() !== null || tooLarge())}>
+        <Portal>
+          <div
+            class="share-modal-backdrop"
+            onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+          >
+            <div
+              class="share-modal"
+              role="dialog"
+              aria-modal="true"
+              aria-label="Поделиться партитурой"
+              tabindex={-1}
+              ref={panel}
+              onKeyDown={onKeyDown}
+            >
+              <div class="share-modal-inner">
+                <h3 class="share-modal-title">🔗 Поделиться партитурой</h3>
 
-            <Show when={!tooLarge()}>
-              <input
-                type="text"
-                class="share-url"
-                readonly
-                value={shareState.shareUrl() ?? ''}
-                onFocus={(e) => e.currentTarget.select()}
-              />
-              <div class="share-modal-meta">
-                <span class="share-modal-size">
-                  {formatBytes(shareState.shareSize())} / {formatBytes(shareState.shareSizeLimit())}
-                </span>
-                <button
-                  type="button"
-                  class="share-modal-btn share-modal-copy"
-                  onClick={() => void onCopy()}
-                >
-                  {copied() ? '✓ Скопировано' : '📋 Copy URL'}
-                </button>
-              </div>
-            </Show>
+                <Show when={!tooLarge()}>
+                  <input
+                    type="text"
+                    class="share-url"
+                    readonly
+                    value={shareState.shareUrl() ?? ''}
+                    onFocus={(e) => e.currentTarget.select()}
+                  />
+                  <div class="share-modal-meta">
+                    <span class="share-modal-size">
+                      {formatBytes(shareState.shareSize())} / {formatBytes(shareState.shareSizeLimit())}
+                    </span>
+                    <button
+                      type="button"
+                      class="share-modal-btn share-modal-copy"
+                      onClick={() => void onCopy()}
+                    >
+                      {copied() ? '✓ Скопировано' : '📋 Copy URL'}
+                    </button>
+                  </div>
+                </Show>
 
-            <Show when={tooLarge()}>
-              <div class="share-modal-warn">
-                ⚠ Партитура слишком длинная ({formatBytes(shareState.shareSize())} &gt;{' '}
-                {formatBytes(shareState.shareSizeLimit())}). URL такого размера обрезают
-                прокси и CDN. Лучше экспортируй партитуру в <code>.strudel.txt</code>{' '}
-                через «📤 Текст» в панели партитуры и перешли файлом.
-              </div>
-            </Show>
+                <Show when={tooLarge()}>
+                  <div class="share-modal-warn">
+                    ⚠ Партитура слишком длинная ({formatBytes(shareState.shareSize())} &gt;{' '}
+                    {formatBytes(shareState.shareSizeLimit())}). URL такого размера обрезают
+                    прокси и CDN. Лучше экспортируй партитуру в <code>.strudel.txt</code>{' '}
+                    через «📤 Текст» в панели партитуры и перешли файлом.
+                  </div>
+                </Show>
 
-            <Show when={shareState.pendingEncoded() !== null && shareState.hasIdbScore()}>
-              <div class="share-modal-pending">
-                <div class="share-modal-pending-msg">
-                  В URL передан shared snippet, но у вас уже есть несохранённая локальная
-                  работа. Загрузить shared snippet? Текущая партитура будет заменена.
+                <Show when={shareState.pendingEncoded() !== null && shareState.hasIdbScore()}>
+                  <div class="share-modal-pending">
+                    <div class="share-modal-pending-msg">
+                      В URL передан shared snippet, но у вас уже есть несохранённая локальная
+                      работа. Загрузить shared snippet? Текущая партитура будет заменена.
+                    </div>
+                    <button
+                      type="button"
+                      class="share-modal-btn share-modal-load"
+                      disabled={shareState.isLoadingShared()}
+                      onClick={onLoadShared}
+                    >
+                      📥 Загрузить shared snippet
+                    </button>
+                  </div>
+                </Show>
+
+                <Show when={error()}>
+                  <div class="share-modal-err">{error()}</div>
+                </Show>
+
+                <div class="share-modal-actions">
+                  <button type="button" class="share-modal-btn" onClick={onClose}>
+                    Закрыть
+                  </button>
                 </div>
-                <button
-                  type="button"
-                  class="share-modal-btn share-modal-load"
-                  disabled={shareState.isLoadingShared()}
-                  onClick={onLoadShared}
-                >
-                  📥 Загрузить shared snippet
-                </button>
               </div>
-            </Show>
-
-            <Show when={error()}>
-              <div class="share-modal-err">{error()}</div>
-            </Show>
-
-            <div class="share-modal-actions">
-              <button type="button" class="share-modal-btn" onClick={onClose}>
-                Закрыть
-              </button>
             </div>
           </div>
-        </div>
+        </Portal>
       </Show>
     </>
   );

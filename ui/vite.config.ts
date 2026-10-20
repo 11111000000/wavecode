@@ -3,8 +3,17 @@ import { defineConfig } from 'vite';
 import solid from 'vite-plugin-solid';
 import { VitePWA } from 'vite-plugin-pwa';
 import { resolve } from 'node:path';
+import { readFileSync } from 'node:fs';
+
+const pkg = JSON.parse(
+  readFileSync(resolve(__dirname, 'package.json'), 'utf8'),
+) as { version: string };
 
 export default defineConfig({
+  define: {
+    // Landing footer prints the real package version — see src/version.ts.
+    __APP_VERSION__: JSON.stringify(pkg.version),
+  },
   plugins: [
     solid(),
     VitePWA({

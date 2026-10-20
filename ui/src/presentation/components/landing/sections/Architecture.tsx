@@ -8,7 +8,7 @@ export function Architecture(): JSX.Element {
   return (
     <section id="architecture" class="l-section" aria-labelledby="arch-title">
       <header class="l-section__head">
-        <span class="l-section__kicker">06 · что внутри</span>
+        <span class="l-section__kicker">04 · путь сигнала</span>
         <h2 class="l-section__title" id="arch-title">
           Что происходит, когда ты нажал «Play».
         </h2>

@@ -77,7 +77,7 @@ export function Features(): JSX.Element {
   return (
     <section id="how" class="l-section" aria-labelledby="how-title">
       <header class="l-section__head">
-        <span class="l-section__kicker">02 · как это работает</span>
+        <span class="l-section__kicker">03 · как это работает</span>
         <h2 class="l-section__title" id="how-title">
           Шесть вещей, которые делают wavecode wavecode'ом.
         </h2>
