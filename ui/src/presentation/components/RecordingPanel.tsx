@@ -45,9 +45,9 @@ import { noteNumberToName } from '~/domain/music/notes';
  * What this panel shows
  * --------------------
  * - For voice-AI (any active FSM tag except idle/errored, plus errored):
- *     🎙️ «Слышу: …interim | final…». A "Проверить" affordance appears
- *     only in `paused` / `review` — see `canReview` below.
- *     Same data the legacy VoiceTranscriptOverlay surfaced.
+ *     🎙️ «Слышу: …interim | final…». Отдельного шага «проверить и
+ *     отправить» больше нет — live-текст виден сразу, а final уходит
+ *     в ИИ сам (`wavecode-voice-live-transcript`).
  * - For whistle (arming/recording/segmenting):
  *     🎵 «Свист · <инструмент>» + last detected note name + Hz readout
  *     + a horizontal strip of recent notes ("c4 e4 g4") + RMS bar.
