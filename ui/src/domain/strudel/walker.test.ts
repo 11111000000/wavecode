@@ -13,6 +13,7 @@ import {
   findTopStackOf,
   countSLayers,
   getStackArgs,
+  collectStacksOf,
   validateForEdit,
   validateForMixer,
   parseScore,
@@ -20,32 +21,42 @@ import {
 import { BUILTIN_PRESETS } from '~/domain/presets';
 
 /**
- * Hand-counted layer totals for each preset (the test against
- * which `findTopStack` + `countSLayers` must match). Derived
- * from the score strings in `ui/src/domain/presets.ts` (Oct 2026
- * audit) and the documented layering in each preset comment.
+ * Hand-counted expectations for each preset.
  *
- * These values are derived from the legacy regex-parser
- * behaviour (which returned the first `stack(` regardless of
- * nesting) and now act as the regression oracle: any change
- * to `findTopStack` semantics must be reflected here.
+ * `topSLayers` / `topStackLayers` describe the FIRST `stack(…)` that
+ * `findTopStack` returns — the legacy depth-1 answer that
+ * `validateForEdit` (the StepGrid precondition) is defined against.
+ * Those values did not change.
+ *
+ * `sections` / `mixerRows` describe the all-stacks walk that
+ * `validateForMixer` uses. They are much larger for every multi-section
+ * preset because `cat(stack(…), stack(…), …)` contributes one stack per
+ * arrangement section: `edm-house` is 8 sections / 44 layers, of which
+ * the legacy answer surfaced only 4.
  */
-const EXPECTED_STACK_LAYERS: ReadonlyArray<{ readonly id: string; readonly sLayers: number; readonly totalLayers: number }> = [
-  { id: 'creep', sLayers: 0, totalLayers: 2 }, // verse bar 1 only (legacy depth-1)
-  { id: 'edm-house', sLayers: 2, totalLayers: 4 }, // section 1 only (legacy depth-1)
-  { id: 'hiphop-boombap', sLayers: 2, totalLayers: 2 }, // intro only (legacy depth-1)
-  { id: 'jazz-ii-v-i', sLayers: 2, totalLayers: 7 }, // no cat wrapper, top-level stack
-  { id: 'ambient-drone', sLayers: 1, totalLayers: 6 }, // top-level stack
-  { id: 'bossa-nova', sLayers: 2, totalLayers: 7 }, // top-level stack
-  { id: 'trap-atlanta', sLayers: 2, totalLayers: 3 }, // section 1 only (legacy depth-1)
-  { id: 'reggaeton', sLayers: 3, totalLayers: 5 }, // top-level stack (5 layers)
-  { id: 'step-grid-demo', sLayers: 4, totalLayers: 4 }, // 4 s-layers, edit-mode valid
-  { id: 'piano-ballad', sLayers: 2, totalLayers: 5 }, // top-level stack
-  { id: '808-classic', sLayers: 4, totalLayers: 5 }, // 4 s-layers + 1 note — edit NOT valid (mix of s and note)
-  { id: 'analog-bass', sLayers: 3, totalLayers: 6 }, // 3 s-layers + 3 note — edit NOT valid
-  { id: '808-king', sLayers: 5, totalLayers: 6 }, // 5 s-layers, edit NOT valid
-  { id: 'retro-lead', sLayers: 2, totalLayers: 6 }, // top-level stack
-  { id: 'toms-funk', sLayers: 6, totalLayers: 7 }, // 6 s-layers + 1 note — edit NOT valid
+const EXPECTED_STACK_LAYERS: ReadonlyArray<{
+  readonly id: string;
+  readonly topSLayers: number;
+  readonly topStackLayers: number;
+  readonly sections: number;
+  readonly mixerRows: number;
+}> = [
+  //                                first-stack      all-stacks
+  { id: 'creep',          topSLayers: 0, topStackLayers: 2, sections: 8, mixerRows: 29 },
+  { id: 'edm-house',      topSLayers: 2, topStackLayers: 4, sections: 8, mixerRows: 44 },
+  { id: 'hiphop-boombap', topSLayers: 2, topStackLayers: 2, sections: 8, mixerRows: 42 },
+  { id: 'jazz-ii-v-i',    topSLayers: 2, topStackLayers: 7, sections: 1, mixerRows: 7 },
+  { id: 'ambient-drone',  topSLayers: 1, topStackLayers: 6, sections: 1, mixerRows: 6 },
+  { id: 'bossa-nova',     topSLayers: 2, topStackLayers: 7, sections: 1, mixerRows: 7 },
+  { id: 'trap-atlanta',   topSLayers: 2, topStackLayers: 3, sections: 8, mixerRows: 43 },
+  { id: 'reggaeton',      topSLayers: 3, topStackLayers: 5, sections: 1, mixerRows: 5 },
+  { id: 'step-grid-demo', topSLayers: 4, topStackLayers: 4, sections: 1, mixerRows: 4 },
+  { id: 'piano-ballad',   topSLayers: 2, topStackLayers: 5, sections: 1, mixerRows: 5 },
+  { id: '808-classic',    topSLayers: 4, topStackLayers: 5, sections: 1, mixerRows: 5 },
+  { id: 'analog-bass',    topSLayers: 3, topStackLayers: 6, sections: 1, mixerRows: 6 },
+  { id: '808-king',       topSLayers: 5, topStackLayers: 6, sections: 1, mixerRows: 6 },
+  { id: 'retro-lead',     topSLayers: 2, topStackLayers: 6, sections: 1, mixerRows: 6 },
+  { id: 'toms-funk',      topSLayers: 6, topStackLayers: 7, sections: 1, mixerRows: 7 },
 ];
 
 describe('walker', () => {
@@ -122,14 +133,14 @@ describe('walker', () => {
   });
 
   it('validateForMixer returns the same layers as the legacy parseStackTopLayers', () => {
-    // The mixer shape (index/source/name triples) is the public
-    // contract — verify on a hand-built fixture.
+    // The mixer shape (index/source/name/section quadruples) is the
+    // public contract — verify on a hand-built fixture.
     const score = 'stack(s("a"), note("c3"), n("0,1"))';
     const layers = validateForMixer(score);
     expect(layers).toHaveLength(3);
-    expect(layers[0]).toEqual({ index: 0, source: 's("a")', name: 'Samples' });
-    expect(layers[1]).toEqual({ index: 1, source: 'note("c3")', name: 'Piano' });
-    expect(layers[2]).toEqual({ index: 2, source: 'n("0,1")', name: 'Arp' });
+    expect(layers[0]).toEqual({ index: 0, source: 's("a")', name: 'Samples', section: 0 });
+    expect(layers[1]).toEqual({ index: 1, source: 'note("c3")', name: 'Piano', section: 0 });
+    expect(layers[2]).toEqual({ index: 2, source: 'n("0,1")', name: 'Arp', section: 0 });
   });
 
   // ---- Fuzz / regression: every preset parses ----
@@ -155,26 +166,89 @@ describe('walker', () => {
   });
 
   it('countSLayers on every preset matches the documented expectations', () => {
-    for (const { id, sLayers } of EXPECTED_STACK_LAYERS) {
+    for (const { id, topSLayers } of EXPECTED_STACK_LAYERS) {
       const preset = BUILTIN_PRESETS.find((p) => p.id === id);
       if (!preset) throw new Error(`preset not found: ${id}`);
       const stack = findTopStackOf(preset.score);
       expect(stack).not.toBeNull();
       const actual = countSLayers(stack!);
-      if (actual !== sLayers) {
-        throw new Error(`preset ${id}: expected ${sLayers} s-layers, got ${actual}`);
+      if (actual !== topSLayers) {
+        throw new Error(`preset ${id}: expected ${topSLayers} s-layers, got ${actual}`);
       }
-      expect(actual).toBe(sLayers);
+      expect(actual).toBe(topSLayers);
     }
   });
 
-  it('total layer count on every preset matches the documented expectations', () => {
-    for (const { id, totalLayers } of EXPECTED_STACK_LAYERS) {
+  it('findTopStack layer count on every preset matches the documented expectations', () => {
+    for (const { id, topStackLayers } of EXPECTED_STACK_LAYERS) {
       const preset = BUILTIN_PRESETS.find((p) => p.id === id);
       if (!preset) throw new Error(`preset not found: ${id}`);
       const stack = findTopStackOf(preset.score);
       if (!stack) continue;
-      expect(stack.args.length).toBe(totalLayers);
+      expect(stack.args.length).toBe(topStackLayers);
+    }
+  });
+
+  // ---- collectStacks: the all-stacks walk the mixer depends on ----
+
+  it('collectStacks returns one ref per stack, in source order', () => {
+    const score = [
+      'cat(',
+      '  stack(note("c3").gain(1), note("e3").gain(1)),',
+      '  stack(note("g3").gain(1)),',
+      '  stack(s("bd").gain(1), note("c2").gain(1)),',
+      ')',
+    ].join('\n');
+    const refs = collectStacksOf(score);
+    expect(refs).toHaveLength(3);
+    expect(refs.map((r) => r.args.length)).toEqual([2, 1, 2]);
+  });
+
+  it('collectStacks re-bases nested spans onto the original score text', () => {
+    const prefix = '// header comment\ncat([\n  stack(\n    note("c3").gain(1),\n  ),\n])\n';
+    const [ref] = collectStacksOf(prefix);
+    expect(ref).toBeDefined();
+    const stackStart = prefix.indexOf('stack(');
+    expect(ref!.start).toBe(stackStart);
+    // Slicing by the re-based span must land exactly on the arg text.
+    for (const arg of ref!.args) {
+      const text = prefix.slice(arg.span.start, arg.span.end);
+      expect(text.startsWith('note(')).toBe(true);
+      expect(text.endsWith(')')).toBe(true);
+    }
+  });
+
+  it('collectStacks handles the bracketed cat([...]) form as well as cat(a, b)', () => {
+    const bracketed = 'cat([\n  stack(note("c3"), note("e3")),\n  stack(note("g3")),\n])';
+    const bare = 'cat(\n  stack(note("c3"), note("e3")),\n  stack(note("g3")),\n)';
+    expect(collectStacksOf(bracketed)).toHaveLength(2);
+    expect(collectStacksOf(bare)).toHaveLength(2);
+  });
+
+  it('collectStacks does not descend into a stack nested inside a stack', () => {
+    const score = 'stack(note("c3"), stack(note("e3"), s("bd")))';
+    const refs = collectStacksOf(score);
+    expect(refs).toHaveLength(1);
+    expect(refs[0]!.args).toHaveLength(2);
+  });
+
+  it('section count and mixer row count match the documented expectations', () => {
+    for (const { id, sections, mixerRows } of EXPECTED_STACK_LAYERS) {
+      const preset = BUILTIN_PRESETS.find((p) => p.id === id);
+      if (!preset) throw new Error(`preset not found: ${id}`);
+      expect(collectStacksOf(preset.score)).toHaveLength(sections);
+      expect(validateForMixer(preset.score)).toHaveLength(mixerRows);
+    }
+  });
+
+  it('mixer rows are enumerated contiguously across sections', () => {
+    for (const preset of BUILTIN_PRESETS) {
+      const layers = validateForMixer(preset.score);
+      layers.forEach((layer, i) => expect(layer.index).toBe(i));
+      // Section ordinals are non-decreasing.
+      for (let i = 1; i < layers.length; i += 1) {
+        expect(layers[i]!.section).toBeGreaterThanOrEqual(layers[i - 1]!.section);
+      }
     }
   });
 });
