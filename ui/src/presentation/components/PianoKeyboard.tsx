@@ -11,6 +11,8 @@ import {
 import {
   isMidiAvailable,
   requestMidiAccess,
+  getMidiFailure,
+  clearMidiFailure,
   onNote,
 } from '~/infrastructure/audio/MidiInput';
 import { createPianoSynth, type PianoSynth } from '~/infrastructure/audio/PianoSynth';
@@ -95,6 +97,10 @@ export function PianoKeyboard(props: PianoKeyboardProps = {}) {
   const [activeNotes, setActiveNotes] = createSignal<ReadonlySet<number>>(new Set());
   const [midiAvailable, setMidiAvailable] = createSignal(false);
   const [midiInputs, setMidiInputs] = createSignal<ReadonlyArray<string>>([]);
+  // Why the last Web MIDI request came back empty. Distinguishes
+  // "no hardware" from "you declined", which used to look identical.
+  const [midiFailure, setMidiFailure] = createSignal<ReturnType<typeof getMidiFailure>>(null);
+  let midiCleanup: (() => void) | null = null;
   // Most-recently-active MIDI input name. Populated by the first MIDI
   // noteOn we see in a given session, replaced by a different device's
   // noteOn if that device takes over, and cleared when the LAST held
@@ -271,12 +277,11 @@ export function PianoKeyboard(props: PianoKeyboardProps = {}) {
   });
 
   // WebMIDI: request access on mount (silently no-op on iOS).
-  onMount(() => {
-    if (!isMidiAvailable()) return;
-    setMidiAvailable(true);
+  const connectMidi = (): void => {
     let unsub: (() => void) | null = null;
     void requestMidiAccess().then((access) => {
-      if (!access) return;
+      if (!access) { setMidiFailure(getMidiFailure()); return; }
+      setMidiFailure(null);
       setMidiInputs(
         Array.from(access.inputs.values()).map((i) => i.name ?? 'Unknown device'),
       );
@@ -285,16 +290,47 @@ export function PianoKeyboard(props: PianoKeyboardProps = {}) {
         else stopNote(e.note);
       });
     });
+    midiCleanup = () => { if (unsub) unsub(); };
+  };
+
+  onMount(() => {
+    if (!isMidiAvailable()) return;
+    setMidiAvailable(true);
+    connectMidi();
     onCleanup(() => {
-      if (unsub) unsub();
+      midiCleanup?.();
+      midiCleanup = null;
     });
   });
+
+  // Re-issuing requestMIDIAccess after a denial re-prompts the user, so
+  // a "denied" chip with a retry button is recoverable rather than a
+  // dead end. A hardware-less browser that reports `granted` still shows
+  // the plain "no device" text.
+  const onRetryMidi = (): void => {
+    clearMidiFailure();
+    setMidiFailure(null);
+    midiCleanup?.();
+    midiCleanup = null;
+    connectMidi();
+  };
 
   const activeCount = (): number => activeNotes().size;
   const hasActive = (): boolean => activeCount() > 0;
   const midiStatus = (): string | undefined => {
     if (!midiAvailable()) return undefined;
-    if (midiInputs().length === 0) return 'MIDI: no device';
+    if (midiInputs().length === 0) {
+      switch (midiFailure()) {
+        case 'denied':
+          return 'MIDI: доступ не разрешён — нажми, чтобы повторить';
+        case 'timeout':
+          return 'MIDI: браузер не ответил — нажми, чтобы повторить';
+        case 'unsupported':
+          return 'MIDI: не поддерживается браузером';
+        default:
+          return 'MIDI: нет устройств';
+      }
+    }
     const n = midiInputs().length;
     const tail = hasActive() ? ` · ${formatActiveLabel(activeCount())}` : '';
     return `MIDI: ${n} device${n === 1 ? '' : 's'}${tail}`;
@@ -334,6 +370,7 @@ export function PianoKeyboard(props: PianoKeyboardProps = {}) {
         <span class="piano-hint">2 octaves (C3–B4) — tap or use MIDI keyboard</span>
         <PianoToolbar
           midiStatus={midiStatus()}
+        onRetryMidi={midiFailure() === 'denied' || midiFailure() === 'timeout' ? onRetryMidi : undefined}
           midiActive={hasActive()}
           midiActiveCount={activeCount()}
           midiSource={activeMidiSource() ?? undefined}

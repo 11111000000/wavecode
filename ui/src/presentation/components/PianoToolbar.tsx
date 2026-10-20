@@ -86,6 +86,11 @@ export type PianoToolbarProps = {
   /** Count of active notes — reflected in the data-active-count
    *  attribute of the MIDI status pill. */
   midiActiveCount?: number | undefined;
+  /** Retry handler rendered as a button inside the status pill when the
+   *  Web MIDI permission was declined or the request timed out. Re-issuing
+   *  `requestMIDIAccess()` after a denial re-prompts the user, so the
+   *  previously unrecoverable state becomes actionable. */
+  onRetryMidi?: (() => void) | undefined;
   /** Name of the most recently active MIDI input (e.g. "AKAI MPK").
    *  When set, rendered as a separate `<span class="piano-midi-source">`
    *  child of the MIDI status pill and reflected in the pill's
@@ -433,6 +438,18 @@ export const PianoToolbar = (props: PianoToolbarProps): JSX.Element => {
           <Show when={props.midiSource}>
             {' · '}
             <span class="piano-midi-source">{props.midiSource}</span>
+          </Show>
+          <Show when={props.onRetryMidi}>
+            {(retry) => (
+              <button
+                type="button"
+                class="piano-midi-retry"
+                onClick={() => retry()}
+                title="Запросить доступ к MIDI ещё раз"
+              >
+                ↻
+              </button>
+            )}
           </Show>
         </span>
       </Show>
