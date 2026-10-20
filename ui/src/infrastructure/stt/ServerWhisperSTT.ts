@@ -170,7 +170,15 @@ const sttError = (
  * too, `NotFoundError` when there is no input at all.
  */
 const classifyMicError = (err: unknown): SttUnsupportedError => {
-  const name = err instanceof DOMException || err instanceof Error ? err.name : '';
+  // Read `name` structurally: `err instanceof DOMException` would
+  // itself throw a ReferenceError in an environment without
+  // DOMException, and this mapper exists precisely so that nothing
+  // raw escapes.
+  const name =
+    typeof err === 'object' && err !== null
+      && typeof (err as { readonly name?: unknown }).name === 'string'
+      ? (err as { readonly name: string }).name
+      : '';
   switch (name) {
     case 'NotAllowedError':
     case 'PermissionDeniedError':
