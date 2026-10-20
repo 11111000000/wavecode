@@ -17,9 +17,13 @@
  * `startWhistle` acquires `mic-direct` for the `whistle` owner,
  * starts the live `micStore` pipeline, and runs the orchestrator.
  * `commitWhistle` triggers `notesToSnippet` + `audio.eval` via the
- * orchestrator. `stopWhistle` releases the mic and stops the live
- * mic. Acquire failure (another mic-direct owner is active) surfaces
- * as a typed `MicBusyError` — the WhistleMiniFAB surfaces a toast.
+ * orchestrator AND splices the same snippet into `appStore.score`
+ * via a presentation-layer dispatch — the orchestrator (application
+ * layer) does not touch the editor, mirroring
+ * `micStore.applyToScore` and `pianoRecStore.applyToScore`.
+ * `stopWhistle` releases the mic and stops the live mic. Acquire
+ * failure (another mic-direct owner is active) surfaces as a typed
+ * `MicBusyError` — the WhistleMiniFAB surfaces a toast.
  */
 
 import { createSignal, onCleanup, untrack } from 'solid-js';
@@ -28,6 +32,8 @@ import { Effect, Layer, Ref, Stream } from 'effect';
 import type { WhistleSessionState } from '~/domain/audio/whistleSession';
 import { initialWhistleSession } from '~/domain/audio/whistleSession';
 import type { AudioNote } from '~/domain/audio/micCapture';
+import { notesToSnippet } from '~/domain/audio/micCapture';
+import { appendToTopStack } from '~/domain/strudel';
 import { AudioEngine } from '~/domain/services';
 import type { MicBusyError } from '~/domain/audio/MicChannel';
 import {
@@ -35,8 +41,10 @@ import {
   type MicCaptureLike,
   type WhistleSessionHandle,
 } from '~/application/voice/WhistleSession';
-import { startMic, stopMic, micPreviewNotes, subscribeMicFrame } from './micStore';
-import { acquireMic, releaseMic } from './micMutexStore';
+import { startMic, stopMic, micPreviewNotes, setMicPreviewNotes, subscribeMicFrame } from './micStore';
+import { acquireMic, releaseMic, resetMicMutexForTests } from './micMutexStore';
+import { dispatch, appStore } from './appStore';
+import { consoleStore } from '~/presentation/components/consoleStore';
 import { logger } from '~/infrastructure/log';
 
 export const [whistleState, setWhistleState] = createSignal<WhistleSessionState>(
@@ -208,7 +216,24 @@ export const startWhistle = (
     );
   });
 
-/** Commit the buffered notes → AudioEngine.eval. */
+/** Default instrument forwarded to `notesToSnippet`. Mirrors the
+ *  default in `startWhistle` (kept here as a single source of truth
+ *  for the commit path because the orchestrator's `instrumentRef`
+ *  is private to the application layer). */
+const WHISTLE_DEFAULT_INSTRUMENT = 'piano';
+
+/**
+ * Commit the buffered notes. Two parallel effects:
+ *   1. `handle.commit()` inside the orchestrator runs
+ *      `notesToSnippet` + `AudioEngine.eval` so the user hears
+ *      the result.
+ *   2. This function additionally splices the same snippet into
+ *      `appStore.score` so the editor mirrors what was whistled.
+ *
+ * Audio is intentionally NOT replayed here — the orchestrator already
+ * drove `deps.audio.eval(snippet)`; a second eval would layer the
+ * snippet on top of itself in Strudel and play it twice.
+ */
 export const commitWhistle = (): Effect.Effect<void, never, never> => {
   if (handle === null) {
     return Effect.sync(() => {
@@ -217,7 +242,31 @@ export const commitWhistle = (): Effect.Effect<void, never, never> => {
     });
   }
   return Effect.gen(function* () {
+    // Snapshot before the orchestrator's async eval resumes control:
+    // `WhistleMiniFAB.releaseIfReal` fires commit + stop back-to-back
+    // via two `Effect.runPromise` calls; in production both Effects
+    // interleave at the first await point inside `audio.eval`, so a
+    // later read of `micPreviewNotes()` could race with `stopMic`'s
+    // `closeOpenNote` finalisation. Capturing now removes that
+    // dependency — even if `stopMic` clears the live buffer first,
+    // we still have the notes we observed at the start of commit.
+    const notes = micPreviewNotes();
     yield* handle!.commit();
+    if (notes.length === 0) return;
+    const snippet = notesToSnippet(notes, {
+      instrument: WHISTLE_DEFAULT_INSTRUMENT,
+    });
+    if (snippet === null) return;
+    const result = appendToTopStack(appStore.score, snippet);
+    if (!result.ok) {
+      consoleStore.pushToast({
+        severity: 'warn',
+        title: 'Не удалось вставить запись',
+        body: 'В score незакрытая скобка stack(...) — исправьте синтаксис и повторите.',
+      });
+      return;
+    }
+    dispatch({ type: 'replaceScore', text: result.score });
   });
 };
 
@@ -244,7 +293,13 @@ export const __setWhistleHandleForTests = (
   handle = h;
 };
 
-/** Test-only: reset module state. */
+/** Test-only: reset module state. Also clears `micPreviewNotes` so
+ *  leaks from a sibling test file (or a previous test in this file)
+ *  do not pollute the orchestrator's commit path — without this
+ *  reset, a stale note buffer from an earlier test would sneak into
+ *  the dispatched score. Resets the mic mutex too so that a leaked
+ *  acquire from an earlier test does not block this test's
+ *  `startWhistle` (which would surface as a `MicBusyError`). */
 export const __resetWhistleForTests = (): void => {
   if (unsubscribeFrame !== null) {
     unsubscribeFrame();
@@ -254,7 +309,9 @@ export const __resetWhistleForTests = (): void => {
   activeSessionId = null;
   setWhistleState(initialWhistleSession());
   setWhistleNotes([]);
+  setMicPreviewNotes([]);
   setWhistleError(null);
+  resetMicMutexForTests();
 };
 
 onCleanup(() => {
