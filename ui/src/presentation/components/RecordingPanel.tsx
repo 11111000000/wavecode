@@ -8,6 +8,7 @@ import {
 import {
   whistleState,
   whistleError,
+  whistleInstrumentLabel,
   stopWhistle,
 } from '../state/whistleStore';
 import {
@@ -44,10 +45,11 @@ import { noteNumberToName } from '~/domain/music/notes';
  * What this panel shows
  * --------------------
  * - For voice-AI (any active FSM tag except idle/errored, plus errored):
- *     🎙️ «Слышу: …interim | final…» + a "Проверить" affordance.
+ *     🎙️ «Слышу: …interim | final…». A "Проверить" affordance appears
+ *     only in `paused` / `review` — see `canReview` below.
  *     Same data the legacy VoiceTranscriptOverlay surfaced.
  * - For whistle (arming/recording/segmenting):
- *     🎵 «Свист: ▶ запись» + last detected note name + Hz readout
+ *     🎵 «Свист · <инструмент>» + last detected note name + Hz readout
  *     + a horizontal strip of recent notes ("c4 e4 g4") + RMS bar.
  *     Notes are pulled from `micPreviewNotes` (the live segmenter
  *     buffer), not from `micTransients` — whistle is a notes-only
@@ -109,6 +111,29 @@ export function RecordingPanel(): JSX.Element {
 /* ── voice-AI body ─────────────────────────────────────────────────── */
 
 const VoiceAIBody = (): JSX.Element => {
+  /* Push-to-talk is the default loop (decisions/wavecode-voice-fab,
+   * outcome `voice-ai-fab-press-and-hold`): press → speak → the final
+   * chunk auto-commits, the user just hears the result. A «Проверить»
+   * button sitting in the panel during `listening` invited a second,
+   * redundant step into the primary gesture — it was enabled in
+   * exactly the states where the user is already mid-sentence and
+   * mid-utterance.
+   *
+   * The affordance is now the *escape hatch* out of that loop, so it
+   * renders only once the recording is already stopped:
+   *   - `paused`  — reached by the panel's ✕ (`stopVoiceAI` →
+   *                `handle.stop()` dispatches `pause`): "I'm done
+   *                talking, let me fix the wording first";
+   *   - `review`  — already in the review modal; the button stays as
+   *                a re-entry point (dispatching `enter-review` from
+   *                `review` is a no-op in the reducer).
+   * In `listening` / `transcribing` / `requesting` / `applying` /
+   * `errored` nothing is rendered at all — not a disabled button. */
+  const canReview = createMemo<boolean>(() => {
+    const tag = voiceAIState().tag;
+    return tag === 'paused' || tag === 'review';
+  });
+
   const onReview = async (): Promise<void> => {
     try {
       await Effect.runPromise(enterVoiceAIReview());
@@ -167,22 +192,19 @@ const VoiceAIBody = (): JSX.Element => {
           </span>
         </Show>
       </div>
-      <div class="voice-recording-panel__actions">
-        <button
-          type="button"
-          class="voice-recording-panel__btn voice-recording-panel__btn--primary"
-          aria-label="Открыть для проверки и редактирования перед отправкой"
-          title="Остановить запись и показать текст для редактирования"
-          onClick={() => { void onReview(); }}
-          disabled={voiceAIState().tag === 'errored'
-            || voiceAIState().tag === 'paused'
-            || voiceAIState().tag === 'review'
-            || voiceAIState().tag === 'applying'
-            || voiceAIState().tag === 'requesting'}
-        >
-          Проверить <SendIcon size={12} />
-        </button>
-      </div>
+      <Show when={canReview()}>
+        <div class="voice-recording-panel__actions">
+          <button
+            type="button"
+            class="voice-recording-panel__btn voice-recording-panel__btn--primary"
+            aria-label="Открыть для проверки и редактирования перед отправкой"
+            title="Остановить запись и показать текст для редактирования"
+            onClick={() => { void onReview(); }}
+          >
+            Проверить <SendIcon size={12} />
+          </button>
+        </div>
+      </Show>
     </>
   );
 };
@@ -224,7 +246,7 @@ const WhistleBody = (): JSX.Element => {
         <span class="voice-recording-panel__icon voice-recording-panel__icon--whistle" aria-hidden="true">
           <WhistleIcon size={16} />
         </span>
-        <span class="voice-recording-panel__title">Свист</span>
+        <span class="voice-recording-panel__title">Свист · {whistleInstrumentLabel()}</span>
         <Show when={whistleState().tag === 'errored'}>
           <span class="voice-recording-panel__err-pill">⚠ {whistleError() ?? 'ошибка'}</span>
         </Show>
