@@ -32,17 +32,24 @@ import { initialWhistleSession } from '~/domain/audio/whistleSession';
  *   - voice-AI in `idle` / unstarted  → panel hidden.
  *   - voice-AI in `listening` / `transcribing` / `requesting` /
  *     `applying` / `errored`           → voice-AI body visible.
+ *   - voice-AI in `review`            → voice-AI body shows the
+ *     inline review form (textarea + → В ИИ button). The head ✕ is
+ *     the cancel affordance; nothing leaves the device until the
+ *     user clicks «→ В ИИ».
  *   - whistle in `arming` / `recording` / `segmenting` → whistle
  *     body visible (this is the new behaviour — used to be silent).
  *   - whistle wins over voice-AI when both happen to be active.
  *
- * «Проверить» affordance (`wavecode-voice-live-transcript`): the
- * live-transcript path (interim chunks arriving mid-speech) makes the
- * panel self-sufficient — the user sees what they said before the
- * auto-commit, so the "review before send" affordance is no longer
- * part of the primary loop. The button is absent from the DOM in
- * every voice-AI state, including `paused` / `review` (the FSM tag
- * stays; the UI affordance doesn't).
+ * History
+ * -------
+ * `decisions/wavecode-voice-live-transcript` deleted VoiceAITextReview
+ * (the modal) on the theory that the live transcript made a separate
+ * review step redundant in the primary loop. `decisions/wavecode-
+ * voice-confirm-before-send` re-introduced the confirmation step
+ * inline on the same panel — NOT as a modal — because a single STT
+ * error should not silently rewrite the score. These tests assert
+ * the inline form is present in `review` and absent in every other
+ * active state.
  */
 
 const FINAL_CHUNK = {
@@ -288,5 +295,145 @@ describe('RecordingPanel — voice-AI body content', () => {
     expect(container.querySelector('.voice-recording-panel__error')?.textContent).toContain(
       'permission denied',
     );
+  });
+});
+
+/* =========================================================================
+ *  Inline review form (`decisions/wavecode-voice-confirm-before-send`).
+ *  Asserts that in the FSM's `review` state the panel surfaces an
+ *  editable textarea seeded with the joined final transcript plus a
+ *  «→ В ИИ» primary button that is disabled while the text is empty.
+ *  The head ✕ in `review` doubles as the "drop the buffer, do not
+ *  send" affordance.
+ * ========================================================================= */
+describe('RecordingPanel — review form (voice-AI inline confirmation)', () => {
+  /** Drive FSM to `review` with a known transcript. We use
+   *  `__dispatchVoiceAIForTests` to skip the orchestrator's auto-
+   *  review path; the test only cares about the rendered DOM. */
+  const enterReviewWith = (text: string): void => {
+    __dispatchVoiceAIForTests({ type: 'arm' });
+    __dispatchVoiceAIForTests({ type: 'stt-ready' });
+    __dispatchVoiceAIForTests({ type: 'chunk', chunk: {
+      kind: 'final',
+      text,
+      confidence: 0.9,
+      lang: 'ru-RU',
+      timestampMs: 0,
+    } });
+    __dispatchVoiceAIForTests({ type: 'enter-review' });
+    expect(voiceAIState().tag).toBe('review');
+  };
+
+  it('renders an editable textarea seeded with the recognised text', () => {
+    enterReviewWith('сделай потише');
+    const { container } = render(() => <RecordingPanel />);
+    const ta = container.querySelector(
+      '.voice-recording-panel__review-textarea',
+    ) as HTMLTextAreaElement;
+    expect(ta).toBeTruthy();
+    expect(ta.value).toBe('сделай потише');
+    expect(ta.getAttribute('aria-label')).toContain('Распознанный текст');
+  });
+
+  it('renders the → В ИИ button enabled when the buffer is non-empty', () => {
+    enterReviewWith('сделай потише');
+    const { container } = render(() => <RecordingPanel />);
+    const send = container.querySelector(
+      '.voice-recording-panel__btn--primary',
+    ) as HTMLButtonElement;
+    expect(send).toBeTruthy();
+    expect(send.textContent).toContain('В ИИ');
+    expect(send.disabled).toBe(false);
+  });
+
+  it('disables the → В ИИ button when the buffer is whitespace-only', () => {
+    enterReviewWith('   ');
+    const { container } = render(() => <RecordingPanel />);
+    const send = container.querySelector(
+      '.voice-recording-panel__btn--primary',
+    ) as HTMLButtonElement;
+    expect(send).toBeTruthy();
+    expect(send.disabled).toBe(true);
+  });
+
+  it('disables the → В ИИ button after the user clears the textarea', () => {
+    enterReviewWith('сделай потише');
+    const { container } = render(() => <RecordingPanel />);
+    const ta = container.querySelector(
+      '.voice-recording-panel__review-textarea',
+    ) as HTMLTextAreaElement;
+    const send = container.querySelector(
+      '.voice-recording-panel__btn--primary',
+    ) as HTMLButtonElement;
+    expect(send.disabled).toBe(false);
+    fireEvent.input(ta, { target: { value: '' } });
+    expect(send.disabled).toBe(true);
+  });
+
+  it('keeps the textarea in the same panel — never opens a modal', () => {
+    // The explicit accept criterion for re-introducing the
+    // confirmation step (`decisions/wavecode-voice-confirm-before-send`):
+    // confirmation lives on the same bottom panel as the live
+    // transcript, NOT in a modal. Lock the layout: no element with
+    // modal-ish classes, no `.voice-review-panel` (the deleted
+    // modal's class name) anywhere.
+    enterReviewWith('сделай потише');
+    const { container } = render(() => <RecordingPanel />);
+    expect(
+      container.querySelector('.voice-recording-panel .voice-recording-panel__review'),
+    ).toBeTruthy();
+    expect(container.querySelector('.voice-review-panel')).toBeNull();
+    expect(container.querySelector('[role="dialog"]')).toBeNull();
+  });
+
+  it('re-uses the live panel — no two-panels-at-once layout', () => {
+    enterReviewWith('сделай потише');
+    const { container } = render(() => <RecordingPanel />);
+    // Only ONE .voice-recording-panel in the DOM, even though we're
+    // rendering the inline review form (the legacy modal used to
+    // overlay a SECOND panel on top of this one).
+    const panels = container.querySelectorAll('.voice-recording-panel');
+    expect(panels).toHaveLength(1);
+  });
+
+  it('head ✕ label switches to "Отменить и не отправлять текст в ИИ" in review', () => {
+    // Functional test, not behavioural: verifies that in `review`
+    // state, the head ✕ button advertises its drop-buffer
+    // semantics (rather than its listening-state "stop recording"
+    // semantics). The aria-label is what the screen reader reads,
+    // which is the user-visible contract.
+    enterReviewWith('сделай потише');
+    const { container } = render(() => <RecordingPanel />);
+    const close = container.querySelector(
+      '.voice-recording-panel__close',
+    ) as HTMLButtonElement;
+    expect(close).toBeTruthy();
+    expect(close.getAttribute('aria-label') ?? '').toContain('Отменить');
+    expect(close.getAttribute('title') ?? '').toContain('Отменить');
+    expect(close.getAttribute('title') ?? '').toContain('не уйдёт');
+  });
+
+  it('head ✕ label keeps the "stop recording" semantics outside of review', () => {
+    armAndListen();
+    expect(voiceAIState().tag).toBe('listening');
+    const { container } = render(() => <RecordingPanel />);
+    const close = container.querySelector(
+      '.voice-recording-panel__close',
+    ) as HTMLButtonElement;
+    expect(close).toBeTruthy();
+    expect(close.getAttribute('aria-label')).toBe('Остановить запись');
+  });
+
+  it('does NOT show the review form when the FSM is listening (textarea would overwrite live text)', () => {
+    // Sanity check on the inverse invariant: in `listening` the
+    // user must see the live transcript evolving; showing a
+    // textarea on top of it would freeze the visible text and
+    // break the live-utterance loop.
+    armAndListen();
+    const { container } = render(() => <RecordingPanel />);
+    expect(container.querySelector('.voice-recording-panel__review-textarea')).toBeNull();
+    expect(container.querySelector('.voice-recording-panel__btn--primary')).toBeNull();
+    // ...but the live transcript is still there.
+    expect(container.querySelector('.voice-recording-panel__transcript')).toBeTruthy();
   });
 });

@@ -6800,6 +6800,50 @@ textarea.ai-textarea:focus-visible {
   word-break: break-word;
   min-height: 1.4em;
 }
+
+/* Inline review form (`decisions/wavecode-voice-confirm-before-send`).
+ * Renders INSIDE the existing RecordingPanel when voice-AI's FSM
+ * enters `review` — replaces the deleted modal (VoiceAITextReview)
+ * with the confirmation affordance co-located on the panel that
+ * already shows the live transcript.
+ *
+ * The container row sets `min-height: 0` so the textarea's flex
+ * grow can shrink the body when the panel hits its
+ * `--voice-panel-max-h` cap, and so the ✕ in the head never gets
+ * pushed off-screen by a long edit. The textarea is small on
+ * purpose (rows=2 in JSX): the panel must not balloon into the
+ * fixed transport bar on mobile viewports. */
+.voice-recording-panel__review {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  min-height: 0;
+}
+.voice-recording-panel__review-textarea {
+  width: 100%;
+  /* Floor of 56px (~2 lines at fs-sm / lh-base) so the field is
+   * clearly editable; ceiling of 96px (~3 lines) so the panel
+   * stays single-screen on a 360×640 phone. The flex `1 1 auto`
+   * lets it grow in between, taking spare height off the panel
+   * cap before the panel's own overflow:auto kicks in. */
+  min-height: 56px;
+  max-height: 96px;
+  flex: 1 1 auto;
+  resize: vertical;
+  padding: var(--space-sm);
+  background: var(--surface-1);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  color: var(--fg);
+  font-family: var(--font-sans);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-base);
+}
+.voice-recording-panel__review-textarea:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px var(--primary-soft);
+}
 .voice-recording-panel__error {
   color: var(--err);
   font-weight: var(--fw-medium);
