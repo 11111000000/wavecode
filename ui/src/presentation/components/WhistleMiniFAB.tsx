@@ -143,7 +143,17 @@ export function WhistleMiniFAB(): JSX.Element {
       // the panel to splice them into score. This is what
       // decisions/wavecode-voice-rec-and-meter changes vs the
       // previous auto-commit-on-release path.
+      //
+      // The panel MUST be armed on this path too, not just on the
+      // fast-tap path: `stopWhistle()` drops the whistle FSM back
+      // to `idle`, and `RecordingPanel.mode` only stays visible
+      // while the FSM is `arming`/`recording`/`segmenting` OR while
+      // `whistlePanelArmed` holds. Without arming here a
+      // hold-and-release would take the panel off screen together
+      // with the notes the user just whistled — they would have to
+      // whistle again, from scratch, to get them spliced.
       void runEffectSafely(stopWhistle());
+      requestWhistlePanelArmed();
       return;
     }
     // Sub-threshold `pointerup` after a quick tap. The session

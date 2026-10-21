@@ -6,6 +6,7 @@ import {
   whistleState,
   setWhistleState,
   whistleInstrumentLabel,
+  whistlePanelArmed,
 } from '../state/whistleStore';
 import { __resetVoiceAIForTests } from '../state/voiceAIStore';
 import { resetMicMutexForTests } from '../state/micMutexStore';
@@ -97,6 +98,26 @@ describe('WhistleMiniFAB — pointerdown / pointerup', () => {
     fireEvent.pointerUp(btn);
     await new Promise<void>((resolve) => setTimeout(resolve, HOLD_GUARD_MS));
     expect(whistleState().tag).toBe('idle');
+  });
+
+  it('REGRESSION (2026-10-21): hold-and-release keeps the panel armed so «Применить» stays reachable', async () => {
+    // `stopWhistle()` drops the whistle FSM back to `idle`, and
+    // `RecordingPanel.mode` only stays visible while the FSM is
+    // arming/recording/segmenting OR while `whistlePanelArmed`
+    // holds. Without arming on the release path a hold-and-release
+    // takes the panel off screen together with the notes the user
+    // just whistled, and those notes can never be spliced.
+    const { container } = render(() => <WhistleMiniFAB />);
+    const btn = container.querySelector<HTMLButtonElement>(
+      '.voice-mini-fab--whistle',
+    )!;
+    fireEvent.pointerDown(btn);
+    await new Promise<void>((resolve) => setTimeout(resolve, HOLD_GUARD_MS));
+    fireEvent.pointerUp(btn);
+    await new Promise<void>((resolve) => setTimeout(resolve, HOLD_GUARD_MS));
+
+    expect(whistleState().tag).toBe('idle');
+    expect(whistlePanelArmed()).toBe(true);
   });
 
   it('REGRESSION (2026-10-19): fast pointerleave immediately after pointerdown does NOT commit an empty buffer', async () => {
