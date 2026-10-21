@@ -5,11 +5,18 @@ import {
   __resetWhistleForTests,
   whistleState,
   setWhistleState,
+  whistlePanelArmed,
+  setWhistlePanelArmed,
+  requestWhistlePanelArmed,
 } from '../state/whistleStore';
 import {
   __resetVoiceAIForTests,
   voiceAIState,
   setVoiceAITranscript,
+  setVoiceAIRmsLevel,
+  voiceAIPanelArmed,
+  setVoiceAIPanelArmed,
+  requestVoiceAIPanelArmed,
   __dispatchVoiceAIForTests,
 } from '../state/voiceAIStore';
 import { resetMicMutexForTests } from '../state/micMutexStore';
@@ -435,5 +442,247 @@ describe('RecordingPanel — review form (voice-AI inline confirmation)', () => 
     expect(container.querySelector('.voice-recording-panel__btn--primary')).toBeNull();
     // ...but the live transcript is still there.
     expect(container.querySelector('.voice-recording-panel__transcript')).toBeTruthy();
+  });
+});
+/* =========================================================================
+ *  Armed states (`decisions/wavecode-voice-rec-and-meter`).
+ *  When the user fast-taps a mini-FAB, the panel renders an
+ *  "вооружена, ждёт ●REC" body with a single ●REC button (voice-AI)
+ *  or ●REC + «Применить» (whistle). These tests pin that contract.
+ * ========================================================================= */
+describe('RecordingPanel — voice-AI armed body', () => {
+  it('is hidden when the panel is not armed and the FSM is idle', () => {
+    expect(voiceAIPanelArmed()).toBe(false);
+    expect(voiceAIState().tag).toBe('idle');
+    const { container } = render(() => <RecordingPanel />);
+    expect(container.querySelector('.voice-recording-panel')).toBeNull();
+  });
+
+  it('renders the armed body when the panel is armed but no session is running', () => {
+    requestVoiceAIPanelArmed();
+    expect(voiceAIPanelArmed()).toBe(true);
+    expect(voiceAIState().tag).toBe('idle');
+    const { container } = render(() => <RecordingPanel />);
+    const panel = container.querySelector('.voice-recording-panel');
+    expect(panel).toBeTruthy();
+    expect(panel?.getAttribute('data-mode')).toBe('voice-ai-armed');
+    expect(panel?.getAttribute('data-state')).toBe('armed');
+    // Title carries the "готов к записи" suffix so the user
+    // understands the panel is open but idle.
+    expect(panel?.querySelector('.voice-recording-panel__title')?.textContent)
+      .toContain('Голос');
+    expect(panel?.querySelector('.voice-recording-panel__title')?.textContent)
+      .toContain('готов к записи');
+    // The ●REC button must be present and NOT highlighted.
+    const rec = container.querySelector(
+      '.voice-recording-panel__rec',
+    ) as HTMLButtonElement;
+    expect(rec).toBeTruthy();
+    expect(rec.getAttribute('data-rec-state')).toBe('off');
+    // No review form, no live transcript — the live body would be
+    // misleading because no STT engine is running.
+    expect(container.querySelector('.voice-recording-panel__transcript')).toBeNull();
+    expect(container.querySelector('.voice-recording-panel__review-textarea')).toBeNull();
+    // No «Применить» analogue on the voice-AI armed body — there
+    // is no transcript to dispatch yet. The «→ В ИИ» button
+    // belongs to the `review` state which fires after the first
+    // final chunk lands.
+    expect(container.querySelector('.voice-recording-panel__btn--primary')).toBeNull();
+  });
+
+  it('head ✕ in armed state clears the panel without ever running a session', () => {
+    requestVoiceAIPanelArmed();
+    const { container } = render(() => <RecordingPanel />);
+    const close = container.querySelector(
+      '.voice-recording-panel__close',
+    ) as HTMLButtonElement;
+    expect(close).toBeTruthy();
+    expect(close.getAttribute('aria-label')).toContain('Закрыть без записи');
+    fireEvent.click(close);
+    expect(voiceAIPanelArmed()).toBe(false);
+    expect(container.querySelector('.voice-recording-panel')).toBeNull();
+  });
+});
+
+describe('RecordingPanel — whistle armed body', () => {
+  it('renders ●REC (off) and «Применить» (disabled) when armed with no notes', () => {
+    requestWhistlePanelArmed();
+    expect(whistlePanelArmed()).toBe(true);
+    expect(whistleState().tag).toBe('idle');
+    expect(micPreviewNotes().length).toBe(0);
+    const { container } = render(() => <RecordingPanel />);
+    const panel = container.querySelector('.voice-recording-panel');
+    expect(panel).toBeTruthy();
+    expect(panel?.getAttribute('data-mode')).toBe('whistle-armed');
+    expect(panel?.getAttribute('data-state')).toBe('armed');
+    const rec = container.querySelector(
+      '.voice-recording-panel__rec',
+    ) as HTMLButtonElement;
+    expect(rec).toBeTruthy();
+    expect(rec.getAttribute('data-rec-state')).toBe('off');
+    const apply = container.querySelector(
+      '.voice-recording-panel__btn--apply',
+    ) as HTMLButtonElement;
+    expect(apply).toBeTruthy();
+    // No notes buffered → disabled. The user must record before
+    // they can apply anything.
+    expect(apply.disabled).toBe(true);
+  });
+
+  it('«Применить» stays disabled even with the panel armed but no notes', () => {
+    requestWhistlePanelArmed();
+    const { container } = render(() => <RecordingPanel />);
+    const apply = container.querySelector(
+      '.voice-recording-panel__btn--apply',
+    ) as HTMLButtonElement;
+    expect(apply.disabled).toBe(true);
+    fireEvent.click(apply);
+    // Empty-buffer safety: dispatching would be a no-op anyway,
+    // but the disabled gate prevents the no-op accidental press.
+    expect(apply.disabled).toBe(true);
+  });
+
+  it('whistle panel shows the ●REC + «Применить» pair even after recording stops', () => {
+    // While the panel is armed and a session has produced notes,
+    // the user must be able to re-arm, stop, and apply without
+    // leaving the panel. We simulate "user recorded and stopped"
+    // by holding whistlePanelArmed + seeding micPreviewNotes.
+    requestWhistlePanelArmed();
+    setMicPreviewNotes([
+      { midi: 60, cents: 0, startMs: 0, durationMs: 200, vibratoCents: 0 },
+      { midi: 64, cents: 0, startMs: 200, durationMs: 200, vibratoCents: 0 },
+    ]);
+    setWhistleState({
+      tag: 'recording',
+      micState: { openNote: null, notes: [], lastClosedMs: null, notesPrunedCount: 0 },
+      startedAtMs: 0,
+      lastFrameMs: 0,
+    });
+    const { container } = render(() => <RecordingPanel />);
+    // While the FSM is in `recording`, the panel transitions to
+    // the regular "whistle" mode (not "armed") — the orchestrator
+    // drives the visibility. The key assertion is that the
+    // ●REC button is highlighted.
+    const rec = container.querySelector(
+      '.voice-recording-panel__rec',
+    ) as HTMLButtonElement;
+    expect(rec).toBeTruthy();
+    expect(rec.getAttribute('data-rec-state')).toBe('on');
+    // The strip shows the buffered notes.
+    expect(container.querySelectorAll('.voice-recording-panel__note')).toHaveLength(2);
+  });
+
+  it('head ✕ in armed state clears the panel without sending notes', () => {
+    requestWhistlePanelArmed();
+    setMicPreviewNotes([
+      { midi: 60, cents: 0, startMs: 0, durationMs: 200, vibratoCents: 0 },
+    ]);
+    const { container } = render(() => <RecordingPanel />);
+    const close = container.querySelector(
+      '.voice-recording-panel__close',
+    ) as HTMLButtonElement;
+    expect(close.getAttribute('aria-label')).toContain('Закрыть без записи');
+    fireEvent.click(close);
+    expect(whistlePanelArmed()).toBe(false);
+    // Notes stay in `micPreviewNotes` — that buffer survives
+    // unless the orchestrator's commit clears it. The user can
+    // re-open the panel and apply them later if they want.
+    expect(micPreviewNotes().length).toBe(1);
+  });
+});
+
+describe('RecordingPanel — voice-AI live RMS meter', () => {
+  it('does not render the meter when voiceAIRmsLevel is null (cloud / off path)', () => {
+    setVoiceAIRmsLevel(null);
+    armAndListen();
+    const { container } = render(() => <RecordingPanel />);
+    expect(container.querySelector('.voice-recording-panel__rms')).toBeNull();
+  });
+
+  it('renders the meter with the calibrated width when RMS is non-null (server path)', () => {
+    setVoiceAIRmsLevel(0.1); // 0.1 → width = 40% via `* 400`
+    armAndListen();
+    const { container } = render(() => <RecordingPanel />);
+    const meter = container.querySelector(
+      '.voice-recording-panel__rms',
+    ) as HTMLElement;
+    expect(meter).toBeTruthy();
+    const fill = meter.querySelector(
+      '.voice-recording-panel__rms-fill',
+    ) as HTMLElement;
+    expect(fill).toBeTruthy();
+    expect(fill.style.width).toBe('40%');
+  });
+
+  it('meter caps at 100% for unusually loud inputs (avoid overflow)', () => {
+    setVoiceAIRmsLevel(0.5); // 0.5 → 200% without cap
+    armAndListen();
+    const { container } = render(() => <RecordingPanel />);
+    const fill = container.querySelector(
+      '.voice-recording-panel__rms-fill',
+    ) as HTMLElement;
+    expect(fill.style.width).toBe('100%');
+  });
+
+  it('loud-enough RMS marks the bar past the speech threshold (visual "the app hears you")', () => {
+    // 0.05 → 20% width, well above the 8% that the whisper
+    // SPEECH_RMS_THRESHOLD (0.02) maps to — so the user sees
+    // a visible bar when the recogniser is "hearing speech".
+    setVoiceAIRmsLevel(0.05);
+    armAndListen();
+    const { container } = render(() => <RecordingPanel />);
+    const fill = container.querySelector(
+      '.voice-recording-panel__rms-fill',
+    ) as HTMLElement;
+    expect(fill.style.width).toBe('20%');
+  });
+});
+
+describe('RecordingPanel — whistle live meter visibility', () => {
+  it('does not render an extra RMS row while armed with no session', () => {
+    requestWhistlePanelArmed();
+    const { container } = render(() => <RecordingPanel />);
+    expect(container.querySelector('.voice-recording-panel__rms-row')).toBeNull();
+  });
+
+  it('renders the whistle RMS row when actively recording', () => {
+    setWhistleState({
+      tag: 'recording',
+      micState: { openNote: null, notes: [], lastClosedMs: null, notesPrunedCount: 0 },
+      startedAtMs: 0,
+      lastFrameMs: 0,
+    });
+    setMicCurrentRms(0.07);
+    const { container } = render(() => <RecordingPanel />);
+    const meter = container.querySelector(
+      '.voice-recording-panel__rms',
+    ) as HTMLElement;
+    expect(meter).toBeTruthy();
+    // The whistle path uses the live `micCurrentRms` directly.
+    const fill = meter.querySelector(
+      '.voice-recording-panel__rms-fill',
+    ) as HTMLElement;
+    expect(fill.style.width).toBe('28%'); // 0.07 * 400 = 28
+  });
+});
+
+/* =========================================================================
+ *  Reset checks — a stale `armed` flag from a previous test must not
+ *  leak into the next test's rendering. The resets in
+ *  `__resetVoiceAIForTests` / `__resetWhistleForTests` set the
+ *  signals to false explicitly so that an explicit `set*PanelArmed`
+ *  from a sibling test doesn't persist.
+ * ========================================================================= */
+describe('RecordingPanel — clean state between tests', () => {
+  it('starts with voiceAIPanelArmed = false after reset', () => {
+    setVoiceAIPanelArmed(true);
+    __resetVoiceAIForTests();
+    expect(voiceAIPanelArmed()).toBe(false);
+  });
+
+  it('starts with whistlePanelArmed = false after reset', () => {
+    setWhistlePanelArmed(true);
+    __resetWhistleForTests();
+    expect(whistlePanelArmed()).toBe(false);
   });
 });

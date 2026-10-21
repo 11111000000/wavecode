@@ -392,6 +392,34 @@ type Meter = {
 };
 
 /**
+ * Module-level handle to the active recording's meter. The presentation
+ * reads `getServerWhisperRmsLevel()` on a 10 Hz poll to render a live
+ * RMS bar inside `RecordingPanel`. The handle is set in `start()` after
+ * the meter exists and cleared in the corresponding `release()`.
+ *
+ * Why a module-level ref instead of plumbing the meter through the
+ * `STTEngine` tag
+ * ---------------------------------------------------------------
+ * `STTEngine` is the stable interface (`start` / `stop` /
+ * `isSupported`). Adding a meter accessor would couple the tag to the
+ * server impl specifically, which a future `WebSpeechSTT` cannot
+ * satisfy (Chrome does not expose AnalyserNode data for the WebSpeech
+ * path — Chrome owns the mic). The presentation reads the meter only
+ * when this module is actually the active engine; on the WebSpeech
+ * path the reader returns `null` and the panel renders no bar.
+ */
+let activeMeter: Meter | null = null;
+
+/**
+ * External accessor for the active recording's RMS level. Returns
+ * `null` when no server-STT recording is in flight — callers MUST
+ * NOT fabricate a level (the cloud Web Speech path produces none,
+ * faking one would mean "the app hears you" when it doesn't).
+ */
+export const getServerWhisperRmsLevel = (): number | null =>
+  activeMeter === null ? null : activeMeter.level();
+
+/**
  * Level meter on an `AnalyserNode`, created in the same way as
  * `MicCapture` (own context, never connected to the destination — a
  * mic routed to the speakers is a feedback loop). Returns `null` when
@@ -438,7 +466,7 @@ const startMeter = (stream: MediaStream): Meter | null => {
 
   const buf = new Float32Array(analyser.fftSize);
   const node = analyser;
-  return {
+  const meter: Meter = {
     level: () => {
       node.getFloatTimeDomainData(buf);
       return computeRms(buf);
@@ -453,6 +481,8 @@ const startMeter = (stream: MediaStream): Meter | null => {
       void ctx.close().catch(() => {});
     },
   };
+  activeMeter = meter;
+  return meter;
 };
 
 /* ── service ────────────────────────────────────────────────────────── */
@@ -550,6 +580,15 @@ const makeService = (
                 window.clearInterval(meterTimer);
                 meterTimer = null;
               }
+              // If this recording owns `activeMeter`, drop the
+              // module-level handle so external readers (`getServer
+              // WhisperRmsLevel`) report null. We only clear when
+                // the pointer matches — a tab-restart race that re-
+                // installed the meter is rare but possible, and
+                // clobbering a fresher handle would be wrong.
+                if (meter !== null && activeMeter === meter) {
+                  activeMeter = null;
+                }
               meter?.dispose();
               meter = null;
               if (recorder.state !== 'inactive') {

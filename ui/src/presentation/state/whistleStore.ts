@@ -58,6 +58,37 @@ export const [whistleNotes, setWhistleNotes] = createSignal<
 export const [whistleError, setWhistleError] = createSignal<string | null>(null);
 
 /**
+ * UI flag: the user has tapped the whistle FAB without holding long
+ * enough to start recording. The panel renders a ●REC + «Применить»
+ * pair until the user presses ●REC (which starts the orchestrator and
+ * clears the flag) or ✕ (which clears the flag and drops the buffer).
+ *
+ * Pure presentation concern, NOT a `whistleSessionReducer` state —
+ * the orchestrator's job is mic + segmenter + score splice, not "user
+ * opened the panel before pressing record". See
+ * `decisions/wavecode-voice-rec-and-meter` outcome `armed-state-
+ * lives-in-presentation-not-domain-fsm`.
+ */
+export const [whistlePanelArmed, setWhistlePanelArmed] = createSignal<boolean>(
+  false,
+);
+
+/** Request the whistle armed state. Called by `WhistleMiniFAB` on a
+ *  fast `pointerup` (held below `MIN_HOLD_BEFORE_RELEASE_OK_MS`).
+ *  Idempotent. */
+export const requestWhistlePanelArmed = (): void => {
+  setWhistlePanelArmed(true);
+};
+
+/** Drop the whistle armed state. Called when the in-panel ●REC
+ *  fires the orchestrator (so the live body takes over), when the
+ *  user dismisses the panel via ✕, and after `commitWhistle`
+ *  applies the buffered notes. */
+export const clearWhistlePanelArmed = (): void => {
+  setWhistlePanelArmed(false);
+};
+
+/**
  * The Strudel sample a whistle session commits its notes to. There is
  * deliberately no selector for it — the mini-FAB dropped piano/synth/
  * drums to make whistle a one-gesture action — so this constant is the
@@ -311,10 +342,22 @@ export const commitWhistle = (): Effect.Effect<void, never, never> => {
   });
 };
 
-/** Stop the session and release `mic-direct`. Idempotent. */
+/** Stop the session and release `mic-direct`. Idempotent.
+ *
+ *  The orchestrator owns the FSM's `recording → idle` transition;
+ *  here we have to mirror it manually when `handle === null` (the
+ *  test-and-degraded path where `WhistleMiniFAB` swallows the
+ *  orchestrator). Without this, a release that happens before any
+ *  orchestrator is wired leaves the FSM stuck on `arming`. The two
+ *  paths produce the same observable state, so callers don't notice
+ *  the difference. */
 export const stopWhistle = (): Effect.Effect<void, never, never> =>
   Effect.gen(function* () {
-    if (handle !== null) {
+    if (handle === null) {
+      yield* Effect.sync(() => {
+        setWhistleState({ tag: 'idle' });
+      });
+    } else {
       yield* handle.stop();
     }
     const sid = activeSessionId;
@@ -353,6 +396,7 @@ export const __resetWhistleForTests = (): void => {
   setMicPreviewNotes([]);
   setWhistleError(null);
   setWhistleInstrument(WHISTLE_INSTRUMENT);
+  setWhistlePanelArmed(false);
   resetMicMutexForTests();
 };
 

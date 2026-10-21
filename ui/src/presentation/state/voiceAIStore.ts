@@ -73,6 +73,7 @@ import {
 import type { MicBusyError } from '~/domain/audio/MicChannel';
 import { acquireMic, releaseMic } from './micMutexStore';
 import { resolveSttEngineKind } from '~/infrastructure/stt/selectSttLayer';
+import { getServerWhisperRmsLevel } from '~/infrastructure/stt/ServerWhisperSTT';
 import { appStore } from './appStore';
 import { AppLayer } from '~/infrastructure/composition';
 import { logger } from '~/infrastructure/log';
@@ -94,6 +95,47 @@ export const [voiceAISupported, setVoiceAISupported] = createSignal<boolean>(
 );
 
 /**
+ * UI flag: the user has tapped the voice-AI FAB without pressing
+ * long enough to start a session. The recording panel renders in
+ * "вооружена, ждём ●REC" mode until either the user presses the
+ * in-panel ●REC button (which clears the flag and starts the
+ * orchestrator) or ✕ dismisses the panel.
+ *
+ * Pure presentation concern, not a domain FSM tag — the wavecode-
+ * voice-rec-and-meter decision explicitly rejects adding an `armed`
+ * state to `voiceSessionReducer`. The reducer's job is orchestrator
+ * + STT + LLM; "user opened the panel" is local to the FAB + panel.
+ */
+export const [voiceAIPanelArmed, setVoiceAIPanelArmed] = createSignal<boolean>(
+  false,
+);
+
+/** Request the voice-AI armed state. Called by `VoiceAIMiniFAB` on a
+ *  fast tap below the hold-debounce threshold. Idempotent. */
+export const requestVoiceAIPanelArmed = (): void => {
+  setVoiceAIPanelArmed(true);
+};
+
+/** Clear the voice-AI armed state. Called when the in-panel ●REC
+ *  fires the orchestrator (so the live body takes over) or when the
+ *  user dismisses the panel via ✕. */
+export const clearVoiceAIPanelArmed = (): void => {
+  setVoiceAIPanelArmed(false);
+};
+
+/**
+ * Live RMS level of the active recording. `null` when no recording
+ * is in flight — the panel uses that to render no meter instead of
+ * fabricating a value. The polling timer is set up by
+ * `startVoiceAI` and torn down by `stopVoiceAI`; on the Web Speech
+ * path the meter source (`getServerWhisperRmsLevel`) returns null,
+ * so the signal stays null and the panel shows nothing.
+ */
+export const [voiceAIRmsLevel, setVoiceAIRmsLevel] = createSignal<number | null>(
+  null,
+);
+
+/**
  * Seconds since the current dictation started.
  *
  * Web Speech streams partials, so the user always sees words while
@@ -105,6 +147,35 @@ export const [voiceAISupported, setVoiceAISupported] = createSignal<boolean>(
 export const [voiceAIElapsedSec, setVoiceAIElapsedSec] = createSignal<number>(0);
 
 let elapsedTimer: number | null = null;
+
+/** RMS poll cadence. Matches `ServerWhisperSTT.METER_POLL_MS` so the
+ *  bar reflects whatever the STT meter observed within ~100 ms —
+ *  fast enough for the eye, cheap enough that the JS timer budget
+ *  isn't strained even on mobile. */
+const RMS_POLL_MS = 100;
+let rmsPollTimer: number | null = null;
+
+/**
+ * Begin polling the active STT meter. The server engine exposes a
+ * live level through `getServerWhisperRmsLevel`; on the Web Speech
+ * path that returns `null` and the signal stays null — `RecordingPanel`
+ * renders no bar in that case (see the wavecode-voice-rec-and-meter
+ * decision's "meter-availability-is-server-only" outcome).
+ */
+const startRmsPoll = (): void => {
+  if (rmsPollTimer !== null) return;
+  rmsPollTimer = window.setInterval(() => {
+    setVoiceAIRmsLevel(getServerWhisperRmsLevel());
+  }, RMS_POLL_MS);
+};
+
+const stopRmsPoll = (): void => {
+  if (rmsPollTimer !== null) {
+    window.clearInterval(rmsPollTimer);
+    rmsPollTimer = null;
+  }
+  setVoiceAIRmsLevel(null);
+};
 
 const startElapsedTimer = (): void => {
   if (elapsedTimer !== null) return;
@@ -300,6 +371,7 @@ export const startVoiceAI = (
       setVoiceAIError(null);
       setVoiceAITranscript(initialTranscriptState(opts.lang));
       startElapsedTimer();
+      startRmsPoll();
     });
     if (handle === null) {
       // Degraded path: orchestrator not built (e.g., unsupported
@@ -348,6 +420,7 @@ export const commitVoiceAI = (): Effect.Effect<void, never, never> => {
 export const stopVoiceAI = (): Effect.Effect<void, never, never> =>
   Effect.gen(function* () {
     stopElapsedTimer();
+    stopRmsPoll();
     if (handle !== null) {
       yield* handle.stop();
     }
@@ -365,6 +438,7 @@ export const cancelVoiceAIInFlight = (): Effect.Effect<void, never, never> => {
   }
   return Effect.gen(function* () {
     stopElapsedTimer();
+    stopRmsPoll();
     yield* handle!.cancelInFlight();
   });
 };
@@ -411,6 +485,7 @@ export const cancelVoiceAIReview = (): Effect.Effect<void, never, never> => {
       activeSessionId = null;
     }
     stopElapsedTimer();
+    stopRmsPoll();
     return;
   });
 };
@@ -551,14 +626,17 @@ export const __resetVoiceAIForTests = (): void => {
   handle = null;
   activeSessionId = null;
   stopElapsedTimer();
+  stopRmsPoll();
   setVoiceAIState(initialVoiceSession());
   setVoiceAITranscript(initialTranscriptState());
   setVoiceAIError(null);
   setVoiceAISupported(true);
+  setVoiceAIPanelArmed(false);
 };
 
 onCleanup(() => {
   activeSessionId = null;
   handle = null;
   stopElapsedTimer();
+  stopRmsPoll();
 });

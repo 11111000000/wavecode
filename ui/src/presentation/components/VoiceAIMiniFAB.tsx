@@ -4,9 +4,12 @@ import {
   voiceAIState,
   voiceAIError,
   voiceAISupported,
+  voiceAIPanelArmed,
   startVoiceAI,
   stopVoiceAI,
   cancelVoiceAIInFlight,
+  requestVoiceAIPanelArmed,
+  clearVoiceAIPanelArmed,
   voiceAITranscript,
 } from '../state/voiceAIStore';
 import { MicIcon } from '../icons';
@@ -100,12 +103,44 @@ const runEffectSafely = async (
 /**
  * VoiceAIMiniFAB — speed-dial mini button for the voice-AI feature.
  *
- *   - Quick tap (< 50ms)  → start a `continuous` session
- *   - Hold (≥ 50ms)       → start a `oneshot` session (auto-commits
- *                           on the first final chunk); release does
- *                           NOT stop it
+ *   - Hold (≥ 50ms)       → start a `continuous` session (one
+ *                           utterance, auto-reviews on the first
+ *                           `final` chunk — the user still has to
+ *                           press «→ В ИИ» to send, see
+ *                           decisions/wavecode-voice-confirm-before-send)
+ *   - Quick tap (< 50ms)  → open `RecordingPanel` in the
+ *                           "вооружена, ждём ●REC" state without
+ *                           starting a session. The user then presses
+ *                           ●REC inside the panel to actually begin.
  *   - Tap while listening → stop the session
  *   - Disabled (with tooltip) when `!voiceAISupported()`
+ *
+ * Why the tap / hold split goes through the panel now
+ * ---------------------------------------------------
+ * Earlier revisions made a fast tap start a session immediately
+ * (`mode: 'continuous'`). The user found that an accidental press
+ * during an unrelated moment — e.g. tapping on the FAB to look up
+ * its tooltip — would quietly open the mic and start streaming
+ * audio to STT, with no visual feedback distinguishable from
+ * "I pressed and waited for the conversation to start". The new
+ * gate moves the start decision behind the panel: a quick tap only
+ * signals intent; the actual `startVoiceAI` call is gated on a
+ * deliberate ●REC click. Holding the FAB past the debounce is
+ * preserved as the "I want this now" path.
+ *
+ * Why this lives in `VoiceAIMiniFAB` and not in
+ * `voiceSessionReducer`
+ * -----------------------------------------------
+ * The reducer owns transitions across the STT / LLM / score-touching
+ * "active session" lifecycle. "The user opened the panel before
+ * pressing record" is UI state with no observable to the
+ * orchestrator — it does not affect mic acquisition, the STT engine,
+ * or the score; the `startVoiceAI` call still goes through the same
+ * path it always did. Adding an `armed` state to the reducer would
+ * require a fourth state per mode (armed, armed-oneshot,
+ * armed-continuous) just to render one button. A presentation-layer
+ * signal in `voiceAIStore` (`voiceAIPanelArmed`) is the minimum that
+ * expresses the requirement.
  */
 export function VoiceAIMiniFAB(props: Props): JSX.Element {
   // Press-lifecycle FSM. Replaces the previous pair of `pressed` /
@@ -136,13 +171,15 @@ export function VoiceAIMiniFAB(props: Props): JSX.Element {
     if (state() !== 'idle') return;
     setState('pending');
     pressTimer = window.setTimeout(() => {
-      // Hold threshold reached → start a oneshot session now.
-      // Orchestrator auto-commits on the first final chunk.
+      // Hold threshold reached → start a continuous session now.
+      // The orchestrator's auto-review fires on the first final
+      // chunk; the user still has to confirm via «→ В ИИ».
       if (state() !== 'pending') return;        // already released
       pressTimer = null;
       setState('holding');
+      clearVoiceAIPanelArmed();
       void runEffectSafely(
-        startVoiceAI({ mode: 'oneshot', lang: props.lang ?? 'ru-RU' }),
+        startVoiceAI({ mode: 'continuous', lang: props.lang ?? 'ru-RU' }),
       );
     }, HOLD_DEBOUNCE_MS);
   };
@@ -151,30 +188,33 @@ export function VoiceAIMiniFAB(props: Props): JSX.Element {
     if (state() === 'idle') return;
     if (state() === 'holding') {
       // The debounce fired while the finger was down — release does
-      // NOT stop the oneshot session (auto-commit does).
+      // NOT stop the continuous session (review-then-send does).
       setState('idle');
       return;
     }
     if (state() === 'pending') {
-      // Fast tap (< 50ms). Cancel the pending callback and start
-      // a continuous session NOW. Previously we cleared the timer
-      // AND asked `pressTimer === null` — that always returned
-      // `true`, so the handler bailed out without ever calling
-      // startVoiceAI. `clearTimer()` is fine for *cancelling* the
-      // debounce, but it must NOT signal "hold already fired";
-      // the explicit `state() === 'pending'` check below does that.
+      // Fast tap (< 50ms). Cancel the pending hold-callback and
+      // decide what to do based on the orchestrator's FSM tag:
+      //   - idle / errored → open the panel in the "armed, wait for
+      //     ●REC" state. We deliberately do NOT call
+      //     `startVoiceAI` here — that's the panel's ●REC's job.
+      //     Previously this branch started a continuous session
+      //     immediately, which surprised users who tapped while
+      //     scrolling by.
+      //   - any other FSM tag → stop the session (tap-during-
+      //     recording preserves the previous behaviour).
       clearTimer();
       setState('tapped');
       const fsmState = voiceAIState();
       if (fsmState.tag !== 'idle' && fsmState.tag !== 'errored') {
         // Tap during an active session → stop.
         void runEffectSafely(Effect.suspend(() => stopVoiceAI()));
+        clearVoiceAIPanelArmed();
         setState('idle');
         return;
       }
-      void runEffectSafely(
-        startVoiceAI({ mode: 'continuous', lang: props.lang ?? 'ru-RU' }),
-      );
+      requestVoiceAIPanelArmed();
+      setState('idle');
       return;
     }
     // 'tapped' (user tapped again on an already-running session):
@@ -241,17 +281,22 @@ export function VoiceAIMiniFAB(props: Props): JSX.Element {
           Chrome can take 2-5s through Google's cloud STT). */}
       <Show when={(() => {
         if (state() !== 'idle') return true;
+        if (voiceAIPanelArmed()) return true;
         const tag = voiceAIState().tag;
         return tag === 'listening' || tag === 'transcribing'
           || tag === 'arming' || tag === 'requesting' || tag === 'applying';
       })()}>
         <span
           class="voice-mini-fab__hint"
-          data-source={state() === 'idle' ? 'transcript' : 'press'}
+          data-source={state() === 'idle'
+            ? (voiceAIPanelArmed() ? 'armed' : 'transcript')
+            : 'press'}
           aria-hidden="true"
         >
           {state() === 'idle'
-            ? (voiceAITranscript().interim || voiceAITranscript().final || '…')
+            ? (voiceAIPanelArmed()
+                ? 'Готов к записи'
+                : (voiceAITranscript().interim || voiceAITranscript().final || '…'))
             : (state() === 'pending' || state() === 'holding'
                 ? 'Слушаю…'
                 : '')}
