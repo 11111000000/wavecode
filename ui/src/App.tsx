@@ -17,6 +17,7 @@ import { AppShellView } from './presentation/components/app/AppShellView';
 import { Admin } from './presentation/pages/Admin';
 import { Landing } from './presentation/components/landing/Landing';
 import { WelcomeTour } from './presentation/components/tour/WelcomeTour';
+import { DisclaimerModal } from './presentation/components/DisclaimerModal';
 import { VoiceFAB } from './presentation/components/VoiceFAB';
 import { initVoiceAI } from './presentation/state/voiceAIStore';
 import { initWhistle } from './presentation/state/whistleStore';
@@ -29,6 +30,7 @@ export function App(): JSX.Element {
     <Show when={route() === 'landing'}><Landing /></Show>
     <Show when={route() === 'app'}><AppShell /></Show>
     <Show when={route() === 'admin'}><Admin /></Show>
+    <DisclaimerModal />
     <WelcomeTour />
   </>);
 }
