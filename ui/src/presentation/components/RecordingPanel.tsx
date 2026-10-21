@@ -1,9 +1,11 @@
-import { Show, For, createMemo, type JSX } from 'solid-js';
+import { Show, For, createMemo, createSignal, type JSX } from 'solid-js';
 import {
   voiceAIState,
   voiceAITranscript,
   voiceAIElapsedSec,
   stopVoiceAI,
+  cancelVoiceAIReview,
+  sendVoiceAIReview,
 } from '../state/voiceAIStore';
 import {
   whistleState,
@@ -16,7 +18,7 @@ import {
   micCurrentHz,
   micCurrentRms,
 } from '../state/micStore';
-import { MicIcon, WhistleIcon, CloseIcon } from '../icons';
+import { MicIcon, WhistleIcon, CloseIcon, SendIcon } from '../icons';
 import { Effect } from 'effect';
 import type { AudioNote } from '~/domain/audio/micCapture';
 import { noteNumberToName } from '~/domain/music/notes';
@@ -44,24 +46,40 @@ import { noteNumberToName } from '~/domain/music/notes';
  *
  * What this panel shows
  * --------------------
- * - For voice-AI (any active FSM tag except idle/errored, plus errored):
- *     🎙️ «Слышу: …interim | final…». Отдельного шага «проверить и
- *     отправить» больше нет — live-текст виден сразу, а final уходит
- *     в ИИ сам (`wavecode-voice-live-transcript`).
+ * - For voice-AI:
+ *   - `listening` / `transcribing`: 🎙️ + live transcript text (or the
+ *     «записываю… N с» counter when no interim text has arrived —
+ *     server STT can take 5-9 s for the first interim, see
+ *     `decisions/wavecode-voice-live-transcript`).
+ *   - `review`: 🎙️ + editable textarea seeded with the joined
+ *     final transcript + a primary «→ В ИИ» button that calls
+ *     `sendVoiceAIReview`. The head ✕ becomes the cancel-review
+ *     affordance and drops the buffer; nothing is sent.
+ *   - `requesting` / `applying`: «жду ответ ИИ…» / «применяю…».
+ *   - `errored`: error pill + the error text.
  * - For whistle (arming/recording/segmenting):
  *     🎵 «Свист · <инструмент>» + last detected note name + Hz readout
  *     + a horizontal strip of recent notes ("c4 e4 g4") + RMS bar.
- *     Notes are pulled from `micPreviewNotes` (the live segmenter
- *     buffer), not from `micTransients` — whistle is a notes-only
- *     feature, never drums.
+ *
+ * Why the review form is inline
+ * -----------------------------
+ * The inline form replaces the previous modal-style VoiceAITextReview
+ * (deleted in `decisions/wavecode-voice-live-transcript`). The whole
+ * flow now lives on the same bottom panel as the live transcript —
+ * the user sees their words materialize while talking, and the
+ * same panel becomes the editor + send affordance when the
+ * utterance finalises. Confirmation is not a separate step in
+ * the visual hierarchy; it's the natural next thing the panel
+ * shows. See `decisions/wavecode-voice-confirm-before-send`.
  *
  * Visibility precedence
  * ---------------------
  * If both voice-AI AND whistle happen to be active (they share a mic
  * mutex so this should be rare, but the FSM is decoupled enough to
  * allow it during transitions), whistle wins for the bottom row
- * because it's a faster, time-bounded gesture; voice-AI stays
- * visible via its review modal.
+ * because it's a faster, time-bounded gesture; voice-AI's review
+ * state keeps the panel visible via this same component instead of
+ * a modal, so the user is never searching for an obscured dialog.
  */
 type Mode = 'voice-ai' | 'whistle' | 'hidden';
 
@@ -111,22 +129,24 @@ export function RecordingPanel(): JSX.Element {
 /* ── voice-AI body ─────────────────────────────────────────────────── */
 
 const VoiceAIBody = (): JSX.Element => {
-  /* Push-to-talk is the default loop (decisions/wavecode-voice-fab,
-   * outcome `voice-ai-fab-press-and-hold`): press → speak → the final
-   * chunk auto-commits, the user just hears the result. A «Проверить»
-   * button sitting in the panel invited a second, redundant step into
-   * that loop, so the live transcript is now self-sufficient: interim
-   * chunks appear as the server returns them (or Web Speech's
-   * interims), the user sees what they said before the final commit,
-   * and the only controls are ✕ (cancel — `stopVoiceAI` →
-   * `handle.stop()` dispatches `pause`) at every active state. The
-   * `review` state and its modal are still wired through the reducer
-   * (`decisions/wavecode-voice-fab`) but have no UI affordance any
-   * more — a clean rollback path exists if a future iteration wants a
-   * deliberate "review" step. */
-  const onStop = async (): Promise<void> => {
+  /* The head ✕ has two distinct semantics depending on FSM tag:
+   *   - listening / transcribing / requesting / applying / paused /
+   *     errored: stop the session (`stopVoiceAI` → `handle.stop()`
+   *     dispatches `pause`).
+   *   - review: drop the unsent buffer (`cancelVoiceAIReview` —
+   *     nothing is sent to the LLM either way, but a session that
+   *     the user has shaped but not committed must not linger).
+   *
+   * The intent is to keep the affordance count fixed at one — the
+   * same button, two clearly-different click outcomes, no extra ✕
+   * row that the user has to disambiguate. */
+  const onClose = async (): Promise<void> => {
     try {
-      await Effect.runPromise(stopVoiceAI());
+      if (voiceAIState().tag === 'review') {
+        await Effect.runPromise(cancelVoiceAIReview());
+      } else {
+        await Effect.runPromise(stopVoiceAI());
+      }
     } catch {
       /* orchestrator handles error recovery */
     }
@@ -145,42 +165,138 @@ const VoiceAIBody = (): JSX.Element => {
         <button
           type="button"
           class="voice-recording-panel__close"
-          aria-label="Остановить запись"
-          title="Остановить голосовой ввод"
-          onClick={() => { void onStop(); }}
+          aria-label={
+            voiceAIState().tag === 'review'
+              ? 'Отменить и не отправлять текст в ИИ'
+              : 'Остановить запись'
+          }
+          title={
+            voiceAIState().tag === 'review'
+              ? 'Отменить — текст в ИИ не уйдёт'
+              : 'Остановить голосовой ввод'
+          }
+          onClick={() => { void onClose(); }}
         >
           <CloseIcon size={14} />
         </button>
       </div>
-      <div class="voice-recording-panel__body">
-        <Show
-          when={voiceAIState().tag !== 'errored'}
-          fallback={
-            <span class="voice-recording-panel__error">
-              {(() => {
-                const s = voiceAIState();
-                return s.tag === 'errored' ? s.error : 'Ошибка голосового ввода';
-              })()}
-            </span>
-          }
-        >
-          <span class="voice-recording-panel__transcript">
-            {voiceAITranscript().interim
-              || voiceAITranscript().final
-              || (voiceAIState().tag === 'applying' ? 'применяю правку…'
-                : voiceAIState().tag === 'requesting' ? 'жду ответ ИИ…'
-                : voiceAIState().tag === 'paused' ? 'на паузе'
-                : (voiceAIState().tag === 'listening' || voiceAIState().tag === 'arming')
-                  // Server STT may take seconds before the first
-                  // interim chunk (5-9 s round-trip); the counter is
-                  // the honest signal that the mic is hot while we
-                  // wait.
-                  ? `записываю… ${voiceAIElapsedSec()} с`
-                : '…')}
-          </span>
-        </Show>
-      </div>
+      <Show when={voiceAIState().tag === 'review'} fallback={<VoiceAILiveBody />}>
+        <VoiceAIReviewBody />
+      </Show>
     </>
+  );
+};
+
+/**
+ * Live body — the listening/transcribing/requesting/applying/errored
+ * states. Shows interim text when STT has it, falls back to the
+ * «записываю… N с» counter on silence (server STT can wait 5-9 s
+ * for the first interim — see `decisions/wavecode-voice-live-transcript`).
+ */
+const VoiceAILiveBody = (): JSX.Element => (
+  <div class="voice-recording-panel__body">
+    <Show
+      when={voiceAIState().tag !== 'errored'}
+      fallback={
+        <span class="voice-recording-panel__error">
+          {(() => {
+            const s = voiceAIState();
+            return s.tag === 'errored' ? s.error : 'Ошибка голосового ввода';
+          })()}
+        </span>
+      }
+    >
+      <span class="voice-recording-panel__transcript">
+        {voiceAITranscript().interim
+          || voiceAITranscript().final
+          || (voiceAIState().tag === 'applying' ? 'применяю правку…'
+            : voiceAIState().tag === 'requesting' ? 'жду ответ ИИ…'
+            : voiceAIState().tag === 'paused' ? 'на паузе'
+            : (voiceAIState().tag === 'listening' || voiceAIState().tag === 'arming')
+              ? `записываю… ${voiceAIElapsedSec()} с`
+            : '…')}
+      </span>
+    </Show>
+  </div>
+);
+
+/**
+ * Review body — `review` state. Editable textarea + primary
+ * «→ В ИИ» button.
+ *
+ * Why a local signal instead of dispatching `edit-review` on every
+ * keystroke
+ * ----------------------------------------------------------
+ * The reducer exposes `edit-review` precisely so the buffer can be
+ * re-shaped mid-review, but dispatching per keystroke would flood
+ * the FSM's `Ref` and re-publish on the queue unnecessarily (the
+ * reducer IS smart enough to dedupe same-text edits via reference
+ * equality, but the dispatcher is still doing work). A local
+ * `createSignal` initialised from the orchestrator's `editedText`
+ * at mount captures the entire flow without touching the reducer:
+ * the textarea is uncontrolled-style on the FSM, controlled-style
+ * on the user. The orchestrator only sees the final value when
+ * the user presses «→ В ИИ».
+ *
+ * If a future iteration wants to surface per-keystroke validation
+ * (e.g., a green-vs-red hint that the LLM would refuse this text),
+ * wiring `effect` to `dispatch({ type: 'edit-review', text })` is
+ * a 4-line change inside `setEditText`. We deliberately defer it.
+ */
+const VoiceAIReviewBody = (): JSX.Element => {
+  const initial = (): string => {
+    const s = voiceAIState();
+    return s.tag === 'review' ? s.editedText : '';
+  };
+  const [editText, setEditText] = createSignal<string>(initial());
+  const isEmpty = (): boolean => editText().trim().length === 0;
+
+  const onSend = async (): Promise<void> => {
+    if (isEmpty()) return;
+    try {
+      await Effect.runPromise(sendVoiceAIReview(editText()));
+    } catch {
+      /* orchestrator handles error recovery */
+    }
+  };
+
+  return (
+    <div class="voice-recording-panel__review">
+      <textarea
+        class="voice-recording-panel__review-textarea"
+        rows={2}
+        value={editText()}
+        aria-label="Распознанный текст — отредактируйте перед отправкой"
+        placeholder="Говорите — текст появится здесь"
+        onInput={(e) => { setEditText(e.currentTarget.value); }}
+        onKeyDown={(e) => {
+          // Cmd/Ctrl+Enter is the keyboard equivalent of «→ В ИИ».
+          // Plain Enter inserts a newline (textarea default);
+          // holding the modifier is the only way to send without
+          // the mouse.
+          if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+            e.preventDefault();
+            void onSend();
+          }
+        }}
+      />
+      <div class="voice-recording-panel__actions">
+        <span class="voice-recording-panel__hint" aria-hidden="true">
+          Проверьте и нажмите «→ В ИИ»
+        </span>
+        <button
+          type="button"
+          class="voice-recording-panel__btn voice-recording-panel__btn--primary"
+          aria-label="Отправить отредактированный текст в ИИ"
+          title="Отправить в ИИ (Cmd/Ctrl+Enter)"
+          disabled={isEmpty()}
+          onClick={() => { void onSend(); }}
+        >
+          <SendIcon size={12} />
+          <span>→ В ИИ</span>
+        </button>
+      </div>
+    </div>
   );
 };
 

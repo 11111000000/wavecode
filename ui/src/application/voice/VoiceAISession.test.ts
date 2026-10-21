@@ -4,11 +4,16 @@
  * fake LLMClient, and a fake AudioEngine).
  *
  * Coverage:
- *   1. `start` arms the FSM and walks it from idle → listening
- *      (after `stt-ready`), then a final chunk drives the
- *      classification + route → `idle`.
- *   2. `cancelInFlight` interrupts a long-running route and resets
- *      the FSM back to `idle`.
+ *   1. Final chunk lands the FSM in `review` (auto path) — the
+ *      route does NOT fire until `sendReview` is called. The two
+ *      steps are observed independently so a regression that
+ *      silently re-introduces auto-commit fails loudly.
+ *   2. `sendReview` after auto-review routes the edited text and
+ *      the FSM reaches `idle`.
+ *   3. `cancelInFlight` interrupts a long-running route (forked by
+ *      `runRouteFromReview`) and resets the FSM back to `idle`.
+ *   4. `enterReview` (manual path), `sendReview`, `cancelReview`,
+ *      and the no-op-on-non-review guard.
  */
 
 import { describe, it, expect } from 'vitest';
@@ -145,7 +150,12 @@ const waitForState = async (
 };
 
 describe('createVoiceAISession — happy-path FSM transitions', () => {
-  it('walks idle → arming → listening → transcribing → requesting → applying → idle', async () => {
+  // The auto-commit path is gone (`decisions/
+  // wavecode-voice-confirm-before-send`): a final chunk alone
+  // never reaches `requesting`/`applying`. The tests below pin
+  // that contract — if a future change re-introduces the silent
+  // route on final, these tests fail loudly.
+  it('walks idle → arming → listening → transcribing → review (final chunk awaits confirmation, no LLM call)', async () => {
     const response = 'note("e4")';
     const { layer, rec } = buildServices(response);
     const stt = fakeStt([interim('сейчас', 10), finalChunk('сделай e4', 100)]);
@@ -156,7 +166,33 @@ describe('createVoiceAISession — happy-path FSM transitions', () => {
       handle.start({ mode: 'oneshot', lang: 'ru-RU', bargeInMode: 'replace' }),
     );
 
-    // Wait for the final chunk to land + route to complete.
+    // Wait for the final chunk to land + auto-review to fire. The
+    // FSM must NOT advance to requesting/applying/idle on its own.
+    const landed = await waitForState(handle, (s) => s.tag === 'review');
+    if (landed.tag !== 'review') throw new Error('unreachable');
+    expect(landed.editedText).toBe('сделай e4');
+    expect(landed.transcript.lang).toBe('ru-RU');
+    // The LLM must not have been called yet — that's the entire
+    // reason for the review step.
+    expect(rec.llmCalls).toBe(0);
+    expect(rec.evalCalls).toBe(0);
+  });
+
+  it('sendReview after auto-review routes the edited text and FSM reaches idle', async () => {
+    const response = 'note("e4")';
+    const { layer, rec } = buildServices(response);
+    const stt = fakeStt([interim('сейчас', 10), finalChunk('сделай e4', 100)]);
+    const { deps } = await buildDeps(stt, layer);
+    const handle = await Effect.runPromise(createVoiceAISession(deps));
+
+    await Effect.runPromise(
+      handle.start({ mode: 'oneshot', lang: 'ru-RU', bargeInMode: 'replace' }),
+    );
+    const landed = await waitForState(handle, (s) => s.tag === 'review');
+    if (landed.tag !== 'review') throw new Error('unreachable');
+
+    // User presses «→ В ИИ» with the (un-edited) transcript.
+    await Effect.runPromise(handle.sendReview('сделай e4'));
     const final = await waitForState(handle, (s) => s.tag === 'idle');
     expect(final.tag).toBe('idle');
     expect(rec.llmCalls).toBe(1);
@@ -164,7 +200,12 @@ describe('createVoiceAISession — happy-path FSM transitions', () => {
     expect(rec.evalInputs[0]).toBe(response);
   });
 
-  it('persists state through the queue when subscribers consume `stream`', async () => {
+  it('persists state through the queue; auto-review is the terminal auto-path tag', async () => {
+    // The stream API is what `RecordingPanel` binds to; this test
+    // pins the public observable: the FSM tags transit through the
+    // auto-review path, NOT through `requesting` / `applying`. If a
+    // future refactor wires auto-commit back through the stream, the
+    // expectation below fails.
     const response = 'note("g4")';
     const { layer, rec } = buildServices(response);
     const stt = fakeStt([finalChunk('note g4')]);
@@ -190,27 +231,31 @@ describe('createVoiceAISession — happy-path FSM transitions', () => {
     await Effect.runPromise(
       handle.start({ mode: 'oneshot', lang: 'ru-RU', bargeInMode: 'replace' }),
     );
-    await waitForState(handle, (s) => s.tag === 'idle');
+    await waitForState(handle, (s) => s.tag === 'review');
     await Effect.runPromise(Fiber.interrupt(fiber));
 
     // The reducer steps recorded (allowing duplicates from multiple
-    // chunks, transitive state visibility):
+    // chunks, transitive state visibility). The auto path lands in
+    // `review` — NO requesting/applying/idle until the user presses
+    // the send button.
     expect(transitions).toContain('arming');
     expect(transitions).toContain('listening');
     expect(transitions).toContain('transcribing');
-    expect(transitions).toContain('requesting');
-    expect(transitions).toContain('applying');
-    // Final state:
-    expect(transitions[transitions.length - 1]).toBe('idle');
-    expect(rec.llmCalls).toBe(1);
+    expect(transitions).toContain('review');
+    expect(transitions).not.toContain('requesting');
+    expect(transitions).not.toContain('applying');
+    // Final state in the auto path is `review`, never `idle`.
+    expect(transitions[transitions.length - 1]).toBe('review');
+    expect(rec.llmCalls).toBe(0);
   });
 });
 
 describe('createVoiceAISession — barge-in', () => {
   it('cancelInFlight resets the FSM to idle mid-route', async () => {
-    // Build a stream that emits one final chunk only AFTER
-    // `cancelInFlight` has been called. We use a Promise to gate
-    // the route completion so we can interrupt BEFORE applied.
+    // The auto-commit path is gone: the final chunk alone drops
+    // the FSM into `review`. To exercise barge-in mid-route we
+    // explicitly trigger a route via `sendReview`, which forks the
+    // route under `inFlightRef` (same shape as the old auto path).
     let routeStart: (() => void) | null = null;
     const routeStarted = new Promise<void>((resolve) => {
       routeStart = resolve;
@@ -254,11 +299,22 @@ describe('createVoiceAISession — barge-in', () => {
     await Effect.runPromise(
       handle.start({ mode: 'oneshot', lang: 'ru-RU', bargeInMode: 'replace' }),
     );
-    // Wait until the FSM entered `requesting` (route kicked off).
-    await waitForState(handle, (s) => s.tag === 'requesting');
-    // Wait for the route to actually start (so `inFlightRef` has a fiber).
+    // Auto path: final chunk → review.
+    await waitForState(handle, (s) => s.tag === 'review');
+    // User presses «→ В ИИ». The dispatch is sync; the route is
+    // forked, so `Effect.runPromise` returns immediately and the
+    // FSM advances through requesting/applying while we poll.
+    await Effect.runPromise(handle.sendReview('note g4'));
+    // Wait until the route is actually running (`inFlightRef` has
+    // a fiber). The `routeStarted` gate fires inside `streamCompletion`
+    // — only after the FSM has hit `requesting` and `runRoute` has
+    // called LLM. Gives us a window to barge-in before `applied`.
     await routeStarted;
-    // Now barge in.
+    // Wait until the FSM is in `requesting` or `applying` to confirm
+    // we're mid-route, not pre-route.
+    await waitForState(handle, (s) => s.tag === 'requesting' || s.tag === 'applying');
+    // Now barge in. `cancelInFlight` interrupts the in-flight
+    // fiber and dispatches `barge-in`.
     await Effect.runPromise(handle.cancelInFlight());
     // Allow the interrupt to propagate.
     await new Promise<void>((resolve) => setTimeout(resolve, 10));
@@ -269,10 +325,13 @@ describe('createVoiceAISession — barge-in', () => {
 
 describe('createVoiceAISession — review-and-edit', () => {
   /**
-   * `enterReview` is the opt-in branch: it does NOT kill the auto-commit
-   * for STT streams that haven't yielded a final chunk yet (chunks keep
-   * coming in `listening`). For these tests we pass a stream that holds
-   * open indefinitely so we can prove the reviewer owns the FSM.
+   * `enterReview` (the manual path) is reachable from listening /
+   * transcribing / paused. The auto path now lands in `review`
+   * directly on a final chunk, but `enterReview` is still useful
+   * for the user-driven case ("I'm still mid-utterance, pause and
+   * send what I have"). For these tests we pass a stream that
+   * holds open indefinitely so we can prove the reviewer owns the
+   * FSM without triggering the auto path.
    */
   const holdingStt = (): ContextNs.Tag.Service<typeof STTEngine> => ({
     isSupported: () => Effect.succeed(true),

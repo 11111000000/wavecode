@@ -17,8 +17,10 @@
  * Lifecycle (MVP)
  * ---------------
  *   start    → arm → STT.start → stt-ready → listening
- *   chunk    → reducer appendChunk → if final → auto-commit →
- *              classifyTranscript → routeIntent → audio.eval
+ *   chunk    → reducer appendChunk → if final → enter-review →
+ *              teardown STT + subscriber (FSM holds the buffer
+ *              for the user to confirm)
+ *   send     → send-review → requesting → route → applied → idle
  *   applied  → continuous? listening : idle
  *   stop     → pause (FSM-only); STT is stopped but the mic mutex
  *              stays (release is the presenter's job).
@@ -30,10 +32,19 @@
  * transition (and once on subscription so a mount-time render sees
  * the current state immediately).
  *
- * MVP simplification: both press-and-hold (oneshot) and tap-continuous
- * use the same auto-commit flow (commit on the first final chunk).
- * The `onChunk` hook on the handle is the *explicit* commit signal
- * for advanced UIs that want to drive commit from a non-STT source.
+ * MVP flow: press-and-hold (oneshot) and tap-continuous both use
+ * the auto-review path — a final chunk lands the FSM in `review`
+ * (STT is stopped); the user must press «→ В ИИ» to route the
+ * buffer through the LLM. This is the only safe shape for voice →
+ * editor commits: STT occasionally mistranscribes (noisy room,
+ * homophones), and `routeIntent` rewrites the score. Without the
+ * buffer step, one misheard word silently corrupts the composition
+ * (`decisions/wavecode-voice-confirm-before-send`).
+ *
+ * The `onChunk` hook on the handle is the *explicit* chunk-feed
+ * signal for non-STT pipelines (test streams, future wake-word
+ * buffers). It still does NOT auto-commit — `enterReview` is the
+ * only entry point into the confirmation sink.
  */
 
 import { Effect, Fiber, Queue, Ref, Stream, type Context } from 'effect';
@@ -45,7 +56,6 @@ import {
   type VoiceSessionState,
   type VoiceSessionEvent,
 } from '~/domain/voice/voiceSession';
-import { classifyTranscript } from '~/domain/voice/voiceIntentClassifier';
 import type { TranscriptChunk } from '~/domain/voice/Transcript';
 import { LLMClient, AudioEngine } from '~/domain/services';
 import type { MicBusyError } from '~/domain/audio/MicChannel';
@@ -76,8 +86,10 @@ export type VoiceSessionHandle = {
     input: VoiceSessionInput,
   ) => Effect.Effect<void, MicBusyError | SttUnsupportedError, never>;
   readonly stop: () => Effect.Effect<void, never, never>;
-  /** Explicit commit signal (pointerup / sentence-end). MVP auto-commits
-   *  on every final chunk — this is a manual override hook. */
+  /** Explicit chunk-feed for non-STT pipelines (test streams,
+   *  future wake-word buffers). Unlike the STT subscriber, this
+   *  does NOT auto-review — callers that want confirmation must
+   *  explicitly dispatch `enter-review` themselves. */
   readonly onChunk: (chunk: TranscriptChunk) => Effect.Effect<void, never, never>;
   /** Live FSM stream — UI subscribes once. */
   readonly stream: Stream.Stream<VoiceSessionState, never, never>;
@@ -170,15 +182,38 @@ export const createVoiceAISession = (
 
     /**
      * Run the route from the `review` sink with a user-edited text.
-     * Branched off `runRoute` so the auto-commit path stays free of
+     * Branched off `runRoute` so the auto path stays free of
      * review-specific bookkeeping — the FSM does the bookkeeping
      * (review → requesting via `send-review`), and this just makes
      * sure the audio eval / LLM call is identical to the auto path.
      *
-     * The orchestrator's `sendReview` dispatches `send-review(text)`
-     * first; if we're not in `review`, the reducer's no-op branch
-     * applies and we drop the request before it ever starts an LLM
-     * call (preventing accidental work after a stale render).
+     * Why `Effect.forkDaemon` here, when the orchestrator's
+     * `runRouteFromReview` previously ran the route inline
+     * --------------------------------------------------
+     * The auto-commit branch (now retired) forked its route via
+     * `forkDaemon` + `Ref.set(inFlightRef, fiber)` so that
+     * `cancelInFlight` could interrupt a long-running LLM
+     * request mid-route. Without the fork, the Effect blocks its
+     * caller until the LLM responds — fine on the auto path (the
+     * subscriber fiber was already async), but bad here: the
+     * store's `sendVoiceAIReview` would hang the UI button click
+     * through the entire round-trip and `cancelInFlight` would
+     * have no fiber to interrupt.
+     *
+     * The shape is "dispatch `send-review` synchronously to flip
+     * the FSM tag, then fork the route so the caller returns
+     * immediately". The reducer guarantees the FSM hits
+     * `requesting` before the route body runs: `send-review`
+     * transitions review → requesting, and `runRoute`'s first
+     * step dispatches `request-sent` (requesting → applying). No
+     * `commit` event is fired — there's nothing to double-commit.
+     *
+     * The `stateRef.get` check at the head is what stops the
+     * entire branch when the caller is stale (e.g. the user
+     * already cancelled). The reducer's `fromReview + send-review`
+     * is also a no-op for non-`review` states, but we still
+     * need to short-circuit before `Ref.set(inFlightRef, ...)`
+     * would otherwise stash a fiber against the wrong FSM tag.
      */
     const runRouteFromReview = (
       text: string,
@@ -188,13 +223,55 @@ export const createVoiceAISession = (
         const prev = yield* Ref.get(stateRef);
         if (prev.tag !== 'review') return;
         yield* dispatch({ type: 'send-review', text });
-        yield* runRoute(text, t);
+        const fiber = yield* Effect.forkDaemon(runRoute(text, t));
+        yield* Ref.set(inFlightRef, fiber);
       });
     };
 
+    /**
+     * Tear down the STT engine + the subscriber fiber slot
+     * atomically. Shared by:
+     *   - `handle.stop`        — pause path
+     *   - `handle.enterReview` — manual pause-for-review path
+     *   - the auto-review branch in `subscribeLoop` — silence
+     *     detector dropped the FSM into `review`
+     *
+     * The atomic modify+interrupt keeps `subscriberRef` correct even
+     * if the interrupting fiber is itself interrupted (a known
+     * surprising interaction in Effect): the slot is nulled before
+     * the old fiber's interrupt propagates, so a second caller can
+     * never observe the dead reference.
+     */
+    const teardownSubscriber = Effect.gen(function* () {
+      const cleared = yield* Ref.modify(
+        subscriberRef,
+        (curr) => [curr, null] as const,
+      );
+      if (cleared !== null) {
+        yield* Fiber.interrupt(cleared);
+      }
+      yield* deps.stt.stop();
+    });
+
     // Subscribe to the STT chunk stream. For each chunk: dispatch a
     // `chunk` event; if the chunk is final and the FSM is in
-    // `transcribing`, auto-commit per the MVP behaviour.
+    // `transcribing`, drop into `review` so the user can confirm /
+    // edit the buffer before any LLM call fires (the previous
+    // auto-commit path is gone — see the file header for why).
+    //
+    // Why this is the only path that triggers `enter-review` from
+    // a reducer event
+    // --------------------------------------------------
+    // The reducer's `enter-review` event is reachable from any
+    // active state (listening / transcribing / paused). This
+    // subscriber is the only caller that fires it without an
+    // explicit user action — the others are `handle.enterReview`,
+    // which a UI button would call manually. Keeping the auto
+    // transition here means the rule-based classifier (`voiceIntent
+    // Classifier.run`) is dead code in the MVP path; classification
+    // only runs if/when a future "send verbatim" affordance
+    // bypasses review. Until then, the user is the only agent that
+    // promotes `review → requesting`.
     const subscribeLoop = (
       chunks: Stream.Stream<TranscriptChunk, SttUnsupportedError>,
     ): Effect.Effect<void, SttUnsupportedError, never> =>
@@ -202,31 +279,26 @@ export const createVoiceAISession = (
         Effect.gen(function* () {
           yield* dispatch({ type: 'chunk', chunk });
           if (chunk.kind !== 'final') return;
-          // Read FSM AFTER the chunk event so we see the post-transition
-          // state — auto-commit only when the reducer put us in
-          // `transcribing` (i.e., this final chunk landed).
+          // Read FSM AFTER the chunk event so we see the post-
+          // transition state — auto-review fires only when the
+          // reducer put us in `transcribing` (i.e., this final chunk
+          // landed). Buffered finals that arrive after the FSM is
+          // already in `review` drop through silently: the reducer
+          // ignores chunks in `review`, so the transcript buffer is
+          // not mutated retroactively. STT engines that emit one
+          // final per utterance (Web Speech, server Whisper) match
+          // this single-transition expectation.
           const s = yield* Ref.get(stateRef);
           if (s.tag !== 'transcribing') return;
-          yield* dispatch({ type: 'commit' });
-          const r = yield* Ref.get(stateRef);
-          if (r.tag !== 'requesting') return;
-          const score = yield* Ref.get(deps.currentScoreRef);
-          const result = classifyTranscript(r.transcript, {
-            now: chunk.timestampMs,
-            currentScore: score,
-            bargeInMode: 'replace',
-          });
-          if (!result.ok || result.intent.kind !== 'edit-score') return;
-          // `forkDaemon` decouples the route from the subscriber's
-          // lifetime: the subscriber is only alive while the STT
-          // stream produces chunks, but a route may extend past
-          // that (e.g., LLM self-heal retry). Linkage would force
-          // a premature interrupt; daemon lets the route finish.
-          // `cancelInFlight` interrupts this fiber explicitly.
-          const fiber = yield* Effect.forkDaemon(
-            runRoute(result.intent.instruction, result.intent.timestampMs),
-          );
-          yield* Ref.set(inFlightRef, fiber);
+          yield* dispatch({ type: 'enter-review' });
+          // Stop STT so the subscriber drains its remaining
+          // buffered chunks (which become no-ops once we're in
+          // `review`) and the stream completes on its own. We
+          // do NOT interrupt the subscriber here: any in-flight
+          // chunks still finish their dispatch, and the subscriber
+          // slot ends naturally. Cancellation on user demand goes
+          // through `cancelVoiceAIReview` / `cancelVoiceAIInFlight`.
+          yield* deps.stt.stop();
         }),
       );
 
@@ -261,11 +333,7 @@ export const createVoiceAISession = (
         Effect.gen(function* () {
           // Atomic get+reset so the subscriber slot is vacated even
           // if the interrupting fiber is itself interrupted.
-          const cleared = yield* Ref.modify(subscriberRef, (curr) => [curr, null] as const);
-          if (cleared !== null) {
-            yield* Fiber.interrupt(cleared);
-          }
-          yield* deps.stt.stop();
+          yield* teardownSubscriber;
           yield* dispatch({ type: 'pause' });
         }),
       onChunk: (chunk: TranscriptChunk) =>
@@ -288,11 +356,7 @@ export const createVoiceAISession = (
           // accumulate more chunks during review. The reducer
           // decides which states can enter review (any except
           // armed-flow + errored); for the rest it's a no-op.
-          const cleared = yield* Ref.modify(subscriberRef, (curr) => [curr, null] as const);
-          if (cleared !== null) {
-            yield* Fiber.interrupt(cleared);
-          }
-          yield* deps.stt.stop();
+          yield* teardownSubscriber;
           yield* dispatch({ type: 'enter-review' });
         }),
       sendReview: (text: string) =>
