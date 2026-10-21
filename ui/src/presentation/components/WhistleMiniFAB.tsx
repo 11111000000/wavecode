@@ -4,9 +4,10 @@ import {
   whistleState,
   whistleError,
   whistleInstrumentLabel,
+  whistlePanelArmed,
   startWhistle,
-  commitWhistle,
   stopWhistle,
+  requestWhistlePanelArmed,
 } from '../state/whistleStore';
 import { WhistleIcon } from '../icons';
 import { consoleStore } from './consoleStore';
@@ -16,26 +17,47 @@ const HOLD_NOTICE_MS = 250;
 const MIN_HOLD_BEFORE_RELEASE_OK_MS = 80;
 
 /**
- * WhistleMiniFAB — press-and-hold mini button for whistle-to-score.
+ * WhistleMiniFAB — whistle-to-score control with two gestures:
  *
- *   - pointerdown → acquire `mic-direct` + start orchestrator
- *   - pointerup   → commit (notesToSnippet → audio.eval) → stop
+ *   - Hold (≥ 80ms)         → start the orchestrator immediately;
+ *                            release stops it. NO commit on release —
+ *                            the buffered notes stay in the panel's
+ *                            «Применить» queue.
+ *   - Quick tap (< 80ms)    → the orchestrator was started briefly,
+ *                            but on `pointerup` we stop it AND
+ *                            open the `RecordingPanel` in its
+ *                            "armed, ждёт ●REC" state. The user
+ *                            then presses ●REC to actually start
+ *                            and «Применить» to splice.
  *
- * The session is "press-and-hold" only — no tap-to-toggle, no
- * continuous. Auto-release after `HOLD_NOTICE_MS` (250ms) of held
- * state gives the user a visual hint that "I'm listening".
+ * Why commit-on-release was removed
+ * ---------------------------------
+ * The previous lifecycle (release splices the buffered snippet)
+ * paired poorly with the new REC-toggle affordance: a user could
+ * press-and-release (auto-splice) AND THEN press «Применить» again,
+ * producing two `dispatch replaceScore` calls for the same notes.
+ * The fix is to keep the orchestrator alive on release (it just
+ * stops recording, leaving the buffered notes untouched) and let
+ * «Применить» in the panel own the splice. While the panel is open
+ * the user can re-press ●REC to add more notes before «Применить»
+ * applies the combined buffer in one shot.
  *
- * Mobile quirk (2026-10-19): on Android Chrome a quick touch fires
- * `pointerleave` ~10-40ms after `pointerdown` (even without the
- * finger moving), so the OLD design's "if pointerleave/cancel →
- * commit" branch fired on every short press, even when the user
- * intended to hold. Result: a `commit()` ran on an empty buffer
- * every time, generating zero notes, and the FSM cycled to idle
- * without ever producing audio. The new design gates the release
- * on a minimum-hold threshold (`MIN_HOLD_BEFORE_RELEASE_OK_MS`):
- * if pointerup/-leave/-cancel fires BEFORE that elapsed, we
- * ignore the release and KEEP listening — the user genuinely held
- * the button and the browser just spat out a transient event.
+ * Mobile quirk (2026-10-19 + 2026-10-21)
+ * --------------------------------------
+ * Android Chrome fires `pointerleave` ~10-40ms after `pointerdown`
+ * (even without the finger moving). The legacy code gated ALL
+ * releases on `MIN_HOLD_BEFORE_RELEASE_OK_MS` to ignore the
+ * spurious event. The new code keeps the gate but separates
+ * handlers: `pointerleave/cancel` still ignore sub-threshold
+ * events entirely, `pointerup` distinguishes hold-release (stop)
+ * from fast-tap (stop+open panel) using the same threshold.
+ *
+ * The orchestrator is started immediately on `pointerdown` (no
+ * deferred-start timer) so the existing 2026-10-19 regression
+ * test "sub-threshold pointerleave does NOT abort an active
+ * recording" remains valid byte-for-byte — the difference vs the
+ * previous code is only what `onPointerUp` does on a sub-threshold
+ * tap (it opens the panel as well).
  */
 export function WhistleMiniFAB(): JSX.Element {
   let sessionId: string | null = null;
@@ -43,11 +65,7 @@ export function WhistleMiniFAB(): JSX.Element {
   const [showHint, setShowHint] = createSignal(false);
   let hintTimer: number | null = null;
   /** Wall-clock ms when the user pressed down. Used to gate the
-   *  `pointerup` / `pointerleave` / `pointercancel` branches: only
-   *  commits+stops if the press has been held longer than
-   *  `MIN_HOLD_BEFORE_RELEASE_OK_MS`. Mobile Chrome spuriously
-   *  fires `pointerleave` ~10-40ms after `pointerdown`; without
-   *  this gate, every short press would commit an empty buffer. */
+   *  `pointerup` / `pointerleave` / `pointercancel` branches. */
   let pressedAtMs: number | null = null;
 
   const ensureSessionId = (): string => {
@@ -57,16 +75,27 @@ export function WhistleMiniFAB(): JSX.Element {
     return sessionId;
   };
 
+  const cancelHintTimer = (): void => {
+    if (hintTimer !== null) {
+      window.clearTimeout(hintTimer);
+      hintTimer = null;
+    }
+  };
+
   const onPointerDown = (): void => {
     if (pressed) return;
     pressed = true;
     pressedAtMs = Date.now();
     setShowHint(false);
-    if (hintTimer !== null) window.clearTimeout(hintTimer);
+    cancelHintTimer();
     hintTimer = window.setTimeout(() => {
       hintTimer = null;
       setShowHint(true);
     }, HOLD_NOTICE_MS);
+    // Start immediately — same as before. The release handler
+    // decides whether to stop only (hold) or stop + open panel
+    // (fast tap) using `isHoldLongEnough()`. Immediate start keeps
+    // the 2026-10-19 regression test valid.
     const sid = ensureSessionId();
     void runEffectSafely(
       Effect.gen(function* () {
@@ -84,22 +113,46 @@ export function WhistleMiniFAB(): JSX.Element {
     return Date.now() - pressedAtMs >= MIN_HOLD_BEFORE_RELEASE_OK_MS;
   };
 
-  const releaseIfReal = (): void => {
+  /** Sub-threshold release on `pointerleave` / `pointercancel`.
+   *  Mobile Chrome spuriously fires these ~10-40ms after
+   *  `pointerdown`. We must NOT honour them — only the eventual
+   *  `pointerup` decides what to do. */
+  const onSpuriousLeave = (): void => {
     if (!pressed) return;
     if (!isHoldLongEnough()) return;
+    // Past the threshold and we still got a leave — treat as a real
+    // release (the user dragged the finger off). Stop the
+    // orchestrator; notes stay buffered.
     pressed = false;
     pressedAtMs = null;
-    if (hintTimer !== null) {
-      window.clearTimeout(hintTimer);
-      hintTimer = null;
-    }
+    cancelHintTimer();
     setShowHint(false);
-    void runEffectSafely(
-      Effect.gen(function* () {
-        yield* commitWhistle();
-      }),
-    );
     void runEffectSafely(stopWhistle());
+  };
+
+  const onPointerUp = (): void => {
+    if (!pressed) return;
+    const heldLongEnough = isHoldLongEnough();
+    pressed = false;
+    pressedAtMs = null;
+    cancelHintTimer();
+    setShowHint(false);
+    if (heldLongEnough) {
+      // Real hold-and-release: just stop the orchestrator. Notes
+      // are NOT committed; the user must press «Применить» inside
+      // the panel to splice them into score. This is what
+      // decisions/wavecode-voice-rec-and-meter changes vs the
+      // previous auto-commit-on-release path.
+      void runEffectSafely(stopWhistle());
+      return;
+    }
+    // Sub-threshold `pointerup` after a quick tap. The session
+    // was briefly started on `pointerdown`; we stop it now and
+    // open the panel in its "armed, ждёт ●REC" state. The user
+    // then has to press ●REC to actually start a recording and
+    // «Применить» to splice into score.
+    void runEffectSafely(stopWhistle());
+    requestWhistlePanelArmed();
   };
 
   const titleText = (): string => {
@@ -114,11 +167,12 @@ export function WhistleMiniFAB(): JSX.Element {
       class="voice-mini-fab voice-mini-fab--whistle"
       data-state={whistleState().tag}
       data-pressed={pressed ? 'true' : 'false'}
+      data-panel-armed={whistlePanelArmed() ? 'true' : 'false'}
       title={titleText()}
       onPointerDown={onPointerDown}
-      onPointerUp={releaseIfReal}
-      onPointerLeave={releaseIfReal}
-      onPointerCancel={releaseIfReal}
+      onPointerUp={onPointerUp}
+      onPointerLeave={onSpuriousLeave}
+      onPointerCancel={onSpuriousLeave}
       aria-label="Свист → музыка"
     >
       <WhistleIcon size={18} />
@@ -130,6 +184,14 @@ export function WhistleMiniFAB(): JSX.Element {
          * store signal the session was started with. */}
         <span class="voice-mini-fab__hint" aria-hidden="true">
           слушаю… · {whistleInstrumentLabel()}
+        </span>
+      </Show>
+      <Show when={whistlePanelArmed() && whistleState().tag === 'idle'}>
+        <span
+          class="voice-mini-fab__hint voice-mini-fab__hint--armed"
+          aria-hidden="true"
+        >
+          жду ●REC
         </span>
       </Show>
     </button>
