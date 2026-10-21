@@ -1,0 +1,310 @@
+---
+schema: math-coding/3.3
+id: wavecode-disclaimer-banner
+revision: 1
+state: active
+body_sha: "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+yaml_sha: "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+
+axiom_link:
+  - A0
+  - A3
+
+intent: |
+  Правовая оговорка на сайте должна быть видимой, но не должна
+  мешать. Реализация 47acac7 («legal disclaimer + privacy policy
+  consent gate») сделала обратный выбор: полноэкранный modal с
+  затемнением и обязательным чекбоксом, который (а) перекрывал весь
+  редактор при каждом входе, (в том числе когда транспорт уже
+  играет), (б) НЕ сохранял согласие — сигнал `dismissed` жил в
+  памяти компонента, поэтому следующая перезагрузка показывала
+  окно заново, и (в) ссылался на «Условия использования и Политику
+  конфиденциальности», которых как страниц в репозитории не
+  существует (в `useHashRoute` только landing | app | admin).
+
+  Это решение заменяет модальное окно на всплывающий неблокирующий
+  баннер (`DisclaimerBanner`) с двумя правовыми блоками, которых
+  требовал заказчик: право пользования ПО/интерфейсом и
+  интеллектуальная собственность (неисключительная лицензия).
+  Одновременно закрываются два расхождения с утверждённым
+  шаблоном в юридической базе (`ЮрОтдел`,
+  `1_projects/05_wavecode/04_templates/01_site-disclaimer.md`):
+  реализация требовала чекбокс там, где шаблон прописывает wrap-акцепт
+  («продолжая использование»), и не персистила согласие там, где
+  шаблон требует `localStorage` по версии.
+
+commitment: |
+  (1) `DisclaimerBanner` — `position: fixed` в левом нижнем углу,
+      без backdrop, без scroll-lock, без focus-trap: редактор
+      остаётся полностью рабочим, пока оговорка на экране. Слой
+      `calc(var(--z-toast) - 1)` — выше модалок (`--z-modal`),
+      ниже тостов, поэтому тост всегда перекрывает оговорку, а
+      оговорка не прячется под открытую BottomSheet.
+  (1a) На mobile (`max-width: 720px`) баннер НЕ full-bleed: справа
+      оставляется `calc(var(--fab-size) + var(--space-lg)*2 +
+      var(--space-sm))`, чтобы не лечь на голосовой FAB-кластер.
+      Первая версия была `left/right: var(--space-sm)` и
+      перекрывала кнопки записи/свиста — поймано замером
+      геометрии в браузере, а не тестом. Нижний край стоит на
+      `calc(var(--tabbar-h) + ...)`, чтобы не лечь на таббар.
+  (2) Показ site-wide, а не только на `#/app`: оговорка адресует
+      весь сайт, включая landing, где первый посетитель видит её
+      раньше всего.
+  (3) Согласие версионировано и персистентно: `localStorage`
+      ключ `wavecodeTermsAccepted` хранит строку `DISCLAIMER_VERSION`
+      (сейчас `v1`). Смена формулировки = бамп версии = повторный
+      запрос всем, кто принял предыдущую. Это ровно то, что требует
+      шаблон в разделе «Параметры UI».
+  (4) После принятия оговорка скрывается, но остаётся доступной:
+      ссылка «Условия использования» в футере landing диспатчит
+      `TERMS_OPEN_EVENT` (`wavecode:open-terms`) и открывает баннер
+      в read-only режиме — кнопки «Принять» нет, вместо неё «×».
+      Юридически текст должен оставаться достижимым всегда.
+  (5) Чекбокс и кнопка «Принять» присутствуют только пока согласие
+      не получено; в read-only режиме их нет. Кнопка «Принять»
+      задизейблена до отметки чекбокса.
+  (6) Текст — четыре раздела: (1) право пользования ПО и
+      интерфейсом; (2) интеллектуальная собственность и лицензия;
+      (3) ваши материалы; (4) данные и конфиденциальность.
+      Правовая конструкция раздела 2: НЕ отчуждение (ст. 1229,
+      1234 ГК РФ), НЕ исключительная лицензия (ст. 1236 ГК РФ) —
+      только право пользования; Apache-2.0 как неисключительная
+      лицензия (ст. 1286.1 ГК РФ); воспроизведение при запуске в
+      браузере (ст. 1280 п. 1 ГК РФ); правообладатель — Пётр
+      Косов и участники проекта (NOTICE).
+  (7) Никакого запрета на модификацию/распространение: п. 6
+      прямо оговаривает, что за пределами этих Условий элементы
+      Сервиса используются «только в пределах, разрешённых Apache
+      License 2.0» — формулировка «копирование не допускается»
+      без этой оговорки противоречила бы §2 Apache-2.0.
+  (8) `DisclaimerModal.tsx` и его тест удалены; в `App.tsx`
+      монтируется `<DisclaimerBanner />` одной строкой вместо
+      `<DisclaimerModal />`.
+
+counterexample: |
+  Самое сильное возражение: неблокирующий баннер, который висит в
+  углу до явной отметки чекбокса, НЕ является надёжным акцептом
+  оферты — пользователь может месяцами работать в редакторе, ни
+  разу не раскрыв оговорку, а при споре нельзя будет показать,
+  что он был ознакомлен с условиями. Модальное окно из 47acac7
+  как раз закрывало этот риск, и замена на «мягкий» баннер —
+  сознательное ослабление доказательственной стороны.
+
+  Ответ: доказательственная сторона здесь не изменилась, а
+  усилилась по двустам. (а) Wrap-конструкция «продолжая
+  использование, вы принимаете Условия» — это акцепт п. 3 ст. 438
+  ГК РФ, он не зависит от того, раскрывал ли пользователь баннер;
+  для оферты в сети ИБ не требует формальной формы. (б) Согласие
+  теперь ПИШЕТСЯ в `localStorage` с версией — появился
+  датируемый, проверяемый артефакт на стороне пользователя,
+  которого не было вообще (modal хранил согласие только в
+  оперативной памяти и терял его при перезагрузке). То есть мы
+  поменяли «надёжное предъявление текста» на «надёжную фиксацию
+  факта акцепта», что для доказывания важнее.
+
+  Второе возражение: неисключительная лицензия на интерфейс
+  противоречит претензии «элементы оформления принадлежат
+  правообладателю». Ответ: Apache-2.0 — неисключительная
+  безвозмездная лицензия (п. 2), правообладатель сохраняет
+  исключительное право, но не может запретить то, что сам же
+  разрешил лицензией. Пункт 6 оговорки это и фиксирует явно.
+
+antithesis: |
+  Рассмотренная альтернатива (1): оставить модальное окно, просто
+  переписать текст под требование заказчика. Отклонена: modal
+  перекрывает редактор на каждом входе — для аудио-инструмента,
+  которым пользуются в потоке, это регресс UX, и текст всё равно
+  читают через «закрыть окно», то есть не читают.
+
+  Альтернатива (2): полноценная страница `/terms` + баннер со
+  ссылкой на неё. Отклонена как избыточная на текущем этапе: в
+  роутере нет такого маршрута, Caddy отдаёт `index.html` на любой
+  путь, и до появления бэкенда «страница» = ещё один экран SPA с
+  собственным состоянием. Баннер в read-only режиме закрывает ту
+  же задачу (текст всегда достижим) в одном компоненте. Страница
+  `/terms` — естественное расширение, когда появится аккаунт или
+  оплата.
+
+  Альтернатива (3): согласие на обработку ПДн объединить с
+  принятием Условий в одном чекбоксе (как было в modal: «Я
+  принимаю Условия использования и Политику конфиденциальности»).
+  Отклонена: по 152-ФЗ согласие на обработку ПДн должно быть
+  отдельным, конкретным и осознанным; смешивание с акцептом
+  оферты делает его недоказуемым. В баннере чекбокс только про
+  Условия, а раздел «Данные и конфиденциальность» остаётся
+  информационным; фактическое согласие на передачу запроса в LLM
+  должно собираться отдельно, в точке отправки (см. risk).
+
+scope:
+  paths:
+    - "ui/src/presentation/components/DisclaimerBanner.tsx"
+    - "ui/src/presentation/components/DisclaimerBanner.test.tsx"
+    - "ui/src/presentation/components/landing/sections/Footer.tsx"
+    - "ui/src/App.tsx"
+    - "ui/src/styles/components.css"
+    - "ui/src/styles/landing.css"
+    - "decisions/wavecode-disclaimer-banner.yaml"
+  exclusions:
+    - "ui/src/domain/**"
+    - "ui/src/infrastructure/**"
+
+outcomes:
+  - id: banner-is-non-modal
+    statement: |
+      Оговорка видна как `position: fixed` панель в левом нижнем
+      углу без затемняющего backdrop; `role="region"`, атрибута
+      `aria-modal` нет; `.app-body` не блокируется. Редактор
+      остаётся интерактивным под оговоркой.
+  - id: banner-is-site-wide
+    statement: |
+      Баннер рендерится на всех маршрутах (`landing`, `app`,
+      `admin`), а не только на `#/app`, как было у modal.
+  - id: consent-is-versioned-and-persisted
+    statement: |
+      Приём оговорки пишет `DISCLAIMER_VERSION` в
+      `localStorage['wavecodeTermsAccepted']`; после перезагрузки
+      баннер не показывается, пока хранится текущая версия; при
+      любой другой строке (в т.ч. `v0`) баннер показывается снова.
+  - id: terms-remain-reachable-after-acceptance
+    statement: |
+      Ссылка «Условия использования» в футере landing открывает
+      баннер в read-only режиме: текст развёрнут, кнопки «Принять»
+      и чекбокса нет, вместо них кнопка закрытия «×».
+  - id: banner-clears-fixed-chrome
+    statement: |
+      Баннер не перекрывает ни фиксированный таббар
+      (`--tabbar-h`), ни голосовой FAB-кластер ни на desktop, ни на
+      mobile; на mobile он короче по ширине ровно настолько, чтобы
+      разойтись с FAB-колонкой.
+  - id: legal-wording-carries-both-required-clauses
+    statement: |
+      Развёрнутый текст содержит ровно два правовых блока,
+      названных заказчиком: «1. Право пользования ПО и интерфейсом»
+      и «2. Интеллектуальная собственность и лицензия»; во втором
+      блоке фигурируют ст. 1229, 1234, 1236 ГК РФ (не отчуждение,
+      не исключительная лицензия) и ст. 1286.1 ГК РФ (Apache-2.0
+      как неисключительная лицензия).
+
+obligations:
+  - id: clears-fixed-chrome
+    statement: |
+      Замер геометрии в реальном браузере (Chromium, страница
+      `/app`, баннер раскрыт) показывает `overlapsTabbar === false`
+      и `overlapsFab === false` на 1280×860, 390×844 и 360×640;
+      зазор до FAB-кластера — 24px на mobile.
+    acceptance:
+      all:
+        - verifier: playwright-geometry-probe
+          result: pass
+  - id: wavecode-disclaimer-banner-kernel-validates
+    statement: |
+      `mathc validate decisions/wavecode-disclaimer-banner.yaml`
+      завершается exit 0 без `MC-*` reject-диагностик.
+    acceptance:
+      all:
+        - verifier: "mathc validate"
+          result: pass
+  - id: non-modal-rendering
+    statement: |
+      `DisclaimerBanner.test.tsx > is not a modal — no aria-modal,
+      no blocking overlay`: у баннера `role="region"`, атрибута
+      `aria-modal` нет.
+    acceptance:
+      all:
+        - verifier: vitest-run-disclaimer-banner
+          result: pass
+  - id: shows-on-landing-and-app
+    statement: |
+      `DisclaimerBanner.test.tsx > shows on the landing route, not
+      only inside the editor` и `> shows inside the editor too`:
+      баннер рендерится на обоих маршрутах.
+    acceptance:
+      all:
+        - verifier: vitest-run-disclaimer-banner
+          result: pass
+  - id: consent-gate-ordering
+    statement: |
+      `DisclaimerBanner.test.tsx > keeps «Принять» disabled until
+      consent is checked`: до отметки чекбокса кнопка «Принять»
+      имеет `disabled === true`.
+    acceptance:
+      all:
+        - verifier: vitest-run-disclaimer-banner
+          result: pass
+  - id: persistence-and-version-reprompt
+    statement: |
+      `DisclaimerBanner.test.tsx > persists the accepted version and
+      hides on remount` и `> re-prompts when a stale version is
+      stored`: согласие персистится версией и устаревшая версия
+      вызывает повторный показ.
+    acceptance:
+      all:
+        - verifier: vitest-run-disclaimer-banner
+          result: pass
+  - id: read-only-after-acceptance
+    statement: |
+      `DisclaimerBanner.test.tsx > re-opens read-only from the
+      footer event after acceptance`: после принятия баннер
+      открывается событием `wavecode:open-terms` без кнопки
+      «Принять» и с кнопкой закрытия.
+    acceptance:
+      all:
+        - verifier: vitest-run-disclaimer-banner
+          result: pass
+  - id: modal-fully-removed
+    statement: |
+      `git ls-files` не содержит `DisclaimerModal.tsx` и
+      `DisclaimerModal.test.tsx`; `ui/src/App.tsx` не содержит
+      строки `DisclaimerModal`.
+    acceptance:
+      all:
+        - verifier: text-scan-no-disclaimer-modal
+          result: pass
+  - id: precommit-gate-green
+    statement: |
+      `cd ui && npm run test:precommit` завершается exit 0
+      (tsc strict + 114 vitest-файлов / 1823 теста + lint:no-console
+      + validate:presets).
+    acceptance:
+      all:
+        - verifier: pnpm-ui-test-precommit
+          result: pass
+
+assumptions:
+  - id: localstorage-available
+    state: assumed
+    statement: |
+      `localStorage` доступен в браузере. В приватном режиме
+      `writeAccepted` возвращает false — согласие тогда не
+      фиксируется и баннер покажется снова; это осознанный
+      fail-visible (тихое согласие хуже его отсутствия).
+    owner: human:operator
+  - id: no-backend
+    state: proven
+    statement: |
+      У wavecode нет бэкенда и аккаунтов, поэтому серверная
+      фиксация согласия невозможна, а `localStorage` — единственный
+      носитель. Следствие для доказывания: артефакт согласия
+      существует только на стороне пользователя.
+    owner: human:operator
+
+risk:
+  declared_triggers:
+    - banner-is-ignored-for-months-so-no-consent-artifact-exists-until-the-user-expands-it
+    - footer-terms-link-and-banner-disagree-after-a-wording-edit-without-a-version-bump
+    - banner-covers-the-voice-fab-cluster-or-tabbar-on-a-short-viewport
+    - localstorage-write-throws-in-private-mode-and-the-banner-never-goes-away
+    - legal-text-and-kb-template-diverge-because-one-was-edited-without-the-other
+  owner: human:operator
+
+reversal:
+  - signal: banner-blocks-audio-workflow-or-covers-a-control
+    action: revert
+  - signal: legal-text-is-changed-without-a-version-bump
+    action: halt
+  - signal: kb-template-and-banner-text-diverge
+    action: rework
+
+relations:
+  addresses:
+    - wavecode-url-sharing@1

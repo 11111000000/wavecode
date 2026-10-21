@@ -1120,6 +1120,25 @@ body.wc-landing-active .wc-app {
   color: var(--primary);
   border-bottom-color: var(--primary);
 }
+/* The terms link has no href — it re-opens the floating disclaimer
+   banner (wavecode-disclaimer-banner). Same affordance as the anchors. */
+.l-footer__link-btn {
+  font-family: inherit;
+  font-size: var(--fs-md);
+  text-align: left;
+  color: var(--fg);
+  background: none;
+  border: none;
+  border-bottom: 1px solid transparent;
+  padding: 0;
+  cursor: pointer;
+  transition: color var(--dur-sm) var(--ease),
+              border-color var(--dur-sm) var(--ease);
+}
+.l-footer__link-btn:hover {
+  color: var(--primary);
+  border-bottom-color: var(--primary);
+}
 .l-footer__bottom {
   border-top: 1px solid var(--border);
   padding: var(--space-lg) var(--space-xl);
