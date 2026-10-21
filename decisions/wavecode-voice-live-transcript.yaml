@@ -219,11 +219,20 @@ outcomes:
       и `VoiceAITextReview.test.tsx` удалены. Импорт из
       `VoiceFAB.tsx` убран. FSM-тег `review` и события
       (`enter-review`, `edit-review`, `send-review`,
-      `cancel-review`) в редукторе сохранены — это
-      extension point для будущих ревизий, не текущая
-      фича. Тест `RecordingPanel.test.tsx > does NOT show
-      the review affordance in paused either (live transcript
-      made it redundant)` подтверждает отсутствие в `paused`.
+      `cancel-review`) в редукторе сохранены. **Этот outcome
+      отменён в части «нет UI-аффорданса для review»
+      ревизией `wavecode-voice-confirm-before-send@1`** —
+      inline-форма (textarea + кнопка «→ В ИИ») внутри
+      `RecordingPanel` НЕ является модалкой и НЕ
+      восстанавливает удалённый `VoiceAITextReview`;
+      см. `wavecode-voice-confirm-before-send@1` для
+      текущего контракта. Тест `RecordingPanel.test.tsx >
+      does NOT show the review affordance in paused either
+      (live transcript made it redundant)` остаётся
+      авторитативным для состояний, отличных от `review`
+      — affordance в `paused` по-прежнему отсутствует
+      (миграция review-формы ещё не подключена к
+      ручной-кнопке паузы).
   - id: auto-commit-still-works
     statement: |
       `RecordingPanel.test.tsx`: путь auto-commit
@@ -355,3 +364,5 @@ relations:
     - wavecode-server-stt@1
     - wavecode-voice-ux-fixes@1
     - wavecode-voice-fab@1
+  superseded_by:
+    - wavecode-voice-confirm-before-send@1
