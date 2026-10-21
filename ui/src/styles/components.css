@@ -7088,67 +7088,149 @@ textarea.ai-textarea:focus-visible {
 }
 
 /* =========================================================================
-   DisclaimerModal — legal disclaimer + privacy policy consent gate.
-   Shows on every app entry, requires explicit consent.
+   DisclaimerBanner — floating (non-modal) legal banner.
+   wavecode-disclaimer-banner: replaces the blocking `DisclaimerModal`
+   overlay. The modal covered the whole editor and re-appeared on every
+   entry; this banner sits in the bottom-left corner, clears the fixed
+   TabBar, and layers *below* the toast (`--z-toast - 1`) so a toast
+   still wins. Non-modal by construction: no backdrop, no scroll lock,
+   no focus trap — the editor stays usable while it is on screen.
    ========================================================================= */
 
-.disclaimer-overlay {
+.disclaimer-banner {
   position: fixed;
-  inset: 0;
-  z-index: calc(var(--z-modal) + 20);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: var(--space-lg);
-  background: rgba(0, 0, 0, 0.66);
-  backdrop-filter: blur(4px);
-  -webkit-backdrop-filter: blur(4px);
-  animation: disclaimer-overlay-fade var(--dur-md) var(--ease);
-}
-
-@keyframes disclaimer-overlay-fade {
-  from { opacity: 0; }
-  to   { opacity: 1; }
-}
-
-.disclaimer-modal {
-  width: 100%;
-  max-width: 560px;
-  max-height: min(82vh, 720px);
+  left: var(--space-lg);
+  bottom: calc(var(--tabbar-h) + var(--space-md) + var(--safe-bottom));
+  z-index: calc(var(--z-toast) - 1);
+  width: min(420px, calc(100vw - 2 * var(--space-lg)));
+  max-height: min(70vh, 560px);
   display: flex;
   flex-direction: column;
+  padding: var(--space-md);
   background: var(--surface-2);
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-pop), 0 0 32px rgba(0, 0, 0, 0.5);
-  padding: var(--space-lg);
+  box-shadow: var(--shadow-pop);
   font-family: var(--font-sans);
   color: var(--fg);
-  animation: disclaimer-modal-in var(--dur-md) var(--ease-spring);
+  animation: disclaimer-banner-in var(--dur-md) var(--ease-spring);
 }
 
-@keyframes disclaimer-modal-in {
-  from { opacity: 0; transform: translateY(10px) scale(0.98); }
-  to   { opacity: 1; transform: translateY(0)   scale(1); }
+@keyframes disclaimer-banner-in {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 
-.disclaimer-title {
-  margin: 0 0 var(--space-md) 0;
+@media (max-width: 720px) {
+  .disclaimer-banner {
+    left: var(--space-sm);
+    /* NOT full-bleed: the voice-FAB cluster is a fixed right-hand
+     * column on mobile (`--fab-size` wide + `--space-lg` inset), so a
+     * full-width banner would sit on top of the record/whistle FABs and
+     * swallow their clicks. Stop short of the cluster instead. */
+    right: calc(var(--fab-size) + var(--space-lg) * 2 + var(--space-sm));
+    width: auto;
+    bottom: calc(var(--tabbar-h) + var(--space-sm) + var(--safe-bottom));
+    max-height: min(60vh, 420px);
+  }
+}
+
+.disclaimer-banner__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-sm);
+}
+
+.disclaimer-banner__title {
+  margin: 0;
   font-family: var(--font-display);
-  font-size: var(--fs-lg);
+  font-size: var(--fs-md);
   font-weight: var(--fw-semibold);
   color: var(--primary);
-  line-height: 1.2;
+  line-height: 1.25;
 }
 
-.disclaimer-body {
-  flex: 1 1 auto;
+.disclaimer-banner__head-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  flex-shrink: 0;
+}
+
+.disclaimer-banner__toggle {
+  min-height: 28px;
+  padding: 0 var(--space-xs);
+  background: none;
+  border: none;
+  font-family: var(--font-sans);
+  font-size: var(--fs-xs);
+  letter-spacing: var(--ls-caps);
+  text-transform: uppercase;
+  color: var(--primary);
+  cursor: pointer;
+  user-select: none;
+}
+
+.disclaimer-banner__toggle:hover { text-decoration: underline; }
+
+.disclaimer-banner__close {
+  min-width: 28px;
+  min-height: 28px;
+  padding: 0;
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  font-family: var(--font-sans);
+  font-size: var(--fs-md);
+  line-height: 1;
+  color: var(--fg-dim);
+  cursor: pointer;
+  user-select: none;
+}
+
+.disclaimer-banner__close:hover {
+  color: var(--fg);
+  border-color: var(--border-strong);
+}
+
+.disclaimer-banner__summary {
+  margin: var(--space-xs) 0 0 0;
+  font-size: var(--fs-sm);
+  line-height: var(--lh-relaxed);
+  color: var(--fg-dim);
+}
+
+/* Collapsed state is a one-liner; once expanded the summary would just
+   repeat the first clause of the body. */
+.disclaimer-banner--expanded .disclaimer-banner__summary { display: none; }
+
+.disclaimer-banner__body {
+  margin-top: var(--space-sm);
   overflow-y: auto;
-  margin-bottom: var(--space-md);
   padding-right: var(--space-xs);
 }
 
+.disclaimer-banner__note {
+  margin: 0;
+  font-size: var(--fs-xs);
+  line-height: var(--lh-relaxed);
+  color: var(--fg-dim);
+}
+
+.disclaimer-banner__note a {
+  color: var(--primary);
+  text-decoration: underline;
+}
+
+.disclaimer-banner__actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: var(--space-sm);
+}
+
 .disclaimer-section { margin-bottom: var(--space-md); }
+.disclaimer-section:last-of-type { margin-bottom: var(--space-sm); }
 
 .disclaimer-section__title {
   margin: 0 0 var(--space-xs) 0;
@@ -7160,18 +7242,7 @@ textarea.ai-textarea:focus-visible {
 }
 
 .disclaimer-section__text {
-  margin: 0;
-  font-size: var(--fs-sm);
-  line-height: var(--lh-relaxed);
-  color: var(--fg);
-}
-
-.disclaimer-list {
-  margin: 0;
-  padding-left: var(--space-lg);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-xs);
+  margin: 0 0 var(--space-xs) 0;
   font-size: var(--fs-sm);
   line-height: var(--lh-relaxed);
   color: var(--fg);
@@ -7199,12 +7270,6 @@ textarea.ai-textarea:focus-visible {
   font-size: var(--fs-sm);
   line-height: var(--lh-relaxed);
   color: var(--fg);
-}
-
-.disclaimer-actions {
-  display: flex;
-  justify-content: flex-end;
-  margin-top: var(--space-md);
 }
 
 .disclaimer-btn {
@@ -7246,6 +7311,5 @@ textarea.ai-textarea:focus-visible {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .disclaimer-overlay,
-  .disclaimer-modal { transition: none; animation: none; }
+  .disclaimer-banner { animation: none; }
 }

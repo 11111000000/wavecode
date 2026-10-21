@@ -1,5 +1,6 @@
-import { For, type JSX } from 'solid-js';
+import { For, Show, type JSX } from 'solid-js';
 import { WavecodeLogo } from '~/presentation/components/landing/icons';
+import { openTermsBanner } from '~/presentation/components/DisclaimerBanner';
 import { APP_VERSION } from '~/version';
 
 type Link = {
@@ -7,6 +8,7 @@ type Link = {
   readonly href: string;
   readonly external?: boolean;
   readonly route?: boolean;     // true → #/app (SPA-навигация), false → #anchor или ext
+  readonly onClick?: () => void; // no href — opens the floating disclaimer banner
 };
 
 const SECTIONS: ReadonlyArray<{ title: string; links: ReadonlyArray<Link> }> = [
@@ -17,6 +19,7 @@ const SECTIONS: ReadonlyArray<{ title: string; links: ReadonlyArray<Link> }> = [
       { label: 'Пресеты',            href: '#snippet' },
       { label: 'Архитектура',        href: '#architecture' },
       { label: 'Quick start',        href: '#start' },
+      { label: 'Условия использования', href: '#terms', onClick: openTermsBanner },
     ],
   },
   {
@@ -62,14 +65,28 @@ export function Footer(): JSX.Element {
                 <For each={col.links}>
                   {(l) => (
                     <li>
-                      <a
-                        href={l.href}
-                        {...(l.external
-                          ? { target: '_blank', rel: 'noopener noreferrer' }
-                          : {})}
+                      <Show
+                        when={!l.onClick}
+                        fallback={
+                          <button
+                            type="button"
+                            class="l-footer__link-btn"
+                            data-testid="footer-terms"
+                            onClick={() => l.onClick?.()}
+                          >
+                            {l.label}
+                          </button>
+                        }
                       >
-                        {l.label}
-                      </a>
+                        <a
+                          href={l.href}
+                          {...(l.external
+                            ? { target: '_blank', rel: 'noopener noreferrer' }
+                            : {})}
+                        >
+                          {l.label}
+                        </a>
+                      </Show>
                     </li>
                   )}
                 </For>
