@@ -6915,6 +6915,96 @@ textarea.ai-textarea:focus-visible {
   font-size: var(--fs-xs);
   color: var(--fg-muted);
 }
+
+/* Arm panel — the "жду ●REC" state for both voice-AI and whistle,
+ * triggered by a fast tap on the corresponding mini-FAB. Two
+ * affordances: a single REC toggle (off by default, click to start)
+ * and (whistle only) a «Применить» button that's disabled until
+ * notes have been buffered. Voice-AI doesn't get an apply here —
+ * its submit affordance lives in the review body that fires after
+ * the first final chunk. */
+.voice-recording-panel__armed {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  flex-wrap: wrap;
+  min-height: 0;
+}
+.voice-recording-panel__rec {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  padding: var(--space-2xs) var(--space-sm);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-pill);
+  background: var(--surface-3);
+  color: var(--fg);
+  font-family: var(--font-sans);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-medium);
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  transition:
+    background var(--dur-2xs) var(--ease),
+    border-color var(--dur-2xs) var(--ease),
+    color var(--dur-2xs) var(--ease);
+}
+.voice-recording-panel__rec:hover {
+  background: var(--surface-2);
+}
+.voice-recording-panel__rec-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: var(--radius-full);
+  background: var(--err);
+  transition: background var(--dur-2xs) var(--ease);
+}
+/* Highlighted (recording): tinted border + filled dot + softening
+ * background that matches the panel's active-mode tone. The
+ * data-rec-state attribute keeps both styles publishable from one
+ * JSX path without re-rendering with a separate class per state. */
+.voice-recording-panel__rec--on {
+  border-color: var(--err);
+  background: var(--err-soft);
+  color: var(--err);
+  box-shadow: 0 0 0 2px var(--err-soft);
+  animation: voice-recording-panel-pulse 1.6s ease-in-out infinite;
+}
+.voice-recording-panel__rec--off .voice-recording-panel__rec-dot {
+  background: var(--fg-muted);
+  opacity: 0.6;
+}
+.voice-recording-panel__rec--on .voice-recording-panel__rec-dot {
+  background: var(--err);
+  box-shadow: 0 0 0 3px var(--err-soft);
+}
+@keyframes voice-recording-panel-pulse {
+  0%, 100% { box-shadow: 0 0 0 2px var(--err-soft); }
+  50%      { box-shadow: 0 0 0 5px var(--err-soft); }
+}
+.voice-recording-panel__rec-label {
+  font-family: var(--font-mono);
+}
+
+/* Apply button — splices the buffered notes into score for the
+ * whistle path only. Voice-AI's analogous action («→ В ИИ») lives
+ * on the review form's primary button and is styled by the
+ * existing `.voice-recording-panel__btn--primary` block. */
+.voice-recording-panel__btn--apply {
+  border-color: var(--cyan);
+  color: var(--cyan);
+}
+.voice-recording-panel__btn--apply:hover:not(:disabled) {
+  background: var(--cyan-soft);
+}
+
+/* Inline-aligned actions row for whistle when both REC and
+ * «Применить» are visible — keeps the hint + REC + apply + count
+ * on a single row that wraps on narrow viewports. */
+.voice-recording-panel__actions--split {
+  flex-wrap: wrap;
+}
+
 .voice-recording-panel__rms {
   flex: 1;
   min-width: 60px;
@@ -6934,9 +7024,32 @@ textarea.ai-textarea:focus-visible {
   color: var(--fg-muted);
   font-family: var(--font-mono);
 }
+/* Live voice-AI body — transcript on the left, RMS meter on the
+ * right. The meter only renders on the server STT path (where our
+ * code owns the mic and can run an AnalyserNode); on the Web Speech
+ * path the meter is omitted and the transcript spans the row. */
+.voice-recording-panel__body--live {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  flex-wrap: wrap;
+}
+.voice-recording-panel__rms-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2xs);
+  flex-shrink: 0;
+}
+.voice-recording-panel__body--live .voice-recording-panel__rms {
+  flex: 0 0 120px;
+  max-width: 160px;
+}
 
 @media (prefers-reduced-motion: reduce) {
   .voice-recording-panel {
+    animation: none;
+  }
+  .voice-recording-panel__rec--on {
     animation: none;
   }
 }
