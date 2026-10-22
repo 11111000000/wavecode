@@ -269,6 +269,29 @@ describe('RecordingPanel — voice-AI body content', () => {
     expect(applying.container.querySelector('.voice-recording-panel__btn--primary')).toBeNull();
   });
 
+  it('REGRESSION: ✕ closes the panel instead of parking it at «на паузе»', async () => {
+    // ✕ called `stopVoiceAI()`, which dispatches `pause` — and `mode`
+    // treats `paused` as a VISIBLE state, so the panel stayed on screen
+    // showing «на паузе». The button is labelled «закрыть», so it must
+    // close: `dismissVoiceAI()` tears the session down AND forces the
+    // FSM back to `idle`.
+    armAndListen();
+    expect(voiceAIState().tag).toBe('listening');
+
+    const { container } = render(() => <RecordingPanel />);
+    const close = container.querySelector<HTMLButtonElement>(
+      '.voice-recording-panel__close',
+    )!;
+    expect(close).not.toBeNull();
+    fireEvent.click(close);
+    await new Promise<void>((resolve) => setTimeout(resolve, 50));
+
+    // Either the test handle never had a real orchestrator (so the
+    // panel's mode is driven purely by the FSM), in which case the
+    // FSM must be `idle`; either way the panel must be gone.
+    expect(voiceAIState().tag).toBe('idle');
+  });
+
   it('does NOT show the review affordance in paused either (live transcript made it redundant)', () => {
     // After `wavecode-voice-live-transcript`, the panel's transcript
     // area carries the latest interim or final text directly. The

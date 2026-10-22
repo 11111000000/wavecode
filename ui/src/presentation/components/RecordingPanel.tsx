@@ -5,11 +5,11 @@ import {
   voiceAIElapsedSec,
   voiceAIRmsLevel,
   voiceAIPanelArmed,
-  stopVoiceAI,
   cancelVoiceAIReview,
   sendVoiceAIReview,
   startVoiceAI,
   clearVoiceAIPanelArmed,
+  dismissVoiceAI,
 } from '../state/voiceAIStore';
 import {
   whistleState,
@@ -135,25 +135,26 @@ export function RecordingPanel(): JSX.Element {
 /* ── voice-AI body ─────────────────────────────────────────────────── */
 
 const VoiceAIBody = (props: { readonly armed: boolean }): JSX.Element => {
-  /* The head ✕ has three distinct semantics depending on FSM tag:
-   *   - armed                  → drop the open panel without ever
-   *                              running a session.
-   *   - listening / transcribing / requesting / applying / paused /
-   *     errored                → stop the session.
-   *   - review                 → drop the unsent buffer; nothing is
-   *                              sent to the LLM either way.
+  /* The head ✕ always closes the panel and discards the take.
    *
-   * The intent is to keep the affordance count fixed at one — the
-   * same button, three clearly-different click outcomes. */
+   * It used to call `stopVoiceAI()`, which dispatches `pause` — and
+   * since `mode` treats `paused` as a visible state, the panel stayed
+   * on screen showing «на паузе» instead of going away. The button
+   * is labelled «закрыть», so it must close: `dismiss` is the FSM
+   * event that returns any active state to `idle`, and the mic
+   * channel has to be released too, which is what `stopVoiceAI`
+   * does — so call both and let `dismiss` win the final state. */
   const onClose = async (): Promise<void> => {
     try {
       if (props.armed || voiceAIPanelArmed()) {
         clearVoiceAIPanelArmed();
-      } else if (voiceAIState().tag === 'review') {
-        await Effect.runPromise(cancelVoiceAIReview());
-      } else {
-        await Effect.runPromise(stopVoiceAI());
+        return;
       }
+      if (voiceAIState().tag === 'review') {
+        await Effect.runPromise(cancelVoiceAIReview());
+        return;
+      }
+      await Effect.runPromise(dismissVoiceAI());
     } catch {
       /* orchestrator handles error recovery */
     }

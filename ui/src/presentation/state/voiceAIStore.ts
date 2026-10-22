@@ -431,6 +431,41 @@ export const stopVoiceAI = (): Effect.Effect<void, never, never> =>
     activeSessionId = null;
   });
 
+/** Close the recording panel and abandon the take.
+ *
+ *  `stopVoiceAI` leaves the FSM in `paused`, which the panel renders
+ *  as an on-screen state — so a ✕ that only stops would strand the
+ *  user at «на паузе». This tears the session down AND forces `idle`,
+ *  which is what makes the ✕ actually close. Also interrupts an
+ *  in-flight LLM route so a dismissed take cannot apply its edit
+ *  afterwards. */
+export const dismissVoiceAI = (): Effect.Effect<void, never, never> =>
+  Effect.gen(function* () {
+    stopElapsedTimer();
+    stopRmsPoll();
+    if (handle !== null) {
+      yield* handle.dismiss();
+    } else {
+      // No orchestrator (degraded start, or the FSM was driven
+      // directly in tests). `stopVoiceAI` cannot help here either —
+      // it only tears the capture side down and relies on the
+      // orchestrator's `pause` dispatch, which needs a handle. Force
+      // the signal to `idle` so the ✕ closes the panel instead of
+      // stranding the user at «на паузе».
+      yield* Effect.sync(() => setVoiceAIState(initialVoiceSession()));
+    }
+    const sid = activeSessionId;
+    if (sid !== null) {
+      yield* Effect.sync(() => releaseMic(sid));
+    }
+    activeSessionId = null;
+    yield* Effect.sync(() => {
+      setVoiceAITranscript(initialTranscriptState(langAtInit));
+      setVoiceAIError(null);
+      clearVoiceAIPanelArmed();
+    });
+  });
+
 /** Barge-in: cancel any in-flight route and reset to idle. */
 export const cancelVoiceAIInFlight = (): Effect.Effect<void, never, never> => {
   if (handle === null) {

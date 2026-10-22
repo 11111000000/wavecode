@@ -187,8 +187,18 @@ export function VoiceAIMiniFAB(props: Props): JSX.Element {
   const onPointerUp = (): void => {
     if (state() === 'idle') return;
     if (state() === 'holding') {
-      // The debounce fired while the finger was down — release does
-      // NOT stop the continuous session (review-then-send does).
+      // The debounce fired while the finger was down, so a session is
+      // already running. Releasing must stop it: the confirm-before-send
+      // design makes the *engine* deliver the final chunk on its own
+      // (1.3 s of silence on the server relay, end-of-utterance on Web
+      // Speech), so holding the button open past the utterance buys
+      // nothing and leaves the user unable to say anything new — every
+      // further word lands in the same buffer. Before
+      // `wavecode-voice-confirm-before-send` this branch deliberately
+      // did NOT stop (auto-commit owned the send); now auto-commit is
+      // gone and the stop is the user's only way to end the take.
+      void runEffectSafely(Effect.suspend(() => stopVoiceAI()));
+      clearVoiceAIPanelArmed();
       setState('idle');
       return;
     }

@@ -95,6 +95,18 @@ export type VoiceSessionHandle = {
   readonly stream: Stream.Stream<VoiceSessionState, never, never>;
   /** Barge-in: cancel any in-flight route and reset the FSM to `idle`. */
   readonly cancelInFlight: () => Effect.Effect<void, never, never>;
+  /** Drop the session entirely: stop the STT stream, release the
+   * subscriber slot and force the FSM back to `idle`.
+   *
+   * `stop` alone leaves the FSM in `paused`, which the recording
+   * panel renders as an on-screen state — the user who pressed ✕ to
+   * dismiss the panel would instead get a panel stuck at «на паузе».
+   * `dismiss` is the FSM event that exists for that case, but it
+   * needs the same teardown `stop` does, so the two are composed
+   * here rather than left to the caller. Safe to call from any
+   * state: on `idle` the reducer's `dismiss` branch returns it
+   * unchanged and the teardown is idempotent. */
+  readonly dismiss: () => Effect.Effect<void, never, never>;
   /** Pause STT and freeze the transcript for the user to edit before
    *  sending. Safe to call from listening / transcribing / paused —
    *  from any other state it's a no-op (we keep the FSM total). */
@@ -349,6 +361,20 @@ export const createVoiceAISession = (
           const cleared = yield* Ref.modify(inFlightRef, (curr) => [curr, null] as const);
           if (cleared !== null) yield* Fiber.interrupt(cleared);
           yield* dispatch({ type: 'barge-in' });
+        }),
+      dismiss: () =>
+        Effect.gen(function* () {
+          // Kill any in-flight route FIRST: dismissing the panel while
+          // the LLM is mid-edit would otherwise let the route finish
+          // and apply an edit the user just abandoned.
+          const inFlight = yield* Ref.modify(inFlightRef, (curr) => [curr, null] as const);
+          if (inFlight !== null) yield* Fiber.interrupt(inFlight);
+          // Then tear down the capture side so the STT stream ends and
+          // the mic is released.
+          yield* teardownSubscriber;
+          // `dismiss` is a wildcard transition in the reducer: it maps
+          // paused / errored → idle and leaves a bare `idle` untouched.
+          yield* dispatch({ type: 'dismiss' });
         }),
       enterReview: () =>
         Effect.gen(function* () {

@@ -110,6 +110,10 @@ const installFake = (): VoiceSessionHandle => {
           setState({ tag: 'idle' });
         }
       }),
+    dismiss: () =>
+      Effect.sync(() => {
+        setState({ tag: 'idle' });
+      }),
     stream: Effect.runSync(
       Effect.succeed(
         (async function* () {

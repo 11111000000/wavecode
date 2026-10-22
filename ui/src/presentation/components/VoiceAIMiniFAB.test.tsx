@@ -121,6 +121,29 @@ describe('VoiceAIMiniFAB — pointer handlers drive the FSM', () => {
     fireEvent.pointerUp(btn);
   });
 
+  it('REGRESSION: hold-and-release stops the session (was: kept recording forever)', async () => {
+    // After `wavecode-voice-confirm-before-send` there is no auto-commit:
+    // the engine delivers the final chunk on its own. The old release
+    // path deliberately left the session running ("review-then-send
+    // does"), which left the user unable to end a take — the panel
+    // stuck on «записываю… N с» and every further word landed in the
+    // same buffer.
+    const { container } = render(() => <VoiceAIMiniFAB lang="ru-RU" />);
+    const btn = container.querySelector<HTMLButtonElement>(
+      '.voice-mini-fab--ai',
+    )!;
+    fireEvent.pointerDown(btn);
+    await new Promise<void>((resolve) => setTimeout(resolve, 100));
+    fireEvent.pointerUp(btn);
+    await new Promise<void>((resolve) => setTimeout(resolve, 50));
+
+    // The press FSM must return to idle so a fresh press can start a
+    // new take; and the armed panel flag must not leak (release is
+    // "stop", not "open the armed panel").
+    expect(btn.getAttribute('data-press')).toBe('idle');
+    expect(voiceAIPanelArmed()).toBe(false);
+  });
+
   it('a tap while a session is active stops it without affecting the armed panel', async () => {
     // The "tap during recording stops the session" path is preserved
     // — only the FSM-idle "tap opens the panel" path is new.
