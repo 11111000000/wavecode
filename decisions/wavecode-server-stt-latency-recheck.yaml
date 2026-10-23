@@ -1,0 +1,212 @@
+---
+schema: math-coding/3.3
+id: wavecode-server-stt-latency-recheck
+revision: 1
+state: active
+body_sha: "sha256:395bb9257ea47a00f2ce376656557a49cbce25a52325a37bb1a3f0a1fefe6e8e"
+yaml_sha: "sha256:395bb9257ea47a00f2ce376656557a49cbce25a52325a37bb1a3f0a1fefe6e8e"
+
+axiom_link:
+  - A0
+  - A3
+
+intent: |
+  Клиентский голосовой путь перестанет сообщать «движок распознавания
+  сломан» о медленном, но исправном whisper-релее, и перестанет
+  выбрасывать расшифровку, которая была в полёте. Фактическая
+  задержка релея пере-измерена (2026-10-23) и больше не совпадает с
+  цифрой «2.6–5.2 s», на которую были написаны все клиентские
+  бюджеты: 1-секундный клип — 17.1 s, 3-секундный — 15.8–16.6 s,
+  take с телефона — 32.2 s.
+
+commitment: |
+  Ни один клиентский таймаут голосового пути не может сработать раньше
+  измеренной задержки релея, и ни один из них не имеет права выбросить
+  расшифровку, которая ещё в полёте. Сама задержка релее — серверная
+  проблема (модель, потоки, окно энкодера), и она этим пакетом не
+  решается: клиент перестаёт стрелять в неё, а не чинит её.
+
+counterexample: |
+  «Таймаут — это страховка от зависшего движка, страшно его убирать».
+  Возражения: страховка есть, и она осталась — 60 s против
+  измеренного максимума 32.2 s. Но пока она была 20 s (а
+  `FLUSH_WAIT_MAX_MS` 10 s, `DRAIN_MAX_MS` 12 s), она срабатывала на
+  КАЖДОМ здоровом take: на 20-й секунде watchdog переводил FSM в
+  `errored`, а расшифровка приходила на 32-й и попадала в мёртвое
+  состояние. Страховка, которая стреляет по всем проходящим, хуже её
+  отсутствия — она сообщает пользователю ложь.
+
+  «Раз whisper медленный — вернуть облачный Web Speech, он даёт
+  части за 1–2 s». Возражения: этот вариант уже отвергнут в
+  `wavecode-server-stt@1` по приватности (Chrome отправляет аудио в
+  Google), и он же объясняет, почему backend по умолчанию —
+  `server`. Переизмерение задержки не переигрывает тот довод.
+
+  «Просто переписать 5-9 s на 17 s в комментариях и оставить цифры
+  в коде». Возражения: комментарии — не исполняемый код, а бюджеты
+  в коде и есть то, что ломало пользователя. Замена только в
+  прозе оставила бы те же 20/10/12 секунд и тот же баг.
+
+  «Не трогать `TICK_MS`, пусть interim-тики стримят раньше».
+  Возражения: тик, поднятый на 2.5-й секунде, занимает единственный
+  слот релея на ~16 s, и release-flush выстраивается в очередь за
+  ним. Короткая фраза платила два round-trip за одну фразу — либо
+  теряла флаш. Interim-стриминг на релее, которое не укладывается в
+  удержание кнопки, не даёт ничего.
+
+antithesis: |
+  «Поднять бюджеты до 60 s и считать, что задача закрыта».
+  Возражения: это делает голосовой ввод пригодным и неубийственным,
+  но не делает его быстрым. Пользователь по-прежнему ждёт ~16–32 s
+  до первого слова. Это снимает ложное сообщение об ошибке, но не
+  создаёт ту UX, ради которой фича и делалась; настоящее лечение —
+  серверное (модель `ggml-base-q5_1`, 4 vCPU QEMU без GPU, фиксированное
+  30-секундное окно энкодера whisper.cpp). Этот пакет честно
+  объявляет, что закрывает только половину.
+
+  «Оставить watchdog на 20 s — раньше пользователь хотя бы понимал,
+  что что-то идёт не так». Возражения: он понимал неверно. Он
+  получал «Не удалось получить текст от движка распознавания» и
+  правил микрофон, которого никто не сломал.
+
+scope:
+  paths:
+    - "ui/src/presentation/components/VoiceAIMiniFAB.tsx"
+    - "ui/src/presentation/components/VoiceAIMiniFAB.test.tsx"
+    - "ui/src/presentation/components/RecordingPanel.tsx"
+    - "ui/src/presentation/state/voiceAIStore.ts"
+    - "ui/src/presentation/state/voiceAIStore.test.ts"
+    - "ui/src/infrastructure/stt/ServerWhisperSTT.ts"
+    - "ui/src/infrastructure/stt/ServerWhisperSTT.test.ts"
+    - "ui/src/application/voice/VoiceAISession.ts"
+  exclusions:
+    - "ui/node_modules/**"
+    - "ui/dist/**"
+    - "ui/src/domain/**"
+
+outcomes:
+  - id: release-stops-the-take
+    statement: |
+      Отпускание кнопки голоса гарантированно останавливает take.
+      Локальный press-FSM больше не сбрасывается в `idle` на
+      устаревшем чтении `voiceAIState().tag` (ленч `sessionStarted`),
+      а `onPointerUp` спрашивает оркестратор, а не зеркало.
+      До фикса: `data-press="idle"` при `voiceAIState().tag ===
+      'listening'`, ноль вызовов `stopVoiceAI` после отпускания —
+      микрофон оставался открытым, `MediaRecorder` писал дальше,
+      счётчик секунд тикал после отпускания, текст не появлялся.
+  - id: budgets-outlive-the-relay
+    statement: |
+      `SERVER_ENGINE_SILENCE_SEC` 20 → 60, `DRAIN_MAX_MS` 12_000 →
+      60_000, `FLUSH_WAIT_MAX_MS` 10_000 → 60_000: каждый перекрывает
+      измеренную задержку релея (15.8–17.1 s тёплый прогон, 32.2 s под
+      очередью ретраев) с запасом на один вложенный round-trip.
+  - id: watchdog-stands-down-mid-flush
+    statement: |
+      Watchdog тишины не срабатывает, пока `voiceAIFlushing()` — флаш
+      по отпусканию намеренно держит FSM в `listening` с пустым
+      буфером (это и рисует «распознаю…»), то есть движок отвечает,
+      а не молчит.
+  - id: interim-ticks-cost-one-round-trip
+    statement: |
+      Первый interim-тик возможен не раньше `TICK_MIN_ELAPSED_MS =
+      10_000` от старта take, далее раз в `TICK_MS = 10_000`. Короткая
+      фраза доходит до сервера ровно один раз — по отпусканию, — вместо
+      того чтобы ждать за своим же тиком.
+  - id: no-console-in-changed-layers
+    statement: |
+      `npm run lint:no-console` (правило `no-console: error` над
+      `src/domain` и `src/application`) проходит: все диагностические
+      сообщения идут через `logger.push` / `consoleStore.pushToast`.
+
+obligations:
+  - id: release-test-covers-production-fsm-shape
+    claim: |
+      `VoiceAIMiniFAB.test.tsx` содержит тест, который ставит настоящий
+      handle через `__setVoiceAIHandleForTests`, публикует `listening`
+      через `__publishVoiceAIStateForTests` и проверяет, что
+      `data-press` равен `holding` до отпускания, а после `pointerup`
+      `stop` вызван ровно один раз и `voiceAIPanelArmed()` равен
+      `false`. Без фикса этот тест падает с
+      `expected 'idle' to be 'holding'` — проверено откатом компонента.
+    acceptance:
+      all:
+        - verifier: vitest-run-voiceai-mini-fab
+          result: pass
+  - id: watchdog-bound-is-measured-not-guessed
+    claim: |
+      `voiceAIStore.test.ts` дублирует `SERVER_ENGINE_SILENCE_SEC`
+      литералом и проверяет, что FSM жива через 32 s (худший
+      измеренный round-trip), а умирает после 60 s. Watchdog,
+      который обвиняет движок раньше его собственного ответа,
+      запрещён.
+    acceptance:
+      all:
+        - verifier: vitest-run-voiceai-store
+          result: pass
+  - id: flush-silences-watchdog
+    claim: |
+      `voiceAIStore.test.ts` содержит тест с handle, чей `stop`
+      никогда не резолвится (модель round-trip на 30 s): при
+      `voiceAIFlushing() === true` watchdog не переводит FSM в
+      `errored` даже после 120 s.
+    acceptance:
+      all:
+        - verifier: vitest-run-voiceai-store
+          result: pass
+  - id: tick-gate-mirrored-in-tests
+    claim: |
+      `ServerWhisperSTT.test.ts` дублирует `TICK_MIN_ELAPSED_MS` и
+      `TICK_MS` литералами, и тест interim-тика проверяет, что POST
+      не уходит раньше `TICK_MIN_ELAPSED_MS + 100`. Расхождение
+      константы с тестом обязано быть видно как правка, а не
+      поглощаться.
+    acceptance:
+      all:
+        - verifier: vitest-run-server-whisper-stt
+          result: pass
+  - id: stale-latency-claims-are-gone
+    claim: |
+      Ни один из файлов `ServerWhisperSTT.ts`, `voiceAIStore.ts`,
+      `VoiceAISession.ts`, `RecordingPanel.tsx` не предъявляет
+      старую цифру как текущую. Упоминания «2.6-5.2 s» остались
+      ровно в трёх местах и все три помечены как исторические
+      («the old note claimed», «The previous bound here was 20 s,
+      written against», «was written against») — то есть цифра
+      названа, чтобы объяснить, почему бюджет сдвинули, а не чтобы
+      оправдать текущее поведение. Цифры «5-9 s» в этих файлах не
+      осталось вовсе.
+    acceptance:
+      all:
+        - verifier: text-scan-no-stale-stt-latency-claim
+          result: pass
+  - id: gate-green
+    claim: |
+      `npm run typecheck`, `npm run lint:no-console` и
+      `npm run validate:presets` завершаются exit 0; 140 тестов
+      голосового/STT контура зелёные.
+    acceptance:
+      all:
+        - verifier: pnpm-ui-typecheck
+          result: pass
+        - verifier: pnpm-ui-lint
+          result: pass
+
+risk:
+  declared_triggers:
+    - relay-gets-faster-and-the-60s-budgets-become-a-lie-of-their-own
+    - relay-slows-further-and-60s-stops-covering-the-real-worst-case
+    - someone-lowers-a-budget-back-to-the-old-5-9s-note-out-of-habit
+    - server-side-whisper-tuning-makes-these-numbers-obsolete
+  owner: human:operator
+
+reversal:
+  - signal: user-reports-long-silent-waits-on-every-take
+    action: halt
+  - signal: watchdog-fires-on-a-take-that-was-only-60s-slow
+    action: revert
+
+relations:
+  addresses:
+    - wavecode-server-stt@1
+    - wavecode-voice-live-transcript@1
