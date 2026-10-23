@@ -1,13 +1,17 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { render, cleanup, fireEvent } from '@solidjs/testing-library';
+import { Effect, Stream } from 'effect';
 import { VoiceAIMiniFAB } from './VoiceAIMiniFAB';
 import {
   __resetVoiceAIForTests,
+  __publishVoiceAIStateForTests,
+  __setVoiceAIHandleForTests,
   voiceAIState,
   voiceAIPanelArmed,
 } from '../state/voiceAIStore';
 import { __resetWhistleForTests } from '../state/whistleStore';
 import { resetMicMutexForTests } from '../state/micMutexStore';
+import { initialTranscriptState } from '~/domain/voice/Transcript';
 
 /**
  * VoiceAIMiniFAB render tests.
@@ -34,6 +38,31 @@ afterEach(() => {
   __resetVoiceAIForTests();
   __resetWhistleForTests();
   resetMicMutexForTests();
+});
+
+/**
+ * A stand-in orchestrator handle that records what it was asked to do.
+ * The default test setup leaves `handle === null`, which drives the
+ * `errored` fallback — and every hold test that relies on it was
+ * blind to the production bug below, because `errored` is published
+ * synchronously and therefore never exposes a stale read.
+ */
+const fakeHandle = (calls: { start: number; stop: number }) => ({
+  start: () => Effect.sync(() => { calls.start += 1; }),
+  stop: () => Effect.sync(() => { calls.stop += 1; }),
+  onChunk: () => Effect.void,
+  enterReview: () => Effect.void,
+  sendReview: () => Effect.void,
+  cancelReview: () => Effect.void,
+  dismiss: () => Effect.void,
+  cancelInFlight: () => Effect.void,
+  stream: Stream.empty,
+});
+
+const listeningState = () => ({
+  tag: 'listening' as const,
+  transcript: initialTranscriptState('ru-RU'),
+  continuous: false,
 });
 
 describe('VoiceAIMiniFAB — render', () => {
@@ -219,6 +248,13 @@ describe('VoiceAIMiniFAB — touch must not end a press', () => {
     // The press is still live: it must NOT have been treated as a
     // completed tap-and-release.
     expect(voiceAIPanelArmed()).toBe(false);
+    // Balance the gesture. Without this the 50 ms debounce timer from
+    // the un-released press outlives the test and fires during
+    // whichever suite runs next, against that suite's installed
+    // handle — which is how a neighbouring test once saw a phantom
+    // `startVoiceAI` call. The assertion above already carries the
+    // point of the test.
+    firePointer(btn, 'pointerup', 'touch');
   });
 
   it('still cancels on slide-off for a mouse', () => {
@@ -235,5 +271,98 @@ describe('VoiceAIMiniFAB — touch must not end a press', () => {
     firePointer(btn, 'pointerleave', 'mouse');
     expect(btn.getAttribute('data-press')).toBe('idle');
     expect(voiceAIPanelArmed()).toBe(true);
+  });
+});
+
+/**
+ * Field report (2026-10-23): "I hold the voice button, say a phrase,
+ * let go — the counter keeps ticking and no text ever appears."
+ *
+ * The cause was the press-FSM sync effect. `startVoiceAI` is async and
+ * publishes `arming` on the stream-consumer fiber, so the
+ * `setState('holding')` that STARTS the take re-runs the tracking
+ * effect while `voiceAIState().tag` is still the stale `idle` — and
+ * that effect cleared `holding` straight back to `idle`. From then on
+ * `onPointerUp` returned at its `state() === 'idle'` guard without
+ * ever calling `stopVoiceAI()`, so the take was never flushed: the mic
+ * stayed open, `MediaRecorder` kept writing past the moment the user
+ * let go, `voiceAIElapsedSec` kept incrementing, and nothing was ever
+ * uploaded.
+ *
+ * Every pre-existing hold test missed this because the no-handle
+ * fallback publishes `errored` synchronously, which never leaves a
+ * stale `idle` on the table.
+ */
+describe('VoiceAIMiniFAB — release must stop a production-shaped session', () => {
+  it('holds the press while the session comes up, then stops on release', async () => {
+    const calls = { start: 0, stop: 0 };
+    __setVoiceAIHandleForTests(fakeHandle(calls) as never);
+
+    const { container } = render(() => <VoiceAIMiniFAB lang="ru-RU" />);
+    const btn = container.querySelector<HTMLButtonElement>(
+      '.voice-mini-fab--ai',
+    )!;
+
+    fireEvent.pointerDown(btn);
+    await new Promise<void>((resolve) => setTimeout(resolve, 120));
+    expect(calls.start).toBe(1);
+
+    // The orchestrator now reports a live take — the production shape.
+    __publishVoiceAIStateForTests(listeningState());
+
+    // The press must still read as a press. Before the fix this was
+    // 'idle': the stale-tag read had already undone the hold.
+    expect(btn.getAttribute('data-press')).toBe('holding');
+
+    fireEvent.pointerUp(btn);
+    await new Promise<void>((resolve) => setTimeout(resolve, 50));
+
+    expect(calls.stop).toBe(1);
+    expect(btn.getAttribute('data-press')).toBe('idle');
+    // "Stop", not "open the armed panel".
+    expect(voiceAIPanelArmed()).toBe(false);
+  });
+
+  it('stops from the orchestrator tag alone when the press FSM lost track', async () => {
+    // The press-FSM mirror is best-effort; the orchestrator's tag is
+    // the authority. Even if the two disagree, lifting the finger must
+    // end the take.
+    const calls = { start: 0, stop: 0 };
+    __setVoiceAIHandleForTests(fakeHandle(calls) as never);
+    __publishVoiceAIStateForTests(listeningState());
+
+    const { container } = render(() => <VoiceAIMiniFAB lang="ru-RU" />);
+    const btn = container.querySelector<HTMLButtonElement>(
+      '.voice-mini-fab--ai',
+    )!;
+
+    // Fast tap: the debounce never fires, so no session starts here —
+    // but one is already running from an earlier press.
+    fireEvent.pointerDown(btn);
+    fireEvent.pointerUp(btn);
+    await new Promise<void>((resolve) => setTimeout(resolve, 50));
+
+    expect(calls.stop).toBe(1);
+    expect(voiceAIPanelArmed()).toBe(false);
+  });
+
+  it('releases the press when a take ends on its own', async () => {
+    const calls = { start: 0, stop: 0 };
+    __setVoiceAIHandleForTests(fakeHandle(calls) as never);
+
+    const { container } = render(() => <VoiceAIMiniFAB lang="ru-RU" />);
+    const btn = container.querySelector<HTMLButtonElement>(
+      '.voice-mini-fab--ai',
+    )!;
+
+    fireEvent.pointerDown(btn);
+    await new Promise<void>((resolve) => setTimeout(resolve, 120));
+    __publishVoiceAIStateForTests(listeningState());
+    expect(btn.getAttribute('data-press')).toBe('holding');
+
+    // The 1.3 s silence flush (or the 100 s hard cap) ends the take
+    // while the finger is still down. The FAB must not stay stuck.
+    __publishVoiceAIStateForTests({ tag: 'idle' });
+    expect(btn.getAttribute('data-press')).toBe('idle');
   });
 });
