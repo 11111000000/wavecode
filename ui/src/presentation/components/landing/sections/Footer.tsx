@@ -1,6 +1,6 @@
 import { For, Show, type JSX } from 'solid-js';
 import { WavecodeLogo } from '~/presentation/components/landing/icons';
-import { openTermsBanner } from '~/presentation/components/DisclaimerBanner';
+import { openTerms } from '~/presentation/state/consentGate';
 import { APP_VERSION } from '~/version';
 
 type Link = {
@@ -8,7 +8,7 @@ type Link = {
   readonly href: string;
   readonly external?: boolean;
   readonly route?: boolean;     // true → #/app (SPA-навигация), false → #anchor или ext
-  readonly onClick?: () => void; // no href — opens the floating disclaimer banner
+  readonly onClick?: () => void; // no href — opens the terms gate read-only
 };
 
 const SECTIONS: ReadonlyArray<{ title: string; links: ReadonlyArray<Link> }> = [
@@ -19,7 +19,7 @@ const SECTIONS: ReadonlyArray<{ title: string; links: ReadonlyArray<Link> }> = [
       { label: 'Пресеты',            href: '#snippet' },
       { label: 'Архитектура',        href: '#architecture' },
       { label: 'Quick start',        href: '#start' },
-      { label: 'Условия использования', href: '#terms', onClick: openTermsBanner },
+      { label: 'Условия использования', href: '#terms', onClick: openTerms },
     ],
   },
   {

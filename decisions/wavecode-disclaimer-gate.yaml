@@ -1,0 +1,425 @@
+---
+schema: math-coding/3.3
+id: wavecode-disclaimer-gate
+revision: 1
+state: active
+body_sha: "sha256:8bd1c76912effd5678608080ec51f0f0b250d1222fab6c0c60ed43b18856b48f"
+yaml_sha: "sha256:8bd1c76912effd5678608080ec51f0f0b250d1222fab6c0c60ed43b18856b48f"
+
+axiom_link:
+  - A0
+  - A3
+
+intent: |
+  Смена формы оговорки с «мягкого» неблокирующего баннера на
+  блокирующий гейт согласия.
+
+  `wavecode-disclaimer-banner` (rev 1) заменил модальное окно на
+  маленькую панель в левом нижнем углу — 420px, без backdrop, без
+  scroll-lock, текст за кнопкой «Подробнее». Решение обосновывало
+  это тем, что «правовая оговорка должна быть видимой, но не должна
+  мешать». На практике форма не выполнила собственной цели:
+
+    (а) панель занимает ~3% площади экрана и тонет в интерфейсе —
+        замечено пользователем: «маленький дисклеймер внизу», «не
+        нужно разворачивать этот дисклаймер, он должен сразу быть
+        развёрнутый»;
+    (б) кнопка «Принять» была на два клика глубже текста, то есть
+        согласие требовало намеренного действия, которого не
+        происходит;
+    (в) одновременно с баннером поднимался 5-шаговый onboarding-тур
+        с затемнением — два блокирующих слоя на старте, и ни один не
+        сообщал, что это шлюз к приложению;
+    (г) сам `wavecode-disclaimer-banner` в разделе `counterexample`
+        признавал: неблокирующий баннер, висящий месяцами без
+        раскрытия, НЕ является надёжным акцептом оферты. Решение
+        закрыло это возражение «усилением доказательственной
+        стороны», но не устранило сам факт непрочтения.
+
+  Нужна форма, в которой условия нельзя не прочитать: полноэкранное
+  перекрытие, текст развёрнут с первого кадра, единственный выход —
+  галочка и «Принять». Согласие по-прежнему персистится версией в
+  `localStorage`, поэтому повторного показа для принявшего нет.
+
+commitment: |
+  (1) `DisclaimerGate` — полноэкранный оверлей: `position: fixed;
+      inset: 0`, слой `--z-consent-gate` = 90. Это выше тостов
+      (`--z-toast` = 80) и выше оверлея onboarding-тура
+      (`calc(--z-modal + 10)` = 70): ничто не может всплыть поверх
+      запроса согласия. Токен добавлен в `styles/tokens.css`,
+      чтобы «90» не было магическим числом в CSS.
+  (2) Панель `.disclaimer-gate__panel`: `max-height: 100%` внутри
+      полноэкранного flex-родителя, единственная прокручиваемая
+      часть — `.disclaimer-gate__body`. На 360x640 телефон заголовок,
+      лид и кнопка «Принять» остаются на экране, длинный список
+      разделов прокручивается внутри, а не выталкивает их.
+  (3) Текст РАЗВЁРНУТ с первого кадра. Кнопки «Подробнее» /
+      «Свернуть» нет вообще; `expanded`-сигнал и
+      `.disclaimer-banner--expanded` удалены. Согласие нельзя
+      получить, не прочитав текст хотя бы частично.
+  (4) Пока гейт поднят, приложение под ним НЕ ИНТЕРАКТИВНО.
+      `App.tsx` оборачивает все маршруты в `<div class="app-root"
+      inert={gate.visible()}>`. Обёртка объявлена
+      `display: contents`, поэтому не добавляет собственного бокса и
+      не меняет раскладку маршрутов, — но `inert` это атрибут
+      поддерева DOM, а не свойство бокса, поэтому он выводит всё
+      приложение из порядка табуляции и с пути указателя. Заглушка
+      (собственный scrim) перекрывает всё, что `inert` не покрывает.
+  (5) У гейта в состоянии `pending` НЕТ выхода кроме согласия: нет
+      кнопки закрытия, Esc не закрывает, клик по подложке не
+      закрывает. В read-only режиме (переоткрытие из футера) «×» и
+      Esc есть. Это инверсия старого `DisclaimerModal`, где окно
+      можно было закрыть и уйти без согласия.
+  (6) Согласие версионировано и персистентно — без изменений:
+      `localStorage['wavecodeTermsAccepted']` хранит строку
+      `DISCLAIMER_VERSION` (сейчас `v1`). Версия НЕ поднята этим
+      решением: формулировки не менялись, а бамп re-prompt-нул бы
+      всех, кто уже принял. Любая правка текста обязана идти
+      вместе с бампом версии И с правкой шаблона в юридической базе
+      (`ЮрОтдел`,
+      `1_projects/05_wavecode/04_templates/01_site-disclaimer.md`).
+  (7) Fail-visible сохранён: если запись в `localStorage` бросает
+      исключение (приватный режим, отключённое хранилище), принятие
+      НЕ фиксируется и гейт остаётся поднятым. Тихое «принято»
+      хуже повторного показа.
+  (8) Онбординг-тур не стартует под гейтом: `WelcomeTour` получил
+      проп `blocked`, который `App.tsx` передаёт как
+      `gate.pending()`, а `currentStep()` возвращает `null`, пока он
+      true. Нельзя обучать работе с приложением, к которому ещё не
+      пустили.
+  (9) Семантика доступности: панель — `role="dialog"`,
+      `aria-modal="true"`, `aria-labelledby` на заголовок,
+      `aria-describedby` на лид, `tabIndex={-1}`; фокус переносится
+      на панель при открытии, чтобы Tab не уходил в `inert`-поддерево.
+  (10) Состояние вынесено в `presentation/state/consentGate.ts`
+      (`useConsentGate()`) и передаётся в компонент пропом.
+      Компонент НЕ читает `localStorage` и НЕ знает о маршрутах —
+      поэтому он структурно не может быть «только на `#/app`», как
+      был `DisclaimerModal`.
+  (11) e2e-конфиги (`playwright.config.ts`,
+      `playwright.debug.config.ts`, `playwright.deployed.config.ts`)
+      сеют `wavecodeTermsAccepted` через `storageState`
+      (`tests/e2e/support/consent.ts`), иначе каждый спек
+      наталкивался бы на гейт вместо приложения.
+      `preset-id-hydration.spec.mjs` делает `localStorage.clear()` и
+      `reload()` — то есть storageState там уже не помогает; спек
+      поэтому сохраняет и восстанавливает ключ согласия сразу после
+      очистки. Обходной путь точечный и помечен комментарием: общий
+      `addInitScript`-фикстур на 21 спек не тянем.
+
+counterexample: |
+  Сильнейшее возражение против этого решения: блокирующий гейт на
+  каждом новом устройстве (новый браузер, другой компьютер, после
+  очистки данных сайта) — это ровно тот UX-регресс, ради которого
+  modal из 47acac7 и был заменён на баннер. Пользователь, который
+  закрыл вкладку на середине работы над композицией, теряет доступ к
+  приложению до повторного согласия.
+
+  Ответ, и он здесь честный: этот риск реален, но цена выбора
+  асимметрична. Прежний вариант предлагал пользователю доступ к
+  приложению без единого зафиксированного согласия — то есть
+  оставлял его в ситуации, где доказать акцепт оферты нечем, и при
+  споре о правах на композицию (а это предмет раздела 3 «Ваши
+  материалы») у правообладателя не было бы ни одного артефакта.
+  Мягкий баннер не «устранил регресс», а спрятал юридический риск
+  ценой удобства.
+
+  Второе возражение: «нельзя блокировать инструмент, которым
+  пользуются в потоке». Ответ: блокировка действует ОДИН раз на
+  версию формулировки, а не на каждый вход. `DisclaimerModal`
+  показывался на каждом входе, потому что не сохранял согласие —
+  это и было настоящей проблемой того решения, а не блокировка как
+  таковая. Здесь принятие записывается версией, поэтому второй
+  заход не блокируется никогда.
+
+  Третье возражение: скринридер или клавиатурный пользователь
+  оказывается в модалке без явного «выхода». Ответ: выход есть и он
+  единственный — чекбокс и «Принять»; Esc намеренно не работает в
+  `pending`, потому что иначе гейт перестаёт быть гейтом. Чтобы
+  текст нельзя было пропустить, но и нельзя было застрять без
+  выхода, панель получает фокус и `aria-modal`, а чекбокс — первый
+  интерактивный элемент внутри неё.
+
+antithesis: |
+  Альтернатива (1): вернуть баннер, но раскрытым по умолчанию и
+  по центру экрана. Отклонена: панель без backdrop и без `inert`
+  остаётся dismiss-нулём — клик мимо неё, Esc или перезагрузка
+  уводят пользователя, и согласие снова можно не дать, просто
+  закрыв вкладку. Размер не лечит отсутствие барьера.
+
+  Альтернатива (2): отдельная страница `/terms` и редирект на неё
+  до первого входа в редактор. Отклонена по причине, названной ещё
+  в `wavecode-disclaimer-banner`: роутера такого маршрута нет
+  (`useHashRoute` = landing | app | admin), Caddy отдаёт `index.html`
+  на любой путь, и страница без бэкенда — это ещё один экран SPA с
+  собственным состоянием и своей точкой отказа. Гейт решает ту же
+  задачу в одном компоненте; страница остаётся естественным
+  расширением, когда появится аккаунт или оплата.
+
+  Альтернатива (3): не спрашивать вовсе, оставить текст в футере.
+  Отклонена: это ровно тот вариант, который реализован сейчас и
+  который даёт нулевую доказательственную ценность. Фактически
+  это и есть текущий baseline до изменения, только без баннера.
+
+  Альтернатива (4): спросить при первом нажатии «play», а не на
+  старте. Отклонена: действие пользователя уже началось (он решил
+  играть), прерывать его хуже, чем преградить вход; и вопрос,
+  возникающий после того, как человек что-то сделал, читается как
+  задним числом навязанный.
+
+scope:
+  paths:
+    - "ui/src/presentation/state/consentGate.ts"
+    - "ui/src/presentation/state/consentGate.test.ts"
+    - "ui/src/presentation/components/DisclaimerGate.tsx"
+    - "ui/src/presentation/components/DisclaimerGate.test.tsx"
+    - "ui/src/presentation/components/tour/WelcomeTour.tsx"
+    - "ui/src/presentation/components/tour/WelcomeTour.test.tsx"
+    - "ui/src/presentation/components/landing/sections/Footer.tsx"
+    - "ui/src/App.tsx"
+    - "ui/src/styles/tokens.css"
+    - "ui/src/styles/base.css"
+    - "ui/src/styles/components.css"
+    - "ui/src/styles/landing.css"
+    - "ui/tests/e2e/support/consent.ts"
+    - "ui/tests/e2e/preset-id-hydration.spec.mjs"
+    - "ui/playwright.config.ts"
+    - "ui/playwright.debug.config.ts"
+    - "ui/playwright.deployed.config.ts"
+    - "decisions/wavecode-disclaimer-gate.yaml"
+    - "decisions/wavecode-disclaimer-banner.yaml"
+  exclusions:
+    - "ui/src/domain/**"
+    - "ui/src/infrastructure/**"
+    - "attestations/wavecode-disclaimer-banner-*.json"
+
+outcomes:
+  - id: gate-is-fullscreen-and-modal
+    statement: |
+      Оверлей занимает весь вьюпорт (`inset: 0`, `--z-consent-gate` =
+      90), панель несёт `role="dialog"` и `aria-modal="true"`; тосты
+      (80) и оверлей тура (70) не могут перекрыть запрос согласия.
+  - id: gate-is-expanded-from-first-frame
+    statement: |
+      Текст условий присутствует в DOM сразу при первом рендере,
+      без нажатия «Подробнее»; кнопка `disclaimer-expand` не
+      существует ни в одном состоянии.
+  - id: app-is-inert-behind-the-gate
+    statement: |
+      Пока `gate.visible()`, все маршруты обёрнуты в
+      `.app-root[inert]`; обёртка не добавляет бокса
+      (`display: contents`), поэтому раскладка не меняется.
+  - id: pending-gate-has-no-dismiss
+    statement: |
+      В состоянии `pending` отсутствует кнопка закрытия, Esc не
+      закрывает, клик по подложке и по панели не закрывает.
+  - id: consent-is-versioned-and-persisted
+    statement: |
+      «Принять» пишет `DISCLAIMER_VERSION` в
+      `localStorage['wavecodeTermsAccepted']`; после перезагрузки гейт
+      не показывается; любая другая строка (в т.ч. `v0`) вызывает
+      повторный показ.
+  - id: acceptance-is-fail-visible
+    statement: |
+      Если запись в `localStorage` бросает исключение, гейт
+      остаётся поднятым, а в хранилище пусто — согласие не может
+      быть «принято молча».
+  - id: tour-does-not-start-under-the-gate
+    statement: |
+      Пока согласие не получено, `WelcomeTour` не рендерит ни
+      оверлея, ни подсказки; после принятия тур стартует с первого
+      шага.
+  - id: terms-remain-reachable-after-acceptance
+    statement: |
+      Ссылка «Условия использования» в футере landing открывает тот
+      же оверлей в read-only режиме: текст развёрнут, кнопок
+      «Принять» и чекбокса нет, вместо них «×» (и Esc).
+  - id: legal-wording-unchanged
+    statement: |
+      Формулировки всех четырёх разделов, лида и сноски про
+      Apache-2.0 побайтово совпадают с текстом, действовавшим при
+      `wavecode-disclaimer-banner` rev 1; `DISCLAIMER_VERSION`
+      остаётся `v1`, поэтому ранее принявшие не переспрашиваются.
+
+obligations:
+  - id: gate-is-modal
+    statement: |
+      `DisclaimerGate.test.tsx > blocks the landing route until the
+      terms are accepted`: панель имеет `role="dialog"` и
+      `aria-modal="true"`.
+    acceptance:
+      all:
+        - verifier: vitest-run-disclaimer-gate
+          result: pass
+  - id: gate-is-expanded-by-default
+    statement: |
+      `DisclaimerGate.test.tsx > is expanded from the first frame —
+      nothing to unfold`: `disclaimer-body` есть сразу,
+      `disclaimer-expand` отсутствует, видны оба названных
+      заказчиком правовых блока.
+    acceptance:
+      all:
+        - verifier: vitest-run-disclaimer-gate
+          result: pass
+  - id: pending-has-no-dismiss
+    statement: |
+      `DisclaimerGate.test.tsx > has no dismiss path while pending —
+      no close, no Esc, no backdrop click` и `> closes the read-only
+      re-open on Esc but keeps a pending gate up`.
+    acceptance:
+      all:
+        - verifier: vitest-run-disclaimer-gate
+          result: pass
+  - id: consent-gate-ordering
+    statement: |
+      `DisclaimerGate.test.tsx > keeps «Принять» disabled until
+      consent is checked`: до отметки чекбокса кнопка «Принять»
+      имеет `disabled === true`.
+    acceptance:
+      all:
+        - verifier: vitest-run-disclaimer-gate
+          result: pass
+  - id: persistence-and-version-reprompt
+    statement: |
+      `DisclaimerGate.test.tsx > persists the accepted version and
+      hides on remount`, `> re-prompts when a stale version is
+      stored`.
+    acceptance:
+      all:
+        - verifier: vitest-run-disclaimer-gate
+          result: pass
+  - id: acceptance-is-fail-visible
+    statement: |
+      `DisclaimerGate.test.tsx > stays up when the acceptance cannot
+      be written (fail-visible)` и `consentGate.test.ts > stays
+      pending when the write throws`.
+    acceptance:
+      all:
+        - verifier: vitest-run-disclaimer-gate
+          result: pass
+  - id: terms-remain-reachable-after-acceptance
+    statement: |
+      `DisclaimerGate.test.tsx > re-opens read-only from the footer
+      event after acceptance`: после принятия гейт открывается
+      событием `wavecode:open-terms` с `data-mode="read-only"`, без
+      кнопки «Принять» и чекбокса, с кнопкой закрытия.
+    acceptance:
+      all:
+        - verifier: vitest-run-disclaimer-gate
+          result: pass
+  - id: tour-is-gated-behind-consent
+    statement: |
+      `WelcomeTour.test.tsx > renders nothing while the legal consent
+      gate is up`: при `blocked` оверлея нет, при `blocked={false}`
+      тур стартует.
+    acceptance:
+      all:
+        - verifier: vitest-run-welcome-tour
+          result: pass
+  - id: app-root-inert-wiring
+    statement: |
+      `App.tsx` содержит `<div class="app-root" inert={gate.visible()
+      ? true : undefined}>` и `<WelcomeTour blocked={gate.pending()}
+      />`; `base.css` объявляет `.app-root { display: contents }`;
+      `tokens.css` объявляет `--z-consent-gate: 90`.
+    acceptance:
+      all:
+        - verifier: text-scan-gate-wiring
+          result: pass
+  - id: e2e-config-seeds-acceptance
+    statement: |
+      Все три playwright-конфига задают `storageState` из
+      `tests/e2e/support/consent.ts`, а
+      `preset-id-hydration.spec.mjs` после `localStorage.clear()`
+      восстанавливает `wavecodeTermsAccepted` перед `reload()`.
+    acceptance:
+      all:
+        - verifier: text-scan-playwright-consent-seed
+          result: pass
+    acceptance:
+      all:
+        - verifier: text-scan-playwright-consent-seed
+          result: pass
+  - id: legal-wording-identical-to-rev-1
+    statement: |
+      `git diff` текста разделов 1–4, лида и сноски между
+      `wavecode-disclaimer-banner` rev 1 и этим решением пуст по
+      содержимому (совпадает только разметка); `DISCLAIMER_VERSION`
+      равен `v1` в обоих.
+    acceptance:
+      all:
+        - verifier: text-diff-legal-prose
+          result: pass
+  - id: wavecode-disclaimer-gate-kernel-validates
+    statement: |
+      `mathc validate decisions/wavecode-disclaimer-gate.yaml`
+      завершается exit 0 без `MC-*` reject-диагностик.
+    acceptance:
+      all:
+        - verifier: "mathc validate"
+          result: pass
+  - id: superseded-decision-is-marked
+    statement: |
+      `decisions/wavecode-disclaimer-banner.yaml` имеет
+      `state: superseded` и `relations.superseded_by:
+      [wavecode-disclaimer-gate@1]`.
+    acceptance:
+      all:
+        - verifier: text-scan-supersede-link
+          result: pass
+  - id: precommit-gate-green
+    statement: |
+      `cd ui && npm run typecheck && npm run lint:no-console &&
+      npm run validate:presets` завершается exit 0; `npx vitest run`
+      падает только на пред-существующих флейках
+      (`micStore.test.ts > starts in idle phase`,
+      `parser.test.ts > perf budget`), которые падают и на master.
+    acceptance:
+      all:
+        - verifier: pnpm-ui-test-precommit
+          result: pass
+
+assumptions:
+  - id: localstorage-available
+    state: assumed
+    statement: |
+      `localStorage` доступен в браузере. В приватном режиме запись
+      бросает исключение — согласие тогда не фиксируется и гейт
+      покажется снова; это осознанный fail-visible (тихое согласие
+      хуже его отсутствия).
+    owner: human:operator
+  - id: no-backend
+    state: proven
+    statement: |
+      У wavecode нет бэкенда и аккаунтов, поэтому серверная фиксация
+      согласия невозможна, а `localStorage` — единственный носитель.
+      Следствие для доказывания: артефакт согласия существует только
+      на стороне пользователя и может быть удалён им же — гейт
+      фиксирует факт акцепта, а не защищает его от уничтожения.
+    owner: human:operator
+
+risk:
+  declared_triggers:
+    - gate-blocks-a-returning-user-whose-localstorage-was-cleared-and-they-do-not-understand-why
+    - gate-is-the-first-paint-and-reads-as-an-app-crash-on-a-fresh-device
+    - legal-text-is-changed-without-a-version-bump-so-nobody-is-re-prompts
+    - kb-template-and-gate-text-diverge-because-one-was-edited-without-the-other
+    - localstorage-write-throws-in-private-mode-and-the-gate-never-goes-away
+    - a-future-route-is-mounted-outside-app-root-and-bypasses-inert
+  owner: human:operator
+
+reversal:
+  - signal: gate-blocks-audio-workflow-and-users-report-it-as-an-outage
+    action: review
+  - signal: legal-text-is-changed-without-a-version-bump
+    action: halt
+  - signal: kb-template-and-gate-text-diverge
+    action: rework
+  - signal: returning-users-are-locked-out-by-storage-clear-without-recognising-the-gate
+    action: rework
+
+relations:
+  supersedes:
+    - wavecode-disclaimer-banner@1
+  refines:
+    - wavecode-welcome-tour@1

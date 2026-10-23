@@ -53,6 +53,17 @@ body {
   isolation: isolate;
 }
 
+/* App.tsx wraps every route in this element purely to carry the `inert`
+   attribute while the legal consent gate is up
+   (decisions/wavecode-disclaimer-gate.yaml). `display: contents` gives it
+   no box of its own, so the routes keep laying out exactly as they did
+   as direct children of #root — but `inert` is a DOM-subtree attribute,
+   not a box property, so it still takes the whole app out of the tab
+   order and off the pointer path. */
+.app-root {
+  display: contents;
+}
+
 /* ── SELECTION ───────────────────────────────────────────── */
 ::selection {
   background: var(--primary);

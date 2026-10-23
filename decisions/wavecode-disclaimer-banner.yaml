@@ -2,9 +2,9 @@
 schema: math-coding/3.3
 id: wavecode-disclaimer-banner
 revision: 1
-state: active
-body_sha: "sha256:0000000000000000000000000000000000000000000000000000000000000000"
-yaml_sha: "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+state: superseded
+body_sha: "sha256:a8b937d5169885cdf7357668b132156f982646aa636256f15cfaf838d4244dd0"
+yaml_sha: "sha256:a8b937d5169885cdf7357668b132156f982646aa636256f15cfaf838d4244dd0"
 
 axiom_link:
   - A0
@@ -308,3 +308,5 @@ reversal:
 relations:
   addresses:
     - wavecode-url-sharing@1
+  superseded_by:
+    - wavecode-disclaimer-gate@1
