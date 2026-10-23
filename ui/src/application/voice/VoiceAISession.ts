@@ -65,14 +65,22 @@ import { LLMClient, AudioEngine } from '~/domain/services';
 import type { MicBusyError } from '~/domain/audio/MicChannel';
 
 /**
- * Ceiling on how long `handle.stop` waits for the STT stream to
- * drain after it asks the engine to flush. The happy path is one
- * server round trip — 2.6-5.2 s measured on angara-1 with
- * `ggml-base-q5_1` (`decisions/wavecode-server-stt`) — so this is
- * roughly 2× the observed worst case. It exists so a wedged engine
- * or a stalled network cannot pin the FAB in `holding` forever.
+ * Ceiling on how long `handle.stop` waits for the STT stream to drain
+ * after it asks the engine to flush. The happy path is one relay round
+ * trip, and on angara-1 that is not the 2.6-5.2 s the old note claimed:
+ * re-measured 2026-10-23 against `ggml-base-q5_1` on 4 vCPU QEMU, a 1 s
+ * clip took 17.1 s, a 3 s clip 15.8-16.6 s (whisper.cpp encodes a fixed
+ * 30 s window, so the floor does not move with clip length) and a
+ * phone-recorded take took 32.2 s.
+ *
+ * At the old 12 s the drain timed out on every take, `parkAfterStreamEnd`
+ * fired while the transcript was still in flight, and the words were
+ * discarded — the same "recogniser is broken" report for a recogniser
+ * that was merely slow. 60 s covers the measured worst case plus the
+ * queueing a flush can hit behind another request in the relay's single
+ * slot, and still bounds a genuinely wedged engine.
  */
-const DRAIN_MAX_MS = 12_000;
+const DRAIN_MAX_MS = 60_000;
 
 /** User-facing session options, set at start-time. */
 export type VoiceSessionInput = {
@@ -483,7 +491,7 @@ export const createVoiceAISession = (
           yield* deps.stt.stop();
           const fiber = yield* Ref.get(subscriberRef);
           if (fiber !== null) {
-            // The drain is one server round trip (2.6-5.2 s measured).
+            // The drain is one relay round trip (~16-32 s measured).
             // `DRAIN_MAX_MS` is a ceiling for the pathological case
             // (engine wedged, network stalled) — past it we fall
             // through to the sink below rather than pinning the FAB.

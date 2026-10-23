@@ -140,7 +140,8 @@ export const [voiceAIRmsLevel, setVoiceAIRmsLevel] = createSignal<number | null>
  *
  * Web Speech streams partials, so the user always sees words while
  * the mic is hot. The server relay cannot: it answers once, after
- * the whole clip is uploaded (5-9 s). A bare "записываю" with no
+ * the whole clip is uploaded (~16 s, see `SERVER_ENGINE_SILENCE_SEC`).
+ * A bare "записываю" with no
  * counter reads as a hang, so the panel shows this instead of
  * pretending there is live text.
  */
@@ -151,8 +152,8 @@ export const [voiceAIElapsedSec, setVoiceAIElapsedSec] = createSignal<number>(0)
  * landed".
  *
  * `stopVoiceAI` tears the meter and the elapsed counter down
- * immediately, but the engine then spends one server round trip
- * (2.6-5.2 s measured) flushing the take. Without this flag the panel
+ * immediately, but the engine then spends one relay round trip
+ * (~16-32 s measured) flushing the take. Without this flag the panel
  * would sit on a frozen «записываю… 3 с» for those seconds — which
  * reads as a hang, and is exactly the "recording doesn't start /
  * nothing happens" impression this change set exists to remove.
@@ -170,15 +171,21 @@ let elapsedTimer: number | null = null;
 const WEB_ENGINE_SILENCE_SEC = 4;
 
 /**
- * Our whisper relay cannot answer faster than the engine's own
- * cadence: `TICK_MS` (2.5 s) of audio has to accumulate before the
- * first upload, and whisper's encode window is a fixed 30 s
- * regardless of clip length, so 2.6-5.2 s is the floor and 9 s is
- * the documented ceiling under host load. Add the flush wait and
- * margin. Anything below this bound fires on healthy takes, which is
- * strictly worse than waiting.
+ * Our whisper relay cannot answer faster than its own encode: measured
+ * on the host (2026-10-23, `ggml-base-q5_1` on 4 vCPU QEMU) a 1 s clip
+ * took 17.1 s and a 3 s clip 15.8-16.6 s, because whisper.cpp encodes a
+ * fixed 30 s window whatever the clip length. A phone-recorded take ran
+ * 32.2 s. The previous bound here was 20 s, written against a "2.6-5.2 s
+ * measured" note that no longer describes this host — so the watchdog
+ * fired on nearly every healthy take, flipped the FSM to `errored`, and
+ * threw away the transcript that was still in flight. A slow recogniser
+ * was being reported as a dead one.
+ *
+ * 60 s leaves room for two round trips (a flush can queue behind
+ * another request in the relay's single slot) while still catching an
+ * engine that is genuinely wedged. See `decisions/wavecode-server-stt`.
  */
-const SERVER_ENGINE_SILENCE_SEC = 20;
+const SERVER_ENGINE_SILENCE_SEC = 60;
 
 /** RMS poll cadence. Matches `ServerWhisperSTT.METER_POLL_MS` so the
  *  bar reflects whatever the STT meter observed within ~100 ms —
@@ -248,20 +255,26 @@ const startElapsedTimer = (): void => {
       // is on.
       //
       // The threshold is per-engine, and the difference is not
-      // cosmetic. On the server relay the FIRST interim cannot arrive
-      // sooner than `ServerWhisperSTT.TICK_MS` (2.5 s of buffered
-      // audio) plus one whisper round trip — 2.6-5.2 s measured, 5-9 s
-      // under host load (`decisions/wavecode-server-stt`). So the first
-      // chunk lands at roughly 5.1-7.7 s, worst case above 11 s. A
-      // flat 4 s threshold therefore fired on EVERY take, before any
-      // text could possibly exist, and replaced a working panel with
-      // "Не удалось получить текст от движка распознавания" — a
-      // false accusation against a recogniser that was fine and on
-      // its way.
+      // cosmetic. On the server relay the first chunk cannot arrive
+      // before one whisper round trip completes — 15.8-17.1 s measured
+      // warm on 2026-10-23, 32.2 s for a phone-recorded take under a
+      // queued retry storm (`decisions/wavecode-server-stt`); the
+      // interim tick that used to fire at 2.5 s only added to that
+      // wait rather than shortening it. A flat 4 s threshold
+      // therefore fired on EVERY take, before any text could possibly
+      // exist, and replaced a working panel with "Не удалось получить
+      // текст от движка распознавания" — a false accusation against a
+      // recogniser that was fine and on its way.
       const elapsed = voiceAIElapsedSec();
       const t = voiceAITranscript();
       if (
         voiceAIState().tag === 'listening'
+        // A release-flush keeps the FSM in `listening` with an empty
+        // buffer BY DESIGN — that is what «распознаю…» renders. The
+        // engine is not silent then, it is answering, so the watchdog
+        // must not accuse it. Without this a 32 s round trip tripped
+        // its own error path.
+        && !voiceAIFlushing()
         && elapsed >= silenceWatchdogSec()
         && t.interim === ''
         && t.final === ''

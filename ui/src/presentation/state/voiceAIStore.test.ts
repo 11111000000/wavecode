@@ -1,9 +1,10 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { Effect, Ref } from 'effect';
+import { Effect, Ref, Stream } from 'effect';
 import {
   voiceAIState,
   voiceAITranscript,
   voiceAIError,
+  voiceAIFlushing,
   voiceAISupported,
   startVoiceAI,
   stopVoiceAI,
@@ -11,6 +12,7 @@ import {
   enterVoiceAIReview,
   sendVoiceAIReview,
   cancelVoiceAIReview,
+  dismissVoiceAI,
   isVoiceAIInReview,
   __setVoiceAIHandleForTests,
   __publishVoiceAIStateForTests,
@@ -357,12 +359,24 @@ describe('voiceAIStore — reducer-driven FSM', () => {
 });
 
 describe('voiceAIStore — silence watchdog is engine-aware', () => {
+  /**
+   * Mirror `SERVER_ENGINE_SILENCE_SEC` in `voiceAIStore.ts`. Hard-coded
+   * on purpose: the number is the contract, so a change to it must show
+   * up here as a deliberate edit rather than be absorbed.
+   *
+   * Re-measured on 2026-10-23 against `ggml-base-q5_1` on 4 vCPU QEMU:
+   * 1 s clip → 17.1 s, 3 s clip → 15.8-16.6 s, phone-recorded take →
+   * 32.2 s. The bound is 60 s so a slow-but-healthy relay is never
+   * accused of being dead.
+   */
+  const SERVER_ENGINE_SILENCE_SEC = 60;
+
   it('does not accuse a healthy server engine before it could possibly answer', async () => {
-    // The field bug: a flat 4 s bound. Our whisper relay cannot answer
-    // faster than TICK_MS (2.5 s of buffered audio) plus one round trip
-    // (2.6-5.2 s measured, 5-9 s under load), so the watchdog fired on
-    // every single take — before any text could exist — and showed
-    // "Не удалось получить текст от движка распознавания".
+    // The field bug: a flat 4 s bound, and then a 20 s one. Our relay
+    // cannot answer faster than one encode round trip (~16 s warm,
+    // 32.2 s observed), so the watchdog fired while the transcript was
+    // still in flight, showed "Не удалось получить текст от движка
+    // распознавания", and threw the words away.
     vi.useFakeTimers();
     try {
       vi.stubGlobal('MediaRecorder', class {
@@ -376,17 +390,80 @@ describe('voiceAIStore — silence watchdog is engine-aware', () => {
       await Effect.runPromise(startVoiceAI({ mode: 'continuous', lang: 'ru-RU' }));
       expect(voiceAIState().tag).toBe('listening');
 
-      // 5 s in — whisper is mid-request, not wedged.
-      await vi.advanceTimersByTimeAsync(5_000);
+      // The slowest measured round trip (32.2 s) — whisper is
+      // mid-request, not wedged.
+      await vi.advanceTimersByTimeAsync(32_000);
       expect(voiceAIState().tag).toBe('listening');
 
       // Past the engine-specific bound: a real hang is still caught,
       // otherwise the watchdog is just dead code.
-      await vi.advanceTimersByTimeAsync(16_000);
+      await vi.advanceTimersByTimeAsync(SERVER_ENGINE_SILENCE_SEC * 1_000);
       expect(voiceAIState().tag).toBe('errored');
     } finally {
       vi.useRealTimers();
       await Effect.runPromise(stopVoiceAI());
+    }
+  });
+
+  it('does not fire while a release-flush is in flight', async () => {
+    // A flush deliberately keeps the FSM in `listening` with an empty
+    // buffer — that is what «распознаю…» renders. The engine is
+    // answering, not silent, so the watchdog must keep its mouth shut
+    // for the whole round trip however long it takes.
+    //
+    // `installFake`'s `stop` resolves instantly and parks the FSM at
+    // `idle`, which cannot reproduce the state. Use a handle whose
+    // `stop` never settles instead — that is what a 30 s relay round
+    // trip actually looks like from here.
+    const listening: VoiceSessionState = {
+      tag: 'listening',
+      transcript: initialTranscriptState('ru-RU'),
+      continuous: false,
+    };
+    const stateRef = Ref.unsafeMake<VoiceSessionState>(initialVoiceSession());
+    __setVoiceAIHandleForTests({
+      stateRef,
+      start: () => Effect.sync(() => {
+        Effect.runSync(Ref.set(stateRef, listening));
+        __publishVoiceAIStateForTests(listening);
+      }),
+      stop: () => Effect.never,
+      onChunk: () => Effect.void,
+      cancelInFlight: () => Effect.void,
+      enterReview: () => Effect.void,
+      sendReview: () => Effect.void,
+      cancelReview: () => Effect.void,
+      dismiss: () => Effect.void,
+      stream: Stream.empty,
+    } as unknown as VoiceSessionHandle);
+
+    vi.useFakeTimers();
+    try {
+      vi.stubGlobal('MediaRecorder', class {
+        static isTypeSupported(): boolean { return true; }
+      });
+      Object.defineProperty(globalThis.navigator, 'mediaDevices', {
+        value: { getUserMedia: () => Promise.resolve({}) },
+        configurable: true,
+      });
+      await Effect.runPromise(startVoiceAI({ mode: 'continuous', lang: 'ru-RU' }));
+      expect(voiceAIState().tag).toBe('listening');
+
+      // Finger off the button → flushing. Never awaited: the flush
+      // itself is what we are holding open.
+      void Effect.runPromise(stopVoiceAI());
+      await vi.advanceTimersByTimeAsync(0);
+      expect(voiceAIFlushing()).toBe(true);
+
+      // Well past the watchdog bound — still not an error, because the
+      // engine is busy rather than silent.
+      await vi.advanceTimersByTimeAsync(SERVER_ENGINE_SILENCE_SEC * 2_000);
+      expect(voiceAIFlushing()).toBe(true);
+      expect(voiceAIState().tag).not.toBe('errored');
+    } finally {
+      vi.useRealTimers();
+      __setVoiceAIHandleForTests(null);
+      await Effect.runPromise(dismissVoiceAI());
     }
   });
 });

@@ -44,8 +44,8 @@ import { consoleStore } from './consoleStore';
  *                         running yet. Pressing ●REC starts it.
  *   - `voice-ai`         — an active session. Shows the live
  *                         transcript OR the «записываю… N с»
- *                         counter (server STT has 5-9 s before the
- *                         first interim lands; see
+ *                         counter (server STT needs ~16 s before
+ *                         the first interim lands; see
  *                         `decisions/wavecode-voice-live-transcript`).
  *                         On the server path a live RMS bar makes
  *                         the mic activity visible.
@@ -252,8 +252,8 @@ const VoiceAIArmedBody = (): JSX.Element => {
 /**
  * Live body — the listening/transcribing/requesting/applying/errored
  * states. Shows interim text when STT has it, falls back to the
- * «записываю… N с» counter on silence (server STT can wait 5-9 s
- * for the first interim — see `decisions/wavecode-voice-live-transcript`).
+ * «записываю… N с» counter on silence (server STT needs ~16 s for
+ * the first interim — see `decisions/wavecode-voice-live-transcript`).
  *
  * The RMS meter is rendered ONLY when `voiceAIRmsLevel()` is non-null,
  * which is the case when our code owns the mic (server path). On the
