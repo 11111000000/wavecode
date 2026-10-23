@@ -12,9 +12,9 @@
  * iOS Safari and Firefox, where `window.SpeechRecognition` simply
  * does not exist — those browsers had no voice input at all before
  * this file. ServerWhisper is the *fallback*, not a replacement:
- * each round-trip is 5-9 s measured on the 4-vCPU host (encode is a
- * fixed 30 s window, so the cost barely moves with clip length) and
- * it needs no Google account on the device.
+ * each round-trip measured 15.8-17.1 s on the 4-vCPU QEMU host on
+ * 2026-10-23 (encode is a fixed 30 s window, so the cost barely moves
+ * with clip length) and it needs no Google account on the device.
  *
  * Two upload cadences
  * -------------------
@@ -140,17 +140,41 @@ const SPEECH_RMS_THRESHOLD = 0.02;
 const SILENCE_FLUSH_MS = 1300;
 
 /**
- * Incremental upload cadence. 2.5 s is the smallest window where a
- * tick can be useful on the server path: response time is 5-9 s
- * (`decisions/wavecode-server-stt`), so the next tick has either
- * completed or been skipped (server single-flight) before this one
- * fires.
+ * Incremental upload cadence, and the floor before the first tick.
+ *
+ * Both numbers are set by the relay's latency, not by taste. Measured
+ * on the host (2026-10-23, `ggml-base-q5_1` on 4 vCPU QEMU, CPU-only):
+ * a 1 s clip took 17.1 s end to end, a 3 s clip 15.8–16.6 s, and a
+ * take recorded from a phone took 32.2 s. whisper.cpp encodes a
+ * *fixed* 30 s window regardless of clip length, so the floor is
+ * flat and the cost barely moves with how much you said.
+ *
+ * The old 2.5 s `TICK_MS` was written against "2.6-5.2 s measured"
+ * and is now actively harmful: a tick fired 2.5 s into every take,
+ * occupied the server's single slot for ~16 s, and then blocked the
+ * release-flush behind `FLUSH_WAIT_MAX_MS`. The take therefore paid
+ * for two round trips to deliver one phrase, or lost the flush
+ * entirely. Since one round trip cannot finish inside the span a
+ * user holds a button, interim streaming buys nothing on this relay
+ * — so the tick waits until the take is long enough that the user is
+ * demonstrably still talking and can afford to wait.
  */
-const TICK_MS = 2_500;
+const TICK_MIN_ELAPSED_MS = 10_000;
 
-/** Hard cap on one utterance. The server rejects clips longer than
- *  120 s with 400; we stop at 100 s and start a fresh clip on the
- *  next utterance rather than failing the request. */
+/** Cadence between interim ticks once the first one is due. */
+const TICK_MS = 10_000;
+
+/**
+ * Hard cap on one utterance. The server rejects clips longer than
+ * 120 s with 400; we stop at 100 s and start a fresh clip on the
+ * next utterance rather than failing the request.
+ *
+ * Note the asymmetry this creates against `SUBPROCESS_TIMEOUT` on the
+ * relay (120 s + 30 s): at 100 s of accumulated audio plus a 16 s
+ * encode, the last flush can outrun the relay's own ceiling. The cap
+ * is kept for the whisper hallucination budget, not as a latency
+ * guarantee — see `decisions/wavecode-server-stt`.
+ */
 const MAX_UTTERANCE_MS = 100_000;
 
 /** RMS polling cadence — 10 Hz is plenty for a boundary test and
@@ -163,12 +187,22 @@ const METER_POLL_MS = 100;
  *  killed mid-utterance loses everything. */
 const RECORDER_TIMESLICE_MS = 1000;
 
-/** Hard ceiling on how long the silence flush will wait for an
- *  in-flight tick before surfacing the (silent)primary error. 10 s
- *  covers two server round-trips' worth of patience; past that the
- *  server is so stuck the user is better off with an error than
- *  with another silent panel. */
-const FLUSH_WAIT_MAX_MS = 10_000;
+/**
+ * Hard ceiling on how long the silence flush will wait for an
+ * in-flight upload before surfacing the failure.
+ *
+ * This must outlast a *whole* relay round trip, because that is
+ * exactly what it is waiting for. Measured 15.8-17.1 s warm and 32.2 s
+ * under a queued retry storm; the previous 10 s could not, so every
+ * take that happened to have an interim tick in flight was reported
+ * as "Сервер распознавания не ответил" and the audio was discarded
+ * — a recogniser that was merely slow was reported as a recogniser
+ * that was broken.
+ *
+ * Two round trips plus margin: a flush that arrives while another
+ * request is queued behind the slot semaphore pays for both.
+ */
+const FLUSH_WAIT_MAX_MS = 60_000;
 
 const ANALYSER_FFT_SIZE = 1024;
 
@@ -857,7 +891,7 @@ const makeService = (
               // measured: 3 s of zeroes → "Редактор субтитров
               // А. Синцевская"), and an invented instruction routed
               // to the LLM edits the user's score. An empty clip is
-              // simply not worth a 5-9 s round-trip either.
+              // simply not worth a ~16 s round-trip either.
               if (sawSpeech && now - lastVoiceAtMs >= SILENCE_FLUSH_MS) {
                 void flush('silence');
                 return;
@@ -869,10 +903,20 @@ const makeService = (
               // the caller asked for; `inFlight` enforces the
               // single-flight rule from `decisions/
               // wavecode-voice-live-transcript`.
+              //
+              // `TICK_MIN_ELAPSED_MS` is what keeps this from eating
+              // the take. A tick fired 2.5 s in occupies the relay's
+              // single slot for ~16 s, and the release-flush then has
+              // to queue behind it — so a short phrase paid for two
+              // round trips to deliver one sentence, or lost the
+              // flush outright. A take has to be long enough that the
+              // user is demonstrably still talking before we spend a
+              // round trip on an interim.
               if (
                 interimWanted
                 && !inFlight
                 && sawSpeech
+                && now - startedAtMs >= TICK_MIN_ELAPSED_MS
                 && now - lastTickStartMs >= TICK_MS
               ) {
                 lastTickStartMs = now;

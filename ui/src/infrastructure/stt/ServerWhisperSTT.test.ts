@@ -388,8 +388,8 @@ describe('ServerWhisperSTT — recording path (stubbed browser)', () => {
   it('stop() flushes the take to the server instead of discarding it', async () => {
     // Releasing the button is the primary gesture of this feature —
     // "hold, say a phrase, let go". It used to be a hard cancel, so
-    // any speech shorter than one `TICK_MS` (2.5 s) tick was thrown
-    // away without ever leaving the tab.
+    // any speech shorter than one tick window was thrown away without
+    // ever leaving the tab.
     const fetchMock = vi.fn(async () => transcriptionResponse('сказанная фраза'));
     vi.stubGlobal('fetch', fetchMock);
     const fiber = await forkStream(layer);
@@ -444,8 +444,8 @@ describe('ServerWhisperSTT — recording path (stubbed browser)', () => {
  * Live-transcript path (`decisions/wavecode-voice-live-transcript`):
  * incremental interim uploads before silence, single-flight, and the
  * empty-speech guard for `sawSpeech`. Each test is wired to the
- * meter's `TICK_MS = 2_500` boundary directly so the cadence is
- * obvious from the timeline, not from magic numbers.
+ * meter's `TICK_MIN_ELAPSED_MS` / `TICK_MS` boundaries directly so the
+ * cadence is obvious from the timeline, not from magic numbers.
  */
 describe('ServerWhisperSTT — live transcript (interim uploads)', () => {
   const layer = makeServerWhisperSTT({
@@ -453,10 +453,11 @@ describe('ServerWhisperSTT — live transcript (interim uploads)', () => {
     apiKey: 'sk-test',
   });
 
-  // Mirror the constant in `ServerWhisperSTT.ts`. Hard-coding here on
+  // Mirror the constants in `ServerWhisperSTT.ts`. Hard-coding here on
   // purpose: a drift in the source number is exactly what the test
   // contract should make obvious, not silently absorb.
-  const TICK_MS = 2_500;
+  const TICK_MIN_ELAPSED_MS = 10_000;
+  const TICK_MS = 10_000;
 
   beforeEach(() => {
     installBrowserFakes();
@@ -477,10 +478,11 @@ describe('ServerWhisperSTT — live transcript (interim uploads)', () => {
     await vi.advanceTimersByTimeAsync(0);
     expect(fakeAnalyser).not.toBeNull();
     fakeAnalyser!.rms = 0.4;
-    // 100 ms past TICK_MS: the first tick fires upload(). Stop
-    // BEFORE silence-flush can fire, so the only POST is the
-    // interim one.
-    await vi.advanceTimersByTimeAsync(TICK_MS + 100);
+    // The first tick is gated on elapsed-since-start, so it cannot
+    // fire before TICK_MIN_ELAPSED_MS no matter how long the take
+    // has been speaking. Stop BEFORE silence-flush can fire, so
+    // the only POST is the interim one.
+    await vi.advanceTimersByTimeAsync(TICK_MIN_ELAPSED_MS + 100);
     expect(fetchMock).toHaveBeenCalledTimes(1);
     await stopEngine(layer);
     await interrupt(fiber);
@@ -515,7 +517,7 @@ describe('ServerWhisperSTT — live transcript (interim uploads)', () => {
     fakeAnalyser!.rms = 0.4;
 
     // Drive past the first tick: POST#1 leaves.
-    await vi.advanceTimersByTimeAsync(TICK_MS + 100);
+    await vi.advanceTimersByTimeAsync(TICK_MIN_ELAPSED_MS + 100);
     expect(fetchMock).toHaveBeenCalledTimes(1);
 
     // Drive past the second tick while POST#1 is still hanging
@@ -555,8 +557,8 @@ describe('ServerWhisperSTT — live transcript (interim uploads)', () => {
     expect(fakeAnalyser).not.toBeNull();
     fakeAnalyser!.rms = 0.4;
 
-    // Past TICK_MS → POST#1 fires.
-    await vi.advanceTimersByTimeAsync(TICK_MS + 100);
+    // Past the first-tick gate → POST#1 fires.
+    await vi.advanceTimersByTimeAsync(TICK_MIN_ELAPSED_MS + 100);
     expect(fetchMock).toHaveBeenCalledTimes(1);
     if (deferred.resolve !== undefined) {
       deferred.resolve(transcriptionResponse('один'));
