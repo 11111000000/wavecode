@@ -11,15 +11,15 @@
  *   - The real recording path, with `getUserMedia`, `MediaRecorder`,
  *     `AudioContext` and `fetch` stubbed on `globalThis`: start →
  *     speak → 1.3 s of silence → one POST → one final chunk. That
- *     last assertion is the one that matters — the upload is
- *     triggered by the engine (see the header comment in
- *     `ServerWhisperSTT.ts`: a chunk emitted from `stop()` would be
- *     dropped by `VoiceAISession.stop()`, which interrupts the
- *     consumer first).
+ *     last assertion is the one that matters — the upload has to
+ *     arrive as a `final`, because that is the only kind the
+ *     orchestrator promotes into the review buffer.
+ *   - `stop()` (the release-the-button gesture) flushes the take
+ *     rather than cancelling it, so a phrase shorter than one
+ *     interim tick still reaches the server.
  *   - HTTP failure mapping: 503 / 504 / 413 / 400 all surface as
  *     `SttUnsupportedError`, never as a raw exception, so the
  *     orchestrator's retry policy can classify them.
- *   - `stop()` is a cancel: it releases the mic and uploads nothing.
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
@@ -158,6 +158,29 @@ const collectStream = (
     return yield* Stream.runCollect(stream);
   }).pipe(Effect.provide(layer));
 
+/** Start consuming in the background while exposing the chunks that
+ *  landed, so a test can assert on what the orchestrator would have
+ *  seen. `forkStream` hides the collection because most tests only
+ *  care about "did it upload". */
+const forkCollecting = (
+  layer: Layer.Layer<STTEngine, never, never>,
+): Promise<{
+  readonly chunks: TranscriptChunk[];
+  readonly fiber: Fiber.RuntimeFiber<void, SttUnsupportedError>;
+}> => {
+  const chunks: TranscriptChunk[] = [];
+  const fiber = Effect.runFork(
+    Effect.gen(function* () {
+      const svc = yield* STTEngine;
+      const stream = yield* svc.start({ lang: 'ru-RU', interim: true });
+      return yield* Stream.runForEach(stream, (chunk: TranscriptChunk) =>
+        Effect.sync(() => { chunks.push(chunk); }),
+      );
+    }).pipe(Effect.provide(layer)),
+  );
+  return Promise.resolve({ chunks, fiber });
+};
+
 /** Start collecting in the background — for the paths where the
  *  stream never ends on its own (a cancelled session) and the test
  *  has to interrupt it the way `VoiceAISession.stop()` does. */
@@ -167,7 +190,7 @@ const forkStream = (
   Effect.runPromise(Effect.forkDaemon(collectStream(layer, { interim: true })));
 
 const interrupt = (
-  fiber: Fiber.RuntimeFiber<Chunk.Chunk<TranscriptChunk>, SttUnsupportedError>,
+  fiber: Fiber.RuntimeFiber<unknown, SttUnsupportedError>,
 ): Promise<Exit.Exit<unknown, unknown>> =>
   Effect.runPromise(Fiber.interrupt(fiber));
 
@@ -352,8 +375,12 @@ describe('ServerWhisperSTT — recording path (stubbed browser)', () => {
     expect(JSON.stringify(exit.cause)).toContain('25');
   });
 
-  it('stop() cancels without uploading', async () => {
-    const fetchMock = vi.fn(async () => transcriptionResponse('не должно уйти'));
+  it('stop() flushes the take to the server instead of discarding it', async () => {
+    // Releasing the button is the primary gesture of this feature —
+    // "hold, say a phrase, let go". It used to be a hard cancel, so
+    // any speech shorter than one `TICK_MS` (2.5 s) tick was thrown
+    // away without ever leaving the tab.
+    const fetchMock = vi.fn(async () => transcriptionResponse('сказанная фраза'));
     vi.stubGlobal('fetch', fetchMock);
     const fiber = await forkStream(layer);
     await vi.advanceTimersByTimeAsync(0);
@@ -361,8 +388,26 @@ describe('ServerWhisperSTT — recording path (stubbed browser)', () => {
     await vi.advanceTimersByTimeAsync(200);
     await stopEngine(layer);
     await vi.advanceTimersByTimeAsync(3000);
-    expect(fetchMock).not.toHaveBeenCalled();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(FakeMediaRecorder.instances[0]?.stopCalls).toBe(1);
+    await interrupt(fiber);
+  });
+
+  it('stop() emits the flushed transcript as a final chunk', async () => {
+    const fetchMock = vi.fn(async () => transcriptionResponse('сказанная фраза'));
+    vi.stubGlobal('fetch', fetchMock);
+    const { chunks, fiber } = await forkCollecting(layer);
+    await vi.advanceTimersByTimeAsync(0);
+    fakeAnalyser!.rms = 0.4;
+    await vi.advanceTimersByTimeAsync(200);
+    await stopEngine(layer);
+    await vi.advanceTimersByTimeAsync(3000);
+    // The orchestrator only promotes `final` (never `interim`) into
+    // the review buffer, so a flush that shipped an interim would
+    // leave the panel empty after release.
+    const finals = chunks.filter((c) => c.kind === 'final');
+    expect(finals.length).toBe(1);
+    expect(finals[0]?.text).toBe('сказанная фраза');
     await interrupt(fiber);
   });
 

@@ -493,10 +493,19 @@ type EmitOps = StreamEmit.EmitOpsPush<SttUnsupportedError, TranscriptChunk>;
  * Active recording, if any. One per tab (mirrors WebSpeechSTT's
  * singleton rule) so a second `start()` fails fast instead of
  * opening a second mic stream the mic mutex knows nothing about.
+ *
+ * `requestFlush` is what `stop()` calls. It is deliberately NOT
+ * `release()`: releasing the finger off the button must still ship
+ * whatever the microphone captured, or "hold, say a phrase, let go"
+ * throws the phrase away whenever the speech was shorter than one
+ * `TICK_MS` tick. Discarding on release is `dismiss`'s job, and that
+ * path never reaches this module — it interrupts the subscriber
+ * fiber first, which makes the flush a no-op via `released`.
  */
 let active: {
   readonly mimeType: string;
   readonly release: () => void;
+  readonly requestFlush: () => void;
 } | null = null;
 
 const makeService = (
@@ -814,7 +823,18 @@ const makeService = (
               }
             }, METER_POLL_MS);
 
-            active = { mimeType, release };
+            /**
+             * Entry point for `STTEngine.stop()`. Triggers the same
+             * silence-flush path on the caller's turn — the take is
+             * uploaded as a `final` chunk, then the stream ends.
+             * Fire-and-forget by design: `stop()` is a synchronous
+             * Effect and the round trip takes seconds.
+             */
+            const requestFlush = (): void => {
+              void flush();
+            };
+
+            active = { mimeType, release, requestFlush };
 
             // Real teardown on every exit path (consumer interrupt,
             // `emit.end()`, upstream failure). Registered as a scope
@@ -837,8 +857,14 @@ const makeService = (
     Effect.sync(() => {
       const session = active;
       if (session === null) return;
-      logger.push('info', ['[stt-server] stop() — cancel, no upload']);
-      session.release();
+      // Flush-and-upload, NOT cancel. `flush()` is idempotent by
+      // construction: it no-ops when a flush is already running (the
+      // 1.3 s silence boundary beat us to it) or when `released` is
+      // set (the consumer tore the take down deliberately), so this
+      // is safe to call on every release regardless of which path
+      // got here first.
+      logger.push('info', ['[stt-server] stop() — flushing take']);
+      session.requestFlush();
     }),
 });
 

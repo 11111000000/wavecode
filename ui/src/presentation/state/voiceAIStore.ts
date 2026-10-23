@@ -74,7 +74,7 @@ import type { MicBusyError } from '~/domain/audio/MicChannel';
 import { acquireMic, releaseMic } from './micMutexStore';
 import { resolveSttEngineKind } from '~/infrastructure/stt/selectSttLayer';
 import { getServerWhisperRmsLevel } from '~/infrastructure/stt/ServerWhisperSTT';
-import { appStore } from './appStore';
+import { appStore, dispatch as dispatchApp } from './appStore';
 import { AppLayer } from '~/infrastructure/composition';
 import { logger } from '~/infrastructure/log';
 
@@ -145,6 +145,19 @@ export const [voiceAIRmsLevel, setVoiceAIRmsLevel] = createSignal<number | null>
  * pretending there is live text.
  */
 export const [voiceAIElapsedSec, setVoiceAIElapsedSec] = createSignal<number>(0);
+
+/**
+ * True between "the finger came off the button" and "the transcript
+ * landed".
+ *
+ * `stopVoiceAI` tears the meter and the elapsed counter down
+ * immediately, but the engine then spends one server round trip
+ * (2.6-5.2 s measured) flushing the take. Without this flag the panel
+ * would sit on a frozen «записываю… 3 с» for those seconds — which
+ * reads as a hang, and is exactly the "recording doesn't start /
+ * nothing happens" impression this change set exists to remove.
+ */
+export const [voiceAIFlushing, setVoiceAIFlushing] = createSignal<boolean>(false);
 
 let elapsedTimer: number | null = null;
 
@@ -320,6 +333,17 @@ export const initVoiceAI = (deps: {
     llm: services.llm,
     audio: services.audio,
     currentScoreRef: services.scoreRef,
+    // Editor write-back. The orchestrator evaluates the LLM's score
+    // through `audio.eval` but cannot reach the app store on its own
+    // (`application/` must not import `presentation/`), so the
+    // dispatch is injected here — the same `replaceScore` call
+    // `AIEditPanel`, `micStore`, `whistleStore` and `pianoRecStore`
+    // already make. Without it the voice path played the new pattern
+    // and left the editor buffer untouched, which the user reported
+    // as "the LLM failed to parse it".
+    onApplied: (score: string): void => {
+      dispatchApp({ type: 'replaceScore', text: score });
+    },
   });
   handle = Effect.runSync(handleProgram);
 
@@ -360,6 +384,10 @@ export const initVoiceAI = (deps: {
         Effect.sync(() => {
           untrack(() => {
             setVoiceAIState(s);
+            // Leaving `listening` means the release-flush finished:
+            // either the transcript landed (`review`) or the take was
+            // abandoned (`errored` / `idle`).
+            if (s.tag !== 'listening') setVoiceAIFlushing(false);
             if (
               s.tag === 'listening'
               || s.tag === 'transcribing'
@@ -437,6 +465,7 @@ export const startVoiceAI = (
     langAtInit = opts.lang;
     yield* Effect.sync(() => {
       setVoiceAIError(null);
+      setVoiceAIFlushing(false);
       setVoiceAITranscript(initialTranscriptState(opts.lang));
       startElapsedTimer();
       startRmsPoll();
@@ -505,6 +534,10 @@ export const commitVoiceAI = (): Effect.Effect<void, never, never> => {
 /** Stop the session and release `speech-api-internal`. */
 export const stopVoiceAI = (): Effect.Effect<void, never, never> =>
   Effect.gen(function* () {
+    // Release flushes the take rather than cancelling it, so the
+    // panel keeps rendering (as «распознаю…») until the final chunk
+    // moves the FSM out of `listening`.
+    setVoiceAIFlushing(true);
     stopElapsedTimer();
     stopRmsPoll();
     if (handle !== null) {
@@ -546,6 +579,7 @@ export const dismissVoiceAI = (): Effect.Effect<void, never, never> =>
     }
     activeSessionId = null;
     yield* Effect.sync(() => {
+      setVoiceAIFlushing(false);
       setVoiceAITranscript(initialTranscriptState(langAtInit));
       setVoiceAIError(null);
       clearVoiceAIPanelArmed();
@@ -751,6 +785,7 @@ export const __resetVoiceAIForTests = (): void => {
   setVoiceAIState(initialVoiceSession());
   setVoiceAITranscript(initialTranscriptState());
   setVoiceAIError(null);
+  setVoiceAIFlushing(false);
   setVoiceAISupported(true);
   setVoiceAIPanelArmed(false);
 };

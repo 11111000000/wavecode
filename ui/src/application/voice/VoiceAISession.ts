@@ -22,8 +22,12 @@
  *              for the user to confirm)
  *   send     → send-review → requesting → route → applied → idle
  *   applied  → continuous? listening : idle
- *   stop     → pause (FSM-only); STT is stopped but the mic mutex
- *              stays (release is the presenter's job).
+ *   stop     → ask the engine to FLUSH (it uploads the take), keep
+ *              the FSM in `listening` until the final chunk lands,
+ *              then land on `review`. This is the release-the-button
+ *              gesture, not a discard; only `dismiss` discards. The
+ *              mic mutex stays claimed (release is the presenter's
+ *              job).
  *   cancelInFlight → interrupt the routed fiber → barge-in → idle.
  *
  * `stream` is a single-consumer Effect `Stream` that yields the
@@ -60,6 +64,16 @@ import type { TranscriptChunk } from '~/domain/voice/Transcript';
 import { LLMClient, AudioEngine } from '~/domain/services';
 import type { MicBusyError } from '~/domain/audio/MicChannel';
 
+/**
+ * Ceiling on how long `handle.stop` waits for the STT stream to
+ * drain after it asks the engine to flush. The happy path is one
+ * server round trip — 2.6-5.2 s measured on angara-1 with
+ * `ggml-base-q5_1` (`decisions/wavecode-server-stt`) — so this is
+ * roughly 2× the observed worst case. It exists so a wedged engine
+ * or a stalled network cannot pin the FAB in `holding` forever.
+ */
+const DRAIN_MAX_MS = 12_000;
+
 /** User-facing session options, set at start-time. */
 export type VoiceSessionInput = {
   readonly mode: 'oneshot' | 'continuous';
@@ -76,6 +90,23 @@ export type VoiceSessionDeps = {
   readonly llm: Context.Tag.Service<typeof LLMClient>;
   readonly audio: Context.Tag.Service<typeof AudioEngine>;
   readonly currentScoreRef: Ref.Ref<string>;
+  /**
+   * Called with the LLM's cleaned score once a routed edit succeeds.
+   *
+   * The orchestrator cannot dispatch into the app store itself —
+   * `application/` is not allowed to import `presentation/`. So the
+   * write-back is injected: `voiceAIStore` passes
+   * `dispatch({type:'replaceScore', text})`.
+   *
+   * This callback is the entire difference between "the voice-AI
+   * feature works" and "it auditions your edit and throws it away".
+   * `routeIntent` calls `audio.eval(cleanedScore)`, so the user
+   * HEARS the new pattern — but before this hook the score was never
+   * written to the editor buffer. Every sibling input path (mic,
+   * whistle, piano recording, the AI edit panel) already did the
+   * `replaceScore` dispatch; voice was the only one that didn't.
+   */
+  readonly onApplied?: (score: string) => void;
 };
 
 /** Handle returned by `createVoiceAISession`. All methods are pure
@@ -171,9 +202,27 @@ export const createVoiceAISession = (
         yield* dispatch({ type: 'request-sent', score });
         // `RouterContext` no longer carries services — the router
         // pulls `LLMClient` + `AudioEngine` from its own environment.
+        // Capture the cleaned score through `onComplete` so it can be
+        // handed to `deps.onApplied` (the editor write-back) after the
+        // route resolves. The callback is invoked synchronously on
+        // this fiber before `applyEditStream` returns, so the value is
+        // already in place by the time we read it below.
+        //
+        // Held in an object rather than a plain `let`: the assignment
+        // happens inside a callback, which TypeScript's control-flow
+        // analysis does not follow, so `let x: string | null = null`
+        // is narrowed to `null` at every read and the post-check
+        // collapses to `never`. A property access is re-widened
+        // after each call, so the object form types correctly.
+        const applied: { score: string | null } = { score: null };
         const routeEff = routeIntent(
           { kind: 'edit-score', instruction, confidence: 1, timestampMs },
           { currentScore: score, nowMs: timestampMs },
+          {
+            onComplete: (cleaned: string): void => {
+              applied.score = cleaned;
+            },
+          },
         );
         const provided = routeEff.pipe(
           Effect.provideService(LLMClient, deps.llm),
@@ -184,6 +233,16 @@ export const createVoiceAISession = (
         if (result._tag === 'Left') {
           yield* dispatch({ type: 'error', message: result.left.message });
           return;
+        }
+        // Write the result into the editor. Without this the voice
+        // path evaluated the new score (`audio.eval`) and stopped —
+        // the user heard the edit land but the score buffer never
+        // changed, which reads as "the LLM failed to parse it".
+        const cleaned = applied.score;
+        if (cleaned !== null && cleaned.trim().length > 0) {
+          yield* Effect.sync(() => {
+            deps.onApplied?.(cleaned);
+          });
         }
         yield* dispatch({ type: 'applied' });
         // After `applied`, the reducer flips back to listening (when
@@ -241,12 +300,13 @@ export const createVoiceAISession = (
     };
 
     /**
-     * Tear down the STT engine + the subscriber fiber slot
-     * atomically. Shared by:
-     *   - `handle.stop`        — pause path
-     *   - `handle.enterReview` — manual pause-for-review path
-     *   - the auto-review branch in `subscribeLoop` — silence
-     *     detector dropped the FSM into `review`
+     * Teardown the STT engine + the subscriber fiber slot
+     * atomically. Shared by `handle.dismiss` and `handle.enterReview`
+     * — both mean "this take is over, throw the rest away".
+     *
+     * Deliberately NOT used by `handle.stop`: interrupting the
+     * subscriber first would discard whatever the engine was in the
+     * middle of delivering. See the comment there.
      *
      * The atomic modify+interrupt keeps `subscriberRef` correct even
      * if the interrupting fiber is itself interrupted (a known
@@ -343,10 +403,47 @@ export const createVoiceAISession = (
         }),
       stop: () =>
         Effect.gen(function* () {
-          // Atomic get+reset so the subscriber slot is vacated even
-          // if the interrupting fiber is itself interrupted.
-          yield* teardownSubscriber;
-          yield* dispatch({ type: 'pause' });
+          // `stop` means "the finger came off the button", NOT "throw
+          // the take away" — the server engine now flushes and uploads
+          // on stop, so the final chunk is still coming.
+          //
+          // That makes ordering load-bearing. Pausing FIRST (the
+          // previous behaviour) left the FSM in `paused` by the time
+          // the transcript arrived, and `fromPaused` had no `chunk`
+          // branch: the words were recognised, billed for a full
+          // server round trip, and then dropped on the floor. So we
+          // hold the FSM in `listening` and wait for the stream to
+          // end — the reducer then walks listening → transcribing →
+          // review on its own, which is the state the user wants:
+          // the text is in front of them, «→ В ИИ» is live, and the
+          // next press-and-hold appends to the same take.
+          yield* deps.stt.stop();
+          const fiber = yield* Ref.get(subscriberRef);
+          if (fiber !== null) {
+            // The drain is one server round trip (2.6-5.2 s measured).
+            // `DRAIN_MAX_MS` is a ceiling for the pathological case
+            // (engine wedged, network stalled) — past it we fall
+            // through to the sink below rather than pinning the FAB.
+            yield* Fiber.await(fiber).pipe(
+              Effect.timeout(DRAIN_MAX_MS),
+              Effect.catchAll(() => Effect.void),
+            );
+            yield* Ref.set(subscriberRef, null);
+          }
+          // Nothing was recognised — a silent take, or an engine that
+          // ended without emitting a final chunk. The subscriber's own
+          // normal exit already handles this, but `stop()` can also be
+          // reached without a stream ever having produced anything, so
+          // pin the FSM to `paused` (which re-arms on the next press)
+          // rather than leaving it stuck on «записываю…».
+          const s = yield* Ref.get(stateRef);
+          if (s.tag === 'listening' || s.tag === 'arming') {
+            const hasText =
+              s.tag === 'listening' && s.transcript.final.trim().length > 0;
+            yield* dispatch({ type: hasText ? 'enter-review' : 'pause' });
+          } else if (s.tag === 'transcribing') {
+            yield* dispatch({ type: 'enter-review' });
+          }
         }),
       onChunk: (chunk: TranscriptChunk) =>
         Effect.gen(function* () {
