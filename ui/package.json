@@ -1,6 +1,6 @@
 {
   "name": "@wavecode/ui",
-  "version": "0.2.0-voicefix",
+  "version": "0.2.3-voicefix",
   "private": true,
   "type": "module",
   "engines": {

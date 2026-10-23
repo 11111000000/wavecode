@@ -181,7 +181,42 @@ const startElapsedTimer = (): void => {
   if (elapsedTimer !== null) return;
   setVoiceAIElapsedSec(0);
   elapsedTimer = window.setInterval(
-    () => { setVoiceAIElapsedSec((s) => s + 1); },
+    () => {
+      setVoiceAIElapsedSec((s) => s + 1);
+      // Watchdog: if we have been in `listening` for 4+ seconds and
+      // still no transcript chunks have arrived, surface a clear
+      // error instead of leaving the user staring at «записываю…
+      // N с» forever. The orchestrator's stream-level `Stream.tapError`
+      // does not fire for a quiet stream that never fails — it only
+      // runs on a terminal error. Cloud Speech in Chromium without
+      // Google services is exactly that: it produces no chunks and no
+      // error, so the user gets no signal at all. The
+      // `Stream.timeoutFail` watchdog in `FallbackSTT` runs in the
+      // Effect runtime and depends on actual chunk production, which a
+      // blocked engine never does; this client-side watchdog covers
+      // the silent-engine case regardless of which path the orchestrator
+      // is on.
+      const elapsed = voiceAIElapsedSec();
+      const t = voiceAITranscript();
+      if (
+        voiceAIState().tag === 'listening'
+        && elapsed >= 4
+        && t.interim === ''
+        && t.final === ''
+      ) {
+        setVoiceAIState({
+          tag: 'errored',
+          error:
+            'Не удалось получить текст от движка распознавания. Проверьте разрешения микрофона в адресной строке и попробуйте снова.',
+          transcript: t,
+        });
+        // Stop the timer — the error state owns the rest of the UX.
+        if (elapsedTimer !== null) {
+          window.clearInterval(elapsedTimer);
+          elapsedTimer = null;
+        }
+      }
+    },
     1000,
   );
 };
@@ -290,30 +325,63 @@ export const initVoiceAI = (deps: {
 
   installScoreSync(services.scoreRef);
 
+  // Subscribe to the orchestrator's FSM stream. If the stream errors
+  // (e.g. `no-speech-api` from a primary STT that lacks its
+  // constructor, or a `network` failure from a server relay that
+  // exhausted its retries), surface the error in the local mirror so
+  // the recording panel can show it instead of sticking at
+  // «записываю… N с». `Stream.tapError` is the Effect equivalent of
+  // a side-effecting error handler; it does not consume the error
+  // (the subscriber still terminates) but lets us observe it before
+  // the stream collapses.
   Effect.runFork(
-    Stream.runForEach(handle.stream, (s) =>
-      Effect.sync(() =>
-        untrack(() => {
-          setVoiceAIState(s);
-          if (s.tag === 'listening'
+    Stream.tapError((err) => {
+      const message =
+        err instanceof Error
+          ? err.message
+          : typeof err === 'string'
+            ? err
+            : JSON.stringify(err);
+      untrack(() => {
+        setVoiceAIState({
+          tag: 'errored',
+          error: message,
+          transcript: initialTranscriptState(
+            (() => {
+              const cur = voiceAIState();
+              return cur.tag === 'errored' ? cur.transcript.lang : (cur as { transcript: { lang: string } }).transcript.lang;
+            })(),
+          ),
+        });
+      });
+      return Effect.void;
+    })(handle.stream).pipe(
+      Stream.runForEach((s) =>
+        Effect.sync(() => {
+          untrack(() => {
+            setVoiceAIState(s);
+            if (
+              s.tag === 'listening'
               || s.tag === 'transcribing'
               || s.tag === 'requesting'
               || s.tag === 'applying'
               || s.tag === 'paused'
               || s.tag === 'review'
-              || s.tag === 'errored') {
-            setVoiceAITranscript(s.transcript);
-          }
-          if (s.tag === 'errored') {
-            setVoiceAIError(s.error);
-          } else if (voiceAIError() !== null) {
-            setVoiceAIError(null);
-          }
+              || s.tag === 'errored'
+            ) {
+              setVoiceAITranscript(s.transcript);
+            }
+            if (s.tag === 'errored') {
+              setVoiceAIError(s.error);
+            } else if (voiceAIError() !== null) {
+              setVoiceAIError(null);
+            }
+          });
         }),
       ),
     ),
   );
-};
+}
 
 /* ── start / stop / commit / cancel ──────────────────────────────── */
 
@@ -392,7 +460,25 @@ export const startVoiceAI = (
       lang: opts.lang,
       bargeInMode: opts.bargeInMode ?? 'replace',
     };
-    yield* handle.start(input);
+    const result = yield* Effect.either(handle.start(input));
+    if (result._tag === 'Left') {
+      // Surface start-time failures (e.g. `no-speech-api` when the
+      // Web Speech API is missing) into the FSM, otherwise the panel
+      // sits at «записываю… N с» forever with no way for the user to
+      // see what went wrong. The caller also fires a toast via
+      // `runEffectSafely`, but the FSM error is what makes the panel
+      // show the message and the ✕ close the session. Without this,
+      // voice-AI in a browser without Web Speech API was completely
+      // silent: the stream was never created, the watchdog had nothing
+      // to monitor, the user saw a stuck counter and an unresponsive ✕.
+      // `err` is a discriminated union; `MicBusyError` has no `message`
+      // field, so narrow to `SttUnsupportedError` before reading it.
+      if (result.left._tag === 'SttUnsupported') {
+        setVoiceAIState({ tag: 'errored', error: result.left.message, transcript: initialTranscriptState(opts.lang) });
+      } else {
+        setVoiceAIState({ tag: 'errored', error: 'Микрофон занят другой сессией', transcript: initialTranscriptState(opts.lang) });
+      }
+    }
   });
 
 /**

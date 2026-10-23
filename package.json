@@ -1,6 +1,6 @@
 {
   "name": "wavecode",
-  "version": "0.2.0-voicefix",
+  "version": "0.2.3-voicefix",
   "private": true,
   "description": "Live-coding music studio (browser SPA). ui/ is the workspace; root scripts delegate to ui/.",
   "type": "module",
