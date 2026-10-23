@@ -632,3 +632,53 @@ describe('createVoiceAISession — re-press during the release flush', () => {
     expect(listening.transcript.final).toBe('первая фраза');
   });
 });
+
+describe('createVoiceAISession — engine ends the stream by itself', () => {
+  it('parks on the silence flush instead of counting seconds forever', async () => {
+    // The field failure: the engine flushes on its own after 1.3 s of
+    // silence, so `handle.stop()` is never called — the finger is still
+    // down. The stream completed with no final chunk and the FSM stayed
+    // pinned on `listening`: the panel kept incrementing the counter
+    // and no text ever appeared, until the user closed the panel by
+    // hand. The sink has to live on the stream's exit, not on stop().
+    const { layer } = buildServices('note("e4")');
+    const stt = controllableStt();
+    const { deps } = await buildDeps(stt.svc, layer);
+    const handle = await Effect.runPromise(createVoiceAISession(deps));
+
+    await Effect.runPromise(
+      handle.start({ mode: 'continuous', lang: 'ru-RU', bargeInMode: 'replace' }),
+    );
+    await waitForState(handle, (s) => s.tag === 'listening');
+
+    // Engine terminates on its own, having captured nothing (the take
+    // was all silence, or the recorder produced no data at all).
+    await Effect.runPromise(stt.svc.stop());
+    await Effect.runPromise(Effect.sleep(20));
+
+    const parked = await waitForState(handle, (s) => s.tag !== 'listening');
+    expect(parked.tag).not.toBe('listening');
+    expect(parked.tag).toBe('paused');
+  });
+
+  it('offers a take that DID produce text for review', async () => {
+    const { layer } = buildServices('note("e4")');
+    const stt = controllableStt();
+    const { deps } = await buildDeps(stt.svc, layer);
+    const handle = await Effect.runPromise(createVoiceAISession(deps));
+
+    await Effect.runPromise(
+      handle.start({ mode: 'continuous', lang: 'ru-RU', bargeInMode: 'replace' }),
+    );
+    await waitForState(handle, (s) => s.tag === 'listening');
+    stt.capture('добавь немного ритма');
+    // Silence flush: emits the final, then ends the stream.
+    await Effect.runPromise(stt.svc.stop());
+    await Effect.runPromise(Effect.sleep(20));
+
+    const review = await waitForState(handle, (s) => s.tag === 'review');
+    expect(review.tag).toBe('review');
+    if (review.tag !== 'review') throw new Error('unreachable');
+    expect(review.editedText).toBe('добавь немного ритма');
+  });
+});

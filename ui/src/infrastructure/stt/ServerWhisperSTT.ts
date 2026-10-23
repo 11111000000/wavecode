@@ -725,7 +725,18 @@ const makeService = (
               return true;
             };
 
-            const flush = async (): Promise<void> => {
+            /**
+             * `reason` is only for the log. When this function decides
+             * to ship nothing there is no other evidence in the app —
+             * no toast, no error state, just a panel that stops
+             * showing text. Without it, "no POST reached the server"
+             * has three indistinguishable causes in the client
+             * (no speech detected / no audio captured / upload
+             * refused), and the only external evidence is the server
+             * access log, which looks identical (silence) for all
+             * three.
+             */
+            const flush = async (reason: string): Promise<void> => {
               if (flushing || released) return;
               flushing = true;
               if (meterTimer !== null) {
@@ -757,6 +768,13 @@ const makeService = (
                 });
                 const blob = new Blob(parts, { type: mimeType });
                 parts.length = 0;
+                logger.push('info', [
+                  '[stt-server] flush',
+                  `reason=${reason}`,
+                  `parts=${parts.length}`,
+                  `bytes=${blob.size}`,
+                  `ms=${Date.now() - startedAtMs}`,
+                ]);
                 if (blob.size === 0) {
                   logger.push('warn', ['[stt-server] nothing recorded, skipping upload']);
                   emit.end();
@@ -779,6 +797,11 @@ const makeService = (
 
             recorder.start(RECORDER_TIMESLICE_MS);
             meter = startMeter(micStream);
+            logger.push('info', [
+              '[stt-server] recording',
+              `state=${recorder.state}`,
+              `meter=${meter !== null}`,
+            ]);
 
             const startedAtMs = Date.now();
             let lastVoiceAtMs = startedAtMs;
@@ -788,11 +811,19 @@ const makeService = (
               const now = Date.now();
               const rms = meter?.level() ?? 0;
               if (rms >= SPEECH_RMS_THRESHOLD) {
+                if (!sawSpeech) {
+                  logger.push('info', [
+                    '[stt-server] speech detected',
+                    `afterMs=${now - startedAtMs}`,
+                    `rms=${rms.toFixed(3)}`,
+                    `meter=${meter !== null}`,
+                  ]);
+                }
                 sawSpeech = true;
                 lastVoiceAtMs = now;
               }
               if (now - startedAtMs >= MAX_UTTERANCE_MS) {
-                void flush();
+                void flush('max-utterance');
                 return;
               }
               // No speech ever → keep listening. Whisper invents
@@ -802,7 +833,7 @@ const makeService = (
               // to the LLM edits the user's score. An empty clip is
               // simply not worth a 5-9 s round-trip either.
               if (sawSpeech && now - lastVoiceAtMs >= SILENCE_FLUSH_MS) {
-                void flush();
+                void flush('silence');
                 return;
               }
               // Incremental-upload gate. Piggies-backs on the meter
@@ -831,7 +862,7 @@ const makeService = (
              * Effect and the round trip takes seconds.
              */
             const requestFlush = (): void => {
-              void flush();
+              void flush('release');
             };
 
             active = { mimeType, release, requestFlush };
