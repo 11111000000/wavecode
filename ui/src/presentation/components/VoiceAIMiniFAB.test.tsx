@@ -170,3 +170,70 @@ describe('VoiceAIMiniFAB — pointer handlers drive the FSM', () => {
     expect(voiceAIPanelArmed()).toBe(true);
   });
 });
+
+/**
+ * Field report: "I hold the button and it keeps going after I let
+ * go — holding doesn't really work."
+ *
+ * The cause was `pointerleave`. On a touch screen a finger resting on
+ * a ~44 px target drifts a couple of pixels as you press, and
+ * `pointerleave` fires the instant the touch point crosses the edge —
+ * mid-dictation, every time. The handler called `onPointerUp()`, so
+ * the take ended while the thumb was still down.
+ *
+ * Asserted through `voiceAIPanelArmed`, which is a direct and
+ * deterministic proxy: `onPointerUp()` on the `pending` path calls
+ * `requestVoiceAIPanelArmed()`, so a stray leave is visible as the
+ * panel arming itself for a press the user never lifted.
+ */
+describe('VoiceAIMiniFAB — touch must not end a press', () => {
+  /**
+   * jsdom has no `PointerEvent` constructor and `fireEvent.*` drops
+   * `pointerType` entirely, so the init dict above never reaches the
+   * handler. Build the event by hand instead — otherwise these tests
+   * would assert against a permanently-`undefined` pointerType and
+   * pass for the wrong reason.
+   */
+  const firePointer = (
+    el: Element,
+    type: string,
+    pointerType: string,
+  ): void => {
+    const ev = new Event(type, { bubbles: true });
+    Object.defineProperty(ev, 'pointerType', { value: pointerType });
+    el.dispatchEvent(ev);
+  };
+
+  it('ignores pointerleave for touch while the press is still pending', () => {
+    const { container } = render(() => <VoiceAIMiniFAB lang="ru-RU" />);
+    const btn = container.querySelector<HTMLButtonElement>(
+      '.voice-mini-fab--ai',
+    )!;
+
+    firePointer(btn, 'pointerdown', 'touch');
+    expect(btn.getAttribute('data-press')).toBe('pending');
+
+    // Finger drifts a couple of pixels before the debounce elapses.
+    firePointer(btn, 'pointerleave', 'touch');
+    expect(btn.getAttribute('data-press')).toBe('pending');
+    // The press is still live: it must NOT have been treated as a
+    // completed tap-and-release.
+    expect(voiceAIPanelArmed()).toBe(false);
+  });
+
+  it('still cancels on slide-off for a mouse', () => {
+    // Slide-off-to-cancel is the affordance that handler was written
+    // for, and a mouse holds a pointer still enough for it to mean
+    // "I moved away". Touch has implicit pointer capture, so
+    // `pointerup` reaches the button anyway and the leave handler is
+    // pure noise there.
+    const { container } = render(() => <VoiceAIMiniFAB lang="ru-RU" />);
+    const btn = container.querySelector<HTMLButtonElement>(
+      '.voice-mini-fab--ai',
+    )!;
+    firePointer(btn, 'pointerdown', 'mouse');
+    firePointer(btn, 'pointerleave', 'mouse');
+    expect(btn.getAttribute('data-press')).toBe('idle');
+    expect(voiceAIPanelArmed()).toBe(true);
+  });
+});

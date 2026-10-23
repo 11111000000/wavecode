@@ -277,8 +277,26 @@ export function VoiceAIMiniFAB(props: Props): JSX.Element {
       title={titleText()}
       onPointerDown={onPointerDown}
       onPointerUp={onPointerUp}
-      onPointerLeave={() => { if (state() === 'pending' || state() === 'holding') onPointerUp(); }}
-      onPointerCancel={() => { if (state() === 'pending' || state() === 'holding') onPointerUp(); }}
+      // `pointerleave` must NOT end a hold on touch. A finger held
+      // on a ~44 px target drifts a few pixels as you press, and
+      // `pointerleave` fires the moment the touch point crosses the
+      // edge — which on a phone happens mid-dictation, every time.
+      // The take was ending while the user was still holding the
+      // button: the panel switched to «распознаю…» under their
+      // thumb and kept counting after they finally let go.
+      //
+      // Mouse users still get slide-off-to-cancel, which is the
+      // affordance that handler was written for. On touch the
+      // equivalent gesture is a drag far past the button, and
+      // `pointercancel` (the OS took the gesture) is the honest
+      // signal for "this press was aborted".
+      onPointerLeave={(e) => {
+        if (e.pointerType === 'touch') return;
+        if (state() === 'pending' || state() === 'holding') onPointerUp();
+      }}
+      onPointerCancel={() => {
+        if (state() === 'pending' || state() === 'holding') onPointerUp();
+      }}
       aria-label="Голосовое управление ИИ"
     >
       <MicIcon size={18} />
