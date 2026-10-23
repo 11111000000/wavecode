@@ -17,7 +17,8 @@ import { AppShellView } from './presentation/components/app/AppShellView';
 import { Admin } from './presentation/pages/Admin';
 import { Landing } from './presentation/components/landing/Landing';
 import { WelcomeTour } from './presentation/components/tour/WelcomeTour';
-import { DisclaimerBanner } from './presentation/components/DisclaimerBanner';
+import { DisclaimerGate } from './presentation/components/DisclaimerGate';
+import { useConsentGate } from './presentation/state/consentGate';
 import { VoiceFAB } from './presentation/components/VoiceFAB';
 import { initVoiceAI } from './presentation/state/voiceAIStore';
 import { initWhistle } from './presentation/state/whistleStore';
@@ -26,12 +27,21 @@ import { AppLayer } from './infrastructure/composition';
 
 export function App(): JSX.Element {
   const route = useHashRoute();
+  const gate = useConsentGate();
   return (<>
-    <Show when={route() === 'landing'}><Landing /></Show>
-    <Show when={route() === 'app'}><AppShell /></Show>
-    <Show when={route() === 'admin'}><Admin /></Show>
-    <DisclaimerBanner />
-    <WelcomeTour />
+    {/* `display: contents` so this wrapper adds no box of its own — it
+        exists only to carry `inert` while the legal gate is up, which is
+        what stops clicks and Tab from reaching the app behind the
+        overlay. See decisions/wavecode-disclaimer-gate.yaml. */}
+    <div class="app-root" inert={gate.visible() ? true : undefined}>
+      <Show when={route() === 'landing'}><Landing /></Show>
+      <Show when={route() === 'app'}><AppShell /></Show>
+      <Show when={route() === 'admin'}><Admin /></Show>
+    </div>
+    <DisclaimerGate gate={gate} />
+    {/* The tour must not start under the gate: you cannot be onboarded
+        into an app you are not allowed to touch yet. */}
+    <WelcomeTour blocked={gate.pending()} />
   </>);
 }
 

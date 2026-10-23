@@ -7088,61 +7088,74 @@ textarea.ai-textarea:focus-visible {
 }
 
 /* =========================================================================
-   DisclaimerBanner — floating (non-modal) legal banner.
-   wavecode-disclaimer-banner: replaces the blocking `DisclaimerModal`
-   overlay. The modal covered the whole editor and re-appeared on every
-   entry; this banner sits in the bottom-left corner, clears the fixed
-   TabBar, and layers *below* the toast (`--z-toast - 1`) so a toast
-   still wins. Non-modal by construction: no backdrop, no scroll lock,
-   no focus trap — the editor stays usable while it is on screen.
+   DisclaimerGate — the blocking legal consent gate.
+   wavecode-disclaimer-gate supersedes `wavecode-disclaimer-banner`:
+   that decision made the notice a small non-modal strip in the bottom
+   left corner with the clauses behind a «Подробнее» toggle, and it
+   failed at its own job — nothing stopped the user from ignoring it,
+   «Принять» was two clicks deep, and the onboarding tour came up
+   underneath it. This is the opposite shape: a full-viewport scrim
+   (`inset: 0`, `--z-consent-gate` = 90, above toast 80 and the tour
+   overlay 70) with the text expanded from the first frame. The app
+   underneath is `inert` while this is up (App.tsx), so there is no
+   click or Tab path out — acceptance is the only exit.
+
+   Height budget: the panel is `max-height: 100%` of a full-viewport
+   flex parent, and the body is the only scrolling part, so a 360x640
+   phone shows the title, the lead and the accept controls without the
+   clause list pushing them off-screen.
    ========================================================================= */
 
-.disclaimer-banner {
+.disclaimer-gate {
   position: fixed;
-  left: var(--space-lg);
-  bottom: calc(var(--tabbar-h) + var(--space-md) + var(--safe-bottom));
-  z-index: calc(var(--z-toast) - 1);
-  width: min(420px, calc(100vw - 2 * var(--space-lg)));
-  max-height: min(70vh, 560px);
+  inset: 0;
+  z-index: var(--z-consent-gate);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-lg);
+  background: rgba(0, 0, 0, 0.72);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+  overscroll-behavior: contain;
+  animation: disclaimer-gate-fade var(--dur-md) var(--ease);
+}
+
+@keyframes disclaimer-gate-fade {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.disclaimer-gate__panel {
   display: flex;
   flex-direction: column;
-  padding: var(--space-md);
+  width: min(720px, 100%);
+  max-height: 100%;
+  padding: var(--space-lg);
   background: var(--surface-2);
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-pop);
+  box-shadow: var(--shadow-overlay);
   font-family: var(--font-sans);
   color: var(--fg);
-  animation: disclaimer-banner-in var(--dur-md) var(--ease-spring);
 }
 
-@keyframes disclaimer-banner-in {
-  from { opacity: 0; transform: translateY(12px); }
-  to   { opacity: 1; transform: translateY(0); }
-}
+.disclaimer-gate__panel:focus { outline: none; }
 
 @media (max-width: 720px) {
-  .disclaimer-banner {
-    left: var(--space-sm);
-    /* NOT full-bleed: the voice-FAB cluster is a fixed right-hand
-     * column on mobile (`--fab-size` wide + `--space-lg` inset), so a
-     * full-width banner would sit on top of the record/whistle FABs and
-     * swallow their clicks. Stop short of the cluster instead. */
-    right: calc(var(--fab-size) + var(--space-lg) * 2 + var(--space-sm));
-    width: auto;
-    bottom: calc(var(--tabbar-h) + var(--space-sm) + var(--safe-bottom));
-    max-height: min(60vh, 420px);
-  }
+  .disclaimer-gate { padding: var(--space-sm); }
+  .disclaimer-gate__panel { padding: var(--space-md); }
 }
 
-.disclaimer-banner__head {
+.disclaimer-gate__head {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: var(--space-sm);
+  flex-shrink: 0;
 }
 
-.disclaimer-banner__title {
+.disclaimer-gate__title {
   margin: 0;
   font-family: var(--font-display);
   font-size: var(--fs-md);
@@ -7151,32 +7164,10 @@ textarea.ai-textarea:focus-visible {
   line-height: 1.25;
 }
 
-.disclaimer-banner__head-actions {
-  display: flex;
-  align-items: center;
-  gap: var(--space-xs);
-  flex-shrink: 0;
-}
-
-.disclaimer-banner__toggle {
-  min-height: 28px;
-  padding: 0 var(--space-xs);
-  background: none;
-  border: none;
-  font-family: var(--font-sans);
-  font-size: var(--fs-xs);
-  letter-spacing: var(--ls-caps);
-  text-transform: uppercase;
-  color: var(--primary);
-  cursor: pointer;
-  user-select: none;
-}
-
-.disclaimer-banner__toggle:hover { text-decoration: underline; }
-
-.disclaimer-banner__close {
-  min-width: 28px;
-  min-height: 28px;
+.disclaimer-gate__close {
+  min-width: var(--touch-target);
+  min-height: var(--touch-target);
+  margin: calc(var(--touch-target) / -2 + var(--fs-sm)) 0 0 0;
   padding: 0;
   background: none;
   border: 1px solid var(--border);
@@ -7189,44 +7180,52 @@ textarea.ai-textarea:focus-visible {
   user-select: none;
 }
 
-.disclaimer-banner__close:hover {
+.disclaimer-gate__close:hover {
   color: var(--fg);
   border-color: var(--border-strong);
 }
 
-.disclaimer-banner__summary {
-  margin: var(--space-xs) 0 0 0;
+.disclaimer-gate__summary {
+  margin: var(--space-sm) 0 0 0;
+  flex-shrink: 0;
   font-size: var(--fs-sm);
   line-height: var(--lh-relaxed);
   color: var(--fg-dim);
 }
 
-/* Collapsed state is a one-liner; once expanded the summary would just
-   repeat the first clause of the body. */
-.disclaimer-banner--expanded .disclaimer-banner__summary { display: none; }
-
-.disclaimer-banner__body {
-  margin-top: var(--space-sm);
+.disclaimer-gate__body {
+  margin-top: var(--space-md);
+  min-height: 0;
   overflow-y: auto;
   padding-right: var(--space-xs);
+  -webkit-overflow-scrolling: touch;
 }
 
-.disclaimer-banner__note {
+.disclaimer-gate__note {
   margin: 0;
   font-size: var(--fs-xs);
   line-height: var(--lh-relaxed);
   color: var(--fg-dim);
 }
 
-.disclaimer-banner__note a {
+.disclaimer-gate__note a {
   color: var(--primary);
   text-decoration: underline;
 }
 
-.disclaimer-banner__actions {
+.disclaimer-gate__hint {
+  margin: var(--space-sm) 0 0 0;
+  flex-shrink: 0;
+  font-size: var(--fs-xs);
+  line-height: var(--lh-relaxed);
+  color: var(--fg-ghost);
+}
+
+.disclaimer-gate__actions {
   display: flex;
   justify-content: flex-end;
   margin-top: var(--space-sm);
+  flex-shrink: 0;
 }
 
 .disclaimer-section { margin-bottom: var(--space-md); }
@@ -7311,5 +7310,5 @@ textarea.ai-textarea:focus-visible {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .disclaimer-banner { animation: none; }
+  .disclaimer-gate { animation: none; }
 }

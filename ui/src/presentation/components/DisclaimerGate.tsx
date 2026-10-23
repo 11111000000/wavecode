@@ -1,148 +1,115 @@
 /**
- * DisclaimerBanner — floating (non-modal) legal banner for the site.
+ * DisclaimerGate — the blocking legal gate shown until the terms are
+ * accepted.
  *
- * Replaces the blocking `DisclaimerModal` (see decision
- * `wavecode-disclaimer-banner`): the modal covered the whole editor
- * with a dark overlay and re-appeared on every entry, which made a
- * legal notice feel like an outage. The banner floats bottom-left,
- * leaves the transport bar and the voice-FAB cluster alone, and stays
- * out of the way until the visitor expands it.
+ * Supersedes `DisclaimerBanner` (decision `wavecode-disclaimer-banner`),
+ * which made the notice a small non-modal strip pinned to the bottom
+ * left corner with the text hidden behind a «Подробнее» toggle. That
+ * shape failed at its own job: nothing stopped the user from ignoring
+ * it, the «Принять» button was two clicks deep, and the onboarding tour
+ * came up underneath it at the same time. Now the notice is a
+ * full-viewport overlay — `role="dialog"`, `aria-modal`, scrim,
+ * expanded from the first frame — and the app behind it is `inert`
+ * (wired in `App.tsx`) until the checkbox is ticked and «Принять»
+ * pressed. See `decisions/wavecode-disclaimer-gate.yaml`.
  *
  * Consent model — versioned, persisted, wrap-plus-explicit:
  *   • acceptance is written to `localStorage` under `wavecodeTermsAccepted`
  *     as the bare version string, so bumping `DISCLAIMER_VERSION`
  *     re-prompts everyone who accepted the previous wording;
- *   • the banner hides once the current version is accepted;
+ *   • the gate never shows again for someone who accepted this version;
  *   • it stays reachable afterwards via the landing footer, which
- *     dispatches `TERMS_OPEN_EVENT` and re-opens the banner read-only
- *     (no accept button, a close button instead).
+ *     dispatches `TERMS_OPEN_EVENT` and re-opens it read-only (no
+ *     consent controls, a close button instead).
  *
  * Legal wording is mirrored in the legal KB template
  * `1_projects/05_wavecode/04_templates/01_site-disclaimer.md` (ЮрОтдел).
- * Any edit here MUST land there in the same commit — the banner is the
- * only place these clauses are shown to users.
+ * Any edit here MUST land there in the same commit AND bump
+ * `DISCLAIMER_VERSION` — the gate is the only place these clauses are
+ * shown to users.
  */
 
-import { createSignal, onCleanup, onMount, Show, type JSX } from 'solid-js';
+import { createEffect, createSignal, onCleanup, onMount, Show, type JSX } from 'solid-js';
+import {
+  DISCLAIMER_VERSION,
+  type ConsentGate,
+} from '~/presentation/state/consentGate';
 
-/**
- * Bump when the wording changes: every stored acceptance of an older
- * version stops matching and the banner shows up again.
- */
-export const DISCLAIMER_VERSION = 'v1';
-
-const STORAGE_KEY = 'wavecodeTermsAccepted';
-
-/** Fired by the landing footer to re-open the banner after acceptance. */
-export const TERMS_OPEN_EVENT = 'wavecode:open-terms';
-
-export const openTermsBanner = (): void => {
-  if (typeof window === 'undefined') return;
-  window.dispatchEvent(new CustomEvent(TERMS_OPEN_EVENT));
+export type DisclaimerGateProps = {
+  readonly gate: ConsentGate;
 };
 
-const readAccepted = (): string | null => {
-  if (typeof window === 'undefined') return null;
-  try {
-    return window.localStorage.getItem(STORAGE_KEY);
-  } catch {
-    // Private-mode / disabled storage — treat as "not accepted yet".
-    return null;
-  }
-};
-
-const writeAccepted = (version: string): boolean => {
-  if (typeof window === 'undefined') return false;
-  try {
-    window.localStorage.setItem(STORAGE_KEY, version);
-    return true;
-  } catch {
-    return false;
-  }
-};
-
-export function DisclaimerBanner(): JSX.Element {
-  const [accepted, setAccepted] = createSignal(readAccepted());
-  const [forcedOpen, setForcedOpen] = createSignal(false);
-  const [expanded, setExpanded] = createSignal(false);
+export function DisclaimerGate(props: DisclaimerGateProps): JSX.Element {
   const [consented, setConsented] = createSignal(false);
+  let panel: HTMLDivElement | undefined;
 
-  const isAccepted = (): boolean => accepted() === DISCLAIMER_VERSION;
-
-  /** Visible until accepted; afterwards only when re-opened from the footer. */
-  const visible = (): boolean => !isAccepted() || forcedOpen();
+  // Pull focus onto the dialog so Tab cannot wander into the inert app
+  // behind it, and so the gate is announced instead of the page under it.
+  createEffect(() => {
+    if (props.gate.visible()) panel?.focus();
+  });
 
   onMount(() => {
-    const onOpen = (): void => {
-      setForcedOpen(true);
-      setExpanded(true);
+    const onKeyDown = (e: KeyboardEvent): void => {
+      // Esc closes the read-only re-open only. A pending gate has no
+      // dismiss path — that is the whole point of it.
+      if (e.key !== 'Escape' || !props.gate.readOnly()) return;
+      props.gate.close();
     };
-    window.addEventListener(TERMS_OPEN_EVENT, onOpen);
-    onCleanup(() => window.removeEventListener(TERMS_OPEN_EVENT, onOpen));
+    window.addEventListener('keydown', onKeyDown);
+    onCleanup(() => window.removeEventListener('keydown', onKeyDown));
   });
 
   const accept = (): void => {
-    setAccepted(writeAccepted(DISCLAIMER_VERSION) ? DISCLAIMER_VERSION : null);
-    setForcedOpen(false);
-    setExpanded(false);
-    setConsented(false);
-  };
-
-  const close = (): void => {
-    setForcedOpen(false);
-    setExpanded(false);
+    props.gate.accept();
     setConsented(false);
   };
 
   return (
-    <Show when={visible()}>
-      <aside
-        class="disclaimer-banner"
-        classList={{ 'disclaimer-banner--expanded': expanded() }}
-        data-testid="disclaimer-banner"
+    <Show when={props.gate.visible()}>
+      <div
+        class="disclaimer-gate"
+        data-testid="disclaimer-gate"
         data-version={DISCLAIMER_VERSION}
-        role="region"
-        aria-labelledby="disclaimer-title"
+        data-mode={props.gate.pending() ? 'pending' : 'read-only'}
       >
-        <div class="disclaimer-banner__head">
-          <h2 id="disclaimer-title" class="disclaimer-banner__title">
-            Условия использования wavecode
-          </h2>
-          <div class="disclaimer-banner__head-actions">
-            <button
-              type="button"
-              class="disclaimer-banner__toggle"
-              data-testid="disclaimer-expand"
-              aria-expanded={expanded()}
-              onClick={() => setExpanded((v) => !v)}
-            >
-              {expanded() ? 'Свернуть' : 'Подробнее'}
-            </button>
-            <Show when={isAccepted()}>
+        <div
+          class="disclaimer-gate__panel"
+          data-testid="disclaimer-panel"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="disclaimer-title"
+          aria-describedby="disclaimer-summary"
+          tabIndex={-1}
+          ref={panel}
+        >
+          <div class="disclaimer-gate__head">
+            <h2 id="disclaimer-title" class="disclaimer-gate__title">
+              Условия использования wavecode
+            </h2>
+            <Show when={props.gate.readOnly()}>
               <button
                 type="button"
-                class="disclaimer-banner__close"
+                class="disclaimer-gate__close"
                 data-testid="disclaimer-close"
                 aria-label="Закрыть условия использования"
-                onClick={close}
+                onClick={() => props.gate.close()}
               >
                 ×
               </button>
             </Show>
           </div>
-        </div>
 
-        <p
-          class="disclaimer-banner__summary"
-          data-testid="disclaimer-summary"
-        >
-          Сервис предоставляется на условиях простой (неисключительной)
-          безвозмездной лицензии. Ознакомьтесь с условиями, продолжив
-          использование.
-        </p>
+          <p
+            class="disclaimer-gate__summary"
+            data-testid="disclaimer-summary"
+          >
+            Сервис предоставляется на условиях простой (неисключительной)
+            безвозмездной лицензии. Ознакомьтесь с условиями, продолжив
+            использование.
+          </p>
 
-        <Show when={expanded()}>
-          <div class="disclaimer-banner__body" data-testid="disclaimer-body">
+          <div class="disclaimer-gate__body" data-testid="disclaimer-body">
             <section class="disclaimer-section">
               <h3 class="disclaimer-section__title">
                 1. Право пользования ПО и интерфейсом
@@ -210,7 +177,7 @@ export function DisclaimerBanner(): JSX.Element {
               </p>
             </section>
 
-            <p class="disclaimer-banner__note">
+            <p class="disclaimer-gate__note">
               Полный текст лицензии на исходный код —{' '}
               <a
                 href="https://github.com/11111000000/wavecode/blob/master/LICENSE"
@@ -223,7 +190,13 @@ export function DisclaimerBanner(): JSX.Element {
             </p>
           </div>
 
-          <Show when={!isAccepted()}>
+          <Show when={props.gate.pending()}>
+            <p class="disclaimer-gate__hint" data-testid="disclaimer-hint">
+              Приложение откроется после того, как вы примете условия.
+              Галочка и кнопка «Принять» сохраняют выбор в этом браузере —
+              в следующий раз окно не появится.
+            </p>
+
             <label class="disclaimer-consent">
               <input
                 type="checkbox"
@@ -237,7 +210,7 @@ export function DisclaimerBanner(): JSX.Element {
               </span>
             </label>
 
-            <div class="disclaimer-banner__actions">
+            <div class="disclaimer-gate__actions">
               <button
                 type="button"
                 class="disclaimer-btn disclaimer-btn--primary"
@@ -249,8 +222,8 @@ export function DisclaimerBanner(): JSX.Element {
               </button>
             </div>
           </Show>
-        </Show>
-      </aside>
+        </div>
+      </div>
     </Show>
   );
 }

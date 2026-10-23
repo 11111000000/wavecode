@@ -242,6 +242,10 @@
   --z-sheet:     40;
   --z-toast:     80;   /* wavecode-toast-overhead-and-toolbar-toggle: выше modal=60 и всех fixed-рядов (52/53) — toast всегда поверх всего */
   --z-modal:     60;
+  --z-consent-gate: 90; /* wavecode-disclaimer-gate: the legal gate is above toast (80)
+                         * and above the onboarding tour overlay
+                         * (calc(--z-modal + 10) = 70), so nothing can
+                         * surface over the acceptance prompt. */
 
   color-scheme: dark;
 }

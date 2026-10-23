@@ -116,7 +116,16 @@ const computeTooltipStyle = (rect: Rect, pref: TourPosition): JSX.CSSProperties 
   };
 };
 
-export function WelcomeTour(): JSX.Element {
+export type WelcomeTourProps = {
+  /**
+   * Suppress the tour while the legal consent gate is up
+   * (`decisions/wavecode-disclaimer-gate.yaml`). App.tsx passes it; the
+   * default keeps this component mountable on its own.
+   */
+  readonly blocked?: boolean;
+};
+
+export function WelcomeTour(props: WelcomeTourProps): JSX.Element {
   const route = useHashRoute();
   const [active, setActive] = createSignal<boolean>(shouldShowTour());
   const [stepIndex, setStepIndex] = createSignal<number>(0);
@@ -124,6 +133,7 @@ export function WelcomeTour(): JSX.Element {
 
   const isLast = (): boolean => stepIndex() >= TOUR_STEPS.length - 1;
   const currentStep = (): TourStep | null => {
+    if (props.blocked === true) return null;
     if (!active() || route() !== 'app') return null;
     return TOUR_STEPS[stepIndex()] ?? null;
   };

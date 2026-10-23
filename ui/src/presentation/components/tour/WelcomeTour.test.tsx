@@ -36,6 +36,20 @@ describe('WelcomeTour (decisions/wavecode-welcome-tour.yaml)', () => {
     });
   });
 
+  it('renders nothing while the legal consent gate is up', async () => {
+    resetTour();
+    setHashRoute('#/app');
+    const { queryByTestId } = render(() => <WelcomeTour blocked />);
+    await waitFor(() => {
+      expect(queryByTestId('welcome-tour')).toBeNull();
+    });
+    // Unblocking starts the tour where it would have started.
+    const unblocked = render(() => <WelcomeTour blocked={false} />);
+    await waitFor(() => {
+      expect(unblocked.getByTestId('welcome-tour')).toBeTruthy();
+    });
+  });
+
   it('renders step 1 (play) on first visit', async () => {
     resetTour();
     setHashRoute('#/app');
