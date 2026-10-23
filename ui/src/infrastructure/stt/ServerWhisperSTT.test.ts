@@ -41,6 +41,13 @@ const AUDIO_CHUNK = 'audio-bytes';
 
 class FakeMediaRecorder {
   static instances: FakeMediaRecorder[] = [];
+  /** When false, the recorder behaves like the real thing on a
+   *  browser where the container never materialises: `start` and
+   *  `stop` succeed, the state machine reports `recording`, and not a
+   *  single byte of audio is delivered. Simulating this is the only
+   *  way to reach the zero-byte branch — every other fake here hands
+   *  over data unconditionally. */
+  static producesAudio = true;
   static isTypeSupported(mime: string): boolean {
     return mime === 'audio/webm;codecs=opus';
   }
@@ -68,6 +75,7 @@ class FakeMediaRecorder {
     if (typeof timeslice === 'number' && timeslice > 0) {
       this.timesliceTimer = window.setInterval(() => {
         if (this.state !== 'recording') return;
+        if (!FakeMediaRecorder.producesAudio) return;
         this.ondataavailable?.({ data: new Blob([AUDIO_CHUNK], { type: this.mimeType }) });
       }, timeslice);
     }
@@ -80,7 +88,9 @@ class FakeMediaRecorder {
       window.clearInterval(this.timesliceTimer);
       this.timesliceTimer = null;
     }
-    this.ondataavailable?.({ data: new Blob([AUDIO_CHUNK], { type: this.mimeType }) });
+    if (FakeMediaRecorder.producesAudio) {
+      this.ondataavailable?.({ data: new Blob([AUDIO_CHUNK], { type: this.mimeType }) });
+    }
     this.onstop?.();
   }
 }
@@ -563,5 +573,79 @@ describe('ServerWhisperSTT — live transcript (interim uploads)', () => {
     await vi.advanceTimersByTimeAsync(0);
     await stopEngine(layer);
     await interrupt(fiber);
+  });
+});
+/**
+ * Capturing nothing used to end the stream silently, which the
+ * orchestrator turned into a bare `pause`. From the user's seat that
+ * is indistinguishable from a quiet take: no transcript, no message,
+ * no sign that anything failed. Field report: "the counter keeps
+ * running and no text appears".
+ */
+describe('ServerWhisperSTT — zero-byte capture is a failure, not an empty take', () => {
+  const layer = makeServerWhisperSTT({
+    endpoint: 'https://stt.test/v1/audio/transcriptions',
+    apiKey: 'sk-test',
+  });
+
+  beforeEach(() => {
+    installBrowserFakes();
+    vi.useFakeTimers();
+    // Simulate a browser where the container never materialises:
+    // start/stop succeed, state reports `recording`, zero bytes ever
+    // arrive. Every other fake in this file hands over data
+    // unconditionally, so this is the only way to reach the branch.
+    FakeMediaRecorder.producesAudio = false;
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+    FakeMediaRecorder.producesAudio = true;
+  });
+
+  /** Let the async flush settle, then read the stream's own exit.
+   *  `interrupt()` would race it and report the interrupt instead. */
+  const settle = async (
+    fiber: Fiber.RuntimeFiber<Chunk.Chunk<TranscriptChunk>, SttUnsupportedError>,
+  ): Promise<Exit.Exit<Chunk.Chunk<TranscriptChunk>, SttUnsupportedError>> => {
+    await vi.advanceTimersByTimeAsync(50);
+    return Effect.runPromise(Fiber.await(fiber));
+  };
+
+  it('reports that the microphone delivered nothing', async () => {
+    const fetchMock = vi.fn(async () => transcriptionResponse('не должно уйти'));
+    vi.stubGlobal('fetch', fetchMock);
+    const fiber = await forkStream(layer);
+    await vi.advanceTimersByTimeAsync(0);
+    fakeAnalyser!.rms = 0.001;
+    await vi.advanceTimersByTimeAsync(300);
+    await stopEngine(layer);
+    const exit = await settle(fiber);
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(exit._tag).toBe('Failure');
+    expect(JSON.stringify((exit as { readonly cause: unknown }).cause))
+      .toContain('микрофон ничего не передал');
+  });
+
+  it('distinguishes a dead mic from an encoder that produced nothing', async () => {
+    // The meter DOES hear speech, so the microphone is alive and the
+    // empty container points at the codec — a different answer, and a
+    // different thing to go fix.
+    const fetchMock = vi.fn(async () => transcriptionResponse('не должно уйти'));
+    vi.stubGlobal('fetch', fetchMock);
+    const fiber = await forkStream(layer);
+    await vi.advanceTimersByTimeAsync(0);
+    fakeAnalyser!.rms = 0.4;
+    await vi.advanceTimersByTimeAsync(200);
+    fakeAnalyser!.rms = 0.001;
+    await vi.advanceTimersByTimeAsync(1500);
+    const exit = await settle(fiber);
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(exit._tag).toBe('Failure');
+    expect(JSON.stringify((exit as { readonly cause: unknown }).cause))
+      .toContain('микрофон слышен');
   });
 });

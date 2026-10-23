@@ -576,6 +576,10 @@ const makeService = (
             // and the meter callback run on the same fiber.
             let inFlight = false;
             let lastTickStartMs = 0;
+            // Highest RMS the meter ever saw. `sawSpeech` alone cannot
+            // tell "quiet room" from "hot mic": both flip it false,
+            // but only the latter means the device was delivering.
+            let peakRms = 0;
 
             const recorder = new MediaRecorder(micStream, { mimeType });
             recorder.ondataavailable = (event: BlobEvent): void => {
@@ -766,18 +770,39 @@ const makeService = (
                   }
                   recorder.stop();
                 });
+                const partCount = parts.length;
                 const blob = new Blob(parts, { type: mimeType });
                 parts.length = 0;
                 logger.push('info', [
                   '[stt-server] flush',
                   `reason=${reason}`,
-                  `parts=${parts.length}`,
+                  `parts=${partCount}`,
                   `bytes=${blob.size}`,
+                  `sawSpeech=${String(sawSpeech)}`,
+                  `peakRms=${peakRms.toFixed(3)}`,
                   `ms=${Date.now() - startedAtMs}`,
                 ]);
                 if (blob.size === 0) {
-                  logger.push('warn', ['[stt-server] nothing recorded, skipping upload']);
-                  emit.end();
+                  // Capturing nothing is a failure, not an empty
+                  // take. Ending the stream silently dropped the FSM
+                  // into `paused` with no transcript and no message,
+                  // so the panel looked like a take that simply had
+                  // nothing in it — indistinguishable from "I was
+                  // quiet". The user reported it as the panel hanging
+                  // on a running counter with no text.
+                  //
+                  // The two causes need different answers, and the
+                  // meter already separates them:
+                  //   sawSpeech=false → nothing reached the mic
+                  //   sawSpeech=true  → audio arrived but the encoder
+                  //                      produced no container
+                  // Saying which one happened turns an invisible
+                  // failure into a diagnosable one.
+                  const detail = sawSpeech
+                    ? `микрофон слышен (пик ${peakRms.toFixed(3)}), но запись пустая — кодек ${mimeType} не отдал данные`
+                    : 'микрофон ничего не передал — проверьте разрешения и что другое приложение не держит устройство';
+                  logger.push('warn', ['[stt-server] nothing recorded', `reason=${reason}`, detail]);
+                  emit.fail(sttError('network', `Запись пустая: ${detail}`));
                   return;
                 }
                 await upload('final', blob);
@@ -810,6 +835,7 @@ const makeService = (
               if (released || flushing) return;
               const now = Date.now();
               const rms = meter?.level() ?? 0;
+              if (rms > peakRms) peakRms = rms;
               if (rms >= SPEECH_RMS_THRESHOLD) {
                 if (!sawSpeech) {
                   logger.push('info', [
