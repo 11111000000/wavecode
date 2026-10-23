@@ -81,6 +81,24 @@ export const acquire = (state: MicMutexState, requested: AcquireRequest): Acquir
 
   if (kind === 'mic-direct') {
     if (state.micDirect !== null) {
+      // Same-session re-acquire is NOT a conflict. The mutex exists to
+      // stop two *different* owners opening the same physical device;
+      // one owner re-asserting its own claim is a no-op. Without this,
+      // a voice-AI session that asks for its own slot back gets a
+      // `MicBusyError` whose `conflictingChannel.owner` and
+      // `requestedBy` are the same owner with the same sessionId —
+      // which is not a diagnostic, it is a bug report in a toast.
+      //
+      // Observed in the field: after a take ended by itself (the 1.3 s
+      // silence flush → `review`), the mic claims were still held and
+      // `activeSessionId` still set, so pressing the button again to
+      // CONTINUE the take re-requested the slot from its own owner and
+      // failed. `speech-api-internal` masked half of it by always
+      // succeeding (appending a duplicate array entry), so only
+      // `mic-direct` surfaced the failure.
+      if (state.micDirect.sessionId === requested.sessionId) {
+        return { ok: true, channel: state.micDirect, next: state };
+      }
       const error: MicBusyError = {
         _tag: 'MicBusy',
         conflictingChannel: state.micDirect,
@@ -94,6 +112,17 @@ export const acquire = (state: MicMutexState, requested: AcquireRequest): Acquir
   }
 
   if (kind === 'speech-api-internal') {
+    // Idempotent for the same reason as `mic-direct`, and it matters
+    // more here: this branch is a blind append, so a re-claim used to
+    // grow `speechApiInternal` by one entry per press. `release`
+    // filters by sessionId so it did eventually get cleaned up, but
+    // the array was reporting N owners where there is one.
+    if (state.speechApiInternal.some((c) => c.sessionId === requested.sessionId)) {
+      const existing = state.speechApiInternal.find(
+        (c) => c.sessionId === requested.sessionId,
+      ) as MicChannel;
+      return { ok: true, channel: existing, next: state };
+    }
     const channel = buildChannel(requested);
     const next: MicMutexState = {
       ...state,

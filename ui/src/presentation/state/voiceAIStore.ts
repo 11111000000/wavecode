@@ -161,6 +161,25 @@ export const [voiceAIFlushing, setVoiceAIFlushing] = createSignal<boolean>(false
 
 let elapsedTimer: number | null = null;
 
+/**
+ * Cloud Web Speech streams partials in ~1-2 s, so four seconds of
+ * total silence means the recogniser is genuinely dead — that is the
+ * Chromium-without-Google-services failure this watchdog was written
+ * for, and it is exactly what it catches.
+ */
+const WEB_ENGINE_SILENCE_SEC = 4;
+
+/**
+ * Our whisper relay cannot answer faster than the engine's own
+ * cadence: `TICK_MS` (2.5 s) of audio has to accumulate before the
+ * first upload, and whisper's encode window is a fixed 30 s
+ * regardless of clip length, so 2.6-5.2 s is the floor and 9 s is
+ * the documented ceiling under host load. Add the flush wait and
+ * margin. Anything below this bound fires on healthy takes, which is
+ * strictly worse than waiting.
+ */
+const SERVER_ENGINE_SILENCE_SEC = 20;
+
 /** RMS poll cadence. Matches `ServerWhisperSTT.METER_POLL_MS` so the
  *  bar reflects whatever the STT meter observed within ~100 ms —
  *  fast enough for the eye, cheap enough that the JS timer budget
@@ -190,6 +209,24 @@ const stopRmsPoll = (): void => {
   setVoiceAIRmsLevel(null);
 };
 
+/**
+ * How long `listening` may stay empty before we call the engine
+ * wedged. Engine-specific because the two engines have genuinely
+ * different first-chunk latencies. See the watchdog comment inside
+ * `startElapsedTimer` for why a flat 4 s was wrong.
+ *
+ * SECONDS, because that is the unit `voiceAIElapsedSec` counts in.
+ * An earlier revision of this fix stored the bounds in milliseconds
+ * and compared them against a second count, which pushed the server
+ * bound to 20 000 s — i.e. the watchdog never fired at all, and the
+ * "genuinely wedged engine" case it exists for went back to hanging
+ * silently. The unit is named in every identifier on purpose.
+ */
+const silenceWatchdogSec = (): number =>
+  resolveSttEngineKind() === 'server'
+    ? SERVER_ENGINE_SILENCE_SEC
+    : WEB_ENGINE_SILENCE_SEC;
+
 const startElapsedTimer = (): void => {
   if (elapsedTimer !== null) return;
   setVoiceAIElapsedSec(0);
@@ -209,11 +246,23 @@ const startElapsedTimer = (): void => {
       // blocked engine never does; this client-side watchdog covers
       // the silent-engine case regardless of which path the orchestrator
       // is on.
+      //
+      // The threshold is per-engine, and the difference is not
+      // cosmetic. On the server relay the FIRST interim cannot arrive
+      // sooner than `ServerWhisperSTT.TICK_MS` (2.5 s of buffered
+      // audio) plus one whisper round trip — 2.6-5.2 s measured, 5-9 s
+      // under host load (`decisions/wavecode-server-stt`). So the first
+      // chunk lands at roughly 5.1-7.7 s, worst case above 11 s. A
+      // flat 4 s threshold therefore fired on EVERY take, before any
+      // text could possibly exist, and replaced a working panel with
+      // "Не удалось получить текст от движка распознавания" — a
+      // false accusation against a recogniser that was fine and on
+      // its way.
       const elapsed = voiceAIElapsedSec();
       const t = voiceAITranscript();
       if (
         voiceAIState().tag === 'listening'
-        && elapsed >= 4
+        && elapsed >= silenceWatchdogSec()
         && t.interim === ''
         && t.final === ''
       ) {
@@ -252,6 +301,21 @@ export type VoiceAIStartOpts = {
 
 let handle: VoiceSessionHandle | null = null;
 let activeSessionId: string | null = null;
+
+/**
+ * Drop the mic claims of whichever session is currently open, and
+ * forget it. Idempotent: with no open session it does nothing.
+ *
+ * Called from every terminal path — explicit stop, dismiss, review
+ * cancel — plus the self-terminating one (a take that reaches `review`
+ * on its own via the silence flush, where nothing else runs).
+ */
+const releaseOwnChannels = (): void => {
+  const sid = activeSessionId;
+  if (sid === null) return;
+  activeSessionId = null;
+  releaseMic(sid);
+};
 let langAtInit: 'ru-RU' | string = 'ru-RU';
 let scoreSyncDispose: (() => void) | null = null;
 
@@ -381,35 +445,55 @@ export const initVoiceAI = (deps: {
       return Effect.void;
     })(handle.stream).pipe(
       Stream.runForEach((s) =>
-        Effect.sync(() => {
-          untrack(() => {
-            setVoiceAIState(s);
-            // Leaving `listening` means the release-flush finished:
-            // either the transcript landed (`review`) or the take was
-            // abandoned (`errored` / `idle`).
-            if (s.tag !== 'listening') setVoiceAIFlushing(false);
-            if (
-              s.tag === 'listening'
-              || s.tag === 'transcribing'
-              || s.tag === 'requesting'
-              || s.tag === 'applying'
-              || s.tag === 'paused'
-              || s.tag === 'review'
-              || s.tag === 'errored'
-            ) {
-              setVoiceAITranscript(s.transcript);
-            }
-            if (s.tag === 'errored') {
-              setVoiceAIError(s.error);
-            } else if (voiceAIError() !== null) {
-              setVoiceAIError(null);
-            }
-          });
-        }),
+        Effect.sync(() => { untrack(() => { publishState(s); }); }),
       ),
     ),
   );
 }
+
+/**
+ * Single funnel for mirroring an FSM state into the Solid signals.
+ *
+ * Module scope rather than inline in the stream subscription so the
+ * test fake handle can drive the exact same bookkeeping. When this
+ * lived inside the subscription, `__setVoiceAIHandleForTests`
+ * replaced the stream with an empty one and every mirror-side rule
+ * (the flush flag, the mic release on `review`) became untestable —
+ * the store tests stayed green against code they never executed.
+ */
+const publishState = (s: VoiceSessionState): void => {
+  setVoiceAIState(s);
+  // Leaving `listening` means the release-flush finished: either the
+  // transcript landed (`review`) or the take was abandoned
+  // (`errored` / `idle`).
+  if (s.tag !== 'listening') setVoiceAIFlushing(false);
+  // A take that reaches `review` by itself — the 1.3 s silence flush,
+  // or the 100 s hard cap — never goes through `stopVoiceAI`, so
+  // nothing released the mic claims. The engine has stopped by this
+  // point (`subscribeLoop` calls `stt.stop()` on the way to review),
+  // so holding `mic-direct` keeps the device locked for nothing and
+  // blocks the whistle button.
+  if (s.tag === 'review') releaseOwnChannels();
+  if (
+    s.tag === 'listening'
+    || s.tag === 'transcribing'
+    || s.tag === 'requesting'
+    || s.tag === 'applying'
+    || s.tag === 'paused'
+    || s.tag === 'review'
+    || s.tag === 'errored'
+  ) {
+    setVoiceAITranscript(s.transcript);
+  }
+  if (s.tag === 'errored') {
+    setVoiceAIError(s.error);
+  } else if (voiceAIError() !== null) {
+    setVoiceAIError(null);
+  }
+};
+
+/** Test-only: drive the FSM mirror without a real stream. */
+export const __publishVoiceAIStateForTests = publishState;
 
 /* ── start / stop / commit / cancel ──────────────────────────────── */
 
@@ -634,11 +718,7 @@ export const cancelVoiceAIReview = (): Effect.Effect<void, never, never> => {
   }
   return Effect.gen(function* () {
     yield* handle!.cancelReview();
-    const sid = activeSessionId;
-    if (sid !== null) {
-      releaseMic(sid);
-      activeSessionId = null;
-    }
+    releaseOwnChannels();
     stopElapsedTimer();
     stopRmsPoll();
     return;
