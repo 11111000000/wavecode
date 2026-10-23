@@ -337,6 +337,34 @@ export const createVoiceAISession = (
       yield* deps.stt.stop();
     });
 
+    /**
+     * Where to put the FSM when the STT stream ends without having
+     * produced a final chunk.
+     *
+     * This is not a defensive nicety — it is the only thing standing
+     * between a self-terminating engine and a UI that lies. The engine
+     * flushes on its own: 1.3 s of silence, or the 100 s hard cap. That
+     * path never goes through `handle.stop()` (nobody called it — the
+     * finger is still down), so with no sink here the stream would
+     * just complete and leave the FSM pinned on `listening`: the panel
+     * kept counting seconds forever and no text ever appeared. Reported
+     * from the field as "the counter keeps going, nothing happens".
+     *
+     * Text present → `review`, so the take is sendable. No text →
+     * `paused`, which re-arms on the next press and does not pretend
+     * there is something to review.
+     */
+    const parkAfterStreamEnd = Effect.gen(function* () {
+      const s = yield* Ref.get(stateRef);
+      if (s.tag === 'listening' || s.tag === 'arming') {
+        const hasText =
+          s.tag === 'listening' && s.transcript.final.trim().length > 0;
+        yield* dispatch({ type: hasText ? 'enter-review' : 'pause' });
+      } else if (s.tag === 'transcribing') {
+        yield* dispatch({ type: 'enter-review' });
+      }
+    });
+
     // Subscribe to the STT chunk stream. For each chunk: dispatch a
     // `chunk` event; if the chunk is final and the FSM is in
     // `transcribing`, drop into `review` so the user can confirm /
@@ -384,6 +412,15 @@ export const createVoiceAISession = (
           // through `cancelVoiceAIReview` / `cancelVoiceAIInFlight`.
           yield* deps.stt.stop();
         }),
+      ).pipe(
+        // Run after the stream completes, whatever completed it. On the
+        // silence-flush path this is the ONLY place that can park the
+        // FSM — `handle.stop()` was never called, the finger is still
+        // down. Without it the panel counts seconds forever with no
+        // text. Skipped when the fiber is interrupted (`dismiss`,
+        // `cancelInFlight`), which is what we want: those paths own
+        // their own destination.
+        Effect.andThen(parkAfterStreamEnd),
       );
 
     // Publish the current state once so a mount-time subscriber sees
@@ -456,20 +493,13 @@ export const createVoiceAISession = (
             );
             yield* Ref.set(subscriberRef, null);
           }
-          // Nothing was recognised — a silent take, or an engine that
-          // ended without emitting a final chunk. The subscriber's own
-          // normal exit already handles this, but `stop()` can also be
-          // reached without a stream ever having produced anything, so
-          // pin the FSM to `paused` (which re-arms on the next press)
-          // rather than leaving it stuck on «записываю…».
-          const s = yield* Ref.get(stateRef);
-          if (s.tag === 'listening' || s.tag === 'arming') {
-            const hasText =
-              s.tag === 'listening' && s.transcript.final.trim().length > 0;
-            yield* dispatch({ type: hasText ? 'enter-review' : 'pause' });
-          } else if (s.tag === 'transcribing') {
-            yield* dispatch({ type: 'enter-review' });
-          }
+          // Fallback sink. On the normal path the subscriber's own
+          // exit already parked the FSM (`parkAfterStreamEnd`) before
+          // this await returned. This only matters when the drain hit
+          // `DRAIN_MAX_MS` and the stream is still open — in which case
+          // something is wedged and the FSM must not stay on
+          // «записываю… N с» forever.
+          yield* parkAfterStreamEnd;
           });
           const drainFiber = yield* Effect.forkDaemon(drain);
           yield* Ref.set(drainRef, drainFiber);
