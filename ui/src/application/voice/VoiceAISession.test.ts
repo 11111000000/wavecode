@@ -593,3 +593,42 @@ describe('createVoiceAISession — take continuation', () => {
     expect(applied).toEqual(['note("e4")']);
   });
 });
+
+describe('createVoiceAISession — re-press during the release flush', () => {
+  it('waits out the in-flight drain instead of colliding with it', async () => {
+    // The FAB fires `stop` from a pointerup handler and never awaits
+    // it, so a second press can land while the take is still being
+    // uploaded. Without the drain barrier in `start` that produced a
+    // hard `aborted` from the engine's one-recording-at-a-time guard.
+    const { layer } = buildServices('note("e4")');
+    const stt = controllableStt();
+    const { deps } = await buildDeps(stt.svc, layer);
+    const handle = await Effect.runPromise(createVoiceAISession(deps));
+
+    await Effect.runPromise(
+      handle.start({ mode: 'continuous', lang: 'ru-RU', bargeInMode: 'replace' }),
+    );
+    await waitForState(handle, (s) => s.tag === 'listening');
+    stt.capture('первая фраза');
+
+    // Do NOT await: this is the fire-and-forget pointerup path.
+    const stopping = Effect.runPromise(handle.stop());
+    // Second press, mid-flush.
+    const starting = Effect.runPromise(
+      handle.start({ mode: 'continuous', lang: 'ru-RU', bargeInMode: 'replace' }),
+    );
+    await stopping;
+    await starting;
+
+    // `review` is transitory here: the re-arm fires the moment the
+    // drain releases it, so the settled state is `listening`. The
+    // transcript is the sharp observable — if the drain had NOT
+    // completed first, `arm` would have been dispatched from
+    // `listening`, and `fromListening + arm` deliberately resets the
+    // buffer. A preserved transcript therefore proves the ordering.
+    const listening = await waitForState(handle, (s) => s.tag === 'listening');
+    expect(listening.tag).toBe('listening');
+    if (listening.tag !== 'listening') throw new Error('unreachable');
+    expect(listening.transcript.final).toBe('первая фраза');
+  });
+});

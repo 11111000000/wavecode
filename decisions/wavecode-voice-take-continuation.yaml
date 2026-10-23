@@ -3,8 +3,8 @@ schema: math-coding/3.3
 id: wavecode-voice-take-continuation
 revision: 1
 state: active
-body_sha: "sha256:e77c96be79daed029a9b2ace2b8c31b59a596ab5f23d33cc3c4c59f033b6f7c8"
-yaml_sha: "sha256:e77c96be79daed029a9b2ace2b8c31b59a596ab5f23d33cc3c4c59f033b6f7c8"
+body_sha: "sha256:4d07de48baad50c5d7f77da8e1b91c418f3879d0cb3fb279978943f22431a3df"
+yaml_sha: "sha256:4d07de48baad50c5d7f77da8e1b91c418f3879d0cb3fb279978943f22431a3df"
 
 axiom_link:
   - A0
@@ -105,12 +105,22 @@ commitment: |
       который уже делают `AIEditPanel`, `micStore`,
       `whistleStore` и `pianoRecStore`.
 
-  (5) `VITE_STT_BACKEND` по умолчанию становится `server`.
+  (5) `start` ждёт незавершённый release-drain (`drainRef`).
+      FAB зовёт `stop` из pointerup и НЕ ждёт его — это жест,
+      блокировать его на сети нельзя. Поэтому без барьера
+      повторное нажатие внутри окна в ~4 с доходило до `start`
+      при живом flush: `arm` из `listening` (который по контракту
+      сбрасывает транскрипт) и жёсткий `aborted` от
+      single-recording-guard движка. Дренирование живёт на своей
+      фибре, `stop` сам ждёт исхода (callers полагаются на
+      settled-FSM), а `start` просто присоединяется.
+
+  (6) `VITE_STT_BACKEND` по умолчанию становится `server`.
       Цепочка fallback'а НЕ удалена — `auto` и `web` её
       по-прежнему выбирают, для A/B облака. Просто пользователь
       больше не получает её случайно.
 
-  (6) `voiceAIFlushing` — presentation-сигнал между «палец
+  (7) `voiceAIFlushing` — presentation-сигнал между «палец
       отпущен» и «транскрипт пришёл». Без него панель
       замирала на «записываю… 3 с» на те ~4 с, что уходит на
       раундtrip, — то есть на время, которое выглядит как
@@ -118,7 +128,7 @@ commitment: |
       `wavecode-voice-rec-and-meter` отказался рисовать
       фейковую метру.
 
-  (7) `npm run test:precommit` (tsc strict + 114 vitest-файлов +
+  (8) `npm run test:precommit` (tsc strict + 114 vitest-файлов +
       lint:no-console + validate:presets) завершается exit 0.
 
 counterexample: |
@@ -258,6 +268,15 @@ outcomes:
       `VoiceAISession.test.ts > hands the routed score back for
       the editor write-back`: `onApplied` вызывается ровно один
       раз и получает очищенный скор маршрута.
+  - id: re-press-mid-flush-waits-out-the-drain
+    statement: |
+      `VoiceAISession.test.ts > re-press during the release flush >
+      waits out the in-flight drain instead of colliding with it`:
+      второй press, не дожидаясь `stop`, даёт settled FSM
+      `listening` с `transcript.final === 'первая фраза'`. Сохранённый
+      транскрипт — sharp-наблюдение: если бы drain не завершился
+      первым, `arm` ушёл бы из `listening`, а `fromListening + arm`
+      сбрасывает буфер по контракту.
   - id: no-frozen-recording-counter-during-flush
     statement: |
       `voiceAIFlushing` поднимается в `stopVoiceAI` и
@@ -310,6 +329,15 @@ obligations:
       take and one send ships both phrases`: после двух
       press/release `review.editedText` содержит обе фразы,
       `rec.llmCalls === 1`.
+    acceptance:
+      all:
+        - verifier: vitest-run-voice-session-orchestrator
+          result: pass
+  - id: drain-barrier-clears-the-transcript-reset-race
+    claim: |
+      `VoiceAISession.test.ts` содержит `re-press during the
+      release flush`; тест падает при удалении ожидания
+      `drainRef` из `start` (проверено мутацией).
     acceptance:
       all:
         - verifier: vitest-run-voice-session-orchestrator

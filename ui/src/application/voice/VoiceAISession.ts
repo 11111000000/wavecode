@@ -170,6 +170,18 @@ export const createVoiceAISession = (
     // `Stream.runForEach` propagates `Stream<A, E>`'s `E` as the loop's
     // own error channel.
     const subscriberRef: Ref.Ref<Fiber.RuntimeFiber<void, SttUnsupportedError> | null> = yield* Ref.make<Fiber.RuntimeFiber<void, SttUnsupportedError> | null>(null);
+    // The release-drain currently in flight, if any.
+    //
+    // `stop` waits out the whole flush (one server round trip) before
+    // returning, but the FAB fires it and forgets — it is a pointerup
+    // handler, nobody blocks a touch event on the network. So a user
+    // who presses the button again inside that window would reach
+    // `start` while the engine is still mid-flush, get `arm` from
+    // `listening` (which resets the transcript by design) and then a
+    // hard `aborted` from the engine's single-recording guard.
+    // Tracking the drain lets `start` simply wait it out, which is
+    // both correct and what the user meant by pressing again.
+    const drainRef: Ref.Ref<Fiber.RuntimeFiber<void, never> | null> = yield* Ref.make<Fiber.RuntimeFiber<void, never> | null>(null);
     // Single-consumer unbounded queue that backs the `stream` API.
     const stateQueue: Queue.Queue<VoiceSessionState> = yield* Queue.unbounded<VoiceSessionState>();
 
@@ -382,6 +394,15 @@ export const createVoiceAISession = (
       stateRef,
       start: (input) =>
         Effect.gen(function* () {
+          // A release-drain may still be running (see `drainRef`).
+          // Let it finish: the take it is uploading belongs to the
+          // same press-and-hold the user is continuing, and the engine
+          // accepts exactly one recording at a time.
+          const draining = yield* Ref.get(drainRef);
+          if (draining !== null) {
+            yield* Fiber.await(draining);
+            yield* Ref.set(drainRef, null);
+          }
           // `input.mode` is forwarded into `bargeInMode` context for the
           // classifier (currently the rule-based classifier ignores it,
           // but the type signature is reserved for future LLM-routed
@@ -403,6 +424,11 @@ export const createVoiceAISession = (
         }),
       stop: () =>
         Effect.gen(function* () {
+          // The drain runs on its own fiber so `start` can join it
+          // instead of colliding with it (see `drainRef`). `stop`
+          // itself still waits for the outcome — callers rely on the
+          // FSM being settled when it resolves.
+          const drain = Effect.gen(function* () {
           // `stop` means "the finger came off the button", NOT "throw
           // the take away" — the server engine now flushes and uploads
           // on stop, so the final chunk is still coming.
@@ -444,6 +470,11 @@ export const createVoiceAISession = (
           } else if (s.tag === 'transcribing') {
             yield* dispatch({ type: 'enter-review' });
           }
+          });
+          const drainFiber = yield* Effect.forkDaemon(drain);
+          yield* Ref.set(drainRef, drainFiber);
+          yield* Fiber.await(drainFiber);
+          yield* Ref.set(drainRef, null);
         }),
       onChunk: (chunk: TranscriptChunk) =>
         Effect.gen(function* () {
