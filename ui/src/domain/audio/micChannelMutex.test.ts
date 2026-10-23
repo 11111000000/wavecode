@@ -173,3 +173,71 @@ describe('micChannelMutex.currentOwners', () => {
     expect(currentOwners(initialMicMutexState())).toEqual([]);
   });
 });
+
+describe('micChannelMutex — self-reclaim is not a conflict', () => {
+  it('mic-direct: the same sessionId may re-acquire its own slot', () => {
+    // Field bug: after a take ended by itself (silence flush → review)
+    // the claims were still held, so pressing the button again to
+    // CONTINUE the take asked its own owner for the slot and got a
+    // MicBusyError whose owner and requester were literally the same
+    // session. Reclaiming your own device is not contention.
+    const first = acquire(initialMicMutexState(), {
+      kind: 'mic-direct',
+      owner: { kind: 'voice-ai', sessionId: 'x' },
+      sessionId: 's1',
+      nowMs: 10,
+    });
+    expect(first.ok).toBe(true);
+    if (!first.ok) return;
+
+    const again = acquire(first.next, {
+      kind: 'mic-direct',
+      owner: { kind: 'voice-ai', sessionId: 'x' },
+      sessionId: 's1',
+      nowMs: 20,
+    });
+    expect(again.ok).toBe(true);
+    // State is untouched — the claim is not duplicated or re-stamped.
+    if (!again.ok) return;
+    expect(again.next).toBe(first.next);
+    expect(again.channel.acquiredAtMs).toBe(10);
+  });
+
+  it('mic-direct: a DIFFERENT session still conflicts', () => {
+    // The idempotency must not weaken the guard it exists to provide.
+    const first = acquire(initialMicMutexState(), {
+      kind: 'mic-direct',
+      owner: { kind: 'voice-ai', sessionId: 'x' },
+      sessionId: 's1',
+      nowMs: 10,
+    });
+    if (!first.ok) return;
+    const other = acquire(first.next, {
+      kind: 'mic-direct',
+      owner: { kind: 'whistle', sessionId: 'x' },
+      sessionId: 's2',
+      nowMs: 20,
+    });
+    expect(other.ok).toBe(false);
+    if (other.ok) return;
+    expect(other.error.conflictingChannel.sessionId).toBe('s1');
+  });
+
+  it('speech-api-internal: a re-claim does not grow the owner list', () => {
+    // This branch was a blind append, so every press added an entry
+    // and `currentOwners` reported N owners where there is one.
+    let state = initialMicMutexState();
+    for (let i = 0; i < 4; i += 1) {
+      const r = acquire(state, {
+        kind: 'speech-api-internal',
+        owner: { kind: 'voice-ai', sessionId: 'x' },
+        sessionId: 's1',
+        nowMs: 10 + i,
+      });
+      expect(r.ok).toBe(true);
+      if (r.ok) state = r.next;
+    }
+    expect(state.speechApiInternal).toHaveLength(1);
+    expect(currentOwners(state)).toHaveLength(1);
+  });
+});
