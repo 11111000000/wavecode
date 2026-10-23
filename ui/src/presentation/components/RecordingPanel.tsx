@@ -3,6 +3,7 @@ import {
   voiceAIState,
   voiceAITranscript,
   voiceAIElapsedSec,
+  voiceAIFlushing,
   voiceAIRmsLevel,
   voiceAIPanelArmed,
   cancelVoiceAIReview,
@@ -293,7 +294,13 @@ const VoiceAILiveBody = (): JSX.Element => {
               : voiceAIState().tag === 'requesting' ? 'жду ответ ИИ…'
               : voiceAIState().tag === 'paused' ? 'на паузе'
               : (voiceAIState().tag === 'listening' || voiceAIState().tag === 'arming')
-                ? `записываю… ${voiceAIElapsedSec()} с`
+                ? (voiceAIFlushing()
+                  // Button released, take is being uploaded. The mic
+                  // is already closed, so «записываю… N с» would be
+                  // a lie that also looks like a hang for the ~4 s
+                  // the round trip takes.
+                  ? 'распознаю…'
+                  : `записываю… ${voiceAIElapsedSec()} с`)
               : '…')}
         </span>
       </Show>

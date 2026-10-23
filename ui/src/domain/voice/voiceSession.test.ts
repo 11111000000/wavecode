@@ -302,6 +302,68 @@ describe('voiceSessionReducer — re-arm', () => {
   });
 });
 
+describe('voiceSessionReducer — take continuation after release', () => {
+  it('arm from paused resumes listening with the transcript intact', () => {
+    // Regression: `fromPaused` had no `arm` branch, so the second
+    // press-and-hold of a take dispatched `arm` → `stt-ready` →
+    // `chunk` and every one of them was a no-op. The microphone
+    // recorded, the audio was transcribed by the server, and the
+    // words were thrown away — the panel simply never changed.
+    let s: VoiceSessionState = voiceSessionReducer({ tag: 'idle' }, { type: 'arm' });
+    s = voiceSessionReducer(s, { type: 'stt-ready' });
+    s = voiceSessionReducer(s, { type: 'chunk', chunk: finalChunk('первая фраза', 500) });
+    s = voiceSessionReducer(s, { type: 'pause' });
+    expect(s.tag).toBe('paused');
+
+    s = voiceSessionReducer(s, { type: 'arm' });
+    expect(s.tag).toBe('listening');
+    if (s.tag !== 'listening') throw new Error('unreachable');
+    // The whole point: what was already dictated survives.
+    expect(s.transcript.final).toBe('первая фраза');
+
+    // `stt-ready` still arrives from the orchestrator's start
+    // sequence and must not clobber the resumed take.
+    s = voiceSessionReducer(s, { type: 'stt-ready' });
+    expect(s.tag).toBe('listening');
+    if (s.tag !== 'listening') throw new Error('unreachable');
+    expect(s.transcript.final).toBe('первая фраза');
+  });
+
+  it('a second utterance appends to the take rather than replacing it', () => {
+    let s: VoiceSessionState = voiceSessionReducer({ tag: 'idle' }, { type: 'arm' });
+    s = voiceSessionReducer(s, { type: 'stt-ready' });
+    s = voiceSessionReducer(s, { type: 'chunk', chunk: finalChunk('сделай тише', 500) });
+    s = voiceSessionReducer(s, { type: 'pause' });
+
+    s = voiceSessionReducer(s, { type: 'arm' });
+    s = voiceSessionReducer(s, {
+      type: 'chunk',
+      chunk: finalChunk('и добавь немного ритма', 900),
+    });
+    expect(s.tag).toBe('transcribing');
+    if (s.tag !== 'transcribing') throw new Error('unreachable');
+    expect(s.transcript.final).toBe('сделай тише и добавь немного ритма');
+  });
+
+  it('the continued take reaches review with both utterances in the buffer', () => {
+    let s: VoiceSessionState = voiceSessionReducer({ tag: 'idle' }, { type: 'arm' });
+    s = voiceSessionReducer(s, { type: 'stt-ready' });
+    s = voiceSessionReducer(s, { type: 'chunk', chunk: finalChunk('сделай тише', 500) });
+    s = voiceSessionReducer(s, { type: 'pause' });
+    s = voiceSessionReducer(s, { type: 'arm' });
+    s = voiceSessionReducer(s, {
+      type: 'chunk',
+      chunk: finalChunk('и добавь немного ритма', 900),
+    });
+    s = voiceSessionReducer(s, { type: 'enter-review' });
+    expect(s.tag).toBe('review');
+    if (s.tag !== 'review') throw new Error('unreachable');
+    // One «→ В ИИ» then ships the whole take, not just the last
+    // press. `send-review` reads exactly this buffer.
+    expect(s.editedText).toBe('сделай тише и добавь немного ритма');
+  });
+});
+
 describe('voiceSessionReducer — full press-and-talk flow', () => {
   it('drives idle → arming → listening → transcribing → requesting → applying → idle', () => {
     const events: ReadonlyArray<VoiceSessionEvent> = [

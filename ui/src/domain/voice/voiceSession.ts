@@ -280,6 +280,29 @@ const fromPaused = (
       continuous: true,
     };
   }
+  // `arm` from `paused` re-opens the take for another utterance.
+  //
+  // This branch is load-bearing, not a nicety. `VoiceAISession.start`
+  // dispatches `arm` → `stt.start` → `stt-ready`, and before it
+  // existed every one of those three was a no-op from `paused`, so
+  // the second press-and-hold of a take recorded audio, uploaded it
+  // to the STT server, and then had every resulting chunk silently
+  // discarded: `fromPaused` had no `chunk` branch either. The user
+  // saw an unchanged panel and concluded the button was dead.
+  //
+  // It goes straight to `listening` rather than through `arming` for
+  // the same reason `fromReview` does — `fromArming + stt-ready`
+  // allocates a FRESH transcript, which would throw away the text
+  // already dictated. `stt-ready` arriving from `listening` is a
+  // no-op (`fromListening` does not handle it), so the orchestrator's
+  // start sequence still completes correctly.
+  if (event.type === 'arm') {
+    return {
+      tag: 'listening',
+      transcript: state.transcript,
+      continuous: true,
+    };
+  }
   if (event.type === 'dismiss') return { tag: 'idle' };
   if (event.type === 'enter-review') {
     return enterReviewFrom(state.transcript);

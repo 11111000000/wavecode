@@ -1,0 +1,408 @@
+---
+schema: math-coding/3.3
+id: wavecode-voice-take-continuation
+revision: 1
+state: active
+body_sha: "sha256:4d07de48baad50c5d7f77da8e1b91c418f3879d0cb3fb279978943f22431a3df"
+yaml_sha: "sha256:4d07de48baad50c5d7f77da8e1b91c418f3879d0cb3fb279978943f22431a3df"
+
+axiom_link:
+  - A0
+  - A3
+
+intent: |
+  Пользователь сообщил о трёх симптомах голосового ввода, которые
+  мы НЕ смогли воспроизвести ни тестами, ни чтением кода как
+  одну поломку — и попросил проанализировать, можно ли перенести
+  запись целиком на серверный вариант, починить текущий, и
+  «сделать бэкенд, который работает быстро и надёжно и всегда».
+
+  Журнал `stt-web.service` за 24 часа ДО этого решения закрыл
+  половину вопроса эмпирически: 8 POST-запросов к
+  `/v1/audio/transcriptions`, все `200 OK`, ни одной ошибки,
+  латентность 2.6-5.2 с, корректная русская расшифровка, User-Agent
+  — Chrome/155 Mobile с `wavecode.kosov.online`, то есть реальный
+  пользовательский трафик этого приложения. Вывод: бэкенд УЖЕ
+  существует и исправен; строить второй — значит потратить работу
+  на дублирование работающей подсистемы.
+
+  Все четыре дефекта — в клиенте. Ниже они названы так, как их
+  увидит пользователь, а не так, как они выглядят в коде.
+
+  (1) «Запись идёт не сразу». `VITE_STT_BACKEND` не был задан →
+      `auto` → в любом Chrome резолвится Web Speech. В Chrome
+      нет распознавателя за Speech-объектом: он стартует и молчит.
+      `FallbackSTT` не отличает «ещё не начал» от «начал и молчит»
+      и тратит `WATCHDOG_MS = 2_500` на каждый press. Итого
+      ~8 с тишины до первого слова — и отправка голоса в Google,
+      что прямо противоречит
+      `AngaraConfig/KB/30_decisions/llm-proxy-audio-route-2026-10-20.md`,
+      где в таблице сравнения сам Cloud-STT помечен как «утечка
+      голоса наружу».
+
+  (2) «Повторное нажатие не работает». `stopVoiceAI()` оставлял
+      FSM в `paused`, а в `fromPaused` НЕ БЫЛО ветки `arm`.
+      Второе нажатие → `dispatch({arm})` = no-op →
+      `dispatch({stt-ready})` = no-op → `chunk` = no-op.
+      Микрофон писал, аудио уходило на сервер, whisper
+      возвращал текст, и reducer его ВЫБРАСЫВАЛ. Панель не
+      менялась. Ровно то, что описал пользователь.
+
+  (3) «Отжал — take пропал». `ServerWhisperSTT.stop()` был
+      отменой без отправки. Единственные загрузки — interim-тик
+      раз в 2.5 с или silence-flush через 1.3 с тишины, и то
+      только пока палец НЕ отпущен. Фраза короче тика при
+      естественном жесте «зажать, сказать, отпустить» не
+      отправлялась вообще. Это же объясняет 1.7-секундные клипы
+      в журнале сервера — доезжали только те take, где
+      пользователь случайно задержался на середине фразы.
+
+  (4) «ЛМ парсинг не удался». Голосовой путь вызывал
+      `audio.eval(cleanedScore)` и на этом заканчивал. Ни одного
+      `dispatch({type:'replaceScore'})` во всём
+      voice-пути — микрофон, свисток, пианино и AIEditPanel его
+      делают, голос был единственным исключением. Правка
+      проигрывалась, а буфер редактора не менялся.
+
+commitment: |
+  (1) `fromPaused` получает ветку `arm` → `listening` с
+      СОХРАНЕНИЕМ транскрипта. Именно в `listening`, а не через
+      `arming`: `fromArming + stt-ready` выделяет СВЕЖИЙ
+      транскрипт и выбросил бы уже сказанное. `stt-ready`,
+      приходящий из `listening`, — no-op, поэтому
+      стартовая последовательность оркестратора остаётся
+      корректной. Симметрично существующей ветке `arm` в
+      `fromReview`.
+
+  (2) `ServerWhisperSTT.stop()` перестаёт быть отменой: он
+      зовёт `requestFlush()` — тот же silence-flush-путь. Идемпо-
+      тентен по построению: no-op, если flush уже идёт (тишина
+      1.3 с успела раньше) или если `released` (потребитель сам
+      снёс take). Отмена остаётся у `dismiss`, который
+      прерывает subscriber-фибру ДО вызова `stt.stop()`, а значит
+      приводит `released` в true и делает flush no-op'ом.
+
+  (3) `VoiceAISession.stop()` перестаёт делать `pause` первым.
+      Порядок здесь и есть исправление: раньше FSM уходил в
+      `paused` до того, как приходил финальный chunk, а
+      `fromPaused` не имел ветки `chunk`. Теперь `stop()` зовёт
+      `stt.stop()`, держит FSM в `listening`, и ждёт завершения
+      subscriber-фибры (`Fiber.await` под потолком
+      `DRAIN_MAX_MS = 12_000` — в happy path это один
+      server-раундtrip). Редуктор сам проходит
+      listening → transcribing → review, что и нужно
+      пользователю: текст перед глазами, «→ В ИИ» доступна,
+      следующий press дописывает в тот же take.
+      `teardownSubscriber` остаётся для `dismiss` и
+      `enterReview` — там take действительно выбрасывается.
+
+  (4) `VoiceSessionDeps` получает `onApplied?: (score) =>
+      void`, который оркестратор зовёт с очищенным скором
+      успешного маршрута. `application/` не имеет права импортировать
+      `presentation/`, поэтому write-back внедряется сверху:
+      `voiceAIStore` передаёт
+      `dispatch({type:'replaceScore', text})` — тот же вызов,
+      который уже делают `AIEditPanel`, `micStore`,
+      `whistleStore` и `pianoRecStore`.
+
+  (5) `start` ждёт незавершённый release-drain (`drainRef`).
+      FAB зовёт `stop` из pointerup и НЕ ждёт его — это жест,
+      блокировать его на сети нельзя. Поэтому без барьера
+      повторное нажатие внутри окна в ~4 с доходило до `start`
+      при живом flush: `arm` из `listening` (который по контракту
+      сбрасывает транскрипт) и жёсткий `aborted` от
+      single-recording-guard движка. Дренирование живёт на своей
+      фибре, `stop` сам ждёт исхода (callers полагаются на
+      settled-FSM), а `start` просто присоединяется.
+
+  (6) `VITE_STT_BACKEND` по умолчанию становится `server`.
+      Цепочка fallback'а НЕ удалена — `auto` и `web` её
+      по-прежнему выбирают, для A/B облака. Просто пользователь
+      больше не получает её случайно.
+
+  (7) `voiceAIFlushing` — presentation-сигнал между «палец
+      отпущен» и «транскрипт пришёл». Без него панель
+      замирала на «записываю… 3 с» на те ~4 с, что уходит на
+      раундtrip, — то есть на время, которое выглядит как
+      зависание. Тот же мотив, по которому
+      `wavecode-voice-rec-and-meter` отказался рисовать
+      фейковую метру.
+
+  (8) `npm run test:precommit` (tsc strict + 114 vitest-файлов +
+      lint:no-console + validate:presets) завершается exit 0.
+
+counterexample: |
+  «Бэкенд всё равно нужен свой — текущий на angara-1 это
+  один 4-vCPU хост, а под нагрузкой те же 2 секунды аудио
+  обрабатывались 121 секунду (это зафиксировано в ADR
+  `llm-proxy-audio-route-2026-10-20`). Надо поднять
+  отдельный сервис под голос». Возражения: (a) журнал
+  показывает 8 запросов за 24 часа и 100% успеха — при такой
+  нагрузке «надёжно» уже выполнено, а не обещано;
+  (b) узкое место ADR уже называет и уже сделало
+  настраиваемым: `services.stt-web.threads` — понижается при
+  просадке хоста без переписывания сервиса; (c) проблема,
+  которую видел пользователь, воспроизводится целиком на
+  клиенте — четыре бага ниже не требуют ни одной серверной
+  правки, и починка бэкенда не изменила бы ни один симптом;
+  (d) новый сервис — это новая точка отказа в дополнение к
+  работающей, а ADR `llm-proxy-audio-route-2026-10-20`
+  прямо позиционирует стек «whisper-cpp из nixpkgs + HTTP-
+  обёртка» как «остаточная работа — обёртка, а не новый
+  ML-стек». Строить второй стек — ровно то, от чего этот ADR
+  предостерегает.
+
+  «Запись вообще должна идти через WebSocket на сервер, раз
+  уж мы всё равно на сервере — там можно честно стримить
+  partial-ы без перезагрузки всего клипа». Возражения:
+  (a) этот репозиторий — SPA без серверных компонентов
+  (`AGENTS.md`), всё разворачивается копированием статики в
+  `/var/lib/wavecode/dist`; появление WebSocket-сервера
+  означает переход на модель с процессом, HealthChecks и
+  рестартами — не «починить запись», а смена формы
+  развёртывания; (b) измеренная латентность 2.6-5.2 с при
+  encode, не зависящем от длины аудио (окно 30 с), означает,
+  что стриминг partial-ов не сокращает латентность первого
+  ответа — он сокращает только последние ~2 с на длинных
+  take; (c) окупаемость несоразмерна: четыре бага ниже
+  съедали 100% пользовательского недовольства, и все четыре
+  лечатся в клиенте.
+
+  «Просто вернуть `arm` в `fromPaused` и починить
+  re-press, а flush-on-release считать отдельной фичей».
+  Возражения: без (2) нажатие-отпускание теряет всё, что
+  короче 2.5 с, то есть ремонтируется ровно тот же жест,
+  который пользователь считает сломанным. Половинчатая
+  правка оставила бы баг, воспроизводимый чаще, чем
+  re-press (у паузы внутри hold ещё есть шанс сработать,
+  а у отпускания — нет).
+
+antithesis: |
+  (1) «`stop()` не должен стримить — отмена должна остаться
+  отменой, а take пусть доливается через silence-flush, как
+  задумано». Возражения: silence-flush требует 1.3 с
+  тишины НЕ ОТПУСКАЯ кнопку, а пользователь отпускает —
+  и take пропадает. Для gesture «зажать-сказать-отпустить»,
+  который и есть основной, отмена несовместима с
+  использованием. `dismiss` остаётся отменой, и это
+  правильное место для неё.
+
+  (2) «Пусть `stop()` всё-таки делает `pause`, а
+  `fromPaused` научится принимать `chunk`». Возражения:
+  тогда панель останется в live-body с текстом и без формы
+  «→ В ИИ» — отправка потребовала бы ещё одного жеста
+  поверх уже произнесённого, то есть UX станет хуже
+  именно в том сценарии, который чиним. Кроме того, `pause`
+  до дренирования стрима — это гонка: chunk может
+  прийти и до, и после. Дренирование в `stop()` делает
+  порядок детерминированным.
+
+  (3) «Держать транскрипт в `arming` ради чистоты —
+  `arming` ведь и означает "будущий listening"». Возражения:
+  `arming` — это `{tag:'arming'}` без транскрипта в принципе
+  (см. `initialVoiceSession`); чтобы сохранить буфер,
+  пришлось бы расширить тип состояния и все его
+  потребители. Прямой переход в `listening` дешевле и
+  уже доказан на `fromReview`.
+
+  (4) «Раз Web Speech не работает в Chrome, удалить его
+  совсем вместе с `FallbackSTT` — меньше кода». Возражения:
+  `auto`/`web` остаются как явный инструмент A/B; их
+  удаление — отдельное решение со своим профилем
+  обратимости, и оно не является частью починки. Здесь
+  меняется только значение по умолчанию.
+
+  (5) «Заодно убрать confirm-before-send: STT на нашем
+  сервере достаточно точен». Возражения: `decision
+  wavecode-voice-confirm-before-send` зафиксировал
+  обратное осознанно (одна ошибка распознавания молча
+  портит скор), и подтверждение работает — жалоба была
+  не на лишний шаг, а на то, что до формы не доходили
+  вовсе.
+
+scope:
+  paths:
+    - "ui/src/domain/voice/voiceSession.ts"
+    - "ui/src/domain/voice/voiceSession.test.ts"
+    - "ui/src/application/voice/VoiceAISession.ts"
+    - "ui/src/application/voice/VoiceAISession.test.ts"
+    - "ui/src/infrastructure/stt/ServerWhisperSTT.ts"
+    - "ui/src/infrastructure/stt/ServerWhisperSTT.test.ts"
+    - "ui/src/infrastructure/stt/selectSttLayer.ts"
+    - "ui/src/infrastructure/stt/selectSttLayer.test.ts"
+    - "ui/src/presentation/state/voiceAIStore.ts"
+    - "ui/src/presentation/components/RecordingPanel.tsx"
+    - "ui/.env.example"
+  exclusions:
+    - "ui/node_modules/**"
+    - "ui/dist/**"
+    - "ui/src/infrastructure/stt/WebSpeechSTT.ts"
+    - "ui/src/infrastructure/stt/FallbackSTT.ts"
+    - "ui/src/application/useCases/llmEdit.ts"
+    - "bin/**"
+    - "**/*.nix"
+
+outcomes:
+  - id: arm-from-paused-resumes-take
+    statement: |
+      `voiceSession.test.ts > voiceSessionReducer — take
+      continuation after release`: `fromPaused + arm` даёт
+      `listening` с `transcript.final === 'первая фраза'`,
+      а последующий `final` дописывает: итоговый буфер
+      `'сделай тише и добавь немного ритма'` доходит до
+      `review.editedText`.
+  - id: release-ships-the-take
+    statement: |
+      `ServerWhisperSTT.test.ts`: `stop() flushes the take to
+      the server instead of discarding it` — ровно один POST;
+      `stop() emits the flushed transcript as a final chunk` —
+      ровно один `final` с текстом. Именно `final`, потому
+      что только его оркестратор поднимает в буфер review.
+  - id: server-is-the-default-engine
+    statement: |
+      `selectSttLayer.test.ts`: `parseSttBackend(undefined)`,
+      `parseSttBackend('')`, `parseSttBackend('nonsense')` →
+      `'server'`. `auto` и `web` по-прежнему доступны явно.
+  - id: routed-score-reaches-the-editor
+    statement: |
+      `VoiceAISession.test.ts > hands the routed score back for
+      the editor write-back`: `onApplied` вызывается ровно один
+      раз и получает очищенный скор маршрута.
+  - id: re-press-mid-flush-waits-out-the-drain
+    statement: |
+      `VoiceAISession.test.ts > re-press during the release flush >
+      waits out the in-flight drain instead of colliding with it`:
+      второй press, не дожидаясь `stop`, даёт settled FSM
+      `listening` с `transcript.final === 'первая фраза'`. Сохранённый
+      транскрипт — sharp-наблюдение: если бы drain не завершился
+      первым, `arm` ушёл бы из `listening`, а `fromListening + arm`
+      сбрасывает буфер по контракту.
+  - id: no-frozen-recording-counter-during-flush
+    statement: |
+      `voiceAIFlushing` поднимается в `stopVoiceAI` и
+      сбрасывается зеркалом FSM при выходе из `listening`;
+      `RecordingPanel` рендерит «распознаю…» вместо
+      «записываю… N с» на этом окне.
+  - id: precommit-green
+    statement: |
+      `cd ui && npm run test:precommit` (tsc strict + 114
+      vitest-файлов, 1834 теста + lint:no-console +
+      validate:presets) завершается exit 0.
+  - id: mathc-validate-clean
+    statement: |
+      `mathc validate decisions/wavecode-voice-take-continuation.yaml`
+      завершается exit 0 без `MC-*` reject-диагностик.
+
+obligations:
+  - id: rearm-keeps-transcript
+    claim: |
+      `voiceSession.test.ts` содержит три теста в `describe
+      ('voiceSessionReducer — take continuation after release')`,
+      включая `arm from paused resumes listening with the
+      transcript intact`, который падает при удалении ветки
+      `arm` из `fromPaused` (проверено мутацией: 4 теста падают).
+    acceptance:
+      all:
+        - verifier: vitest-run-voice-session-domain
+          result: pass
+  - id: release-flushes-instead-of-cancels
+    claim: |
+      `ServerWhisperSTT.test.ts` содержит `stop() flushes the
+      take to the server instead of discarding it` и `stop()
+      emits the flushed transcript as a final chunk`.
+    acceptance:
+      all:
+        - verifier: vitest-run-server-whisper-stt
+          result: pass
+  - id: stop-drains-before-parking
+    claim: |
+      `VoiceAISession.test.ts` содержит `a released take lands
+      in review instead of being discarded` и `a silent release
+      parks in paused and the next press still works`.
+    acceptance:
+      all:
+        - verifier: vitest-run-voice-session-orchestrator
+          result: pass
+  - id: two-presses-one-send
+    claim: |
+      `VoiceAISession.test.ts > re-pressing appends to the same
+      take and one send ships both phrases`: после двух
+      press/release `review.editedText` содержит обе фразы,
+      `rec.llmCalls === 1`.
+    acceptance:
+      all:
+        - verifier: vitest-run-voice-session-orchestrator
+          result: pass
+  - id: drain-barrier-clears-the-transcript-reset-race
+    claim: |
+      `VoiceAISession.test.ts` содержит `re-press during the
+      release flush`; тест падает при удалении ожидания
+      `drainRef` из `start` (проверено мутацией).
+    acceptance:
+      all:
+        - verifier: vitest-run-voice-session-orchestrator
+          result: pass
+  - id: score-written-back-to-editor
+    claim: |
+      `VoiceAISession.test.ts > hands the routed score back for
+      the editor write-back` и вручную: `grep -rn
+      'replaceScore' ui/src/presentation/state/voiceAIStore.ts`
+      показывает `dispatchApp({ type: 'replaceScore', text:
+      score })` внутри `onApplied`.
+    acceptance:
+      all:
+        - verifier: vitest-run-voice-session-orchestrator
+          result: pass
+        - verifier: text-scan-replace-score
+          result: pass
+  - id: server-default-no-cloud-leak
+    claim: |
+      `selectSttLayer.test.ts` фиксирует `server` как значение
+      по умолчанию, и `resolveSttEngine('server', caps(true,
+      true)) === 'server'` — то есть при наличии Web Speech в
+      браузере он всё равно не выбирается.
+    acceptance:
+      all:
+        - verifier: vitest-run-select-stt-layer
+          result: pass
+  - id: precommit-gate-green
+    claim: |
+      `cd ui && npm run test:precommit` завершается exit 0.
+    acceptance:
+      all:
+        - verifier: pnpm-ui-test-precommit
+          result: pass
+  - id: mathc-validate-clean
+    claim: |
+      `mathc validate decisions/wavecode-voice-take-continuation.yaml`
+      завершается exit 0.
+    acceptance:
+      all:
+        - verifier: mathc-validate
+          result: pass
+
+risk:
+  declared_triggers:
+    - drain-max-ms-is-hit-under-host-load-and-take-parked-in-paused-instead-of-review
+    - release-during-in-flight-interim-causes-server-503-single-flight-collision
+    - stt-web-single-flight-semaphore-rejects-concurrent-take-from-a-second-tab
+    - re-arm-in-review-duplicates-text-because-user-also-pressed-send
+    - voice-aif-lushing-flag-lingers-after-error-path-and-panel-shows-raspoznavay-forever
+  owner: human:operator
+
+reversal:
+  - signal: drain-max-ms-is-routinely-hit-so-takes-land-in-paused
+    action: rework
+  - signal: flush-on-stop-doubles-latency-because-server-is-single-flight-and-an-interim-is-always-in-flight
+    action: rework
+  - signal: users-miss-web-speech-partials-enough-to-ask-for-auto-back
+    action: review
+  - signal: replace-score-on-voice-path-surfaces-score-that-user-did-not-want-committed
+    action: halt
+
+relations:
+  addresses:
+    - wavecode-voice-rec-and-meter@1
+    - wavecode-voice-confirm-before-send@1
+    - wavecode-voice-live-transcript@1
+    - wavecode-server-stt@1

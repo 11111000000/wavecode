@@ -17,7 +17,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { Effect, Fiber, Layer, Ref, Stream } from 'effect';
+import { Effect, Fiber, Layer, Ref, Stream, type StreamEmit } from 'effect';
 import {
   createVoiceAISession,
   type VoiceSessionDeps,
@@ -134,6 +134,72 @@ const buildDeps = async (
     currentScoreRef: scoreRef,
   };
   return { deps, scoreRef };
+};
+
+/**
+ * STTEngine whose stream is driven by the test rather than by a
+ * microphone. `capture` records what the (imaginary) mic heard; the
+ * `final` chunk is only emitted when `stop()` is called, which is
+ * exactly how the real server engine behaves now that release
+ * flushes the take instead of cancelling it.
+ *
+ * Emission is buffered rather than dropped when `stop()` wins the
+ * race against the subscriber fiber attaching — `handle.start`
+ * dispatches `stt-ready` BEFORE it forks the subscriber, so a test
+ * can legitimately observe `listening` before `asyncPush`'s register
+ * has run.
+ */
+const controllableStt = (): {
+  readonly svc: ContextNs.Tag.Service<typeof STTEngine>;
+  readonly capture: (text: string) => void;
+} => {
+  type Handler = StreamEmit.EmitOpsPush<SttUnsupportedError, TranscriptChunk>;
+  let handler: Handler | null = null;
+  let captured = '';
+  let ended = false;
+  let replay: TranscriptChunk[] = [];
+
+  const drain = (h: Handler): void => {
+    for (const c of replay) h.single(c);
+    replay = [];
+    if (ended) h.end();
+  };
+
+  return {
+    svc: {
+      isSupported: () => Effect.succeed(true),
+      start: (_opts: SttStartOptions) =>
+        Effect.sync(() => {
+          // A new utterance: nothing captured, nothing replayed, not
+          // ended. Reset here rather than in the register Effect so
+          // a `stop()` that beat the attach is preserved.
+          captured = '';
+          ended = false;
+          replay = [];
+          handler = null;
+          // `asyncPush` runs `register` through `Effect.tap`, so its
+          // return value is discarded — returning a "cleanup" here
+          // would just execute it inline and tear `handler` down
+          // before a single chunk arrived. The stream's real lifetime
+          // is the `acquireRelease` scope that `runForEach` holds open.
+          return Stream.asyncPush<TranscriptChunk, SttUnsupportedError>((emit) => {
+            handler = emit;
+            drain(emit);
+            return Effect.void;
+          }, { bufferSize: 16 });
+        }),
+      stop: () =>
+        Effect.sync(() => {
+          if (ended) return;
+          const text = captured;
+          captured = '';
+          if (text !== '') replay = [...replay, finalChunk(text)];
+          ended = true;
+          if (handler !== null) drain(handler);
+        }),
+    },
+    capture: (text: string): void => { captured = text; },
+  };
 };
 
 const waitForState = async (
@@ -411,5 +477,158 @@ describe('createVoiceAISession — review-and-edit', () => {
     const after = await Effect.runPromise(Ref.get(handle.stateRef));
     expect(after.tag).toBe('idle');
     expect(rec.llmCalls).toBe(0);
+  });
+});
+
+/**
+ * The gesture that was broken: hold the FAB, say a phrase, let go —
+ * then hold it again to continue the same take, and send once at
+ * the end. Every step here corresponds to something the user could
+ * not do before.
+ */
+describe('createVoiceAISession — take continuation', () => {
+  it('a released take lands in review instead of being discarded', async () => {
+    const { layer } = buildServices('note("e4")');
+    const stt = controllableStt();
+    const { deps } = await buildDeps(stt.svc, layer);
+    const handle = await Effect.runPromise(createVoiceAISession(deps));
+
+    await Effect.runPromise(
+      handle.start({ mode: 'continuous', lang: 'ru-RU', bargeInMode: 'replace' }),
+    );
+    await waitForState(handle, (s) => s.tag === 'listening');
+    stt.capture('сделай тише');
+    // Release. The engine flushes, so the words must survive.
+    await Effect.runPromise(handle.stop());
+
+    const s = await waitForState(handle, (x) => x.tag === 'review');
+    expect(s.tag).toBe('review');
+    if (s.tag !== 'review') throw new Error('unreachable');
+    expect(s.editedText).toBe('сделай тише');
+  });
+
+  it('re-pressing appends to the same take and one send ships both phrases', async () => {
+    const { layer, rec } = buildServices('note("e4")');
+    const stt = controllableStt();
+    const { deps } = await buildDeps(stt.svc, layer);
+    const handle = await Effect.runPromise(createVoiceAISession(deps));
+
+    await Effect.runPromise(
+      handle.start({ mode: 'continuous', lang: 'ru-RU', bargeInMode: 'replace' }),
+    );
+    await waitForState(handle, (s) => s.tag === 'listening');
+    stt.capture('сделай тише');
+    await Effect.runPromise(handle.stop());
+    await waitForState(handle, (x) => x.tag === 'review');
+
+    // Second press. `arm` used to be a no-op from `paused`/`review`
+    // teardown, so nothing after this point was ever captured.
+    await Effect.runPromise(
+      handle.start({ mode: 'continuous', lang: 'ru-RU', bargeInMode: 'replace' }),
+    );
+    const listening = await waitForState(handle, (x) => x.tag === 'listening');
+    expect(listening.tag).toBe('listening');
+    if (listening.tag !== 'listening') throw new Error('unreachable');
+    // The first phrase survived the re-arm.
+    expect(listening.transcript.final).toBe('сделай тише');
+
+    stt.capture('и добавь немного ритма');
+    await Effect.runPromise(handle.stop());
+    const review = await waitForState(handle, (x) => x.tag === 'review');
+    expect(review.tag).toBe('review');
+    if (review.tag !== 'review') throw new Error('unreachable');
+    expect(review.editedText).toBe('сделай тише и добавь немного ритма');
+
+    // One send. One LLM call. Both phrases in the instruction.
+    await Effect.runPromise(handle.sendReview(review.editedText));
+    await waitForState(handle, (s) => s.tag === 'idle');
+    expect(rec.llmCalls).toBe(1);
+  });
+
+  it('a silent release parks in paused and the next press still works', async () => {
+    const { layer } = buildServices('note("e4")');
+    const stt = controllableStt();
+    const { deps } = await buildDeps(stt.svc, layer);
+    const handle = await Effect.runPromise(createVoiceAISession(deps));
+
+    await Effect.runPromise(
+      handle.start({ mode: 'continuous', lang: 'ru-RU', bargeInMode: 'replace' }),
+    );
+    await waitForState(handle, (s) => s.tag === 'listening');
+    // Held the button, said nothing, let go.
+    await Effect.runPromise(handle.stop());
+    const parked = await waitForState(handle, (s) => s.tag === 'paused');
+    expect(parked.tag).toBe('paused');
+
+    await Effect.runPromise(
+      handle.start({ mode: 'continuous', lang: 'ru-RU', bargeInMode: 'replace' }),
+    );
+    const back = await waitForState(handle, (s) => s.tag === 'listening');
+    expect(back.tag).toBe('listening');
+  });
+
+  it('hands the routed score back for the editor write-back', async () => {
+    const { layer } = buildServices('note("e4")');
+    const stt = controllableStt();
+    const { deps } = await buildDeps(stt.svc, layer);
+    const applied: string[] = [];
+    const handle = await Effect.runPromise(
+      createVoiceAISession({ ...deps, onApplied: (s) => { applied.push(s); } }),
+    );
+
+    await Effect.runPromise(
+      handle.start({ mode: 'continuous', lang: 'ru-RU', bargeInMode: 'replace' }),
+    );
+    await waitForState(handle, (s) => s.tag === 'listening');
+    stt.capture('сделай тише');
+    await Effect.runPromise(handle.stop());
+    const review = await waitForState(handle, (s) => s.tag === 'review');
+    if (review.tag !== 'review') throw new Error('unreachable');
+
+    await Effect.runPromise(handle.sendReview(review.editedText));
+    await waitForState(handle, (s) => s.tag === 'idle');
+
+    // Without this the score was evaluated but never written into the
+    // editor buffer — the user heard the edit and saw no change.
+    expect(applied).toEqual(['note("e4")']);
+  });
+});
+
+describe('createVoiceAISession — re-press during the release flush', () => {
+  it('waits out the in-flight drain instead of colliding with it', async () => {
+    // The FAB fires `stop` from a pointerup handler and never awaits
+    // it, so a second press can land while the take is still being
+    // uploaded. Without the drain barrier in `start` that produced a
+    // hard `aborted` from the engine's one-recording-at-a-time guard.
+    const { layer } = buildServices('note("e4")');
+    const stt = controllableStt();
+    const { deps } = await buildDeps(stt.svc, layer);
+    const handle = await Effect.runPromise(createVoiceAISession(deps));
+
+    await Effect.runPromise(
+      handle.start({ mode: 'continuous', lang: 'ru-RU', bargeInMode: 'replace' }),
+    );
+    await waitForState(handle, (s) => s.tag === 'listening');
+    stt.capture('первая фраза');
+
+    // Do NOT await: this is the fire-and-forget pointerup path.
+    const stopping = Effect.runPromise(handle.stop());
+    // Second press, mid-flush.
+    const starting = Effect.runPromise(
+      handle.start({ mode: 'continuous', lang: 'ru-RU', bargeInMode: 'replace' }),
+    );
+    await stopping;
+    await starting;
+
+    // `review` is transitory here: the re-arm fires the moment the
+    // drain releases it, so the settled state is `listening`. The
+    // transcript is the sharp observable — if the drain had NOT
+    // completed first, `arm` would have been dispatched from
+    // `listening`, and `fromListening + arm` deliberately resets the
+    // buffer. A preserved transcript therefore proves the ordering.
+    const listening = await waitForState(handle, (s) => s.tag === 'listening');
+    expect(listening.tag).toBe('listening');
+    if (listening.tag !== 'listening') throw new Error('unreachable');
+    expect(listening.transcript.final).toBe('первая фраза');
   });
 });
