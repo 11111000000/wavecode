@@ -49,7 +49,10 @@
 import { createSignal, createEffect, createRoot, onCleanup, untrack } from 'solid-js';
 import * as Context from 'effect/Context';
 import { Effect, Layer, Ref, Stream } from 'effect';
-import { initialVoiceSession } from '~/domain/voice/voiceSession';
+import {
+  initialVoiceSession,
+  voiceSessionReducer,
+} from '~/domain/voice/voiceSession';
 import type { VoiceSessionState } from '~/domain/voice/voiceSession';
 import {
   initialTranscriptState,
@@ -760,113 +763,23 @@ export const __setVoiceAIHandleForTests = (
   handle = h;
 };
 
-/** Test-only: drive the reducer directly. */
+/** Test-only: drive the reducer directly.
+ *
+ *  This used to be a hand-written copy of the transition table, and
+ *  that copy had drifted from `voiceSessionReducer` in both
+ *  directions: it ignored interim chunks, it had no `arm` branch
+ *  outside `idle`, and it had no `chunk` branch outside `listening`.
+ *  A test that drives the copy therefore proved nothing about the
+ *  FSM the app actually runs — and the production bugs this seam
+ *  could not see were exactly the ones in the copy's blind spots
+ *  (a press swallowed from `applying`, a take with only interim text
+ *  parked where there was no send button).
+ *
+ *  Delegating to the real reducer makes the seam a true mirror
+ *  instead of a second implementation. */
 export const __dispatchVoiceAIForTests = (event: VoiceSessionEvent): void => {
-  const initial = voiceAIState();
-  const next = (() => {
-    switch (event.type) {
-      case 'arm': return initial.tag === 'idle'
-        ? { tag: 'arming' as const }
-        : initial;
-      case 'stt-ready': return initial.tag === 'arming'
-        ? {
-          tag: 'listening' as const,
-          transcript: initialTranscriptState('ru-RU'),
-          continuous: false,
-        }
-        : initial;
-      case 'chunk':
-        // Mirrors the real reducer: listening + final chunk →
-        // `transcribing` with `transcript.final` updated from the
-        // chunk text; otherwise listening stays listening.
-        if (initial.tag === 'listening') {
-          if (event.chunk.kind === 'final') {
-            const nextFinal = initial.transcript.final
-              ? `${initial.transcript.final} ${event.chunk.text}`.trim()
-              : event.chunk.text;
-            return {
-              tag: 'transcribing' as const,
-              transcript: { ...initial.transcript, final: nextFinal, interim: '' },
-            };
-          }
-          return { ...initial, transcript: initial.transcript };
-        }
-        return initial;
-      case 'commit':
-        return initial.tag === 'listening' || initial.tag === 'transcribing'
-          ? { tag: 'requesting' as const, transcript: initial.transcript, continuous: false }
-          : initial;
-      case 'request-sent':
-        return initial.tag === 'requesting'
-          ? { tag: 'applying' as const, transcript: initial.transcript, score: event.score, continuous: false }
-          : initial;
-      case 'applied':
-        return initial.tag === 'applying'
-          ? { tag: 'idle' as const }
-          : initial;
-      case 'barge-in':
-        return { tag: 'idle' as const };
-      case 'pause':
-        // Mirrors `pauseFrom` in domain/voice/voiceSession.ts: STT
-        // stops but the transcript survives, which is what lets the
-        // recording panel offer «Проверить». This case used to return
-        // `initial`, leaving `paused` unreachable from every test.
-        return initial.tag === 'listening' || initial.tag === 'transcribing'
-          || initial.tag === 'requesting' || initial.tag === 'applying'
-          ? { tag: 'paused' as const, transcript: initial.transcript }
-          : initial;
-      case 'resume':
-        return initial.tag === 'paused'
-          ? {
-            tag: 'listening' as const,
-            transcript: initial.transcript,
-            continuous: true,
-          }
-          : initial;
-      case 'error':
-        return {
-          tag: 'errored' as const,
-          error: event.message,
-          transcript: initialTranscriptState(),
-        };
-      case 'dismiss':
-        return { tag: 'idle' as const };
-      case 'enter-review':
-        if (initial.tag === 'listening' || initial.tag === 'transcribing' || initial.tag === 'paused') {
-          return {
-            tag: 'review' as const,
-            transcript: initial.transcript,
-            editedText: initial.transcript.final.trim(),
-          };
-        }
-        return initial;
-      case 'edit-review':
-        if (initial.tag === 'review' && initial.editedText !== event.text) {
-          return {
-            tag: 'review' as const,
-            transcript: initial.transcript,
-            editedText: event.text,
-          };
-        }
-        return initial;
-      case 'send-review':
-        if (initial.tag === 'review') {
-          return {
-            tag: 'requesting' as const,
-            transcript: { ...initial.transcript, final: event.text },
-            continuous: false,
-          };
-        }
-        return initial;
-      case 'cancel-review':
-        return initial.tag === 'review'
-          ? { tag: 'idle' as const }
-          : initial;
-      default:
-        return initial;
-    }
-  })();
-  if (next !== initial) setVoiceAIState(next as VoiceSessionState);
+  const next = voiceSessionReducer(voiceAIState(), event);
+  if (next !== voiceAIState()) setVoiceAIState(next);
 };
 
 /** Test-only: reset module state. */
