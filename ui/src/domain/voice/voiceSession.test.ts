@@ -526,9 +526,6 @@ describe('voiceSessionReducer — a press must always start a take', () => {
   ])('arm from %s starts listening instead of doing nothing', (_name, state) => {
     const next = voiceSessionReducer(state, { type: 'arm' });
     expect(next.tag).toBe('listening');
-    if (next.tag !== 'listening') throw new Error('unreachable');
-    // The transcript already dictated survives the re-arm.
-    expect(next.transcript).toBe(transcript);
   });
 
   it('arm from applying does not lose the score the AI was applying', () => {
@@ -589,5 +586,61 @@ describe('voiceSessionReducer — a take with text is always sendable', () => {
     expect(next.tag).toBe('transcribing');
     if (next.tag !== 'transcribing') throw new Error('unreachable');
     expect(next.transcript.final).toBe('опоздавшая фраза');
+  });
+});
+
+/**
+ * A press during `applying` / `requesting` must NOT carry the
+ * already-sent instruction into the new take.
+ *
+ * The user sends an instruction, hears the composition, and says the
+ * next one. The first instruction is already on its way to the LLM —
+ * sending it again with the second one appended would apply it twice.
+ */
+describe('voiceSessionReducer — a press after the instruction was sent', () => {
+  const sent = initialTranscriptState('ru-RU');
+
+  it.each([
+    ['requesting', { tag: 'requesting', transcript: { ...sent, final: 'сделай композицию' }, continuous: false } as VoiceSessionState],
+    ['applying', { tag: 'applying', transcript: { ...sent, final: 'сделай композицию' }, score: 'note("c4")', continuous: false } as VoiceSessionState],
+  ])('arm from %s starts with an empty buffer', (_name, state) => {
+    const next = voiceSessionReducer(state, { type: 'arm' });
+    expect(next.tag).toBe('listening');
+    if (next.tag !== 'listening') throw new Error('unreachable');
+    expect(next.transcript.final).toBe('');
+    expect(next.transcript.interim).toBe('');
+  });
+
+  it('arm from review DOES carry the unsent buffer over', () => {
+    // The opposite contract: `review` holds text the user has not
+    // sent yet, so a press continues that take
+    // (`decisions/wavecode-voice-take-continuation`).
+    const state: VoiceSessionState = {
+      tag: 'review',
+      transcript: { ...sent, final: 'сделай композицию' },
+      editedText: 'сделай композицию',
+    };
+    const next = voiceSessionReducer(state, { type: 'arm' });
+    expect(next.tag).toBe('listening');
+    if (next.tag !== 'listening') throw new Error('unreachable');
+    expect(next.transcript.final).toBe('сделай композицию');
+  });
+});
+
+/**
+ * The unsent/sent distinction, spelled out for the one state that
+ * keeps it: `transcribing` holds a final chunk the user has NOT
+ * confirmed yet, so a press continues that take.
+ */
+describe('voiceSessionReducer — an unsent buffer survives a press', () => {
+  it('arm from transcribing keeps the transcript', () => {
+    const transcript = { ...initialTranscriptState('ru-RU'), final: 'сделай композицию' };
+    const next = voiceSessionReducer(
+      { tag: 'transcribing', transcript },
+      { type: 'arm' },
+    );
+    expect(next.tag).toBe('listening');
+    if (next.tag !== 'listening') throw new Error('unreachable');
+    expect(next.transcript.final).toBe('сделай композицию');
   });
 });

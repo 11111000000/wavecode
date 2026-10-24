@@ -732,6 +732,35 @@ describe('createVoiceAISession — a press during the LLM round trip', () => {
     return { layer: Layer.merge(llmLayer, audioLayer) };
   };
 
+  /**
+   * The LLM answers immediately and `audio.eval` never returns — the
+   * shape of "the composition is playing and the FSM is still
+   * `applying`". `evalStarted` resolves the moment the eval begins,
+   * which is the audible moment for the user.
+   */
+  const buildServicesWithHangingEval = (): {
+    layer: Layer.Layer<LLMClient | AudioEngine, never, never>;
+    evalStarted: Promise<void>;
+  } => {
+    let signalStarted: () => void = () => {};
+    const evalStarted = new Promise<void>((resolve) => { signalStarted = resolve; });
+    const llmLayer = Layer.succeed(LLMClient, {
+      streamCompletion: (_req: CompletionRequest) => Effect.succeed(chunk('note("e4")')),
+    });
+    const audioLayer = Layer.succeed(AudioEngine, {
+      eval: () => Effect.suspend(() => {
+        signalStarted();
+        return Effect.never;
+      }),
+      stop: () => Effect.void, compileAndQuery: () => Effect.succeed([]),
+      setCps: () => Effect.void, setLayerMix: () => Effect.void,
+      setScore: () => Effect.void, getCycleProgress: () => Effect.succeed(0),
+      getActiveHaps: () => Effect.succeed([]), recordLive: () => Effect.die('x'),
+      renderOffline: () => Effect.die('x'),
+    });
+    return { layer: Layer.merge(llmLayer, audioLayer), evalStarted };
+  };
+
   it('a press while the previous edit is still applying starts a new take', async () => {
     const { layer } = buildHangingServices();
     const stt = controllableStt();
@@ -760,6 +789,54 @@ describe('createVoiceAISession — a press during the LLM round trip', () => {
     expect(listening.tag).toBe('listening');
 
     // And the new take is a real one: its words reach the transcript.
+    stt.capture('сделай бас быстрее');
+    await Effect.runPromise(handle.stop());
+    const review2 = await waitForState(handle, (s) => s.tag === 'review');
+    expect(review2.tag).toBe('review');
+    if (review2.tag !== 'review') throw new Error('unreachable');
+    expect(review2.editedText).toContain('сделай бас быстрее');
+  });
+
+  it('a press while the new composition is PLAYING starts a take', async () => {
+    // The exact field-report timing. `runRoute` dispatches
+    // `request-sent` BEFORE it calls the LLM, and the FSM only
+    // reaches `idle` after `audio.eval` — the moment the new
+    // composition becomes audible. So while the user is HEARING the
+    // result of the previous instruction, the FSM is still
+    // `applying`, and a press meant for the next instruction landed
+    // in a state where `arm` used to be a no-op.
+    //
+    // The user reported exactly this: "after the composition had
+    // played, I pressed voice again and nothing happened — no text at
+    // all", because the microphone never opened.
+    const { layer, evalStarted } = buildServicesWithHangingEval();
+    const stt = controllableStt();
+    const { deps } = await buildDeps(stt.svc, layer);
+    const handle = await Effect.runPromise(createVoiceAISession(deps));
+
+    await Effect.runPromise(
+      handle.start({ mode: 'continuous', lang: 'ru-RU', bargeInMode: 'replace' }),
+    );
+    await waitForState(handle, (s) => s.tag === 'listening');
+    stt.capture('сделай композицию');
+    await Effect.runPromise(handle.stop());
+    const review = await waitForState(handle, (s) => s.tag === 'review');
+    if (review.tag !== 'review') throw new Error('unreachable');
+    await Effect.runPromise(handle.sendReview(review.editedText));
+
+    // The LLM answered and `audio.eval` is running — the composition
+    // is playing. The FSM is still `applying`.
+    await evalStarted;
+    const playing = await Effect.runPromise(Ref.get(handle.stateRef));
+    expect(playing.tag).toBe('applying');
+
+    // The press. It must open the microphone.
+    await Effect.runPromise(
+      handle.start({ mode: 'continuous', lang: 'ru-RU', bargeInMode: 'replace' }),
+    );
+    const listening = await waitForState(handle, (s) => s.tag === 'listening');
+    expect(listening.tag).toBe('listening');
+
     stt.capture('сделай бас быстрее');
     await Effect.runPromise(handle.stop());
     const review2 = await waitForState(handle, (s) => s.tag === 'review');
