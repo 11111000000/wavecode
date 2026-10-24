@@ -48,6 +48,7 @@ import {
   appendChunk,
   initialTranscriptState,
   type TranscriptChunk,
+  type TranscriptLang,
   type TranscriptState,
 } from './Transcript';
 
@@ -241,7 +242,7 @@ const fromRequesting = (
     };
   }
   if (event.type === 'arm') {
-    return rearmFrom(state.transcript);
+    return rearmFresh(state.transcript.lang);
   }
   if (event.type === 'barge-in') return { tag: 'idle' };
   return state;
@@ -267,7 +268,7 @@ const fromApplying = (
     return { tag: 'idle' };
   }
   if (event.type === 'arm') {
-    return rearmFrom(state.transcript);
+    return rearmFresh(state.transcript.lang);
   }
   if (event.type === 'barge-in') {
     // Cancel-and-replace: drop the in-flight eval result and the
@@ -467,6 +468,27 @@ const errorFrom = (state: VoiceSessionState, message: string): VoiceSessionState
 const rearmFrom = (transcript: TranscriptState): VoiceSessionState => ({
   tag: 'listening',
   transcript,
+  continuous: true,
+});
+
+/**
+ * Re-arm for a take whose PREVIOUS instruction has already been sent.
+ *
+ * `requesting` and `applying` mean the text is on its way to the LLM
+ * (or already there). A new take must therefore start with an EMPTY
+ * buffer: carrying the sent text over would make the next review
+ * form read «сделай композицию сделай бас быстрее» and send the
+ * already-applied instruction a second time.
+ *
+ * The contrast with `rearmFrom` is the whole point of the two
+ * helpers: `review`, `paused` and `transcribing` hold an UNSENT
+ * buffer, so a press continues it (the take-continuation contract —
+ * see `decisions/wavecode-voice-take-continuation`); `requesting`
+ * and `applying` hold a SENT one, so a press starts over.
+ */
+const rearmFresh = (lang: TranscriptLang): VoiceSessionState => ({
+  tag: 'listening',
+  transcript: initialTranscriptState(lang),
   continuous: true,
 });
 
