@@ -3,8 +3,8 @@ schema: math-coding/3.3
 id: wavecode-voice-second-take-sendable
 revision: 1
 state: active
-body_sha: "sha256:0b973495ac520995600f46dedd7784fbdb24eeb13ec33d594ed5deb51ccdb753"
-yaml_sha: "sha256:0b973495ac520995600f46dedd7784fbdb24eeb13ec33d594ed5deb51ccdb753"
+body_sha: "sha256:24db37e61b1d3a4fa639114d85f943070297920e61a83232208309f8c7cd9b25"
+yaml_sha: "sha256:24db37e61b1d3a4fa639114d85f943070297920e61a83232208309f8c7cd9b25"
 
 axiom_link:
   - A0
@@ -95,9 +95,17 @@ outcomes:
   - id: arm-works-from-every-state
     statement: |
       `arm` из `idle`, `errored`, `paused`, `review`, `transcribing`,
-      `requesting`, `applying` переводит FSM в `listening` с
-      сохранённой расшифровкой. До фикса `transcribing`,
-      `requesting` и `applying` были no-op — нажатие проглатывалось.
+      `requesting`, `applying` переводит FSM в `listening`. До фикса
+      `transcribing`, `requesting` и `applying` были no-op — нажатие
+      проглатывалось целиком: микрофон не открывался.
+  - id: sent-buffer-is-not-carried-into-the-next-take
+    statement: |
+      `arm` из `requesting` / `applying` начинает take с ПУСТЫМ
+      буфером: инструкция там уже в проводе, и перенос её в новый
+      take применил бы её второй раз («сделай композицию сделай
+      бас быстрее»). `arm` из `review` / `paused` / `transcribing`
+      буфер СОХРАНЯЕТ — там текст ещё не отправлен, и это контракт
+      take-continuation. Два хелпера: `rearmFrom` и `rearmFresh`.
   - id: any-text-is-sendable
     statement: |
       Take с любым распознанным текстом (final ИЛИ interim)
@@ -143,10 +151,16 @@ obligations:
           result: pass
   - id: press-during-llm-roundtrip-is-tested
     claim: |
-      `VoiceAISession.test.ts` с подвешенным LLM (состояние FSM
-      `applying` на весь round-trip) проверяет, что нажатие в этом
-      окне приводит FSM в `listening`, а слова нового take доезжают
-      до review-формы.
+      `VoiceAISession.test.ts` проверяет оба окна: подвешенный LLM
+      (FSM в `applying` на весь round-trip) и подвешенный
+      `audio.eval` — момент, когда композиция УЖЕ ЗВУЧИТ, а FSM
+      ещё в `applying`. В обоих нажатие приводит FSM в `listening`,
+      а слова нового take доезжают до review-формы.
+  - id: sent-and-unsent-buffers-are-distinguished
+    claim: |
+      `voiceSession.test.ts` проверяет, что `arm` из `requesting` /
+      `applying` даёт пустую расшифровку, а `arm` из `review` /
+      `transcribing` сохраняет её.
     acceptance:
       all:
         - verifier: vitest-run-voice-ai-session
