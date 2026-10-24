@@ -292,7 +292,8 @@ const VoiceAILiveBody = (): JSX.Element => {
             || voiceAITranscript().final
             || (voiceAIState().tag === 'applying' ? 'применяю правку…'
               : voiceAIState().tag === 'requesting' ? 'жду ответ ИИ…'
-              : voiceAIState().tag === 'paused' ? 'на паузе'
+              : voiceAIState().tag === 'paused'
+                ? 'на паузе · нажмите и держите голос, чтобы продолжить'
               : (voiceAIState().tag === 'listening' || voiceAIState().tag === 'arming')
                 ? (voiceAIFlushing()
                   // Button released, take is being uploaded. The mic

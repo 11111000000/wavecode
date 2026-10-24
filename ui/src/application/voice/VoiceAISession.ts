@@ -361,12 +361,23 @@ export const createVoiceAISession = (
      * Text present → `review`, so the take is sendable. No text →
      * `paused`, which re-arms on the next press and does not pretend
      * there is something to review.
+     *
+     * "Text present" counts an INTERIM as well as a final. The relay
+     * answers with an empty transcript often enough — whisper on a
+     * clip it cannot make sense of returns `""` — and dropping the
+     * whole take because the FINAL upload came back empty throws
+     * away a phrase the user can hear themselves saying. The interim
+     * is the proof that they spoke. An interim-only take therefore
+     * lands in `review` too, with the interim seeded into the
+     * editable buffer, and the user gets a send button.
      */
     const parkAfterStreamEnd = Effect.gen(function* () {
       const s = yield* Ref.get(stateRef);
       if (s.tag === 'listening' || s.tag === 'arming') {
         const hasText =
-          s.tag === 'listening' && s.transcript.final.trim().length > 0;
+          s.tag === 'listening'
+          && (s.transcript.final.trim().length > 0
+            || s.transcript.interim.trim().length > 0);
         yield* dispatch({ type: hasText ? 'enter-review' : 'pause' });
       } else if (s.tag === 'transcribing') {
         yield* dispatch({ type: 'enter-review' });
@@ -454,6 +465,22 @@ export const createVoiceAISession = (
           // versions). The orchestrator itself does not branch on mode
           // — the pure reducer decides `idle` vs `listening` after
           // `applied` via the `continuous` flag it carries.
+          //
+          // A press that lands while the PREVIOUS edit is still being
+          // applied must start a take, not be swallowed: `applying`
+          // and `requesting` cover the whole LLM round trip, because
+          // `runRoute` dispatches `request-sent` before it calls the
+          // LLM. The reducer now accepts `arm` from those states.
+          //
+          // The in-flight route is deliberately NOT interrupted. It
+          // carries the user's previous instruction, and it is
+          // already on the wire — killing it would throw away an
+          // edit the user already asked for. It finishes on its own:
+          // `onApplied` writes the score to the editor, and the
+          // `applied` event lands on the FSM's new `listening` state,
+          // where the reducer has no branch for it and drops it. The
+          // route and the new take then coexist, which is what the
+          // user asked for by pressing again.
           yield* dispatch({ type: 'arm' });
           const chunks = yield* deps.stt.start({ lang: input.lang, interim: true });
           yield* dispatch({ type: 'stt-ready' });

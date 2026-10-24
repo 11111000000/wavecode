@@ -152,6 +152,11 @@ const buildDeps = async (
 const controllableStt = (): {
   readonly svc: ContextNs.Tag.Service<typeof STTEngine>;
   readonly capture: (text: string) => void;
+  /** Emit an interim chunk — the engine's live partial. */
+  readonly interim: (text: string) => void;
+  /** End the stream without a final chunk — what the relay looks
+   *  like when it answers `{"text": ""}`. */
+  readonly endSilently: () => void;
 } => {
   type Handler = StreamEmit.EmitOpsPush<SttUnsupportedError, TranscriptChunk>;
   let handler: Handler | null = null;
@@ -199,6 +204,17 @@ const controllableStt = (): {
         }),
     },
     capture: (text: string): void => { captured = text; },
+    /** Emit an interim chunk — the engine's live partial. */
+    interim: (text: string): void => {
+      if (handler !== null) handler.single(interim(text));
+      else replay = [...replay, interim(text)];
+    },
+    /** End the stream WITHOUT a final chunk — what the relay looks
+     *  like when it answers `{"text": ""}`. */
+    endSilently: (): void => {
+      ended = true;
+      if (handler !== null) drain(handler);
+    },
   };
 };
 
@@ -680,5 +696,98 @@ describe('createVoiceAISession — engine ends the stream by itself', () => {
     expect(review.tag).toBe('review');
     if (review.tag !== 'review') throw new Error('unreachable');
     expect(review.editedText).toBe('добавь немного ритма');
+  });
+});
+
+/**
+ * Field report (2026-10-24): after the first composition was created,
+ * pressing the voice button again to edit it produced text with no way
+ * to send it.
+ *
+ * The mechanism, at the orchestrator level: `runRoute` dispatches
+ * `request-sent` BEFORE it calls the LLM, so the FSM sits in
+ * `applying` for the whole round trip. A press inside that window
+ * used to be swallowed by the reducer (no `arm` branch from
+ * `applying`), so the microphone never opened and the user got
+ * nothing at all — no error, no text, just a panel stuck on
+ * «применяю правку…».
+ */
+describe('createVoiceAISession — a press during the LLM round trip', () => {
+  /** Services whose LLM never answers, so the FSM stays in
+   *  `applying` for as long as the test wants it to. */
+  const buildHangingServices = (): {
+    layer: Layer.Layer<LLMClient | AudioEngine, never, never>;
+  } => {
+    const llmLayer = Layer.succeed(LLMClient, {
+      streamCompletion: (_req: CompletionRequest) => Effect.never,
+    });
+    const audioLayer = Layer.succeed(AudioEngine, {
+      eval: () => Effect.void,
+      stop: () => Effect.void, compileAndQuery: () => Effect.succeed([]),
+      setCps: () => Effect.void, setLayerMix: () => Effect.void,
+      setScore: () => Effect.void, getCycleProgress: () => Effect.succeed(0),
+      getActiveHaps: () => Effect.succeed([]), recordLive: () => Effect.die('x'),
+      renderOffline: () => Effect.die('x'),
+    });
+    return { layer: Layer.merge(llmLayer, audioLayer) };
+  };
+
+  it('a press while the previous edit is still applying starts a new take', async () => {
+    const { layer } = buildHangingServices();
+    const stt = controllableStt();
+    const { deps } = await buildDeps(stt.svc, layer);
+    const handle = await Effect.runPromise(createVoiceAISession(deps));
+
+    // Take 1 → review → send. The route never finishes, so the FSM
+    // stays in `applying` — exactly the window the user pressed in.
+    await Effect.runPromise(
+      handle.start({ mode: 'continuous', lang: 'ru-RU', bargeInMode: 'replace' }),
+    );
+    await waitForState(handle, (s) => s.tag === 'listening');
+    stt.capture('сделай композицию');
+    await Effect.runPromise(handle.stop());
+    const review = await waitForState(handle, (s) => s.tag === 'review');
+    if (review.tag !== 'review') throw new Error('unreachable');
+    await Effect.runPromise(handle.sendReview(review.editedText));
+    await waitForState(handle, (s) => s.tag === 'applying');
+
+    // The press. Before the fix this was a no-op and the FSM stayed
+    // in `applying` forever.
+    await Effect.runPromise(
+      handle.start({ mode: 'continuous', lang: 'ru-RU', bargeInMode: 'replace' }),
+    );
+    const listening = await waitForState(handle, (s) => s.tag === 'listening');
+    expect(listening.tag).toBe('listening');
+
+    // And the new take is a real one: its words reach the transcript.
+    stt.capture('сделай бас быстрее');
+    await Effect.runPromise(handle.stop());
+    const review2 = await waitForState(handle, (s) => s.tag === 'review');
+    expect(review2.tag).toBe('review');
+    if (review2.tag !== 'review') throw new Error('unreachable');
+    expect(review2.editedText).toContain('сделай бас быстрее');
+  });
+
+  it('a take whose final upload is empty still reaches review via its interim', async () => {
+    const { layer } = buildServices('note("e4")');
+    const stt = controllableStt();
+    const { deps } = await buildDeps(stt.svc, layer);
+    const handle = await Effect.runPromise(createVoiceAISession(deps));
+
+    await Effect.runPromise(
+      handle.start({ mode: 'continuous', lang: 'ru-RU', bargeInMode: 'replace' }),
+    );
+    await waitForState(handle, (s) => s.tag === 'listening');
+
+    // The engine produced an interim and then ended the stream with
+    // no final chunk — the relay answered `{"text": ""}`.
+    stt.interim('сделай бас быстрее');
+    await new Promise<void>((r) => setTimeout(r, 20));
+    stt.endSilently();
+    await waitForState(handle, (s) => s.tag === 'review' || s.tag === 'paused');
+    const parked = await Effect.runPromise(Ref.get(handle.stateRef));
+    // Without the interim counted as text this parks in `paused`,
+    // which has no review form and therefore no send button.
+    expect(parked.tag).toBe('review');
   });
 });

@@ -195,6 +195,9 @@ const fromTranscribing = (
   state: { readonly tag: 'transcribing'; readonly transcript: TranscriptState },
   event: VoiceSessionEvent,
 ): VoiceSessionState => {
+  if (event.type === 'arm') {
+    return rearmFrom(state.transcript);
+  }
   if (event.type === 'commit') {
     return {
       tag: 'requesting',
@@ -237,6 +240,9 @@ const fromRequesting = (
       continuous: state.continuous,
     };
   }
+  if (event.type === 'arm') {
+    return rearmFrom(state.transcript);
+  }
   if (event.type === 'barge-in') return { tag: 'idle' };
   return state;
 };
@@ -259,6 +265,9 @@ const fromApplying = (
       };
     }
     return { tag: 'idle' };
+  }
+  if (event.type === 'arm') {
+    return rearmFrom(state.transcript);
   }
   if (event.type === 'barge-in') {
     // Cancel-and-replace: drop the in-flight eval result and the
@@ -297,13 +306,25 @@ const fromPaused = (
   // no-op (`fromListening` does not handle it), so the orchestrator's
   // start sequence still completes correctly.
   if (event.type === 'arm') {
-    return {
-      tag: 'listening',
-      transcript: state.transcript,
-      continuous: true,
-    };
+    return rearmFrom(state.transcript);
   }
   if (event.type === 'dismiss') return { tag: 'idle' };
+  if (event.type === 'chunk') {
+    // A chunk that lands while the FSM is parked must not be thrown
+    // away. `paused` is where a take parks when the STT stream ends
+    // without text — but the final chunk of that very take can still
+    // be in flight (the flush uploads, and the engine ends the
+    // stream, and the two land in either order). Dropping it here
+    // loses a phrase the user can hear themselves saying.
+    //
+    // A final chunk moves the FSM to `transcribing`, which is what
+    // the subscriber's auto-review looks for — so a late final still
+    // reaches the review form.
+    if (event.chunk.kind !== 'final') return state;
+    const next = appendChunk(state.transcript, event.chunk);
+    if (next === state.transcript) return state;
+    return { tag: 'transcribing', transcript: next };
+  }
   if (event.type === 'enter-review') {
     return enterReviewFrom(state.transcript);
   }
@@ -355,11 +376,7 @@ const fromReview = (
     // re-runs the STT pipeline (we stop the previous one in
     // `enterReview`); the transcript is preserved so final chunks
     // append on top.
-    return {
-      tag: 'listening',
-      transcript: state.transcript,
-      continuous: true,
-    };
+    return rearmFrom(state.transcript);
   }
   if (event.type === 'barge-in') return { tag: 'idle' };
   return state;
@@ -417,6 +434,62 @@ const errorFrom = (state: VoiceSessionState, message: string): VoiceSessionState
 };
 
 /**
+ * Shared helper for the states a press-and-hold can re-arm from:
+ * `paused`, `review`, `transcribing`, `requesting`, `applying`.
+ *
+ * All of them mean the same thing to the user: "the microphone is not
+ * recording right now, and I am holding the button down". Every one
+ * of them MUST accept the press.
+ *
+ * Why this helper exists
+ * ----------------------
+ * `applying` and `requesting` had no `arm` branch, and the effect was
+ * that a press during the LLM round trip was swallowed whole. The
+ * window is wide: `runRoute` dispatches `request-sent` BEFORE it
+ * calls the LLM, so the FSM sits in `applying` for the whole
+ * round-trip — seconds. A user who says the next instruction while
+ * the previous edit is still landing gets no microphone, no
+ * recording, no recognition, and no error: the press simply does
+ * nothing, and the panel keeps showing «применяю правку…».
+ *
+ * The `transcribing` case had the same hole: `transcribing` is the
+ * state between "the final chunk landed" and "the user confirmed",
+ * which is exactly where a user who is impatient with the review step
+ * presses again.
+ *
+ * It goes straight to `listening` rather than through `arming` for
+ * the same reason `fromPaused` and `fromReview` do: `fromArming +
+ * stt-ready` allocates a FRESH transcript, which would throw away
+ * the text already dictated. `stt-ready` arriving from `listening` is
+ * a no-op (`fromListening` does not handle it), so the orchestrator's
+ * start sequence still completes correctly.
+ */
+const rearmFrom = (transcript: TranscriptState): VoiceSessionState => ({
+  tag: 'listening',
+  transcript,
+  continuous: true,
+});
+
+/**
+ * The text a review buffer should start from.
+ *
+ * A final chunk is the authoritative source. An interim is the
+ * fallback for a take whose final upload came back empty — the relay
+ * answers with an empty transcript often enough (whisper on a clip
+ * it cannot make sense of returns `""`) that dropping the whole take
+ * would be the wrong answer. The user DID say something; the interim
+ * proves it; the text is better than silence.
+ *
+ * Without this fallback the review form opened with an empty
+ * textarea and a disabled «→ В ИИ» button — the recognised text was
+ * on screen and there was no way to send it.
+ */
+const reviewBufferText = (transcript: TranscriptState): string => {
+  const final = transcript.final.trim();
+  return final.length > 0 ? final : transcript.interim.trim();
+};
+
+/**
  * Shared helper for the listen-ing / transcribing / paused arms
  * of `enter-review`: snapshot the current transcript and seed the
  * editable buffer with the joined final chunks (finals already
@@ -426,5 +499,5 @@ const errorFrom = (state: VoiceSessionState, message: string): VoiceSessionState
 const enterReviewFrom = (transcript: TranscriptState): VoiceSessionState => ({
   tag: 'review',
   transcript,
-  editedText: transcript.final.trim(),
+  editedText: reviewBufferText(transcript),
 });

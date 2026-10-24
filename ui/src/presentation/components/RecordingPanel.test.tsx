@@ -365,6 +365,34 @@ describe('RecordingPanel — review form (voice-AI inline confirmation)', () => 
     expect(ta.getAttribute('aria-label')).toContain('Распознанный текст');
   });
 
+  it('seeds the buffer from the interim when the take produced no final chunk', () => {
+    // The relay answers `{"text": ""}` often enough that a take can
+    // end with an interim and no final. Before the fix the review
+    // form opened EMPTY — the recognised text was on screen and the
+    // send button was disabled, so there was no way to send it.
+    __dispatchVoiceAIForTests({ type: 'arm' });
+    __dispatchVoiceAIForTests({ type: 'stt-ready' });
+    __dispatchVoiceAIForTests({ type: 'chunk', chunk: {
+      kind: 'interim',
+      text: 'сделай бас быстрее',
+      confidence: 0.9,
+      lang: 'ru-RU',
+      timestampMs: 0,
+    } });
+    __dispatchVoiceAIForTests({ type: 'enter-review' });
+    expect(voiceAIState().tag).toBe('review');
+
+    const { container } = render(() => <RecordingPanel />);
+    const ta = container.querySelector(
+      '.voice-recording-panel__review-textarea',
+    ) as HTMLTextAreaElement;
+    const send = container.querySelector(
+      '.voice-recording-panel__btn--primary',
+    ) as HTMLButtonElement;
+    expect(ta.value).toBe('сделай бас быстрее');
+    expect(send.disabled).toBe(false);
+  });
+
   it('renders the → В ИИ button enabled when the buffer is non-empty', () => {
     enterReviewWith('сделай потише');
     const { container } = render(() => <RecordingPanel />);

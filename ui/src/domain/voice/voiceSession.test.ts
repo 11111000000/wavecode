@@ -14,7 +14,11 @@ import {
   type VoiceSessionEvent,
   type VoiceSessionState,
 } from './voiceSession';
-import type { TranscriptChunk } from './Transcript';
+import {
+  initialTranscriptState,
+  type TranscriptChunk,
+  type TranscriptState,
+} from './Transcript';
 
 const interim = (text: string, t = 100): TranscriptChunk => ({
   kind: 'interim',
@@ -489,5 +493,101 @@ describe('voiceSessionReducer — review-and-edit flow', () => {
       editedText: 'foo',
     };
     expect(voiceSessionReducer(start, { type: 'barge-in' })).toEqual({ tag: 'idle' });
+  });
+});
+
+/**
+ * Field report (2026-10-24): "I made the first composition, then
+ * pressed the voice button again to edit it — the text was recognised
+ * and there was no way to send it."
+ *
+ * Two independent holes, both of which end in "text on screen, no
+ * send button".
+ *
+ * 1. `arm` was a no-op from `transcribing`, `requesting` and
+ *    `applying`. `requesting`/`applying` cover the WHOLE LLM round
+ *    trip — `runRoute` dispatches `request-sent` before it calls the
+ *    LLM — so a press while the previous edit was still landing was
+ *    swallowed whole: no microphone, no recording, no recognition, no
+ *    error. The panel just kept saying «применяю правку…».
+ *
+ * 2. A take whose FINAL upload came back empty (whisper returns `""`
+ *    for a clip it cannot make sense of) but whose INTERIM had text
+ *    parked in `paused` — a state with no review form. The text was
+ *    on screen and unsendable.
+ */
+describe('voiceSessionReducer — a press must always start a take', () => {
+  const transcript = initialTranscriptState('ru-RU');
+
+  it.each([
+    ['transcribing', { tag: 'transcribing', transcript } as VoiceSessionState],
+    ['requesting', { tag: 'requesting', transcript, continuous: false } as VoiceSessionState],
+    ['applying', { tag: 'applying', transcript, score: 'note("c4")', continuous: false } as VoiceSessionState],
+  ])('arm from %s starts listening instead of doing nothing', (_name, state) => {
+    const next = voiceSessionReducer(state, { type: 'arm' });
+    expect(next.tag).toBe('listening');
+    if (next.tag !== 'listening') throw new Error('unreachable');
+    // The transcript already dictated survives the re-arm.
+    expect(next.transcript).toBe(transcript);
+  });
+
+  it('arm from applying does not lose the score the AI was applying', () => {
+    // The route finishes on its own and dispatches `applied`; by then
+    // the FSM is `listening`, where `applied` has no branch. That is
+    // correct — the score was already handed to the editor by
+    // `onApplied` — but the re-arm must not pretend the take
+    // produced that score.
+    const state: VoiceSessionState = {
+      tag: 'applying', transcript, score: 'note("c4")', continuous: false,
+    };
+    const next = voiceSessionReducer(state, { type: 'arm' });
+    expect(next.tag).toBe('listening');
+    expect('score' in next).toBe(false);
+  });
+});
+
+describe('voiceSessionReducer — a take with text is always sendable', () => {
+  const base = initialTranscriptState('ru-RU');
+
+  it('enter-review seeds the buffer from the interim when there is no final', () => {
+    const interimOnly: TranscriptState = { ...base, interim: 'сделай бас быстрее' };
+    const next = voiceSessionReducer(
+      { tag: 'paused', transcript: interimOnly },
+      { type: 'enter-review' },
+    );
+    expect(next.tag).toBe('review');
+    if (next.tag !== 'review') throw new Error('unreachable');
+    // Without this the review form opened EMPTY and the «→ В ИИ»
+    // button stayed disabled: the text was visible and unsendable.
+    expect(next.editedText).toBe('сделай бас быстрее');
+  });
+
+  it('enter-review prefers the final over the interim', () => {
+    const both: TranscriptState = {
+      ...base, interim: 'черновик', final: 'готовая фраза',
+    };
+    const next = voiceSessionReducer(
+      { tag: 'paused', transcript: both },
+      { type: 'enter-review' },
+    );
+    if (next.tag !== 'review') throw new Error('unreachable');
+    expect(next.editedText).toBe('готовая фраза');
+  });
+
+  it('a final chunk landing on a parked take is not thrown away', () => {
+    const next = voiceSessionReducer(
+      { tag: 'paused', transcript: base },
+      {
+        type: 'chunk',
+        chunk: {
+          kind: 'final', text: 'опоздавшая фраза', confidence: 0.9,
+          lang: 'ru-RU', timestampMs: 0,
+        },
+      },
+    );
+    // `transcribing` is where the subscriber's auto-review looks.
+    expect(next.tag).toBe('transcribing');
+    if (next.tag !== 'transcribing') throw new Error('unreachable');
+    expect(next.transcript.final).toBe('опоздавшая фраза');
   });
 });
