@@ -1,5 +1,5 @@
 import { Show, type JSX } from 'solid-js';
-import { Effect } from 'effect';
+import { Cause, Effect, Exit } from 'effect';
 import {
   whistleState,
   whistleError,
@@ -123,28 +123,34 @@ export function WhistleMiniFAB(): JSX.Element {
   );
 }
 
-/** Run a possibly-failing Effect with a user-facing toast on failure. */
+/**
+ * Run a possibly-failing Effect with a user-facing toast on failure.
+ *
+ * `runPromiseExit` + `Cause.squash` instead of `runPromise`: the
+ * latter rejects with the runtime's `FiberFailure` wrapper, whose
+ * `_tag` is not 'MicBusy' — the typed error never reached the
+ * formatter and the toast showed the raw JSON of the error object.
+ */
 const runEffectSafely = async (
   eff: Effect.Effect<unknown, unknown, never>,
 ): Promise<void> => {
-  try {
-    await Effect.runPromise(eff as never);
-  } catch (err) {
-    const msg = (() => {
-      if (typeof err === 'object' && err !== null) {
-        const tag = (err as { readonly _tag?: unknown })._tag;
-        if (tag === 'MicBusy') {
-          const e = err as MicBusyError;
-          return 'Микрофон занят другим режимом ('
-            + e.conflictingChannel.owner.kind + ')';
-        }
+  const exit = await Effect.runPromiseExit(eff as Effect.Effect<unknown, never, never>);
+  if (Exit.isSuccess(exit)) return;
+  const err = Cause.squash(exit.cause);
+  const msg = (() => {
+    if (typeof err === 'object' && err !== null) {
+      const tag = (err as { readonly _tag?: unknown })._tag;
+      if (tag === 'MicBusy') {
+        const e = err as MicBusyError;
+        return 'Микрофон занят другим режимом ('
+          + e.conflictingChannel.owner.kind + ')';
       }
-      return err instanceof Error ? err.message : String(err);
-    })();
-    consoleStore.pushToast({
-      severity: 'warn',
-      title: 'Свист',
-      body: msg,
-    });
-  }
+    }
+    return err instanceof Error ? err.message : String(err);
+  })();
+  consoleStore.pushToast({
+    severity: 'warn',
+    title: 'Свист',
+    body: msg,
+  });
 };

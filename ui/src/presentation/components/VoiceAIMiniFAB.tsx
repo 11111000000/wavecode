@@ -1,5 +1,5 @@
 import { Show, type JSX } from 'solid-js';
-import { Effect } from 'effect';
+import { Cause, Effect, Exit } from 'effect';
 import {
   voiceAIState,
   voiceAIError,
@@ -66,28 +66,37 @@ const isPermissionBlocked = (): boolean => {
   return /permission|NotAllowed|microphone.*block/i.test(e);
 };
 
-/** Run a possibly-failing Effect with a user-facing toast on failure. */
+/**
+ * Run a possibly-failing Effect with a user-facing toast on failure.
+ *
+ * `runPromiseExit` + `Cause.squash` instead of `runPromise`: the
+ * latter rejects with the runtime's `FiberFailure` wrapper, whose
+ * `_tag` is neither 'MicBusy' nor 'SttUnsupported' — the typed error
+ * never reached the formatter and the toast showed the raw JSON of
+ * the error object («{"_tag":"MicBusy","conflictingChannel":…}»).
+ * Squashing the cause hands back the original error value, so the
+ * user reads «Микрофон занят другим режимом (whistle)».
+ */
 const runEffectSafely = async (
   eff: Effect.Effect<void, MicBusyError | SttUnsupportedError, never>,
 ): Promise<void> => {
-  try {
-    await Effect.runPromise(eff);
-  } catch (err) {
-    const msg = (() => {
-      if (typeof err === 'object' && err !== null) {
-        const tag = (err as { readonly _tag?: unknown })._tag;
-        if (tag === 'MicBusy' || tag === 'SttUnsupported') {
-          return formatError(err as MicBusyError | SttUnsupportedError);
-        }
+  const exit = await Effect.runPromiseExit(eff);
+  if (Exit.isSuccess(exit)) return;
+  const err = Cause.squash(exit.cause);
+  const msg = (() => {
+    if (typeof err === 'object' && err !== null) {
+      const tag = (err as { readonly _tag?: unknown })._tag;
+      if (tag === 'MicBusy' || tag === 'SttUnsupported') {
+        return formatError(err as MicBusyError | SttUnsupportedError);
       }
-      return err instanceof Error ? err.message : String(err);
-    })();
-    consoleStore.pushToast({
-      severity: 'warn',
-      title: 'Голос',
-      body: msg,
-    });
-  }
+    }
+    return err instanceof Error ? err.message : String(err);
+  })();
+  consoleStore.pushToast({
+    severity: 'warn',
+    title: 'Голос',
+    body: msg,
+  });
 };
 
 /**

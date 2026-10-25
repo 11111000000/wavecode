@@ -264,7 +264,7 @@ const VoiceAILiveBody = (): JSX.Element => {
             || (voiceAIState().tag === 'applying' ? 'применяю правку…'
               : voiceAIState().tag === 'requesting' ? 'жду ответ ИИ…'
               : voiceAIState().tag === 'paused'
-                ? 'на паузе · нажмите и держите голос, чтобы продолжить'
+                ? 'на паузе · нажмите кнопку ещё раз, чтобы продолжить'
               : voiceAIState().tag === 'arming'
                 ? 'готовлю микрофон…'
               : (voiceAIState().tag === 'listening')
