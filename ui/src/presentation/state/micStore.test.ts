@@ -135,6 +135,42 @@ describe('micStore — clearPreview', () => {
   });
 });
 
+describe('micStore — startMic keepBufferedNotes', () => {
+  /**
+   * Drive the segmenter into "one closed note" state: a pitched frame
+   * opens a note, a silent frame after it closes the note (the
+   * segmenter's `minNoteMs` is 80 ms).
+   */
+  const playOneNote = (w: typeof import('../state/micStore')): void => {
+    w.feedMicFrame({ hz: 440, clarity: 0.95, rms: 0.05, timestampMs: 0 });
+    w.feedMicFrame({ hz: null, clarity: 0, rms: 0.001, timestampMs: 200 });
+  };
+
+  it('a RESUMED recording keeps the notes that were already played', async () => {
+    // The whistle toggle pauses a take and the next press continues
+    // it. If the mic restart wiped the segmenter's buffer, the pause
+    // would silently mean "start over" and the notes the user had
+    // just whistled would be lost.
+    const w = await importStore();
+    playOneNote(w);
+    expect(w.micPreviewNotes()).toHaveLength(1);
+
+    w.startMic({ keepBufferedNotes: true });
+    expect(w.micPreviewNotes()).toHaveLength(1);
+    w.stopMic();
+  });
+
+  it('a FRESH recording starts with an empty buffer', async () => {
+    const w = await importStore();
+    playOneNote(w);
+    expect(w.micPreviewNotes()).toHaveLength(1);
+
+    w.startMic();
+    expect(w.micPreviewNotes()).toHaveLength(0);
+    w.stopMic();
+  });
+});
+
 describe('micStore — applyToScore (slot dispatching)', () => {
   it('is a no-op when both buffers are empty', async () => {
     const w = await importStore();

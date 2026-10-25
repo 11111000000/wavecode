@@ -183,6 +183,23 @@ const resetSegState = (): void => {
   setMicPeakTimes([]);
 };
 
+/**
+ * Drop the segmenter's buffer but keep the live meter readings.
+ *
+ * Used when a recording is RESUMED rather than started fresh: the
+ * whistle toggle pauses a take («стоп» → the panel keeps the notes)
+ * and the next press continues it, so the notes already whistled have
+ * to survive the mic restart. A full `resetSegState()` would wipe
+ * them and the user would lose the take they had just made.
+ */
+const resetLiveReadings = (): void => {
+  setMicCurrentHz(null);
+  setMicCurrentRms(0);
+  setMicPrunedCount(0);
+  setMicMeterFrame(null);
+  setMicPeakTimes([]);
+};
+
 /** Prune `micPeakTimes` of entries older than `nowMs - window`. Called
  *  on every MicCapture event so the array stays bounded at ~30-100
  *  entries regardless of session length. */
@@ -269,14 +286,29 @@ const onMicMeter = (frame: MeterFrame): void => {
   // detected musical events (notes + transients).
 };
 
-export const startMic = (): void => {
+/**
+ * Open the microphone.
+ *
+ * `opts.keepBufferedNotes` resumes a take instead of starting a new
+ * one: the segmenter's note buffer survives the restart, so a paused
+ * whistle take can be continued without losing the notes that were
+ * already whistled. Everything else (the meter readings) is reset —
+ * those belong to the live capture, not to the buffer.
+ */
+export const startMic = (
+  opts: { readonly keepBufferedNotes?: boolean } = {},
+): void => {
   if (micListening()) return;
   if (!isMicSupported()) {
     pushError(new Error('Этот браузер не поддерживает микрофон (getUserMedia недоступен).'));
     setMicStateSignal('errored');
     return;
   }
-  resetSegState();
+  if (opts.keepBufferedNotes === true) {
+    resetLiveReadings();
+  } else {
+    resetSegState();
+  }
   setMicErrorSignal(null);
   detector = startMicDetector({
     onFrame: onMicFrame,

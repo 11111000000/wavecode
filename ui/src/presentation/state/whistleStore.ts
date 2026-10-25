@@ -41,7 +41,7 @@ import {
   type MicCaptureLike,
   type WhistleSessionHandle,
 } from '~/application/voice/WhistleSession';
-import { startMic, stopMic, micPreviewNotes, setMicPreviewNotes, subscribeMicFrame } from './micStore';
+import { startMic, stopMic, micPreviewNotes, setMicPreviewNotes, subscribeMicFrame, clearPreview } from './micStore';
 import { acquireMic, releaseMic, resetMicMutexForTests } from './micMutexStore';
 import { dispatch, appStore } from './appStore';
 import { consoleStore } from '~/presentation/components/consoleStore';
@@ -135,6 +135,29 @@ export type WhistleStartOpts = {
   readonly instrument?: string;
 };
 
+/**
+ * The whistle session id, shared by every surface that can start a
+ * whistle take (the mini-FAB toggle and the panel's ●REC).
+ *
+ * One id, not one per surface: the mic mutex releases by session id
+ * (`releaseMic(sessionId)` drops every channel that id owns), so a
+ * take started by the FAB and stopped by the panel must speak the
+ * same id — otherwise the release would not match the acquire and
+ * the device would stay claimed.
+ */
+let whistleSessionId: string | null = null;
+
+/** Stable id for the current whistle take. Created once, reused. */
+export const ensureWhistleSessionId = (): string => {
+  if (whistleSessionId === null) {
+    whistleSessionId =
+      typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+        ? crypto.randomUUID()
+        : `whistle-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+  }
+  return whistleSessionId;
+};
+
 let handle: WhistleSessionHandle | null = null;
 let activeSessionId: string | null = null;
 let unsubscribeFrame: (() => void) | null = null;
@@ -149,6 +172,10 @@ const captureLiveNotes = (): ReadonlyArray<AudioNote> => {
   setWhistleNotes(live);
   return live;
 };
+
+/** True when the segmenter holds notes from an earlier (paused) take.
+ *  The mic restart must not wipe them. */
+const hasBufferedNotes = (): boolean => micPreviewNotes().length > 0;
 
 /**
  * Build the orchestrator handle. Awaits `Effect.runSync` once and
@@ -180,7 +207,12 @@ export const initWhistle = (deps: {
   const notesRef: { current: ReadonlyArray<AudioNote> } = { current: [] };
 
   const mic: MicCaptureLike = {
-    start: () => Effect.sync(() => startMic()),
+    // Resume, not restart: the whistle toggle pauses a take and the
+    // next press continues it. Without `keepBufferedNotes` the
+    // segmenter's buffer would be wiped by the mic restart and the
+    // notes the user had just whistled would be gone — the pause
+    // would silently mean "start over".
+    start: () => Effect.sync(() => startMic({ keepBufferedNotes: hasBufferedNotes() })),
     stop: () =>
       Effect.sync(() => {
         stopMic();
@@ -268,7 +300,7 @@ export const startWhistle = (
       // captures via micStore.startMic, but `commitWhistle` will be
       // a no-op (snippet-via-orchestrator requires the layer).
       yield* Effect.sync(() => {
-        startMic();
+        startMic({ keepBufferedNotes: hasBufferedNotes() });
         setWhistleState({ tag: 'arming' });
       });
       return;
@@ -339,6 +371,11 @@ export const commitWhistle = (): Effect.Effect<void, never, never> => {
       return;
     }
     dispatch({ type: 'replaceScore', text: result.score });
+    // The notes are in the score now. Leaving them in the segmenter's
+    // buffer would make the NEXT whistle take inherit them — the
+    // strip would show the old notes and «Применить» would splice
+    // them a second time.
+    clearPreview();
   });
 };
 
@@ -370,6 +407,32 @@ export const stopWhistle = (): Effect.Effect<void, never, never> =>
     });
   });
 
+/**
+ * Delete the recorded audio (the buffered notes), keep the panel open.
+ *
+ * This is the panel's «Удалить» button for the whistle path. The
+ * whistle has no transcript of its own, so "keep the text" degenerates
+ * to "keep the panel": the user stays where they are (the panel with
+ * an empty note strip, ●REC ready for another take, «Применить»
+ * disabled because there is nothing to apply) instead of being
+ * dropped back to the editor with the panel gone.
+ *
+ * `stopWhistle` releases the mic and parks the FSM at `idle`; the
+ * notes themselves live in `micStore`'s preview buffer, which
+ * `clearPreview()` empties — including the segmenter's internal
+ * state, so a fresh take cannot resurrect the deleted notes.
+ */
+export const discardWhistleTake = (): Effect.Effect<void, never, never> =>
+  Effect.gen(function* () {
+    yield* stopWhistle();
+    yield* Effect.sync(() => {
+      clearPreview();
+      setWhistleNotes([]);
+    });
+    // Keep the panel on screen: the take is gone, the surface is not.
+    requestWhistlePanelArmed();
+  });
+
 /** Test-only: install a custom handle. */
 export const __setWhistleHandleForTests = (
   h: WhistleSessionHandle | null,
@@ -391,6 +454,7 @@ export const __resetWhistleForTests = (): void => {
   }
   handle = null;
   activeSessionId = null;
+  whistleSessionId = null;
   setWhistleState(initialWhistleSession());
   setWhistleNotes([]);
   setMicPreviewNotes([]);
