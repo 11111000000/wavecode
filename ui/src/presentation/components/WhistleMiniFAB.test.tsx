@@ -14,18 +14,15 @@ import { resetMicMutexForTests } from '../state/micMutexStore';
 /**
  * WhistleMiniFAB render tests.
  *
- *   1. Renders with `.voice-mini-fab--whistle` and a whistle icon.
- *   2. pointerdown / pointerup wires through to start/stop via the
- *      store's `startWhistle` / `stopWhistle` Effects. Under the
- *      no-handle fallback the FSM lands in `arming`.
+ * The button is a TOGGLE (`decisions/wavecode-voice-fab-toggle-rec`):
  *
- * The minimal-hold gate (`MIN_HOLD_BEFORE_RELEASE_OK_MS` =
- * 80 ms) added on 2026-10-19 requires `pointerup` to be preceded
- * by enough wall-clock time on `pointerdown`. The "real" release
- * test below uses 120ms to clear the threshold.
+ *   press → the take starts, the button becomes a REC button;
+ *   press → the take pauses, the notes stay in the buffer and the
+ *           panel stays open so «Применить» remains reachable.
+ *
+ * The old contract was press-and-hold: the take ended with the
+ * finger, and every note had to fit inside one grip.
  */
-
-const HOLD_GUARD_MS = 120;
 
 beforeEach(() => {
   __resetVoiceAIForTests();
@@ -39,6 +36,10 @@ afterEach(() => {
   __resetWhistleForTests();
   resetMicMutexForTests();
 });
+
+/** Let the fire-and-forget Effect settle. */
+const settle = (): Promise<void> =>
+  new Promise<void>((resolve) => setTimeout(resolve, 30));
 
 describe('WhistleMiniFAB — render', () => {
   it('renders with class voice-mini-fab--whistle', () => {
@@ -67,9 +68,6 @@ describe('WhistleMiniFAB — hint chip names the instrument', () => {
       lastFrameMs: 0,
     });
     const { container } = render(() => <WhistleMiniFAB />);
-    fireEvent.pointerDown(container.querySelector<HTMLButtonElement>('.voice-mini-fab--whistle')!);
-    // The chip only appears after HOLD_NOTICE_MS of held state.
-    await new Promise<void>((resolve) => setTimeout(resolve, HOLD_GUARD_MS + 200));
     const hint = container.querySelector('.voice-mini-fab__hint');
     expect(hint?.textContent).toContain('слушаю…');
     expect(hint?.textContent).toContain(whistleInstrumentLabel());
@@ -77,73 +75,84 @@ describe('WhistleMiniFAB — hint chip names the instrument', () => {
   });
 });
 
-describe('WhistleMiniFAB — pointerdown / pointerup', () => {
-  it('pointerdown starts a session (FSM lands in non-idle under fallback)', async () => {
+describe('WhistleMiniFAB — the press toggles the take', () => {
+  it('a press starts a session (FSM lands in non-idle under fallback)', async () => {
     const { container } = render(() => <WhistleMiniFAB />);
     const btn = container.querySelector<HTMLButtonElement>(
       '.voice-mini-fab--whistle',
     )!;
-    fireEvent.pointerDown(btn);
-    await new Promise<void>((resolve) => setTimeout(resolve, HOLD_GUARD_MS));
+    fireEvent.click(btn);
+    await settle();
     expect(whistleState().tag).not.toBe('idle');
   });
 
-  it('pointerup stops the session (FSM returns to idle)', async () => {
+  it('the next press pauses the session (FSM returns to idle)', async () => {
     const { container } = render(() => <WhistleMiniFAB />);
     const btn = container.querySelector<HTMLButtonElement>(
       '.voice-mini-fab--whistle',
     )!;
-    fireEvent.pointerDown(btn);
-    await new Promise<void>((resolve) => setTimeout(resolve, HOLD_GUARD_MS));
-    fireEvent.pointerUp(btn);
-    await new Promise<void>((resolve) => setTimeout(resolve, HOLD_GUARD_MS));
+    fireEvent.click(btn);
+    await settle();
+    fireEvent.click(btn);
+    await settle();
     expect(whistleState().tag).toBe('idle');
   });
 
-  it('REGRESSION (2026-10-21): hold-and-release keeps the panel armed so «Применить» stays reachable', async () => {
+  it('REGRESSION: the paused take keeps the panel armed so «Применить» stays reachable', async () => {
     // `stopWhistle()` drops the whistle FSM back to `idle`, and
     // `RecordingPanel.mode` only stays visible while the FSM is
     // arming/recording/segmenting OR while `whistlePanelArmed`
-    // holds. Without arming on the release path a hold-and-release
-    // takes the panel off screen together with the notes the user
-    // just whistled, and those notes can never be spliced.
+    // holds. Without arming on the pause path the paused take takes
+    // the panel off screen together with the notes the user just
+    // whistled, and those notes can never be spliced.
     const { container } = render(() => <WhistleMiniFAB />);
     const btn = container.querySelector<HTMLButtonElement>(
       '.voice-mini-fab--whistle',
     )!;
-    fireEvent.pointerDown(btn);
-    await new Promise<void>((resolve) => setTimeout(resolve, HOLD_GUARD_MS));
-    fireEvent.pointerUp(btn);
-    await new Promise<void>((resolve) => setTimeout(resolve, HOLD_GUARD_MS));
+    fireEvent.click(btn);
+    await settle();
+    fireEvent.click(btn);
+    await settle();
 
     expect(whistleState().tag).toBe('idle');
     expect(whistlePanelArmed()).toBe(true);
   });
 
-  it('REGRESSION (2026-10-19): fast pointerleave immediately after pointerdown does NOT commit an empty buffer', async () => {
-    // Mobile Chrome fires `pointerleave` ~10-40ms after `pointerdown`
-    // even when the user intended to hold the button. Without the
-    // MIN_HOLD_BEFORE_RELEASE_OK_MS gate, `commitWhistle()` ran on
-    // an empty buffer immediately, generating zero notes, and the
-    // FSM cycled to idle without producing audio. Pin the new
-    // behaviour: a sub-threshold pointerleave leaves the session
-    // ACTIVE.
+  it('REGRESSION: the take survives the finger leaving the button', async () => {
+    // The toggle contract: releasing the pointer must NOT end the
+    // recording. A browser turns pointerdown+pointerup into a
+    // `click` — and it is that click that starts the take. The
+    // pointerup itself must not stop it.
     const { container } = render(() => <WhistleMiniFAB />);
     const btn = container.querySelector<HTMLButtonElement>(
       '.voice-mini-fab--whistle',
     )!;
     fireEvent.pointerDown(btn);
-    // Simulate the spurious pointerleave that mobile Chrome emits
-    // ~15ms after pointerdown — well under the 80ms gate.
-    btn.dispatchEvent(new Event('pointerleave', { bubbles: true }));
-    await new Promise<void>((resolve) => setTimeout(resolve, 50));
-    // FSM should still be in a recording state — pointerleave was
-    // ignored as too short.
-    expect(whistleState().tag).not.toBe('idle');
-    // Now properly release after >80ms hold.
-    await new Promise<void>((resolve) => setTimeout(resolve, 60));
     fireEvent.pointerUp(btn);
-    await new Promise<void>((resolve) => setTimeout(resolve, HOLD_GUARD_MS));
-    expect(whistleState().tag).toBe('idle');
+    fireEvent.click(btn);
+    await settle();
+    expect(whistleState().tag).not.toBe('idle');
+  });
+});
+
+describe('WhistleMiniFAB — the REC state', () => {
+  it('turns into a REC button while the take is running', async () => {
+    const { container } = render(() => <WhistleMiniFAB />);
+    const btn = container.querySelector<HTMLButtonElement>(
+      '.voice-mini-fab--whistle',
+    )!;
+    expect(btn.getAttribute('data-rec-state')).toBe('off');
+    expect(container.querySelector('.voice-mini-fab__rec-dot')).toBeNull();
+    expect(btn.querySelector('.voice-mini-fab__label')?.textContent).toBe('Свист');
+
+    fireEvent.click(btn);
+    await settle();
+
+    expect(btn.getAttribute('data-rec-state')).toBe('on');
+    expect(btn.getAttribute('aria-pressed')).toBe('true');
+    // The whistle glyph is replaced by the blinking dot.
+    expect(container.querySelector('.voice-mini-fab__rec-dot')).toBeTruthy();
+    expect(btn.querySelector('svg.wc-icon')).toBeNull();
+    expect(btn.querySelector('.voice-mini-fab__label')?.textContent).toBe('REC');
   });
 });

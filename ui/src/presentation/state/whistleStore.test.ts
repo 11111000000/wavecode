@@ -137,6 +137,24 @@ describe('whistleStore — replaceScore dispatch', () => {
     await Effect.runPromise(commitWhistle());
     expect(appStore.score).toBe(before);
   });
+
+  it('commit clears the buffered notes so the next take does not inherit them', async () => {
+    // The notes are in the score now. Leaving them in the segmenter's
+    // buffer would make the NEXT whistle take start with the previous
+    // take's notes — the strip would show them and «Применить» would
+    // splice them a second time.
+    const { setMicPreviewNotes, micPreviewNotes } = await import('./micStore');
+    const { appStore, dispatch } = await import('./appStore');
+    installFake();
+    setMicPreviewNotes([
+      { midi: 60, cents: 0, startMs: 0, durationMs: 500, vibratoCents: 0 },
+    ]);
+    dispatch({ type: 'replaceScore', text: '' });
+    await Effect.runPromise(startWhistle({ sessionId: 'sess-c4' }));
+    await Effect.runPromise(commitWhistle());
+    expect(appStore.score).toContain('c4');
+    expect(micPreviewNotes()).toHaveLength(0);
+  });
 });
 
 describe('whistleStore — mic mutex contention', () => {

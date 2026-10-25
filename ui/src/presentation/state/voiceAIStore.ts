@@ -98,35 +98,6 @@ export const [voiceAISupported, setVoiceAISupported] = createSignal<boolean>(
 );
 
 /**
- * UI flag: the user has tapped the voice-AI FAB without pressing
- * long enough to start a session. The recording panel renders in
- * "вооружена, ждём ●REC" mode until either the user presses the
- * in-panel ●REC button (which clears the flag and starts the
- * orchestrator) or ✕ dismisses the panel.
- *
- * Pure presentation concern, not a domain FSM tag — the wavecode-
- * voice-rec-and-meter decision explicitly rejects adding an `armed`
- * state to `voiceSessionReducer`. The reducer's job is orchestrator
- * + STT + LLM; "user opened the panel" is local to the FAB + panel.
- */
-export const [voiceAIPanelArmed, setVoiceAIPanelArmed] = createSignal<boolean>(
-  false,
-);
-
-/** Request the voice-AI armed state. Called by `VoiceAIMiniFAB` on a
- *  fast tap below the hold-debounce threshold. Idempotent. */
-export const requestVoiceAIPanelArmed = (): void => {
-  setVoiceAIPanelArmed(true);
-};
-
-/** Clear the voice-AI armed state. Called when the in-panel ●REC
- *  fires the orchestrator (so the live body takes over) or when the
- *  user dismisses the panel via ✕. */
-export const clearVoiceAIPanelArmed = (): void => {
-  setVoiceAIPanelArmed(false);
-};
-
-/**
  * Live RMS level of the active recording. `null` when no recording
  * is in flight — the panel uses that to render no meter instead of
  * fabricating a value. The polling timer is set up by
@@ -650,6 +621,48 @@ export const stopVoiceAI = (): Effect.Effect<void, never, never> =>
     activeSessionId = null;
   });
 
+/**
+ * Delete the recorded audio, keep the recognised text.
+ *
+ * This is the panel's «Удалить» button, and it is deliberately NOT
+ * `stopVoiceAI` + a cleared buffer:
+ *
+ *   - `stopVoiceAI` FLUSHES the take: the engine uploads the audio
+ *     and the transcript lands a round trip later. That is the right
+ *     behaviour for the second press of the FAB (the user wants the
+ *     words), and the wrong one for «Удалить» (the user wants the
+ *     audio gone).
+ *   - `dismissVoiceAI` throws the transcript away with the audio.
+ *     The user asked to keep the text.
+ *
+ * `handle.enterReview()` is the middle path the orchestrator already
+ * has: it tears the capture side down (the subscriber fiber is
+ * interrupted BEFORE `stt.stop()`, so the server engine's `released`
+ * latch is set and its release-flush becomes a no-op — the take is
+ * never uploaded) and then dispatches `enter-review`, which freezes
+ * whatever was already recognised into the editable buffer.
+ *
+ * Honest limit: interim ticks that were already uploaded to the STT
+ * relay (every 10 s of speech) cannot be recalled from the server.
+ * «Удалить» prevents the FINAL upload of the take — the bulk of it.
+ */
+export const discardVoiceAITake = (): Effect.Effect<void, never, never> =>
+  Effect.gen(function* () {
+    stopElapsedTimer();
+    stopRmsPoll();
+    if (handle !== null) {
+      yield* handle.enterReview();
+    }
+    const sid = activeSessionId;
+    if (sid !== null) {
+      yield* Effect.sync(() => releaseMic(sid));
+    }
+    activeSessionId = null;
+    yield* Effect.sync(() => {
+      setVoiceAIFlushing(false);
+    });
+  });
+
 /** Close the recording panel and abandon the take.
  *
  *  `stopVoiceAI` leaves the FSM in `paused`, which the panel renders
@@ -682,7 +695,6 @@ export const dismissVoiceAI = (): Effect.Effect<void, never, never> =>
       setVoiceAIFlushing(false);
       setVoiceAITranscript(initialTranscriptState(langAtInit));
       setVoiceAIError(null);
-      clearVoiceAIPanelArmed();
     });
   });
 
@@ -793,7 +805,6 @@ export const __resetVoiceAIForTests = (): void => {
   setVoiceAIError(null);
   setVoiceAIFlushing(false);
   setVoiceAISupported(true);
-  setVoiceAIPanelArmed(false);
 };
 
 onCleanup(() => {

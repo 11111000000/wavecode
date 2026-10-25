@@ -6310,6 +6310,37 @@ textarea.ai-textarea:focus-visible {
   background: var(--err-soft);
 }
 
+/* REC state — the mini-FAB IS the record button while a take is
+ * running. The icon is replaced by a blinking dot, the chip reads
+ * «REC» and the whole button turns red, so "the microphone is
+ * open" is readable from the button alone and not only from the
+ * panel. The rule sits AFTER the per-mode colouring above so it
+ * wins over the voice/whistle tint (both are the same specificity
+ * — one class + one attribute — and this one comes later). */
+.voice-mini-fab[data-rec-state='on'] {
+  color: var(--err);
+  border-color: var(--err);
+  background: var(--err-soft);
+  box-shadow: var(--shadow-fab), 0 0 20px var(--err-soft);
+  animation: voice-mini-fab-rec-pulse 1.4s ease-in-out infinite;
+}
+@keyframes voice-mini-fab-rec-pulse {
+  0%, 100% { box-shadow: var(--shadow-fab), 0 0 14px var(--err-soft); }
+  50%      { box-shadow: var(--shadow-fab), 0 0 28px var(--err-soft); }
+}
+.voice-mini-fab__rec-dot {
+  width: 14px;
+  height: 14px;
+  border-radius: var(--radius-full);
+  background: var(--err);
+  box-shadow: 0 0 10px var(--err-soft);
+  animation: voice-mini-fab-rec-blink 1.1s ease-in-out infinite;
+}
+@keyframes voice-mini-fab-rec-blink {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.35; }
+}
+
 .voice-mini-fab--whistle {
   color: var(--cyan);
   border-color: var(--cyan);
@@ -6778,6 +6809,27 @@ textarea.ai-textarea:focus-visible {
   color: var(--fg);
 }
 
+/* «Удалить» — deletes the recorded AUDIO and keeps the text. Sits
+ * next to the ✕ in the panel head, one step quieter than the ✕:
+ * the ✕ closes the panel, this one keeps it open. */
+.voice-recording-panel__delete {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  background: transparent;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  color: var(--fg-muted);
+  cursor: pointer;
+  transition: background var(--dur-2xs) var(--ease), color var(--dur-2xs) var(--ease);
+}
+.voice-recording-panel__delete:hover {
+  background: var(--err-soft);
+  color: var(--err);
+}
+
 .voice-recording-panel__body {
   display: flex;
   align-items: baseline;
@@ -6910,6 +6962,19 @@ textarea.ai-textarea:focus-visible {
 }
 .voice-recording-panel__btn--primary:hover:not(:disabled) {
   background: var(--primary-soft);
+}
+
+/* «Очистить текст» — the small button that empties the recognised-text
+ * field. Deliberately quiet: it is a convenience, not a primary
+ * action, and it must not compete with «→ В ИИ» for attention. */
+.voice-recording-panel__btn--clear {
+  padding: var(--space-2xs) var(--space-xs);
+  font-size: var(--fs-3xs);
+  color: var(--fg-muted);
+}
+.voice-recording-panel__btn--clear:hover:not(:disabled) {
+  background: var(--surface-3);
+  color: var(--fg);
 }
 .voice-recording-panel__hint {
   font-size: var(--fs-xs);

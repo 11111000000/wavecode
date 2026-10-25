@@ -1,0 +1,298 @@
+---
+schema: math-coding/3.3
+id: wavecode-voice-fab-toggle-rec
+revision: 1
+state: active
+body_sha: "sha256:9cf72f7520967e9cc8c09177cb135ebfaeff3eb49d59ef1c5cbbbf2d5bbce7c6"
+yaml_sha: "sha256:9cf72f7520967e9cc8c09177cb135ebfaeff3eb49d59ef1c5cbbbf2d5bbce7c6"
+
+axiom_link:
+  - A0
+  - A3
+
+intent: |
+  Пользователь описал желаемое поведение голосового кластера
+  своими словами: «кнопка голоса один раз нажата — она меняется
+  на типа кнопку REC, значит что запись идёт; в окошке видно, что
+  запись идёт; когда её ещё раз нажимаем — происходит стоп, и видно,
+  что запись в расшифровке; и свиста один раз нажали — начались,
+  второй раз нажали — это как бы пауза». Плюс две кнопки в панели:
+  «удалить» и маленькая «очистить весь текст».
+
+  Переведённое на язык требований:
+
+  (1) Обе мини-кнопки (Голос и Свист) — ТУМБЛЕРЫ, а не
+      «держать». Одно нажатие запускает запись, второе её
+      останавливает. Запись обязана ПРОДОЛЖАТЬСЯ после того, как
+      палец отпустил кнопку: удержание принципиально не может это
+      выразить.
+
+  (2) Пока идёт запись, сама кнопка становится кнопкой REC: точка,
+      красная подсветка, чип «REC». Состояние читается с кнопки, а
+      не только из панели.
+
+  (3) В панели записи появляется кнопка «Удалить», которая удаляет
+      АУДИО и оставляет ТЕКСТ (так ответил пользователь на
+      уточняющий вопрос), и маленькая кнопка «Очистить текст»,
+      которая очищает поле распознанного текста в панели (тоже
+      ответ пользователя).
+
+  (4) Для свиста второе нажатие — это ПАУЗА: ноты остаются в
+      буфере, панель остаётся открытой («Применить» должна быть
+      доступна), следующее нажатие продолжает тот же take, а не
+      начинает новый с нуля.
+
+  Что было до этого решения: `VoiceAIMiniFAB` различал «удержание
+  ≥ 50 мс» (старт сессии) и «тап» (только вооружить панель и ждать
+  ●REC внутри неё); `WhistleMiniFAB` работал по принципу
+  «зажал-свистнул-отпустил». Панель имела собственную кнопку ●REC
+  для голоса. Пользовательский сценарий «нажал один раз — идёт
+  запись, нажал ещё раз — стоп» в такой модели был недостижим:
+  запись всегда жила вместе с пальцем.
+
+commitment: |
+  (1) `VoiceAIMiniFAB` и `WhistleMiniFAB` переходят на toggle:
+      `click` начинает take, следующий `click` его останавливает
+      (для свиста — ставит на паузу). Никакой обработчик
+      `pointerup`/`pointerleave` больше не завершает запись: отпускание
+      пальца не влияет на take.
+
+  (2) Во время записи кнопка отображает REC-состояние: точка вместо
+      иконки (`data-rec-state="on"`, класс `voice-mini-fab__rec-dot`),
+      чип «REC» вместо «Голос»/«Свист», красная подсветка и пульс.
+
+  (3) Голосовая «вооружённая» фаза (`voiceAIPanelArmed`) и
+      `VoiceAIArmedBody` удаляются: FAB сам является REC-контролом,
+      второй способ начать тот же take был бы дублирующим и
+      недостижимым. Кнопка ●REC в панели остаётся для свиста
+      (она управляет take, который идёт из FAB), но не для голоса.
+
+  (4) Пауза свиста сохраняет буфер: `stopWhistle` освобождает
+      микрофон, но не трогает ноты; продолжение take стартует с
+      `keepBufferedNotes`, чтобы сегментатор не сбросил уже
+      насвистанное. «Применить» вставляет ВЕСЬ буфер.
+
+  (5) Панель получает «Удалить» (удаляет аудио, текст остаётся) и
+      маленькую «Очистить текст» (очищает поле распознанного
+      текста). «Удалить» показывается только пока take реально
+      пишется: после flush аудио уже летит на сервер, и кнопка,
+      обещающая его удалить, была бы ложью.
+
+  (6) Контракт подтверждения перед отправкой не меняется: take
+      заканчивается в `review`, текст попадает в редактируемое
+      поле, до «→ В ИИ» ничего не уходит в LLM.
+
+  (7) Слои не меняются: правки только в `presentation/` и в CSS.
+      `tsc --noEmit` + `vitest` + `lint:no-console` +
+      `validate:presets` — exit 0; `mathc validate` на этом файле —
+      exit 0.
+
+counterexample: |
+  «Тап-тумблер хуже удержания: он открывает микрофон при
+  случайном касании, а удержание хотя бы требовало намерения.
+  Стоит оставить hold-to-record, а toggle-REC оставить только в
+  панели». Возражения: (а) требование «запись продолжается после
+  отпускания» физически не выражается удержанием — take умирает
+  вместе с пальцем, и это ровно то, что пользователь описал как
+  неработающее; (б) «случайное касание» — это ровно тот же
+  случай, который в 2026-10 закрывался «вооружённой» фазой, но
+  ценой второго обязательного клика по ●REC, то есть ценой
+  нарушения требуемого сценария «нажал один раз — идёт запись»;
+  (в) случайный старт не остаётся незамеченным: кнопка
+  мгновенно становится красной REC-точкой, панель показывает
+  «записываю… N с» и живую метку громкости, микрофон держится под
+  мьютексом, а второй тап его выключает; (г) удержание не
+  выражает и «паузу» — оно не может оставить буфер нот доступным
+  для «Применить», не превращая отпускание в отмену.
+
+  «Тогда оставим hold-to-record, но добавим рядом отдельную
+  маленькую кнопку REC». Возражения: два контрола на одно
+  действие — источник расхождения состояний (кнопка «говорит» REC,
+  сессия не стартовала). Панель уже имела такую кнопку ●REC, и она
+  была именно тем, что пользователь игнорировал: он просил, чтобы
+  «кнопка голоса» сама была REC-кнопкой.
+
+antithesis: |
+  «Оставить hold-to-record как основной жест, а toggle добавить
+  третьим способом — shift+click». Возражения: (1) скрытый
+  модификатор не находится без инструкции, а инструкция — это
+  ровно то, что пользователь пытался убрать; (2) два разных
+  способа остановить take дают два разных состояния (один
+  отменяет take, другой сливает его в расшифровку), и в
+  «вооружённой» модели это уже породило отдельный доменный тег
+  `armed`; (3) пользователь сформулировал поведение в терминах
+  «нажал один раз / нажал ещё раз» — это описание toggle, а не
+  модификатора.
+
+scope:
+  paths:
+    - "ui/src/presentation/components/VoiceAIMiniFAB.tsx"
+    - "ui/src/presentation/components/VoiceAIMiniFAB.test.tsx"
+    - "ui/src/presentation/components/WhistleMiniFAB.tsx"
+    - "ui/src/presentation/components/WhistleMiniFAB.test.tsx"
+    - "ui/src/presentation/components/RecordingPanel.tsx"
+    - "ui/src/presentation/components/RecordingPanel.test.tsx"
+    - "ui/src/presentation/state/voiceAIStore.ts"
+    - "ui/src/presentation/state/whistleStore.ts"
+    - "ui/src/presentation/state/micStore.ts"
+    - "ui/src/styles/components.css"
+    - "decisions/wavecode-voice-fab-toggle-rec.yaml"
+  exclusions:
+    - "ui/node_modules/**"
+    - "ui/dist/**"
+    - "ui/src/domain/**"
+    - "ui/src/application/**"
+    - "ui/src/infrastructure/**"
+
+outcomes:
+  - id: fab-is-a-toggle
+    statement: |
+      `VoiceAIMiniFAB` и `WhistleMiniFAB` обрабатывают `click`:
+      первый клик вызывает `startVoiceAI` / `startWhistle`, второй
+      (при живом take) — `stopVoiceAI` / `stopWhistle`. Обработчиков
+      `pointerup`/`pointerleave`, завершающих take, в этих файлах
+      нет.
+  - id: recording-outlives-the-finger
+    statement: |
+      `VoiceAIMiniFAB.test.tsx > REGRESSION: the take survives the
+      finger leaving the button` и `WhistleMiniFAB.test.tsx` с тем же
+      именем: после pointerdown+pointerup+click у
+      `handle.start` ровно один вызов и ноль вызовов `handle.stop`.
+  - id: fab-shows-the-rec-state
+    statement: |
+      Во время записи у FAB стоит `data-rec-state="on"`,
+      `aria-pressed="true"`, вместо иконки микрофона/свиста рендерится
+      `.voice-mini-fab__rec-dot`, чип подписи читает «REC».
+  - id: panel-has-delete-and-clear
+    statement: |
+      В панели записи есть `.voice-recording-panel__delete`
+      («Удалить» — удаляет аудио, текст остаётся) и
+      `.voice-recording-panel__btn--clear` («Очистить текст» —
+      очищает поле распознанного текста и делает «→ В ИИ»
+      неактивной).
+  - id: whistle-pause-keeps-the-buffer
+    statement: |
+      `startMic({ keepBufferedNotes: true })` не сбрасывает буфер
+      сегментатора при перезапуске микрофона; после паузы и
+      продолжения ноты остаются в `micPreviewNotes`, а
+      `commitWhistle` очищает буфер только после успешной вставки
+      в score.
+  - id: confirm-before-send-intact
+    statement: |
+      Голосовой take по-прежнему заканчивается в `review`: текст
+      попадает в редактируемое поле панели, а `→ В ИИ` — единственный
+      путь к LLM. Тест `RecordingPanel.test.tsx > renders an editable
+      textarea seeded with the recognised text` остаётся зелёным.
+  - id: precommit-green
+    statement: |
+      `cd ui && npm run test:precommit` (tsc strict + vitest +
+      lint:no-console + validate:presets) завершается exit 0.
+  - id: mathc-validate-clean
+    statement: |
+      `mathc validate decisions/wavecode-voice-fab-toggle-rec.yaml`
+      завершается exit 0 без `MC-*` reject-диагностик.
+
+obligations:
+  - id: toggle-replaces-hold
+    claim: |
+      `VoiceAIMiniFAB.tsx` и `WhistleMiniFAB.tsx` не содержат
+      обработчиков `onPointerUp` / `onPointerLeave`, завершающих
+      take: запись живёт дольше пальца.
+    acceptance:
+      all:
+        - verifier: text-scan-no-hold-release-handlers
+          result: pass
+  - id: rec-state-is-published
+    claim: |
+      Обе кнопки публикуют `data-rec-state` («on» во время записи)
+      и рендерят `.voice-mini-fab__rec-dot`; в CSS есть правило
+      `.voice-mini-fab[data-rec-state='on']`.
+    acceptance:
+      all:
+        - verifier: text-scan-rec-state-published
+          result: pass
+  - id: panel-delete-and-clear-exist
+    claim: |
+      `RecordingPanel.tsx` рендерит `.voice-recording-panel__delete`
+      и `.voice-recording-panel__btn--clear`; тесты
+      `RecordingPanel.test.tsx` проверяют, что «Удалить» не
+      показывается после flush и в `review`, а «Очистить текст»
+      опустошает поле и выключает «→ В ИИ».
+    acceptance:
+      all:
+        - verifier: vitest-run-recording-panel
+          result: pass
+  - id: toggle-behaviour-is-tested
+    claim: |
+      `VoiceAIMiniFAB.test.tsx` и `WhistleMiniFAB.test.tsx` зелёные:
+      первый клик стартует, второй останавливает, отпускание пальца
+      не останавливает, во время flush клик — no-op.
+    acceptance:
+      all:
+        - verifier: vitest-run-voice-mini-fab
+          result: pass
+  - id: whistle-buffer-survives-resume
+    claim: |
+      `micStore.startMic` принимает `keepBufferedNotes`, и
+      `whistleStore.startWhistle` передаёт его. `micStore.test.ts`
+      фиксирует: перезапуск микрофона с флагом сохраняет уже
+      сыгранные ноты, а без флага — очищает буфер;
+      `whistleStore.test.ts` фиксирует, что `commitWhistle` чистит
+      буфер после успешной вставки в score.
+    acceptance:
+      all:
+        - verifier: vitest-run-mic-store
+          result: pass
+        - verifier: vitest-run-whistle-store
+          result: pass
+  - id: layer-boundaries-untouched
+    claim: |
+      Ни один файл в `ui/src/domain/`, `ui/src/application/` или
+      `ui/src/infrastructure/` не изменён этим пакетом, и ни одна
+      правка не добавляет импорт через слой.
+    acceptance:
+      all:
+        - verifier: text-scan-no-domain-layer-change
+          result: pass
+  - id: typecheck-lint-green
+    claim: |
+      `npm run typecheck`, `npm run lint:no-console` и
+      `npm run validate:presets` завершаются exit 0.
+    acceptance:
+      all:
+        - verifier: pnpm-ui-typecheck
+          result: pass
+        - verifier: pnpm-ui-lint
+          result: pass
+  - id: mathc-validate-clean
+    claim: |
+      `mathc validate decisions/wavecode-voice-fab-toggle-rec.yaml`
+      завершается exit 0 без `MC-*` reject-диагностик.
+    acceptance:
+      all:
+        - verifier: mathc-validate
+          result: pass
+
+risk:
+  declared_triggers:
+    - accidental-tap-opens-the-mic-without-the-user-noticing
+    - second-tap-during-the-release-flush-starts-a-second-take-over-the-first
+    - whistle-pause-then-resume-silently-drops-the-buffed-notes
+    - delete-button-shown-after-the-audio-has-already-been-uploaded
+    - user-expects-hold-to-record-and-finds-the-take-ends-on-tap
+  owner: human:operator
+
+reversal:
+  - signal: accidental-taps-open-the-mic-too-often-and-the-user-asks-for-a-hold-gesture-back
+    action: rework
+  - signal: the-take-continuation-contract-breaks-because-the-toggle-resets-the-transcript
+    action: halt
+  - signal: the-rec-state-is-not-readable-on-mobile-and-the-user-complains-they-cannot-tell-whether-it-is-recording
+    action: rework
+
+relations:
+  addresses:
+    - wavecode-voice-rec-and-meter@1
+    - wavecode-voice-confirm-before-send@1
+    - wavecode-voice-take-continuation@1
+    - wavecode-voice-second-take-sendable@1

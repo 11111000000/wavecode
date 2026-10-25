@@ -14,9 +14,7 @@ import {
   voiceAIState,
   setVoiceAITranscript,
   setVoiceAIRmsLevel,
-  voiceAIPanelArmed,
-  setVoiceAIPanelArmed,
-  requestVoiceAIPanelArmed,
+  setVoiceAIFlushing,
   __dispatchVoiceAIForTests,
 } from '../state/voiceAIStore';
 import { resetMicMutexForTests } from '../state/micMutexStore';
@@ -496,67 +494,14 @@ describe('RecordingPanel — review form (voice-AI inline confirmation)', () => 
   });
 });
 /* =========================================================================
- *  Armed states (`decisions/wavecode-voice-rec-and-meter`).
- *  When the user fast-taps a mini-FAB, the panel renders an
- *  "вооружена, ждёт ●REC" body with a single ●REC button (voice-AI)
- *  or ●REC + «Применить» (whistle). These tests pin that contract.
+ *  Whistle panel (`decisions/wavecode-voice-fab-toggle-rec`).
+ *  The whistle mini-FAB is a toggle now: a press starts the take, the
+ *  next press pauses it and leaves the notes in the buffer. The panel
+ *  therefore stays on screen with ●REC + «Применить» so the paused
+ *  notes can still be applied (or deleted).
  * ========================================================================= */
-describe('RecordingPanel — voice-AI armed body', () => {
-  it('is hidden when the panel is not armed and the FSM is idle', () => {
-    expect(voiceAIPanelArmed()).toBe(false);
-    expect(voiceAIState().tag).toBe('idle');
-    const { container } = render(() => <RecordingPanel />);
-    expect(container.querySelector('.voice-recording-panel')).toBeNull();
-  });
-
-  it('renders the armed body when the panel is armed but no session is running', () => {
-    requestVoiceAIPanelArmed();
-    expect(voiceAIPanelArmed()).toBe(true);
-    expect(voiceAIState().tag).toBe('idle');
-    const { container } = render(() => <RecordingPanel />);
-    const panel = container.querySelector('.voice-recording-panel');
-    expect(panel).toBeTruthy();
-    expect(panel?.getAttribute('data-mode')).toBe('voice-ai-armed');
-    expect(panel?.getAttribute('data-state')).toBe('armed');
-    // Title carries the "готов к записи" suffix so the user
-    // understands the panel is open but idle.
-    expect(panel?.querySelector('.voice-recording-panel__title')?.textContent)
-      .toContain('Голос');
-    expect(panel?.querySelector('.voice-recording-panel__title')?.textContent)
-      .toContain('готов к записи');
-    // The ●REC button must be present and NOT highlighted.
-    const rec = container.querySelector(
-      '.voice-recording-panel__rec',
-    ) as HTMLButtonElement;
-    expect(rec).toBeTruthy();
-    expect(rec.getAttribute('data-rec-state')).toBe('off');
-    // No review form, no live transcript — the live body would be
-    // misleading because no STT engine is running.
-    expect(container.querySelector('.voice-recording-panel__transcript')).toBeNull();
-    expect(container.querySelector('.voice-recording-panel__review-textarea')).toBeNull();
-    // No «Применить» analogue on the voice-AI armed body — there
-    // is no transcript to dispatch yet. The «→ В ИИ» button
-    // belongs to the `review` state which fires after the first
-    // final chunk lands.
-    expect(container.querySelector('.voice-recording-panel__btn--primary')).toBeNull();
-  });
-
-  it('head ✕ in armed state clears the panel without ever running a session', () => {
-    requestVoiceAIPanelArmed();
-    const { container } = render(() => <RecordingPanel />);
-    const close = container.querySelector(
-      '.voice-recording-panel__close',
-    ) as HTMLButtonElement;
-    expect(close).toBeTruthy();
-    expect(close.getAttribute('aria-label')).toContain('Закрыть без записи');
-    fireEvent.click(close);
-    expect(voiceAIPanelArmed()).toBe(false);
-    expect(container.querySelector('.voice-recording-panel')).toBeNull();
-  });
-});
-
-describe('RecordingPanel — whistle armed body', () => {
-  it('renders ●REC (off) and «Применить» (disabled) when armed with no notes', () => {
+describe('RecordingPanel — whistle panel', () => {
+  it('renders ●REC (off) and «Применить» (disabled) when the panel is armed with no notes', () => {
     requestWhistlePanelArmed();
     expect(whistlePanelArmed()).toBe(true);
     expect(whistleState().tag).toBe('idle');
@@ -564,8 +509,8 @@ describe('RecordingPanel — whistle armed body', () => {
     const { container } = render(() => <RecordingPanel />);
     const panel = container.querySelector('.voice-recording-panel');
     expect(panel).toBeTruthy();
-    expect(panel?.getAttribute('data-mode')).toBe('whistle-armed');
-    expect(panel?.getAttribute('data-state')).toBe('armed');
+    expect(panel?.getAttribute('data-mode')).toBe('whistle');
+    expect(panel?.getAttribute('data-state')).toBe('idle');
     const rec = container.querySelector(
       '.voice-recording-panel__rec',
     ) as HTMLButtonElement;
@@ -623,7 +568,7 @@ describe('RecordingPanel — whistle armed body', () => {
     expect(container.querySelectorAll('.voice-recording-panel__note')).toHaveLength(2);
   });
 
-  it('head ✕ in armed state clears the panel without sending notes', () => {
+  it('head ✕ drops the buffered notes and closes the panel', async () => {
     requestWhistlePanelArmed();
     setMicPreviewNotes([
       { midi: 60, cents: 0, startMs: 0, durationMs: 200, vibratoCents: 0 },
@@ -632,13 +577,16 @@ describe('RecordingPanel — whistle armed body', () => {
     const close = container.querySelector(
       '.voice-recording-panel__close',
     ) as HTMLButtonElement;
-    expect(close.getAttribute('aria-label')).toContain('Закрыть без записи');
+    expect(close.getAttribute('aria-label')).toContain('Отменить');
     fireEvent.click(close);
+    // The panel closes synchronously…
     expect(whistlePanelArmed()).toBe(false);
-    // Notes stay in `micPreviewNotes` — that buffer survives
-    // unless the orchestrator's commit clears it. The user can
-    // re-open the panel and apply them later if they want.
-    expect(micPreviewNotes().length).toBe(1);
+    // …and the notes are dropped once the mic release has settled.
+    await new Promise<void>((resolve) => setTimeout(resolve, 50));
+    // The ✕ abandons the take: nothing may survive it. The notes
+    // are dropped from the segmenter's buffer as well — a take the
+    // user explicitly cancelled must not reappear in the next one.
+    expect(micPreviewNotes().length).toBe(0);
   });
 });
 
@@ -718,6 +666,131 @@ describe('RecordingPanel — whistle live meter visibility', () => {
 });
 
 /* =========================================================================
+ *  «Удалить» and «Очистить текст»
+ *  (`decisions/wavecode-voice-fab-toggle-rec`).
+ *
+ *  «Удалить» deletes the recorded AUDIO and keeps the text. It is
+ *  only honest while a take is still being captured — once the audio
+ *  has been flushed to the recogniser there is nothing left to
+ *  delete, and offering the button would be a lie.
+ * ========================================================================= */
+describe('RecordingPanel — «Удалить»', () => {
+  it('is offered while the take is being captured', () => {
+    armAndListen();
+    const { container } = render(() => <RecordingPanel />);
+    const del = container.querySelector(
+      '.voice-recording-panel__delete',
+    ) as HTMLButtonElement;
+    expect(del).toBeTruthy();
+    expect(del.getAttribute('aria-label')).toContain('Удалить');
+    expect(del.getAttribute('title')).toContain('текст останется');
+  });
+
+  it('is NOT offered while the take is being flushed (the audio is already uploading)', () => {
+    armAndListen();
+    setVoiceAIFlushing(true);
+    const { container } = render(() => <RecordingPanel />);
+    expect(container.querySelector('.voice-recording-panel__delete')).toBeNull();
+  });
+
+  it('is NOT offered in review (the take is over — there is no audio left to delete)', () => {
+    __dispatchVoiceAIForTests({ type: 'arm' });
+    __dispatchVoiceAIForTests({ type: 'stt-ready' });
+    __dispatchVoiceAIForTests({ type: 'chunk', chunk: FINAL_CHUNK });
+    __dispatchVoiceAIForTests({ type: 'enter-review' });
+    expect(voiceAIState().tag).toBe('review');
+    const { container } = render(() => <RecordingPanel />);
+    expect(container.querySelector('.voice-recording-panel__delete')).toBeNull();
+  });
+
+  it('drops the buffered whistle notes and keeps the panel open', async () => {
+    requestWhistlePanelArmed();
+    setMicPreviewNotes([
+      { midi: 60, cents: 0, startMs: 0, durationMs: 200, vibratoCents: 0 },
+      { midi: 64, cents: 0, startMs: 200, durationMs: 200, vibratoCents: 0 },
+    ]);
+    const { container } = render(() => <RecordingPanel />);
+    const del = container.querySelector(
+      '.voice-recording-panel__delete',
+    ) as HTMLButtonElement;
+    expect(del).toBeTruthy();
+    fireEvent.click(del);
+    await new Promise<void>((resolve) => setTimeout(resolve, 50));
+    // The audio (the notes) is gone…
+    expect(micPreviewNotes().length).toBe(0);
+    // …and the panel stays: deleting the take is not closing the
+    // surface. «Применить» is disabled again (nothing to apply).
+    expect(whistlePanelArmed()).toBe(true);
+    const apply = container.querySelector(
+      '.voice-recording-panel__btn--apply',
+    ) as HTMLButtonElement;
+    expect(apply.disabled).toBe(true);
+  });
+});
+
+describe('RecordingPanel — «Очистить текст»', () => {
+  const enterReviewWith = (text: string): void => {
+    __dispatchVoiceAIForTests({ type: 'arm' });
+    __dispatchVoiceAIForTests({ type: 'stt-ready' });
+    __dispatchVoiceAIForTests({ type: 'chunk', chunk: {
+      kind: 'final',
+      text,
+      confidence: 0.9,
+      lang: 'ru-RU',
+      timestampMs: 0,
+    } });
+    __dispatchVoiceAIForTests({ type: 'enter-review' });
+  };
+
+  it('empties the recognised-text field', () => {
+    enterReviewWith('сделай потише');
+    const { container } = render(() => <RecordingPanel />);
+    const ta = container.querySelector(
+      '.voice-recording-panel__review-textarea',
+    ) as HTMLTextAreaElement;
+    const clear = container.querySelector(
+      '.voice-recording-panel__btn--clear',
+    ) as HTMLButtonElement;
+    expect(ta.value).toBe('сделай потише');
+    expect(clear).toBeTruthy();
+    fireEvent.click(clear);
+    expect(ta.value).toBe('');
+  });
+
+  it('disables «→ В ИИ» after the text was cleared (an empty instruction is never sent)', () => {
+    enterReviewWith('сделай потише');
+    const { container } = render(() => <RecordingPanel />);
+    const clear = container.querySelector(
+      '.voice-recording-panel__btn--clear',
+    ) as HTMLButtonElement;
+    const send = container.querySelector(
+      '.voice-recording-panel__btn--primary',
+    ) as HTMLButtonElement;
+    expect(send.disabled).toBe(false);
+    fireEvent.click(clear);
+    expect(send.disabled).toBe(true);
+  });
+});
+
+describe('RecordingPanel — arming is a visible state', () => {
+  it('opens the panel as soon as the take starts arming', () => {
+    // The mini-FAB starts the take on the press, so the panel has to
+    // appear in the same frame — otherwise the user sees nothing
+    // happen between the press and the first STT chunk (up to ~16 s
+    // on the server relay).
+    __dispatchVoiceAIForTests({ type: 'arm' });
+    expect(voiceAIState().tag).toBe('arming');
+    const { container } = render(() => <RecordingPanel />);
+    const panel = container.querySelector('.voice-recording-panel');
+    expect(panel).toBeTruthy();
+    expect(panel?.getAttribute('data-mode')).toBe('voice-ai');
+    expect(
+      container.querySelector('.voice-recording-panel__transcript')?.textContent,
+    ).toBe('готовлю микрофон…');
+  });
+});
+
+/* =========================================================================
  *  Reset checks — a stale `armed` flag from a previous test must not
  *  leak into the next test's rendering. The resets in
  *  `__resetVoiceAIForTests` / `__resetWhistleForTests` set the
@@ -725,12 +798,6 @@ describe('RecordingPanel — whistle live meter visibility', () => {
  *  from a sibling test doesn't persist.
  * ========================================================================= */
 describe('RecordingPanel — clean state between tests', () => {
-  it('starts with voiceAIPanelArmed = false after reset', () => {
-    setVoiceAIPanelArmed(true);
-    __resetVoiceAIForTests();
-    expect(voiceAIPanelArmed()).toBe(false);
-  });
-
   it('starts with whistlePanelArmed = false after reset', () => {
     setWhistlePanelArmed(true);
     __resetWhistleForTests();
