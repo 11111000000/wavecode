@@ -22,6 +22,11 @@ import {
   type FocusedContext,
 } from '../state/editorSelection';
 import type { Role } from '~/domain/types';
+import {
+  MELODIC_SOUNDS,
+  DEFAULT_MELODIC_SOUND,
+  soundGlyph,
+} from '~/domain/sounds';
 
 /**
  * AI-редактор: пользователь пишет инструкцию на русском → LLM правит score → авто-eval.
@@ -132,6 +137,16 @@ export function AIEditPanel() {
   let messagesRef: HTMLDivElement | undefined;
   let textareaRef: HTMLTextAreaElement | undefined;
 
+  /**
+   * The melodic instrument the AI should use.
+   *
+   * The user picks it here (the AI panel is where the user talks
+   * about music), and the choice rides into the user prompt as an
+   * explicit instruction — so "сделай как в джазе" and "сделай на
+   * пиано" both land on a sound that really exists.
+   */
+  const [aiInstrument, setAiInstrument] = createSignal<string>(DEFAULT_MELODIC_SOUND);
+
   /** Messages of the active preset's dialog thread. */
   const activeMessages = createMemo(
     () => appStore.dialogs[appStore.activePresetId] ?? [],
@@ -241,7 +256,11 @@ export function AIEditPanel() {
             text,
             hist,
             { status: appStore.audio.status, ...(appStore.audio.lastError ? { lastError: appStore.audio.lastError } : {}) },
-            { model: currentSettings.model, thinking: currentSettings.thinking },
+            {
+              model: currentSettings.model,
+              thinking: currentSettings.thinking,
+              instrument: aiInstrument(),
+            },
             streamCallbacks,
             ctxForPrompt,
           );
@@ -492,6 +511,23 @@ export function AIEditPanel() {
         />
         <div class="ai-controls-row1">
           <LLMSettingsPopover />
+          <label class="ai-instrument-select-wrap" aria-label="Инструмент для ИИ">
+            <span class="ai-instrument-glyph" aria-hidden="true">
+              {soundGlyph(aiInstrument())}
+            </span>
+            <select
+              class="ai-instrument-select"
+              value={aiInstrument()}
+              disabled={busy()}
+              onChange={(e) => { setAiInstrument(e.currentTarget.value); }}
+            >
+              <For each={MELODIC_SOUNDS}>
+                {(sound) => (
+                  <option value={sound.id}>{sound.label}</option>
+                )}
+              </For>
+            </select>
+          </label>
           <button
             type="button"
             class="ai-clear-btn"

@@ -3,6 +3,7 @@ import { readFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join, resolve } from 'node:path';
 import { registerSynthSounds, soundMap } from 'superdough';
+import { PIANO_INSTRUMENTS } from '~/domain/music/notes';
 import {
   OSCILLATOR_SOUNDS,
   SAMPLE_SOUNDS,
@@ -12,6 +13,7 @@ import {
   soundLabel,
   soundGlyph,
   isMelodicSound,
+  soundCatalogForPrompt,
 } from './sounds';
 
 /**
@@ -169,5 +171,38 @@ describe('sounds — the helpers', () => {
 
   it('the melodic catalogue is the oscillators plus the sample sounds', () => {
     expect(MELODIC_SOUNDS.length).toBe(OSCILLATOR_SOUNDS.length + SAMPLE_SOUNDS.length);
+  });
+});
+
+describe('sounds — the on-screen piano instruments', () => {
+  it('every instrument the piano offers is a real sound', () => {
+    // The piano toolbar used to offer 'casio' / 'guitar' / 'synth' —
+    // names that were never registered, so a pick committed a snippet
+    // that killed the whole pattern.
+    for (const inst of PIANO_INSTRUMENTS) {
+      expect(ALL_SOUNDS.some((s) => s.id === inst)).toBe(true);
+    }
+  });
+
+  it('the piano instruments cover every melodic sample sound', () => {
+    for (const s of SAMPLE_SOUNDS) {
+      expect(PIANO_INSTRUMENTS).toContain(s.id as never);
+    }
+  });
+});
+
+describe('sounds — the prompt catalogue', () => {
+  it('names every sound exactly once', () => {
+    const text = soundCatalogForPrompt();
+    for (const s of ALL_SOUNDS) {
+      expect(text).toContain(s.id);
+    }
+  });
+
+  it('does NOT offer the sounds that never existed', () => {
+    const text = soundCatalogForPrompt();
+    expect(text).not.toContain('guitar');
+    expect(text).not.toContain('casio');
+    expect(text).not.toContain('piano_a4');
   });
 });

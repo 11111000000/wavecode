@@ -36,6 +36,7 @@ import {
   type MelodyGrid,
 } from './melodyGridTypes';
 import { noteNumberToName, strudelNoteToMidi } from './notes';
+import { DEFAULT_MELODIC_SOUND } from '../sounds';
 import {
   parseScore,
   argLeadingName,
@@ -53,11 +54,15 @@ import {
 export const MELODY_DEFAULT_BPM = 120;
 
 /**
- * Default instrument for committed snippets. Matches the
- * pianoRecStore default (triangle wave — audible without a
- * sample-bank lookup).
+ * Default instrument for committed snippets.
+ *
+ * One default for the whole app (`sounds.ts`): the piano sample —
+ * the only melodic sound the app ships as a real sample, and the
+ * one every generator (микрофон, пиано, свист) agrees on. A user
+ * who wants another timbre picks it where it is convenient (the
+ * mic panel, the whistle panel, the piano toolbar, the AI panel).
  */
-export const MELODY_DEFAULT_INSTRUMENT = 'triangle';
+export const MELODY_DEFAULT_INSTRUMENT = DEFAULT_MELODIC_SOUND;
 
 /**
  * Reasons `extractMelodyFromScore` may return `{ ok: false }`. The

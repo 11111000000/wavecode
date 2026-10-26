@@ -5,6 +5,8 @@
  * Range we support: C3 (48) .. B4 (71) — 24 keys.
  */
 
+import { DEFAULT_MELODIC_SOUND } from '../sounds';
+
 const NOTE_NAMES_SHARP = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'] as const;
 const NOTE_NAMES_FLAT  = ['C', 'Db', 'D', 'Eb', 'E', 'F', 'Gb', 'G', 'Ab', 'A', 'Bb', 'B'] as const;
 
@@ -47,7 +49,7 @@ export const SILENCE_SNIPPET = 'silence';
  *  `singleNoteSnippet`, `multiNoteSnippet`, and `noteToneSnippet` so
  *  all three shapes stay byte-identical for a single note. */
 const pianoVoice = (noteLc: string, gainLit: string): string =>
-  `note("${noteLc}").s("triangle").attack(0.005).decay(0.4).sustain(0.1).gain(${gainLit})`;
+  `note("${noteLc}").s("${DEFAULT_MELODIC_SOUND}").attack(0.005).decay(0.4).sustain(0.1).gain(${gainLit})`;
 
 /** Synthesize a single-note Strudel snippet with short envelope. */
 export const singleNoteSnippet = (note: string): string => {
@@ -169,13 +171,26 @@ export const isBlackKey = (midi: number): boolean => {
 // the value used by `noteToneSnippet` to construct the committed
 // Strudel snippet (`s("${instrument}")`).
 
-/** Sample name (or oscillator waveform) for the on-screen piano.
- *  The 4 oscillator literals double as Strudel sample names that
- *  resolve to the corresponding Web Audio waveform. The 4 sample
- *  literals resolve to Strudel-bank samples at eval time. */
-export type PianoInstrument =
-  | 'triangle' | 'sine' | 'sawtooth' | 'square'
-  | 'piano' | 'casio' | 'guitar' | 'synth';
+/**
+ * The instrument of the on-screen piano.
+ *
+ * Every value is a name superdough REALLY knows — the sample names
+ * come from the three bundled banks (piano / synth_*), the waveform
+ * names from `registerSynthSounds`. The previous literals
+ * ('casio' | 'guitar' | 'synth') were pure invention: no such sound
+ * was registered, so picking one committed a snippet that threw
+ * `sound guitar not found!` and killed the whole pattern.
+ *
+ * `sounds.test.ts` pins this union against the catalogue and against
+ * the library's own soundMap, so it cannot drift back.
+ */
+export const PIANO_INSTRUMENTS = [
+  'piano',
+  'synth_bass', 'synth_pad', 'synth_lead', 'synth_strings', 'synth_brass',
+  'triangle', 'sawtooth', 'square', 'sine', 'supersaw', 'sbd',
+] as const;
+
+export type PianoInstrument = typeof PIANO_INSTRUMENTS[number];
 
 /** Coerce the domain `PianoInstrument` to a Web Audio
  *  `OscillatorType`. Oscillator literals map identity; sample
@@ -189,9 +204,13 @@ export const pianoInstrumentToOscType = (inst: PianoInstrument): OscillatorType 
     case 'sine':     return 'sine';
     case 'sawtooth': return 'sawtooth';
     case 'square':   return 'square';
+    case 'supersaw': return 'sawtooth';
+    case 'sbd':      return 'sine';
     case 'piano':    return 'triangle';
-    case 'casio':    return 'sine';
-    case 'guitar':   return 'sawtooth';
-    case 'synth':    return 'square';
+    case 'synth_bass':   return 'sawtooth';
+    case 'synth_pad':    return 'sine';
+    case 'synth_lead':   return 'sawtooth';
+    case 'synth_strings':return 'sine';
+    case 'synth_brass':  return 'square';
   }
 };

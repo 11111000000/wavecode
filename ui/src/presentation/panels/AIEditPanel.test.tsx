@@ -102,6 +102,22 @@ describe('AIEditPanel — happy path streaming', () => {
     expect(queryByText(/Здесь будет диалог/)).toBeTruthy();
   });
 
+  it('offers an instrument picker with only REAL sounds', () => {
+    // The instrument the user picks here rides into the prompt, so
+    // the model writes a sound that really exists.
+    const { container } = render(() => <AIEditPanel />);
+    const select = container.querySelector<HTMLSelectElement>('.ai-instrument-select');
+    expect(select).toBeTruthy();
+    const values = Array.from(select?.querySelectorAll('option') ?? [])
+      .map((o) => o.getAttribute('value'));
+    expect(values).toContain('piano');
+    expect(values).toContain('synth_pad');
+    expect(values).not.toContain('guitar');
+    expect(values).not.toContain('casio');
+    // The app-wide default.
+    expect(select?.value).toBe('piano');
+  });
+
   it('streams assistant tokens into a draft message then replaces with the final message', async () => {
     let capturedOnToken: ((s: string) => void) | undefined;
 

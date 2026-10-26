@@ -23,7 +23,8 @@ import {
   setTranscribeBpm,
   type PianoSlot,
 } from '../state/pianoRecStore';
-import type { PianoInstrument } from '~/domain/music/notes';
+import { PIANO_INSTRUMENTS, type PianoInstrument } from '~/domain/music/notes';
+import { MELODIC_SOUNDS } from '~/domain/sounds';
 
 /**
  * PianoToolbar — REC + FOLLOW + slot selector + apply + preview + instrument.
@@ -100,32 +101,27 @@ export type PianoToolbarProps = {
   midiSource?: string | undefined;
 };
 
-const INSTRUMENTS: ReadonlyArray<PianoInstrument> = [
-  'piano', 'casio', 'guitar', 'synth',
-  'triangle', 'sine', 'sawtooth', 'square',
-];
+/**
+ * The instruments the on-screen piano offers.
+ *
+ * The list comes from the sound catalogue — the names superdough
+ * REALLY has. The old hard-coded trio of samples ('casio', 'guitar',
+ * 'synth') never existed: picking one made the REC commit a snippet
+ * with `s("guitar")`, which superdough rejects with "sound guitar
+ * not found!" and the whole pattern dies.
+ */
+const INSTRUMENTS: ReadonlyArray<PianoInstrument> = PIANO_INSTRUMENTS;
 
-const INSTRUMENT_LABEL: Record<PianoInstrument, string> = {
-  piano:    'Piano',
-  casio:    'Casio',
-  guitar:   'Guitar',
-  synth:    'Synth',
-  triangle: '△',
-  sine:     '∿',
-  sawtooth: '⊿',
-  square:   '⊓',
-};
+const INSTRUMENT_LABEL: Record<string, string> = Object.fromEntries(
+  MELODIC_SOUNDS.map((sound) => [sound.id, sound.label]),
+);
 
-const INSTRUMENT_TITLE: Record<PianoInstrument, string> = {
-  piano:    'Piano (Strudel sample — REC пишет s("piano"))',
-  casio:    'Casio (Strudel sample — REC пишет s("casio"))',
-  guitar:   'Guitar (Strudel sample — REC пишет s("guitar"))',
-  synth:    'Synth (Strudel sample — REC пишет s("synth"))',
-  triangle: 'Triangle oscillator (REC пишет s("triangle"))',
-  sine:     'Sine oscillator (REC пишет s("sine"))',
-  sawtooth: 'Sawtooth oscillator (REC пишет s("sawtooth"))',
-  square:   'Square oscillator (REC пишет s("square"))',
-};
+const INSTRUMENT_TITLE: Record<string, string> = Object.fromEntries(
+  MELODIC_SOUNDS.map((sound) => [
+    sound.id,
+    `${sound.label} (REC пишет s("${sound.id}"))`,
+  ]),
+);
 
 const SLOTS: ReadonlyArray<{
   readonly id: PianoSlot;
@@ -153,7 +149,8 @@ const SLOTS: ReadonlyArray<{
   },
 ];
 
-const instrumentGlyph = (inst: PianoInstrument): string => INSTRUMENT_LABEL[inst];
+const instrumentGlyph = (inst: PianoInstrument): string =>
+  INSTRUMENT_LABEL[inst] ?? '♪';
 
 /** Duration of the "✓ Применено" pill flash after a successful apply. */
 const APPLY_FLASH_MS = 1500;
@@ -410,23 +407,24 @@ export const PianoToolbar = (props: PianoToolbarProps): JSX.Element => {
           </span>
         </Show>
       </Show>
-      <div class="piano-instrument-selector" role="group" aria-label="Инструмент пианино">
-        <For each={INSTRUMENTS}>
-          {(inst) => (
-            <button
-              type="button"
-              class="piano-inst-btn"
-              data-active={instrument() === inst ? 'true' : 'false'}
-              data-instrument={inst}
-              onClick={() => setInstrument(inst)}
-              title={INSTRUMENT_TITLE[inst]}
-              aria-label={`Инструмент: ${INSTRUMENT_LABEL[inst]}`}
-            >
-              {instrumentGlyph(inst)}
-            </button>
-          )}
-        </For>
-      </div>
+      <label class="piano-instrument-selector" aria-label="Инструмент пианино">
+        <span class="piano-inst-glyph" aria-hidden="true">
+          {instrumentGlyph(instrument())}
+        </span>
+        <select
+          class="piano-inst-select"
+          value={instrument()}
+          onChange={(e) => { setInstrument(e.currentTarget.value as PianoInstrument); }}
+        >
+          <For each={INSTRUMENTS}>
+            {(inst) => (
+              <option value={inst} title={INSTRUMENT_TITLE[inst]}>
+                {INSTRUMENT_LABEL[inst]}
+              </option>
+            )}
+          </For>
+        </select>
+      </label>
       <Show when={props.midiStatus}>
         <span
           class={`piano-midi-status piano-midi-${midiPillTone()}${props.midiActive ? ' has-active' : ''}`}

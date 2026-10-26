@@ -12,6 +12,8 @@ import {
   type DialogTurn,
   type FocusedContextLike,
 } from './llmEdit';
+import { SYSTEM_PROMPT } from './llmEdit';
+import { ALL_SOUNDS } from '~/domain/sounds';
 
 /**
  * Tests for `applyEditStream` and the self-heal retry budget.
@@ -441,5 +443,53 @@ describe('applyEditWithContext — prompt forwarding', () => {
     const req = captured[0]!;
     const userMsg = req.messages[req.messages.length - 1]!;
     expect(userMsg.content).not.toContain('=== FOCUSED CONTEXT');
+  });
+});
+
+/* =========================================================================
+ *  The prompt must only ever name sounds that really exist.
+ *
+ *  A wrong `.s("…")` name is not a quiet layer: superdough throws
+ *  "sound X not found! Is it loaded?" at trigger time and the WHOLE
+ *  pattern dies. The model copies the names it is shown, so the
+ *  prompt is generated from the sound catalogue — and this test pins
+ *  that the fictional names are gone and every real one is there.
+ * ========================================================================= */
+describe('SYSTEM_PROMPT — the instrument list', () => {
+  it('names every sound of the catalogue', () => {
+    for (const sound of ALL_SOUNDS) {
+      expect(SYSTEM_PROMPT).toContain(sound.id);
+    }
+  });
+
+  it('does NOT name the sounds that never existed', () => {
+    // These three were offered by the piano toolbar before the
+    // catalogue — and every pick of them committed a snippet that
+    // killed the pattern.
+    expect(SYSTEM_PROMPT).not.toContain('s("guitar")');
+    expect(SYSTEM_PROMPT).not.toContain('s("casio")');
+    expect(SYSTEM_PROMPT).not.toContain('s("synth")');
+    // The per-sample names of the old bank layout are gone too.
+    expect(SYSTEM_PROMPT).not.toContain('piano_a4');
+    expect(SYSTEM_PROMPT).not.toContain('piano_c4');
+  });
+
+  it('tells the model that no other name exists', () => {
+    expect(SYSTEM_PROMPT).toContain('ДРУГИХ ИМЁН ЗВУКОВ В WAVECODE НЕТ');
+    expect(SYSTEM_PROMPT).toContain('sound X not found!');
+  });
+});
+
+describe('buildUserPrompt — the chosen instrument', () => {
+  it('mentions the instrument when one is chosen', () => {
+    const prompt = buildUserPrompt('note("c4")', 'сделай тише', undefined, null, 'piano');
+    expect(prompt).toContain('=== ИНСТРУМЕНТ ===');
+    expect(prompt).toContain('piano');
+    expect(prompt).toContain('Пианино');
+  });
+
+  it('omits the instrument block when nothing is chosen', () => {
+    const prompt = buildUserPrompt('note("c4")', 'сделай тише');
+    expect(prompt).not.toContain('=== ИНСТРУМЕНТ ===');
   });
 });
