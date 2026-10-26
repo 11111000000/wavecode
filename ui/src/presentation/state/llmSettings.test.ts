@@ -54,4 +54,24 @@ describe('llmSettings', () => {
     expect(reloaded()).toEqual({ model: 'fast', thinking: 'high' });
   });
 
+  it('advertises the models the proxy actually routes to', async () => {
+    // 2026-10-26: прокси переключён на DeepSeek. Лейблы 'M3'/'M2.1' и
+    // routesTo 'MiniMax-*' были ложью: UI обещал MiniMax, а отдавался
+    // DeepSeek. Этот тест — регекс-guard: смена маршрутизации прокси
+    // обязана обновлять и подписи в UI.
+    const { MODEL_TIERS } = await import('./llmSettings');
+    expect(MODEL_TIERS.map((t) => [t.value, t.routesTo])).toEqual([
+      ['smart', 'deepseek-v4-pro'],
+      ['fast', 'deepseek-flash'],
+    ]);
+    const joined = MODEL_TIERS.map((t) => `${t.label} ${t.routesTo}`).join(' ');
+    expect(joined).not.toMatch(/MiniMax|M3|M2\.1/);
   });
+
+  it('labels the thinking option "off" as minimum, because DeepSeek cannot disable reasoning', async () => {
+    const { thinkingLabel } = await import('./llmSettings');
+    expect(thinkingLabel('off')).toBe('min');
+    expect(thinkingLabel('low')).toBe('low');
+    expect(thinkingLabel('high')).toBe('high');
+  });
+});
