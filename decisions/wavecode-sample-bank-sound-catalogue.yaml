@@ -1,0 +1,352 @@
+---
+schema: math-coding/3.3
+id: wavecode-sample-bank-sound-catalogue
+revision: 1
+state: active
+body_sha: "sha256:9ac8438d0d05e8b3b2410012d8040d021827f140942bef583aedf18142d6d53c"
+yaml_sha: "sha256:9ac8438d0d05e8b3b2410012d8040d021827f140942bef583aedf18142d6d53c"
+
+axiom_link:
+  - A0
+  - A3
+
+intent: |
+  Пользователь: «сейчас если свистишь, то дефолтный инструмент
+  Piano — как сэмпл ничего не звучит; хотелось бы, чтобы можно было
+  просто щёлкать ритм, и он реально сделает хай-хэт; проанализируй,
+  какие сэмпы можно использовать; и хотелось бы выбирать инструменты
+  кликнув прямо в коде, где инструмент, — увидеть всех реально
+  доступных, либо выбрать в меню, удобно на мобильном».
+
+  Три симптома, один корень.
+
+  (1) «Ничего не звучит». `WhistleStore` коммитит
+      `note("…").s("piano")`. Имя `piano` НЕ зарегистрировано в
+      soundMap: банк пиано регистрирует `piano_a1…piano_c7`, а
+      bank-alias (`piano → piano_a4`), который закрывал это имя,
+      был демонтирован в `wavecode-sample-bank-underscore`.
+      Незарегистрированное имя — не «тихий» слой: superdough
+      бросает `sound piano not found! Is it loaded?` на триггере,
+      и падает ВЕСЬ паттерн, а не только его слой.
+
+  (2) «Пресеты звучат не на той высоте». Банки `piano` и `synth`
+      описаны в формате «массив» (`piano_a4: ["A4.mp3"]`), а
+      superdough в этой ветке считает сэмпл C2-корневым и
+      транспонирует как `midi - 36`: `note("a4").s("piano_a4")` →
+      +33 полутона (проверено на `superdough/util.mjs`, версия
+      1.3.0). Ветка «объект, ключ — нота» выбирает БЛИЖАЙШУЮ
+      доставленную ноту и транспонирует по разнице — это и есть
+      правильная форма банка.
+
+  (3) «Щёлкнуть ритм нельзя». Транзиенты (kick/snare/hat/click)
+      микрофон ловит и классифицирует, но свист их ВЫБРАСЫВАЛ:
+      в snippet шли только ноты. При этом 19.10 транзиенты были
+      вырезаны из свиста намеренно — пользователь жаловался
+      «при свисте вставляют в барабаны какие-то»: онсет САМОГО
+      свиста тоже транзиент, и он попадал в барабан.
+
+  Плюс запрос на интерфейс: список реально доступных инструментов
+  и выбор — и в коде (клик по имени звука), и в меню (мобильный).
+
+commitment: |
+  (1) Банки `piano` и `synth` переводятся в note-keyed форму
+      (`piano: {a1: [...], …}`, `synth_bass: {c1: [...], …}`) —
+      superdough выбирает ближайшую ноту и транспонирует по
+      разнице. Банк ударных остаётся массивом: удар не несёт
+      ноты.
+
+  (2) Пресеты переводятся на новые имена (`piano_a4` → `piano`,
+      `synth_bass-c2` → `synth_bass`, `synth_lead-e4`/`g4` →
+      `synth_lead`, `synth_pad-c3` → `synth_pad`).
+
+  (3) Появляется каталог звуков `domain/sounds.ts` — единственный
+      список имён, которые superdough РЕАЛЬНО знает: осцилляторы
+      (`registerSynthSounds`: triangle/sawtooth/square/sine/
+      supersaw/sbd/шум) плюс сэмплы трёх банков. Каталог
+      проверяется тестом против soundMap библиотеки и против
+      доставленных манифестов + mp3-файлов, поэтому «призрачных»
+      имён в нём быть не может.
+
+  (4) Свист коммитит и ноты, И транзиенты: снапшот строится
+      через `micSnippetFromBuffers` — ту же функцию, что и в
+      MicPanel, так что превью и вставка в score совпадают.
+
+  (5) Транзиент, совпавший с устойчивой нотой (в пределах
+      допуска 60 мс), — это онсет САМОГО свиста и отбрасывается
+      (`filterPercussionHits`); транзиент без ноты рядом — это
+      щелчок и остаётся. Так снимается баг 19.10 и выполняется
+      новая просьба одновременно.
+
+  (6) Инструмент свиста выбирается в панели (нативный `<select>`,
+      пригоден на телефоне) и кликом по имени звука прямо в коде
+      (CM6-расширение `instrumentClickPicker` + карточка выбора).
+      Оба списка — из каталога, то есть предлагают только
+      рабочие имена.
+
+  (7) MicPanel больше не предлагает фиктивные `synth`/`drums`:
+      его список — каталог + псевдо-инструмент «только барабаны»
+      (слой нот отбрасывается, в score идёт только ритм).
+
+  (8) `tsc --noEmit` + `vitest` + `lint:no-console` +
+      `validate:presets` — exit 0; `mathc validate` на этом файле —
+      exit 0.
+
+scope:
+  paths:
+    - "ui/public/samples/piano/strudel.json"
+    - "ui/public/samples/synth/strudel.json"
+    - "ui/src/domain/sounds.ts"
+    - "ui/src/domain/sounds.test.ts"
+    - "ui/src/domain/audio/transient.ts"
+    - "ui/src/domain/audio/transient.test.ts"
+    - "ui/src/domain/audio/micSnippet.ts"
+    - "ui/src/domain/presets.ts"
+    - "ui/src/application/voice/WhistleSession.ts"
+    - "ui/src/application/voice/WhistleSession.test.ts"
+    - "ui/src/presentation/state/whistleStore.ts"
+    - "ui/src/presentation/state/whistleStore.test.ts"
+    - "ui/src/presentation/state/micStore.ts"
+    - "ui/src/presentation/components/RecordingPanel.tsx"
+    - "ui/src/presentation/components/RecordingPanel.test.tsx"
+    - "ui/src/presentation/components/MicPanel.tsx"
+    - "ui/src/presentation/components/MicPanel.test.tsx"
+    - "ui/src/presentation/components/WhistleMiniFAB.test.tsx"
+    - "ui/src/presentation/components/CodeMirrorEditorImpl.tsx"
+    - "ui/src/presentation/editor/instrumentClickPicker.ts"
+    - "ui/src/presentation/editor/instrumentClickPicker.test.ts"
+    - "ui/src/infrastructure/audio/SampleLoader.test.ts"
+    - "ui/src/infrastructure/audio/strudel.d.ts"
+    - "ui/src/styles/components.css"
+    - "decisions/wavecode-sample-bank-sound-catalogue.yaml"
+  exclusions:
+    - "ui/node_modules/**"
+    - "ui/dist/**"
+    - "ui/public/samples/drums/**"
+    - "ui/src/infrastructure/stt/**"
+    - "ui/src/infrastructure/llm/**"
+
+counterexample: |
+  «Синты superdough (triangle/sawtooth/…) уже покрывают всё, чего
+  хочет пользователь, — просто оставить пресеты на них и не трогать
+  банки». Возражения: (а) пользователь просил именно СЭМПЛЫ
+  («пиано отсутствует как сэмпл»), и Salamander-пиано в комплекте
+  уже есть — вопрос только в том, что оно не подключено; (б) даже
+  для синтов текущие имена не работают: `s("supersaw")` требует
+  загруженного worklet'а, а `.shape()`/`.djf()` работают иначе,
+  чем задумано; (в) «оставить на синтax» означает оставить
+  пресеты в том состоянии, когда мелодические слои не играют вовсе
+  (проверено: имя `triangle` зарегистрировано осциллятором, но
+  `piano_a4` — это сэмпл, и он бьёт на 2+ октавы выше).
+
+  «Оставить банки в массивной форме, а высоту чинить в самом
+  приложении — пересчитывать ноту под сэмпл перед вставкой в
+  score». Возражения: это дублирование логики superdough внутри
+  приложения: свой расчёт транспозиции, свои кейсы (октава,
+  диез), и всё это расходится с тем, что реально играет
+  аудиодвижок; формат манифеста — это и есть контракт с
+  superdough, и правильный контракт — note-keyed банк.
+
+  «Тащить в репозиторий недостающие сэмплы ударных (rim/oh/tom/
+  crash/ride) — в манифесте они заявлены, а файлов нет». Возражения:
+  (а) проверка показала, что файлы на месте: 14 ударных mp3
+  лежат в `public/samples/drums/`, манифест полон — вопрос был
+  только в чтении вывода команды; (б) скачивание новых сэмплов —
+  отдельная задача со своей лицензионной проверкой, и она не
+  нужна для исправления тишины.
+
+antithesis: |
+  «Сделать отдельный режим „свист" и отдельный „ритм" (кнопка
+  переключения), чтобы не разбирать онсет и щелчок в коде».
+  Возражения: (1) это лишнее состояние для пользователя — «я
+  свистел» и «я стучал» не должны требовать разных режимов, тем
+  более что в одном take встречается и то и другое; (2) разведение
+  по буферу нот — уже существующий в приложении факт: сегментатор
+  отбрасывает удары короче `minNoteMs` (80 мс), то есть щелчок
+  пальцем по столу просто не оставляет ноты, а свист оставляет;
+  (3) режим — это ещё один переключатель в интерфейсе, который
+  придётся объяснять, тогда как разделение по буферу нот
+  объясняется само собой и проверяется тестом.
+
+  «Оставить всё как есть, а пользователю объяснить, что
+  `s("piano")` не работает, и предложить писать `s("piano_a4")`».
+  Возражения: (а) тогда «пиано отсутствует» остаётся
+  непочиненным — а это исходная жалоба; (б) `piano_a4` бьёт на 33
+  полутона выше, то есть «правильное» имя звучит неправильно;
+  (в) пользователь просил выбрать инструмент — интерфейс должен
+  предлагать рабочие варианты, а не требовать знания внутренних
+  имён сэмплов.
+
+outcomes:
+  - id: the-catalogue-is-the-single-truth
+    statement: |
+      `ui/src/domain/sounds.ts` перечисляет все имена, которые
+      superdough реально знает: 9 осцилляторов (`registerSynthSounds`),
+      6 мелодических сэмплов (пиано + 5 семейств синт) и 14
+      ударных. `sounds.test.ts` сверяет список с soundMap библиотеки
+      и с манифестами `public/samples/*/strudel.json` + наличием
+      mp3-файлов.
+  - id: melodic-banks-are-note-keyed
+    statement: |
+      `public/samples/piano/strudel.json` описывает один банк
+      `piano` с ключами-нотами (a1..a4, c2..c7), а
+      `public/samples/synth/strudel.json` — пять семейств
+      (`synth_bass`, `synth_pad`, `synth_lead`, `synth_strings`,
+      `synth_brass`) с ключами-нотами. superdough выбирает
+      ближайшую доставленную ноту и транспонирует по разнице.
+  - id: presets-use-the-new-names
+    statement: |
+      В `ui/src/domain/presets.ts` больше нет `piano_a4`,
+      `piano_c4`, `synth_bass-c2`, `synth_lead-e4`, `synth_lead-g4`,
+      `synth_pad-c3` — только `piano`, `synth_bass`, `synth_lead`,
+      `synth_pad`.
+  - id: the-whistle-is-audible
+    statement: |
+      `whistleStore` по умолчанию коммитит `note("…").s("piano")` —
+      имя, которое зарегистрировано банком пиано, — и
+      `whistleStore.test.ts` фиксирует, что в score попадают и
+      ноты, и ритм (`drums_hh`), и что онсет самого свиста в
+      барабан не превращается.
+  - id: the-pickers-offer-only-real-sounds
+    statement: |
+      Панель свиста (`RecordingPanel.tsx`) и MicPanel предлагают
+      список из каталога; в MicPanel «Только барабаны» — псевдо-
+      инструмент, отбрасывающий слой нот. Тесты
+      `RecordingPanel.test.tsx` и `MicPanel.test.tsx` проверяют,
+      что в списках нет фиктивных `synth`/`drums` как звуков.
+  - id: click-a-sound-to-change-it
+    statement: |
+      Клик по имени звука внутри `s("…")` в редакторе открывает
+      карточку выбора (`instrumentClickPicker.ts` +
+      `CodeMirrorEditorImpl.tsx`); выбор заменяет имя в score.
+      `instrumentClickPicker.test.ts` фиксирует, что подхватываются
+      только аргументы `s(` / `.s(`.
+  - id: precommit-green
+    statement: |
+      `cd ui && npm run test:precommit` (tsc strict + vitest +
+      lint:no-console + validate:presets) завершается exit 0.
+  - id: mathc-validate-clean
+    statement: |
+      `mathc validate decisions/wavecode-sample-bank-sound-catalogue.yaml`
+      завершается exit 0 без `MC-*` reject-диагностик.
+
+obligations:
+  - id: catalogue-matches-the-library
+    claim: |
+      `sounds.test.ts` вызывает `registerSynthSounds()` из
+      superdough и проверяет, что каждый осциллятор каталога есть
+      в soundMap, а `piano` — как раз НЕ осциллятор (он сэмпл).
+    acceptance:
+      all:
+        - verifier: vitest-run-sounds-catalogue
+          result: pass
+  - id: catalogue-matches-the-shipped-files
+    claim: |
+      `sounds.test.ts` сверяет каталог с манифестами
+      `public/samples/*/strudel.json` (и ноты, и имена) и
+      проверяет, что каждый файл, названный манифестом, реально
+      лежит на диске.
+    acceptance:
+      all:
+        - verifier: vitest-run-sounds-catalogue
+          result: pass
+  - id: manifests-are-note-keyed
+    claim: |
+      `SampleLoader.test.ts` проверяет, что манифест пиано — один
+      note-keyed банк `piano` с нотами a1..c7, а манифест синт —
+      пять note-keyed семейств; банк ударных остаётся массивом.
+    acceptance:
+      all:
+        - verifier: vitest-run-sample-loader
+          result: pass
+  - id: the-whistle-commits-both-buffers
+    claim: |
+      `whistleStore.test.ts` фиксирует: в score попадают и ноты, и
+      `drums_hh` из щелчка; онсет самой ноты в барабан не
+      превращается.
+    acceptance:
+      all:
+        - verifier: vitest-run-whistle-store
+          result: pass
+  - id: onset-vs-tap-is-decided-by-the-note-buffer
+    claim: |
+      `transient.test.ts` (5 новых тестов) фиксирует
+      `filterPercussionHits`: онсет ноты отбрасывается (в том числе
+      при опережении детектора на несколько мс), щелчок без ноты
+      рядом остаётся, смешанный take даёт только щелчки.
+    acceptance:
+      all:
+        - verifier: vitest-run-transient-domain
+          result: pass
+  - id: pickers-offer-only-real-sounds
+    claim: |
+      `RecordingPanel.test.tsx` и `MicPanel.test.tsx` проверяют,
+      что списки инструментов не содержат несуществующих `synth` /
+      `drums` и что выбор реально меняет инструмент.
+    acceptance:
+      all:
+        - verifier: vitest-run-recording-panel
+          result: pass
+        - verifier: vitest-run-mic-panel
+          result: pass
+  - id: click-a-sound-opens-the-picker
+    claim: |
+      `instrumentClickPicker.test.ts` фиксирует: аргумент `s(` /
+      `.s(` опознаётся (включая имя с дефисом), а имя ноты и
+      строка не в `s(` — нет.
+    acceptance:
+      all:
+        - verifier: vitest-run-instrument-click-picker
+          result: pass
+  - id: layer-boundaries-untouched
+    claim: |
+      Правки не выходят за `presentation/`, `domain/` и
+      `public/samples/`: `application/` изменён только в
+      `WhistleSession.ts` (поля `getTransients` и сборка снапшота),
+      `infrastructure/` — только объявление типа `soundMap`.
+    acceptance:
+      all:
+        - verifier: text-scan-layer-boundaries
+          result: pass
+  - id: typecheck-lint-green
+    claim: |
+      `npm run typecheck`, `npm run lint:no-console` и
+      `npm run validate:presets` завершаются exit 0.
+    acceptance:
+      all:
+        - verifier: pnpm-ui-typecheck
+          result: pass
+        - verifier: pnpm-ui-lint
+          result: pass
+  - id: mathc-validate-clean
+    claim: |
+      `mathc validate decisions/wavecode-sample-bank-sound-catalogue.yaml`
+      завершается exit 0 без `MC-*` reject-диагностик.
+    acceptance:
+      all:
+        - verifier: mathc-validate
+          result: pass
+
+risk:
+  declared_triggers:
+    - a-sound-name-that-passes-the-catalogue-test-still-404s-at-runtime-because-the-file-is-missing
+    - the-note-keyed-bank-picks-a-much-lower-sample-than-the-written-note-and-sounds-wrong
+    - the-user-taps-a-rhythm-and-the-filter-drops-the-hits-because-the-segmenter-kept-a-note
+    - the-click-picker-opens-on-every-click-and-makes-the-editor-feel-broken
+    - the-llm-generates-sound-names-that-are-not-in-the-catalogue
+  owner: human:operator
+
+reversal:
+  - signal: the-presets-sound-wrong-after-the-note-keyed-conversion-and-the-operator-prefers-the-old-pitch
+    action: revert
+  - signal: the-pickers-are-too-long-on-mobile-and-the-user-asks-for-groups
+    action: rework
+  - signal: the-filter-drops-more-taps-than-it-keeps
+    action: rework
+
+relations:
+  addresses:
+    - wavecode-sample-pack@1
+    - wavecode-sample-bank-underscore@1
+    - wavecode-strudel-runtime-patches@1
+    - wavecode-whistle-replace-score@1
+    - wavecode-voice-rec-and-meter@1
