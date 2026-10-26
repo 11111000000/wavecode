@@ -841,7 +841,9 @@ describe('PianoKeyboard component (no MIDI status on iOS Safari)', () => {
 
   it('still renders the rec button and instrument selector', () => {
     expect(container.querySelector('.piano-rec-btn')).toBeTruthy();
-    // (wavecode-piano-sample-picker) 4 sample + 4 oscillator = 8 buttons.
-    expect(container.querySelectorAll('.piano-inst-btn')).toHaveLength(8);
+    // The instrument picker is a <select> over the sound catalogue.
+    const select = container.querySelector('.piano-inst-select');
+    expect(select).toBeTruthy();
+    expect(select?.querySelectorAll('option').length).toBeGreaterThan(0);
   });
 });

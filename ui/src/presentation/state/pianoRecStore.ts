@@ -2,6 +2,7 @@ import { createSignal } from 'solid-js';
 import { EditorView, Decoration, type DecorationSet } from '@codemirror/view';
 import { StateEffect, StateField } from '@codemirror/state';
 import type { PianoInstrument } from '~/domain/music/notes';
+import { DEFAULT_MELODIC_SOUND } from '~/domain/sounds';
 import { noteToneSnippet, noteNumberToName } from '~/domain/music/notes';
 import { appendToTopStack } from '~/domain/strudel';
 import { consoleStore } from '~/presentation/components/consoleStore';
@@ -104,7 +105,9 @@ export const pianoSlotGlyph = (slot: PianoSlot): string => {
 
 export const [recEnabled, setRecEnabled] = createSignal(false);
 export const [recBuffer, setRecBuffer] = createSignal<ReadonlyArray<RecNote>>([]);
-export const [instrument, setInstrumentSignal] = createSignal<PianoInstrument>('triangle');
+export const [instrument, setInstrumentSignal] = createSignal<PianoInstrument>(
+  DEFAULT_MELODIC_SOUND,
+);
 export const [followEnabled, setFollowEnabled] = createSignal(false);
 
 // wavecode-piano-rec-clarity: slot + focus + editor-API signals

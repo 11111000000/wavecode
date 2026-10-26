@@ -184,6 +184,48 @@ export const DRUMS_ONLY_ID = 'drums';
 export const isDrumsOnlyInstrument = (id: string): boolean =>
   id === DRUMS_ONLY_ID;
 
+/**
+ * The melodic sound the app's own code generators use when nobody
+ * picked one.
+ *
+ * The piano is the default because it is the one melodic sound the
+ * app ships as a SAMPLE (the Salamander bank) — it is the flagship
+ * instrument of the presets, of the on-screen piano and of the piano
+ * recorder. Every generator that emits a `.s("…")` name reads this
+ * constant, so "the default" is one decision in one place instead of
+ * a literal repeated in five modules.
+ */
+export const DEFAULT_MELODIC_SOUND = 'piano';
+
+/**
+ * The instrument list for the LLM prompt.
+ *
+ * The prompt is the one place where a wrong sound name does the most
+ * damage: the model copies the names it is shown, and a name that
+ * superdough does not know (`s("guitar")`, `s("synth")`,
+ * `s("piano_a4")`) kills the WHOLE pattern at trigger time. So the
+ * list is generated from the catalogue — the same list the pickers
+ * offer and the same list the test pins against the library's own
+ * soundMap. The prompt can no longer drift from what the app can
+ * actually play.
+ */
+export const soundCatalogForPrompt = (): string => {
+  const melodic = MELODIC_SOUNDS.map((s) => {
+    const range = s.notes && s.notes.length > 0
+      ? ` (сэмпл, ноты: ${s.notes.join(' ')})`
+      : ' (осциллятор)';
+    return `  ${s.id} — ${s.label}${range}`;
+  });
+  const drums = DRUM_SOUNDS.map((s) => `  ${s.id} — ${s.label}`);
+  return [
+    'МЕЛОДИЧЕСКИЕ (используй с note(...)):',
+    ...melodic,
+    '',
+    'УДАРНЫЕ (одиночные сэмплы, без note(...)):',
+    ...drums,
+  ].join('\n');
+};
+
 /** The label of a sound id, or the id itself for an unknown name. */
 export const soundLabel = (id: string): string =>
   SOUND_BY_ID.get(id)?.label ?? id;

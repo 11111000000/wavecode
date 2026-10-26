@@ -30,6 +30,7 @@
 
 import { noteNumberToName, type PianoInstrument } from '~/domain/music/notes';
 import { parseScore } from '~/domain/strudel';
+import { DEFAULT_MELODIC_SOUND } from '~/domain/sounds';
 
 /**
  * Minimum representation of a recorded note — mirrors
@@ -81,9 +82,10 @@ export const TRANSCRIBE_DEFAULT_BPM = 120;
 /** Default quantize resolution. 16 = sixteenth-note grid; the most
  *  expressive choice that still groups accidental jitter. */
 export const TRANSCRIBE_DEFAULT_QUANTIZE = 16 as const;
-/** Default instrument passthrough. Matches pianoRecStore default
- *  (triangle wave — audible without a sample-bank lookup). */
-export const TRANSCRIBE_DEFAULT_INSTRUMENT = 'triangle';
+/** Default instrument passthrough — the app-wide default (the piano
+ *  sample). A transcription of piano playing should sound like the
+ *  piano that was played. */
+export const TRANSCRIBE_DEFAULT_INSTRUMENT = DEFAULT_MELODIC_SOUND;
 
 /** Compute grid width in ms for the given BPM and quantize. Throws
  *  if `bpm <= 0` (the caller should never pass a non-positive BPM,

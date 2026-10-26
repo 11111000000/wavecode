@@ -1,6 +1,7 @@
 import { Effect, type Context } from 'effect';
 import { LLMClient } from '~/domain/services';
 import { parseScore } from '~/domain/strudel';
+import { soundCatalogForPrompt, soundLabel } from '~/domain/sounds';
 
 /**
  * System prompt для wavecode AI-редактора.
@@ -38,17 +39,22 @@ export const SYSTEM_PROMPT = [
   'Основные функции:',
   '  note("c4") / note("55 59 62")  — нота по имени или MIDI числами',
   '  n("...")                       — то же что note(), но только MIDI числа',
-  '  s("sawtooth")                  — форма волны (sawtooth/sine/square/triangle/white/brown)',
-  '  s("sbd")                       — синтезированный bass drum (superdough registerSynthSounds)',
+  '  s("<имя звука>")                — инструмент; список имён НИЖЕ,',
   '',
-  'Sample-based drums (требуют зарегистрированный sample bank):',
-  '  s("bd" | "sd" | "hh" | "oh" | "cp")           — короткие имена,',
-  '  s("drums_bd" | "drums_sd" | "drums_hh" | ...)  — bank-prefix,',
-  '  s("github:user/repo")                        — external sample pack.',
-  '  В wavecode банк "drums_*" загружается автоматически через SampleLoader;',
-  '  короткие "bd" / "sd" / "hh" / "oh" / "cp" без банка упадут с "sound not found".',
-  '  Используй sbd для гарантированного звука, drums_* для полноценного kit,',
-  '  и sawtooth/sine/square/triangle для не-ударных голосов.',
+  '=== ИНСТРУМЕНТЫ: ТОЛЬКО ИЗ ЭТОГО СПИСКА ===',
+  soundCatalogForPrompt(),
+  '',
+  'ДРУГИХ ИМЁН ЗВУКОВ В WAVECODE НЕТ. Любое имя не из списка выше',
+  'приводит к "sound X not found! Is it loaded?" — и паттерн падает ЦЕЛИКОМ,',
+  'не заиграет ни одна нота. Никогда не выдумывай имя звука: бери из списка.',
+  '(Имена из списка — единственные, которые действительно загружены.)',
+  '',
+  'Мелодические сэмплы (piano, synth_*) — банки, привязанные к ноте:',
+  'для любой ноты superdough берёт БЛИЖАЙШУЮ доставленную ноту и',
+  'подстраивает высоту, поэтому высоту можно писать свободно.',
+  'Ударные (drums_*) — одиночные сэмплы, ноты у них нет.',
+  'Для «просто пиано» бери piano, для «синта» — synth_pad / synth_lead,',
+  'для баса — synth_bass, для бита — s("drums_bd*4") + s("drums_hh*8").',
   '  .gain(0..1)   — громкость',
   '  .lpf(hz)      — low-pass фильтр',
   '  .slow(n)      — замедлить в n раз',
@@ -61,36 +67,36 @@ export const SYSTEM_PROMPT = [
   '=== ПРИМЕРЫ: ADDITIVE EDITING ===',
   '',
   'Текущий score (для примеров):',
-  '  note("<[55,59,62] [59,63,66] [60,64,67] [60,63,67]>").s("sawtooth").gain(0.4)',
+  '  note("<[55,59,62] [59,63,66] [60,64,67] [60,63,67]>").s("piano").gain(0.4)',
   '',
   'User: "добавь басовую линию"',
   '  Правильный ответ:',
   '  stack(',
-  '    note("<[55,59,62] [59,63,66] [60,64,67] [60,63,67]>").s("sawtooth").gain(0.4),',
-  '    note("<g2 b2 c3 c3>").s("sawtooth").gain(0.35).lpf(400)',
+  '    note("<[55,59,62] [59,63,66] [60,64,67] [60,63,67]>").s("piano").gain(0.4),',
+  '    note("<g2 b2 c3 c3>").s("synth_bass").gain(0.35).lpf(400)',
   '  )',
   '',
   'User: "добавь бит (drum pattern)"',
   '  Правильный ответ:',
   '  stack(',
-  '    note("<[55,59,62] [59,63,66] [60,64,67] [60,63,67]>").s("sawtooth").gain(0.4),',
-  '    s("sbd*4").gain(0.5)',
+  '    note("<[55,59,62] [59,63,66] [60,64,67] [60,63,67]>").s("piano").gain(0.4),',
+  '    s("drums_bd*4").gain(0.5)',
   '  )',
   '',
   'User: "добавь простую мелодию на октаву выше"',
   '  Правильный ответ:',
   '  stack(',
-  '    note("<[55,59,62] [59,63,66] [60,64,67] [60,63,67]>").s("sawtooth").gain(0.4),',
-  '    note("<67 71 74 72>").s("sine").gain(0.2)',
+  '    note("<[55,59,62] [59,63,66] [60,64,67] [60,63,67]>").s("piano").gain(0.4),',
+  '    note("<67 71 74 72>").s("synth_lead").gain(0.2)',
   '  )',
   '',
   'User: "сделай быстрее"',
   '  Правильный ответ (добавь .fast(2) к существующему):',
-  '  note("<[55,59,62] [59,63,66] [60,64,67] [60,63,67]>").s("sawtooth").gain(0.4).fast(2)',
+  '  note("<[55,59,62] [59,63,66] [60,64,67] [60,63,67]>").s("piano").gain(0.4).fast(2)',
   '',
   'User: "добавь reverb"',
   '  Правильный ответ (добавь .room(.5) к существующему):',
-  '  note("<[55,59,62] [59,63,66] [60,64,67] [60,63,67]>").s("sawtooth").gain(0.4).room(.5)',
+  '  note("<[55,59,62] [59,63,66] [60,64,67] [60,63,67]>").s("piano").gain(0.4).room(.5)',
   '',
   '=== ПОСЛЕДНЕЕ ===',
   'Если инструкция не относится к music — верни ТЕКУЩИЙ score без изменений.',
@@ -110,6 +116,7 @@ export const FIX_SYSTEM_PROMPT = [
   '  1. Парсится как валидный Strudel score (balanced parens, valid args).',
   '  2. Сохраняет смысл исходной инструкции.',
   '  3. Не добавляет markdown, преамбул, <think>блоков.',
+  '  4. Не выдумывает имён звуков: оставляет те же .s("…"), что были в исходном score.',
   '',
   'Верни ТОЛЬКО ИСПРАВЛЕННЫЙ JS — никаких пояснений.',
 ].join('\n');
@@ -140,6 +147,7 @@ export const buildUserPrompt = (
   instruction: string,
   audioState: { status: string; lastError?: string } = { status: 'unknown' },
   focusedContext: FocusedContextLike | null = null,
+  instrument: string | null = null,
 ): string => {
   const lastErrorLine = audioState.lastError
     ? `last_error: ${audioState.lastError}\n`
@@ -175,6 +183,15 @@ export const buildUserPrompt = (
     '=== ИНСТРУКЦИЯ ПОЛЬЗОВАТЕЛЯ ===',
     instruction,
     '',
+    ...(instrument !== null
+      ? [
+          '=== ИНСТРУМЕНТ ===',
+          `Пользователь выбрал инструмент: ${instrument} (${soundLabel(instrument)}).`,
+          'Используй его для МЕЛОДИЧЕСКИХ голосов (note(...).s("…")),',
+          'ударные оставляй из списка drums_* — так тоже звучит.',
+          '',
+        ]
+      : []),
     '=== ЗАДАЧА ===',
     'Верни МОДИФИЦИРОВАННЫЙ ПОЛНЫЙ score — это база плюс твоя правка.',
     'Сохрани все ноты/аккорды, которые НЕ упомянуты в инструкции. Измени ТОЛЬКО то что просит пользователь.',
@@ -392,7 +409,12 @@ export const applyEdit = (
   instruction: string,
   history: ReadonlyArray<DialogTurn> = [],
   audioState: { status: string; lastError?: string } = { status: 'unknown' },
-  options: { model?: 'smart' | 'fast'; thinking?: 'low' | 'high' | 'off' } = {},
+  options: {
+    model?: 'smart' | 'fast';
+    thinking?: 'low' | 'high' | 'off';
+    /** The melodic sound the user picked for the AI's answer. */
+    instrument?: string | null;
+  } = {},
 ): Effect.Effect<string, Error | string, LLMClient> =>
   Effect.gen(function* () {
     const result = yield* applyEditStream(currentScore, instruction, history, audioState, options);
@@ -423,7 +445,12 @@ export const applyEditStream = (
   instruction: string,
   history: ReadonlyArray<DialogTurn> = [],
   audioState: { status: string; lastError?: string } = { status: 'unknown' },
-  options: { model?: 'smart' | 'fast'; thinking?: 'low' | 'high' | 'off' } = {},
+  options: {
+    model?: 'smart' | 'fast';
+    thinking?: 'low' | 'high' | 'off';
+    /** The melodic sound the user picked for the AI's answer. */
+    instrument?: string | null;
+  } = {},
   callbacks: ApplyEditCallbacks = {},
   context: FocusedContextLike | null = null,
 ): Effect.Effect<ApplyEditResult, Error | string, LLMClient> =>
@@ -434,7 +461,13 @@ export const applyEditStream = (
     const userMessage = {
       id: `user-${Date.now()}`,
       role: 'user' as const,
-      content: buildUserPrompt(currentScore, instruction, audioState, context),
+      content: buildUserPrompt(
+        currentScore,
+        instruction,
+        audioState,
+        context,
+        options.instrument ?? null,
+      ),
       ts: Date.now(),
     };
     const baseMessages = [
@@ -584,7 +617,12 @@ export const applyEditWithContext = (
   instruction: string,
   history: ReadonlyArray<DialogTurn> = [],
   audioState: { status: string; lastError?: string } = { status: 'unknown' },
-  options: { model?: 'smart' | 'fast'; thinking?: 'low' | 'high' | 'off' } = {},
+  options: {
+    model?: 'smart' | 'fast';
+    thinking?: 'low' | 'high' | 'off';
+    /** The melodic sound the user picked for the AI's answer. */
+    instrument?: string | null;
+  } = {},
   context: FocusedContextLike | null = null,
   callbacks: ApplyEditCallbacks = {},
 ): Effect.Effect<string, Error | string, LLMClient> =>
@@ -602,7 +640,13 @@ export const applyEditWithContext = (
       {
         id: `user-${Date.now()}`,
         role: 'user' as const,
-        content: buildUserPrompt(currentScore, instruction, audioState, context),
+        content: buildUserPrompt(
+          currentScore,
+          instruction,
+          audioState,
+          context,
+          options.instrument ?? null,
+        ),
         ts: Date.now(),
       },
     ];

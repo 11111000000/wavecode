@@ -1498,6 +1498,37 @@ textarea.wc-input {
   box-shadow: var(--shadow-glow-primary);
 }
 
+/* The instrument picker of the on-screen piano. A native <select>:
+ * the catalogue has 12 melodic sounds, and 12 buttons do not fit a
+ * 360 px phone. The OS picker sheet is the one control that works
+ * there. */
+.piano-instrument-selector {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px var(--space-2xs);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+}
+.piano-inst-glyph {
+  font-size: var(--fs-xs);
+  line-height: 1;
+}
+.piano-inst-select {
+  appearance: none;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-pill);
+  color: var(--fg);
+  font-family: var(--font-sans);
+  font-size: var(--fs-2xs);
+  padding: 0 var(--space-2xs);
+  max-width: 120px;
+  cursor: pointer;
+}
+.piano-inst-select:hover { color: var(--fg); }
+
 .piano-midi-status {
   display: inline-flex;
   align-items: center;
@@ -7457,3 +7488,34 @@ textarea.ai-textarea:focus-visible {
   min-width: 180px;
   cursor: pointer;
 }
+
+/* The AI panel's instrument picker — the sound the LLM should use for
+ * the melodic parts. A native <select>: the list is long and the OS
+ * picker sheet is the one control that works on a phone. */
+.ai-instrument-select-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px var(--space-2xs);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+}
+.ai-instrument-glyph {
+  font-size: var(--fs-xs);
+  line-height: 1;
+}
+.ai-instrument-select {
+  appearance: none;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-pill);
+  color: var(--fg);
+  font-family: var(--font-sans);
+  font-size: var(--fs-2xs);
+  padding: 0 var(--space-2xs);
+  max-width: 128px;
+  cursor: pointer;
+}
+.ai-instrument-select:hover:not(:disabled) { color: var(--fg); }
+.ai-instrument-select:disabled { opacity: 0.55; cursor: not-allowed; }

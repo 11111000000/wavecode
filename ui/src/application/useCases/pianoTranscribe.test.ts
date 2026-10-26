@@ -31,10 +31,10 @@ describe('pianoTranscribe — empty + guards', () => {
     expect(r.summary).toEqual({ notes: 0, columns: 0, beats: 0, valid: true });
   });
 
-  it('defaults: bpm=120, quantize=16, instrument="triangle"', () => {
+  it('defaults: bpm=120, quantize=16, instrument="piano" (the app-wide default)', () => {
     expect(TRANSCRIBE_DEFAULT_BPM).toBe(120);
     expect(TRANSCRIBE_DEFAULT_QUANTIZE).toBe(16);
-    expect(TRANSCRIBE_DEFAULT_INSTRUMENT).toBe('triangle');
+    expect(TRANSCRIBE_DEFAULT_INSTRUMENT).toBe('piano');
   });
 
   it('throws when bpm <= 0 (defensive guard)', () => {
@@ -61,7 +61,7 @@ describe('pianoTranscribe — single note + chord + sequence', () => {
   it('single note at bpm=120 → bare token, no `<>` wrapper', () => {
     const r = pianoTranscribe([note(60, 0)], { bpm: 120 });
     // Single column → no cat. The wrapper is `note("…").s("…")`.
-    expect(r.score).toBe('note("c4").s("triangle")');
+    expect(r.score).toBe('note("c4").s("piano")');
     expect(r.summary).toEqual({
       notes: 1,
       columns: 1,
@@ -77,7 +77,7 @@ describe('pianoTranscribe — single note + chord + sequence', () => {
       { bpm: 120 },
     );
     expect(r.score).toContain('[c4 e4 g4]');
-    expect(r.score).toBe('note("[c4 e4 g4]").s("triangle")');
+    expect(r.score).toBe('note("[c4 e4 g4]").s("piano")');
     expect(r.summary.columns).toBe(1);
     expect(r.summary.notes).toBe(3);
   });
@@ -97,7 +97,7 @@ describe('pianoTranscribe — single note + chord + sequence', () => {
       [note(60, 0), note(62, 125), note(64, 250), note(67, 375)],
       { bpm: 120 },
     );
-    expect(r.score).toBe('note("<c4 d4 e4 g4>").s("triangle")');
+    expect(r.score).toBe('note("<c4 d4 e4 g4>").s("piano")');
     expect(r.summary.columns).toBe(4);
     expect(r.summary.beats).toBe(1);
   });
@@ -114,7 +114,7 @@ describe('pianoTranscribe — single note + chord + sequence', () => {
       ],
       { bpm: 120 },
     );
-    expect(r.score).toBe('note("<[c4 e4 g4] d4 e4>").s("triangle")');
+    expect(r.score).toBe('note("<[c4 e4 g4] d4 e4>").s("piano")');
     expect(r.summary.columns).toBe(3);
   });
 });
@@ -211,9 +211,9 @@ describe('pianoTranscribe — AST validation', () => {
     expect(r.score).toContain('.s("piano")');
   });
 
-  it('oscillator passthrough: `.s("triangle")` for raw wave', () => {
-    const r = pianoTranscribe([note(60, 0)], { bpm: 120, instrument: 'triangle' });
-    expect(r.score).toContain('.s("triangle")');
+  it('instrument passthrough: `.s("synth_lead")` for a sample sound', () => {
+    const r = pianoTranscribe([note(60, 0)], { bpm: 120, instrument: 'synth_lead' });
+    expect(r.score).toContain('.s("synth_lead")');
   });
 
   it('summary.valid stays true for all normal inputs', () => {

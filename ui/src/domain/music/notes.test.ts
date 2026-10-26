@@ -54,7 +54,7 @@ describe('notes', () => {
   it('singleNoteSnippet: contains note() with envelope chain', () => {
     const snippet = singleNoteSnippet('C4');
     expect(snippet).toContain('note(');
-    expect(snippet).toContain('triangle');
+    expect(snippet).toContain('piano');
     expect(snippet).toContain('attack(0.005)');
     expect(snippet).toContain('decay(0.4)');
   });
@@ -68,7 +68,7 @@ describe('notes', () => {
     const snippet = multiNoteSnippet(new Set(['c4']));
     expect(snippet).not.toContain('stack(');
     expect(snippet).toContain('note("c4")');
-    expect(snippet).toContain('s("triangle")');
+    expect(snippet).toContain('s("piano")');
     expect(snippet).toContain('gain(0.3)');
     expect(snippet).toContain('attack(0.005)');
     expect(snippet).toContain('decay(0.4)');
@@ -145,7 +145,7 @@ describe('notes', () => {
 
     const all: ReadonlyArray<PianoInstrument> = [
       'triangle', 'sine', 'sawtooth', 'square',
-      'piano', 'casio', 'guitar', 'synth',
+      'piano', 'synth_pad', 'synth_lead', 'synth_brass',
     ];
 
     it('returns the same string for every oscillator literal', () => {
@@ -156,9 +156,9 @@ describe('notes', () => {
 
     it('sample literals fall back to a close oscillator timbre', () => {
       expect(pianoInstrumentToOscType('piano')).toBe('triangle');
-      expect(pianoInstrumentToOscType('casio')).toBe('sine');
-      expect(pianoInstrumentToOscType('guitar')).toBe('sawtooth');
-      expect(pianoInstrumentToOscType('synth')).toBe('square');
+      expect(pianoInstrumentToOscType('synth_pad')).toBe('sine');
+      expect(pianoInstrumentToOscType('synth_lead')).toBe('sawtooth');
+      expect(pianoInstrumentToOscType('synth_brass')).toBe('square');
     });
 
     it('result is structurally an OscillatorType (assignment-safe)', () => {
@@ -188,9 +188,9 @@ describe('notes', () => {
       expect(out).toContain('note("c4")');
     });
 
-    it('emits s("casio") snippet when instrument is "casio"', () => {
-      const out = noteToneSnippet(64, 'casio');
-      expect(out).toContain('.s("casio")');
+    it('emits s("synth_pad") snippet when instrument is "synth_pad"', () => {
+      const out = noteToneSnippet(64, 'synth_pad');
+      expect(out).toContain('.s("synth_pad")');
       expect(out).toContain('note("e4")');
     });
 

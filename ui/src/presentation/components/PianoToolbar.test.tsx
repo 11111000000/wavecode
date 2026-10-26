@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, cleanup, fireEvent } from '@solidjs/testing-library';
 import { PianoToolbar } from './PianoToolbar';
+import { DEFAULT_MELODIC_SOUND } from '~/domain/sounds';
 
 /**
  * PianoToolbar is a presentational component that reads from
@@ -37,87 +38,57 @@ afterEach(() => {
   cleanup();
 });
 
-describe('PianoToolbar — instrument selector (wavecode-piano-sample-picker)', () => {
-  it('renders 8 instrument buttons (4 sample + 4 oscillator)', () => {
+describe('PianoToolbar — instrument selector (the sound catalogue)', () => {
+  it('renders a <select> with ONLY sounds that really exist', () => {
     const { container } = render(() => <PianoToolbar />);
-    const buttons = container.querySelectorAll<HTMLButtonElement>('.piano-inst-btn');
-    expect(buttons).toHaveLength(8);
+    const select = container.querySelector<HTMLSelectElement>('.piano-inst-select');
+    expect(select).not.toBeNull();
+    const values = Array.from(select?.querySelectorAll('option') ?? [])
+      .map((o) => o.getAttribute('value'));
+    // The real sample sounds and the real oscillators.
+    expect(values).toContain('piano');
+    expect(values).toContain('synth_pad');
+    expect(values).toContain('sawtooth');
+    // The old fiction — those names were never registered, so a
+    // snippet with them killed the whole pattern.
+    expect(values).not.toContain('casio');
+    expect(values).not.toContain('guitar');
+    expect(values).not.toContain('synth');
   });
 
-  it('first 4 buttons are sample labels (Piano, Casio, Guitar, Synth)', () => {
-    const { container } = render(() => <PianoToolbar />);
-    const buttons = container.querySelectorAll<HTMLButtonElement>('.piano-inst-btn');
-    expect(buttons[0]!.textContent).toBe('Piano');
-    expect(buttons[1]!.textContent).toBe('Casio');
-    expect(buttons[2]!.textContent).toBe('Guitar');
-    expect(buttons[3]!.textContent).toBe('Synth');
-  });
-
-  it('last 4 buttons are oscillator glyphs (△ ∿ ⊿ ⊓)', () => {
-    const { container } = render(() => <PianoToolbar />);
-    const buttons = container.querySelectorAll<HTMLButtonElement>('.piano-inst-btn');
-    expect(buttons[4]!.textContent).toBe('△');
-    expect(buttons[5]!.textContent).toBe('∿');
-    expect(buttons[6]!.textContent).toBe('⊿');
-    expect(buttons[7]!.textContent).toBe('⊓');
-  });
-
-  it('each sample button has a data-instrument attribute matching its id', () => {
-    const { container } = render(() => <PianoToolbar />);
-    const buttons = container.querySelectorAll<HTMLButtonElement>('.piano-inst-btn');
-    expect(buttons[0]!.getAttribute('data-instrument')).toBe('piano');
-    expect(buttons[1]!.getAttribute('data-instrument')).toBe('casio');
-    expect(buttons[2]!.getAttribute('data-instrument')).toBe('guitar');
-    expect(buttons[3]!.getAttribute('data-instrument')).toBe('synth');
-  });
-
-  it('sample button title explains that REC writes s("<name>")', () => {
-    const { container } = render(() => <PianoToolbar />);
-    const buttons = container.querySelectorAll<HTMLButtonElement>('.piano-inst-btn');
-    expect(buttons[0]!.getAttribute('title')).toContain('s("piano")');
-    expect(buttons[1]!.getAttribute('title')).toContain('s("casio")');
-    expect(buttons[2]!.getAttribute('title')).toContain('s("guitar")');
-    expect(buttons[3]!.getAttribute('title')).toContain('s("synth")');
-  });
-
-  it('default instrument (triangle) is one of the last 4 buttons', () => {
-    const { container } = render(() => <PianoToolbar />);
-    const buttons = container.querySelectorAll<HTMLButtonElement>('.piano-inst-btn');
-    // The default 'triangle' is the 5th button (index 4).
-    expect(buttons[4]!.getAttribute('data-active')).toBe('true');
-    for (let i = 0; i < 8; i += 1) {
-      if (i !== 4) {
-        expect(buttons[i]!.getAttribute('data-active')).toBe('false');
-      }
-    }
-  });
-
-  it('clicking a sample button sets the instrument signal + flips data-active', async () => {
+  it('the default instrument is the app-wide default (piano)', async () => {
     const rec = await import('../state/pianoRecStore');
-    const { container, getByLabelText } = render(() => <PianoToolbar />);
-    fireEvent.click(getByLabelText('Инструмент: Piano') as HTMLButtonElement);
-    expect(rec.instrument()).toBe('piano');
-    const buttons = container.querySelectorAll<HTMLButtonElement>('.piano-inst-btn');
-    expect(buttons[0]!.getAttribute('data-active')).toBe('true');
-    expect(buttons[4]!.getAttribute('data-active')).toBe('false');
+    // The store's signal is module-level, so a sibling test may have
+    // moved it; the point here is the DEFAULT and the wiring.
+    rec.setInstrument(DEFAULT_MELODIC_SOUND);
+    const { container } = render(() => <PianoToolbar />);
+    const select = container.querySelector<HTMLSelectElement>('.piano-inst-select');
+    expect(select?.value).toBe(DEFAULT_MELODIC_SOUND);
+    expect(DEFAULT_MELODIC_SOUND).toBe('piano');
   });
 
-  it('clicking an oscillator button still works (regression)', async () => {
+  it('choosing an option sets the instrument signal', async () => {
     const rec = await import('../state/pianoRecStore');
-    const { container, getByLabelText } = render(() => <PianoToolbar />);
-    // Oscillator literals keep their unicode glyph as label
-    // (△ ∿ ⊿ ⊓), not a transliterated word — see INSTRUMENT_LABEL.
-    fireEvent.click(getByLabelText('Инструмент: ∿') as HTMLButtonElement);
-    expect(rec.instrument()).toBe('sine');
-    const buttons = container.querySelectorAll<HTMLButtonElement>('.piano-inst-btn');
-    expect(buttons[5]!.getAttribute('data-active')).toBe('true');
+    const { container } = render(() => <PianoToolbar />);
+    const select = container.querySelector<HTMLSelectElement>('.piano-inst-select')!;
+    fireEvent.change(select, { target: { value: 'synth_lead' } });
+    expect(rec.instrument()).toBe('synth_lead');
+  });
+
+  it('the option title explains that REC writes s("<name>")', () => {
+    const { container } = render(() => <PianoToolbar />);
+    const opt = container.querySelector<HTMLOptionElement>(
+      '.piano-inst-select option[value="piano"]',
+    );
+    expect(opt?.getAttribute('title')).toContain('s("piano")');
   });
 
   it('instrument setter preserves rec buffer (separate concerns)', async () => {
     const rec = await import('../state/pianoRecStore');
     rec.appendNote(60, 0, 100);
-    const { getByLabelText } = render(() => <PianoToolbar />);
-    fireEvent.click(getByLabelText('Инструмент: ⊓') as HTMLButtonElement);
+    const { container } = render(() => <PianoToolbar />);
+    const select = container.querySelector<HTMLSelectElement>('.piano-inst-select')!;
+    fireEvent.change(select, { target: { value: 'square' } });
     expect(rec.recBuffer()).toEqual([{ midi: 60, startMs: 0, endMs: 100 }]);
   });
 });
