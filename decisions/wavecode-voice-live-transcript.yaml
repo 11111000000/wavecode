@@ -3,8 +3,8 @@ schema: math-coding/3.3
 id: wavecode-voice-live-transcript
 revision: 1
 state: active
-body_sha: "sha256:0000000000000000000000000000000000000000000000000000000000000000"
-yaml_sha: "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+body_sha: "sha256:a8e0eb2e3e80ba795f06af778b3d4764287861c2802fbd2d57ab6a7e10626e68"
+yaml_sha: "sha256:a8e0eb2e3e80ba795f06af778b3d4764287861c2802fbd2d57ab6a7e10626e68"
 
 axiom_link:
   - A0
@@ -338,7 +338,7 @@ obligations:
       завершается exit 0 без `MC-*` reject-диагностик.
     acceptance:
       all:
-        - verifier: mathc-validate
+        - verifier: mathc validate
           result: pass
 
 risk:

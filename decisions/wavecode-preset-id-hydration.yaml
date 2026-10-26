@@ -3,8 +3,8 @@ schema: math-coding/3.3
 id: wavecode-preset-id-hydration
 revision: 1
 state: active
-body_sha: "sha256:c0545153830a8c32f574d464efa88f17a6d1b6a6fb3285d9feecab5d4d9ea7b9"
-yaml_sha: "sha256:c0545153830a8c32f574d464efa88f17a6d1b6a6fb3285d9feecab5d4d9ea7b9"
+body_sha: "sha256:9f488c9951401f250d57e0f8e6a661412e222e8e31db25091d967e9122d38db2"
+yaml_sha: "sha256:9f488c9951401f250d57e0f8e6a661412e222e8e31db25091d967e9122d38db2"
 
 intent: |
   Пресет-селектор в TransportBar показывает `'creep'` независимо от
@@ -112,61 +112,6 @@ antithesis: |
   Семантика «последний загруженный» — non-obvious choice,
   документирование обязательно чтобы следующий агент не
   «починил» это в обратную сторону.
-  Три коммита в одной серии на ветке `fix/preset-id-hydration`:
-counterexample: |
-  The strongest objection to this decision is captured in the `antithesis` field above: (1) «Можно вместо нового стора переиспользовать uiState — он
-antithesis: |
-  (1) «Можно вместо нового стора переиспользовать uiState — он
-  уже хранит state в localStorage». Возражение: uiState — это
-  layout/mobile state (презентационный), не composition state.
-  selectedPresetId привязан к партитуре и AudioEngine через
-  `replaceScore`. Смешивать с layout state — нарушение
-  single-responsibility, затрудняет будущий split-pack
-  (composition state может стать частью `compositionState.ts`,
-  а layout останется отдельно).
-  (2) «Можно хранить selectedPresetId в IDB вместе со score как
-  один объект `{score, presetId}`. Атомарность!». Возражение:
-  атомарность не нужна — score пишется через useAutoSave (500ms
-  debounce), presetId пишется в момент явного выбора. Между
-  ними в худшем случае ~500ms окно где они не вполне
-  синхронны, но обе записи всё равно случатся до релоада
-  (юзер не успеет перезагрузить вкладку за 500ms после выбора
-  пресета без сохранения score). Два ключа проще мигрировать
-  (если завтра score переедет на localStorage, обратное
-  разделение будет болезненным). IDB для milestone-строки —
-  overkill (4-12 chars), localStorage — норма.
-  (3) «При редактировании score надо сбрасывать selectedPresetId
-  в null — иначе это "ложь"». Возражение: это не ложь, а
-  documented DAW-семантика. Ableton, FL Studio, Bitwig, Logic
-  Pro — все показывают имя пресета даже когда юзер начал его
-  модифицировать. Это даёт юзеру mental hook "это модификация
-  X" вместо "это новый пустой трек". Дополнительный бонус:
-  если юзер откроет другой пресет и вернётся, селектор
-  покажет тот же X. Авто-сброс создал бы «фантомные» null
-  состояния в дропдауне — а их сейчас нет (select требует
-  value, нет placeholder).
-  (4) «Можно просто хардкодить `'creep'` дефолт и не вводить
-  `setSelectedPresetPersist` API». Возражение: тогда
-  `useAppBootstrap` после restore вынужден лезть в
-  localStorage напрямую + дублировать запись. Выделение в
-  store скрывает детали персистенции, тестируется отдельно,
-  единый entry-point для всех mutations (включая `onNew`,
-  `onDeletePreset`, `onResetAll`).
-  (5) «Просто читай selectedPreset из IDBRepo, не плоди новый
-  ключ**. Возражение: IDBRepo уже перегружен (score,
-  messages, share). selectedPreset — презентационный сигнал,
-  не доменное поле AppState. localStorage — правильный
-  уровень для мелких UI prefs (mobile mode, sheet height,
-  custom presets — все там). См. precedent:
-  `wavecode-ui-state-v1`, `wavecode-mobile-transport-expanded-v1`,
-  `wavecode-custom-presets-v1`.
-  (6) «Не нужен пакет, trivial fix». Возражение: precedent в
-  репо — каждый layout/state-fix с побочными эффектами
-  сопровождается packet (см. math/wavecode-mobile-transport-bar,
-  math/wavecode-preset-row-and-toast-z, math/wavecode-ui-state).
-  Семантика «последний загруженный» — non-obvious choice,
-  документирование обязательно чтобы следующий агент не
-  «починил» это в обратную сторону.
 axiom_link:
   - A5
 scope:
@@ -189,7 +134,7 @@ obligations:
       The original v1.0 packet applied on the recorded date in its `witness` file; this migration preserves that evidence as an `attestations/<id>-evidence.json` file.
     acceptance:
       all:
-        - verifier: "attestation-store-has-subject"
+        - verifier: "mathc self-check"
           result: pass
 assumptions:
   - id: wavecode-preset-id-hydration-assumption-1
@@ -239,4 +184,3 @@ risk:
 relations:
   addresses:
     - wavecode-bootstrap-math-coding-3.3@1
----

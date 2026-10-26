@@ -3,8 +3,8 @@ schema: math-coding/3.3
 id: wavecode-melody-grid
 revision: 1
 state: draft
-body_sha: "sha256:dfa2647e8f1d38904afa765b52bb85606a2b63f8d4de269416bdb167ecd2c5c9"
-yaml_sha: "sha256:dfa2647e8f1d38904afa765b52bb85606a2b63f8d4de269416bdb167ecd2c5c9"
+body_sha: "sha256:93f7ea783f0a3c131e2f12a8259cec055f504ad59b607f340faa5cbbc71f0bfa"
+yaml_sha: "sha256:93f7ea783f0a3c131e2f12a8259cec055f504ad59b607f340faa5cbbc71f0bfa"
 
 intent: |
   wavecode has a 4×8 drum-pad StepGrid (kick / snare / hihat / clap),
@@ -320,4 +320,3 @@ relations:
     - wavecode-bootstrap-math-coding-3.3@1
     - wavecode-strudel-ast@1
     - wavecode-step-grid-modes@1
----

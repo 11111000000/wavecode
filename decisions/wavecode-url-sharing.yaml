@@ -3,8 +3,8 @@ schema: math-coding/3.3
 id: wavecode-url-sharing
 revision: 1
 state: draft
-body_sha: "sha256:11909f8ea2158f1f1a3e8e9b9c7d0ea4c7272f427a3899a60d2164d631af6e46"
-yaml_sha: "sha256:11909f8ea2158f1f1a3e8e9b9c7d0ea4c7272f427a3899a60d2164d631af6e46"
+body_sha: "sha256:d81ecefd030bad601fddb4f8499dd99da5fc9f070a770fa0d164f91ea33069f8"
+yaml_sha: "sha256:d81ecefd030bad601fddb4f8499dd99da5fc9f070a770fa0d164f91ea33069f8"
 
 intent: |
   В шапке справа от `↷ Redo` — кнопка `🔗 Поделиться`. На нажатие —
@@ -19,29 +19,6 @@ intent: |
   `navigator.clipboard.writeText` (с fallback `document.execCommand
   ('copy')` на старых webview).
 commitment: |
-  LZ-string — small (5KB gzip), стандарт для URL-embedded state
-  (TypeScript: `lz-string` package, ~3KB after tree-shake). Один
-  encode-side, один decode-side, оба pure (легко unit-test'ить).
-  Reading side: `main.tsx` `onMount` парсит URL до `repo.loadScore()`
-  — URL beats IDB; manual override через modal если IDB есть.
-  Никакого tracking/analytics; чистая URL-share.
-counterexample: |
-  The strongest objection to this decision is captured in the `antithesis` field above: (1) Большие score (5KB+) после LZ-string всё равно > 4KB URL →
-antithesis: |
-  (1) Большие score (5KB+) после LZ-string всё равно > 4KB URL →
-  некоторые серверы/CDN 8KB URL limit. Решение: warning при
-  >8KB. (2) `btoa()` ломается на Unicode (русские комментарии в
-  score — preset Mary Had Little Lamb имеет ASCII; но юзер
-  набьёт кириллицу). LZ-string решает — UTF-16 → base64-custom.
-  (3) Shared URL кэшируется в браузерной history —
-  чувствительный score может leak через shared device.
-  Документируем как risk, не решаем. (4) XSS через
-  `location.search` — если злоумышленник сделает URL с
-  ?s=<evil-string> с редиректом через Strudel eval,
-  Strudel throws на синтаксических ошибках и ничего не
-  пишет в DB кроме `replaceScore` — посредственный impact.
-  Documented. (5) `Clipboard.writeText()` требует secure context —
-  localhost/HTTPS; mobile http — fallback на execCommand.
   LZ-string — small (5KB gzip), стандарт для URL-embedded state
   (TypeScript: `lz-string` package, ~3KB after tree-shake). Один
   encode-side, один decode-side, оба pure (легко unit-test'ить).
@@ -86,7 +63,7 @@ obligations:
       The original v1.0 packet applied on the recorded date in its `witness` file; this migration preserves that evidence as an `attestations/<id>-evidence.json` file.
     acceptance:
       all:
-        - verifier: "attestation-store-has-subject"
+        - verifier: "mathc self-check"
           result: pass
 assumptions:
   - id: wavecode-url-sharing-assumption-1
@@ -136,4 +113,3 @@ risk:
 relations:
   addresses:
     - wavecode-bootstrap-math-coding-3.3@1
----

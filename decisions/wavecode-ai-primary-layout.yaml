@@ -3,8 +3,8 @@ schema: math-coding/3.3
 id: wavecode-ai-primary-layout
 revision: 1
 state: draft
-body_sha: "sha256:4acdfc0978a3a40f1c8b370f1343c4e1b76d225cd956cb0a87e0b5cb277b4e5f"
-yaml_sha: "sha256:4acdfc0978a3a40f1c8b370f1343c4e1b76d225cd956cb0a87e0b5cb277b4e5f"
+body_sha: "sha256:defddd55e5a61705f54d4dcdba1c551962d22c18075e964694815e2bad59aa8d"
+yaml_sha: "sha256:defddd55e5a61705f54d4dcdba1c551962d22c18075e964694815e2bad59aa8d"
 
 intent: |
   AI-primary layout wavecode: на desktop (≥1024px) AI-чат занимает
@@ -14,19 +14,6 @@ intent: |
   умолчанию, AI по табу). Toggle в TopBar переключает
   code-primary ↔ ai-primary, persisted в localStorage.
 commitment: |
-  3 компонента + 1 сигнал:
-counterexample: |
-  The strongest objection to this decision is captured in the `antithesis` field above: (1) «AI как главный — спорно, юзер привык кода». Возражение:
-antithesis: |
-  (1) «AI как главный — спорно, юзер привык кода». Возражение:
-  юзер сам сказал «AI должен быть на самом видном месте».
-  Toggle в TopBar = reversal за 1 клик, cost ≈ 0.
-  (2) «Drawer 360px — тесно для кода». Возражение: drawer = scrollable,
-  код-редактор имеет свой внутренний scroll. Юзер видит свой код,
-  но доминирует AI (по запросу).
-  (3) «min-height 320px — magic number». Возражение: 320px = footer
-  (textarea + 3 controls) + 256px messages-list минимум. Magic
-  justified by content audit.
   3 компонента + 1 сигнал:
 counterexample: |
   The strongest objection to this decision is captured in the `antithesis` field above: (1) «AI как главный — спорно, юзер привык кода». Возражение:
@@ -63,7 +50,7 @@ obligations:
       The original v1.0 packet applied on the recorded date in its `witness` file; this migration preserves that evidence as an `attestations/<id>-evidence.json` file.
     acceptance:
       all:
-        - verifier: "attestation-store-has-subject"
+        - verifier: "mathc self-check"
           result: pass
 assumptions: []
 risk:
@@ -73,4 +60,3 @@ risk:
 relations:
   addresses:
     - wavecode-bootstrap-math-coding-3.3@1
----

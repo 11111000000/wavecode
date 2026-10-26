@@ -3,8 +3,8 @@ schema: math-coding/3.3
 id: wavecode-deepseek-upstream-adaptation
 revision: 1
 state: active
-body_sha: "sha256:f157fdb076904573edb410dcee215af59e921554732d23ade619bcd91c838381"
-yaml_sha: "sha256:f157fdb076904573edb410dcee215af59e921554732d23ade619bcd91c838381"
+body_sha: "sha256:861a40e40624c15efe1197812567a8c0bae8907d24e2babf29e16b6fe81b4809"
+yaml_sha: "sha256:861a40e40624c15efe1197812567a8c0bae8907d24e2babf29e16b6fe81b4809"
 
 axiom_link:
   - A0
@@ -215,7 +215,7 @@ obligations:
       завершается exit 0 без `MC-*` reject-диагностик.
     acceptance:
       all:
-        - verifier: mathc-validate
+        - verifier: mathc validate
           result: pass
 
 risk:

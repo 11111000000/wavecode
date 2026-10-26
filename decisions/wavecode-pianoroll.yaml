@@ -3,8 +3,8 @@ schema: math-coding/3.3
 id: wavecode-pianoroll
 revision: 1
 state: draft
-body_sha: "sha256:0000000000000000000000000000000000000000000000000000000000000000"
-yaml_sha: "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+body_sha: "sha256:16ce783bd9f59238422077b5993d45f868d30c7c64906a17f4312709ad04beee"
+yaml_sha: "sha256:16ce783bd9f59238422077b5993d45f868d30c7c64906a17f4312709ad04beee"
 
 intent: |
   DAW-привычные юзеры мыслят дорожками (X = время, Y = pitch), а
@@ -278,4 +278,3 @@ relations:
   depends_on:
     - wavecode-bootstrap-math-coding-3.3@1
     - wavecode-strudel-ast@1
----

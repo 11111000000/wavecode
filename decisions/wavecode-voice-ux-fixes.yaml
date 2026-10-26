@@ -3,8 +3,8 @@ schema: math-coding/3.3
 id: wavecode-voice-ux-fixes
 revision: 1
 state: active
-body_sha: "sha256:0000000000000000000000000000000000000000000000000000000000000000"
-yaml_sha: "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+body_sha: "sha256:4120fedf6ada4efb99f6e58d68c50528e2caafece904a842102f0b2e2985497a"
+yaml_sha: "sha256:4120fedf6ada4efb99f6e58d68c50528e2caafece904a842102f0b2e2985497a"
 
 axiom_link:
   - A0
@@ -285,7 +285,7 @@ obligations:
       завершается exit 0 без `MC-*` reject-диагностик.
     acceptance:
       all:
-        - verifier: mathc-validate
+        - verifier: mathc validate
           result: pass
 
 risk:

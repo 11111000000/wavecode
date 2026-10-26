@@ -3,8 +3,8 @@ schema: math-coding/3.3
 id: wavecode-piano-rec-clarity
 revision: 1
 state: active
-body_sha: "sha256:0996d8165fe7a0647057c6844270d066edfbe8688f12694066de25490c8649ea"
-yaml_sha: "sha256:0996d8165fe7a0647057c6844270d066edfbe8688f12694066de25490c8649ea"
+body_sha: "sha256:335630b2d1fb49e253a6bc205ffc9d3bda2fc90f747da02071b95ebf41473e17"
+yaml_sha: "sha256:335630b2d1fb49e253a6bc205ffc9d3bda2fc90f747da02071b95ebf41473e17"
 
 intent: |
   REC-режим пианино в wavecode страдает от двух связанных дефектов
@@ -116,56 +116,6 @@ antithesis: |
   действие сработало. Это риск-в-награда: 20 строк кода ради
   уверенности юзера. Без feedback-loop REC становится чёрным
   ящиком.
-  Семь компонентов:
-counterexample: |
-  The strongest objection to this decision is captured in the `antithesis` field above: (1) «Collapsible piano съест ещё больше места в 360px drawer'е».
-antithesis: |
-  (1) «Collapsible piano съест ещё больше места в 360px drawer'е».
-  Возражение: дефолт = collapsed. Default-state **не занимает**
-  место в drawer'е (одна узкая кнопка `▼ Piano` 32×24px в header'е).
-  Expand — opt-in. Юзер, который не записывает пианино, не платит
-  за affordance.
-
-  (2) «Почему слот не персистится в localStorage?».
-  Возражение: слот `cursor` требует `editorFocused()`, который
-  per-mount, не per-session. Если юзер вышел с `cursor` в slot, а
-  вернулся — у редактора нет фокуса, и кнопка disabled. Это
-  создаёт «забытый slot» UX-баг: «почему ⌖ серый?». Reset
-  per-session устраняет класс таких багов. `stack` — дефолт и
-  всегда рабочий; пользователь осознанно переключает на `cursor`,
-  делает работу, может вернуть обратно.
-
-  (3) «Replace без confirm-диалога — потеря данных».
-  Возражение: в AppState уже есть `history`/`future` (multi-undo,
-  пакет `wavecode-multi-undo`). Любой `replaceScore` отменяется
-  одной `⌘Z`. Confirm-диалог — лишний клик при горячем flow
-  «записал мелодию → начал новую композицию». Tooltip кнопки
-  replace: «Заменит весь score. ⌘Z для отмены» — сообщает явно,
-  но не блокирует.
-
-  (4) «Live auto-apply полезнее — каждое нажатие сразу в score».
-  Возражение: live auto-apply + `replace` = потеря работы при
-  случайном нажатии. Слот `stack` + live = переполнение стека
-  буферами нот (юзер нажал 200 нот за минуту — 200 строк в
-  стеке). Буфер + manual apply даёт пользователю review-точку.
-  Live mode — отдельный пакет `wavecode-piano-rec-live`, не здесь.
-
-  (5) «Slot cursor на mobile сбивает с толку».
-  Возражение: кнопка `⌖ cursor` disabled когда `editorFocused()`
-  false. Tooltip объясняет: «Тапните в редактор чтобы ставить
-  ноты в курсор». Юзер, который физически не видит редактор,
-  не нажимает — кнопка серая. Если он тапнул в редактор
-  (например, переключился на Score таб) — кнопка становится
-  активной. Это согласуется с axiom A5: «surface the model
-  user already holds» — модель «вставить туда, где курсор»
-  известна из любого текстового редактора.
-
-  (6) «Flash + scrollIntoView = overengineering ради cosmetic».
-  Возражение: A1 — feedback. Apply — это commit, а не silent
-  write. Если юзер не видит результат apply, он не уверен, что
-  действие сработало. Это риск-в-награда: 20 строк кода ради
-  уверенности юзера. Без feedback-loop REC становится чёрным
-  ящиком.
 axiom_link:
   - A3
 scope:
@@ -190,7 +140,7 @@ obligations:
       The original v1.0 packet applied on the recorded date in its `witness` file; this migration preserves that evidence as an `attestations/<id>-evidence.json` file.
     acceptance:
       all:
-        - verifier: "attestation-store-has-subject"
+        - verifier: "mathc self-check"
           result: pass
 assumptions: []
 risk:
@@ -200,4 +150,3 @@ risk:
 relations:
   addresses:
     - wavecode-bootstrap-math-coding-3.3@1
----

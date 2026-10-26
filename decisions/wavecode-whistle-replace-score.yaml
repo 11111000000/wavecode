@@ -3,8 +3,8 @@ schema: math-coding/3.3
 id: wavecode-whistle-replace-score
 revision: 1
 state: active
-body_sha: "sha256:943c8078bf8d4e6f82e3b6699cf6b5868029a6c81444bb55f1c0b0cbaa9dd04d"
-yaml_sha: "sha256:943c8078bf8d4e6f82e3b6699cf6b5868029a6c81444bb55f1c0b0cbaa9dd04d"
+body_sha: "sha256:77215447be4ccf124ee3b6dc2d78893f9abeee64fb3ecfa85a84d3c8f3d34612"
+yaml_sha: "sha256:77215447be4ccf124ee3b6dc2d78893f9abeee64fb3ecfa85a84d3c8f3d34612"
 
 axiom_link:
   - A0
@@ -190,7 +190,7 @@ obligations:
       returns exit 0 with zero `MC-*` reject diagnostics.
     acceptance:
       all:
-        - verifier: mathc-validate
+        - verifier: mathc validate
           result: pass
 
 risk:

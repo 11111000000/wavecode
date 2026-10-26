@@ -3,8 +3,8 @@ schema: math-coding/3.3
 id: wavecode-voice-take-continuation
 revision: 1
 state: active
-body_sha: "sha256:4d07de48baad50c5d7f77da8e1b91c418f3879d0cb3fb279978943f22431a3df"
-yaml_sha: "sha256:4d07de48baad50c5d7f77da8e1b91c418f3879d0cb3fb279978943f22431a3df"
+body_sha: "sha256:fde614d9085e2128a484d253814535c29dbcabf67c13edc4058d103b4dbda433"
+yaml_sha: "sha256:fde614d9085e2128a484d253814535c29dbcabf67c13edc4058d103b4dbda433"
 
 axiom_link:
   - A0
@@ -378,7 +378,7 @@ obligations:
       завершается exit 0.
     acceptance:
       all:
-        - verifier: mathc-validate
+        - verifier: mathc validate
           result: pass
 
 risk:

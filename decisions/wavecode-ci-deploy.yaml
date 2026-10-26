@@ -3,8 +3,8 @@ schema: math-coding/3.3
 id: wavecode-ci-deploy
 revision: 1
 state: active
-body_sha: "sha256:eef93c68e74117facf351b5bbda5bd436621a603275f1a5c1bbe8b38f960e95c"
-yaml_sha: "sha256:eef93c68e74117facf351b5bbda5bd436621a603275f1a5c1bbe8b38f960e95c"
+body_sha: "sha256:0ad1e00e692ccb5e2a06e65424b23e48d90ec925cb1df896b7c9372c288320f2"
+yaml_sha: "sha256:0ad1e00e692ccb5e2a06e65424b23e48d90ec925cb1df896b7c9372c288320f2"
 
 intent: |
   Production (`https://wavecode.kosov.online/`) деплоится вручную:
@@ -100,58 +100,6 @@ antithesis: |
   infrastructure-уровневое изменение (CI, deploy, persistence)
   сопровождается packet. Compromise deploy key = full RCE на
   production — non-trivial enough to require the paper trail.
-  Три коммита в одной серии на ветке `feat/ci-deploy-pipeline`
-  (merged в master коммитом 59694b6):
-counterexample: |
-  The strongest objection to this decision is captured in the `antithesis` field above: (1) «Можно делать build на CI runner, потом rsync dist/ в
-antithesis: |
-  (1) «Можно делать build на CI runner, потом rsync dist/ в
-  /var/lib/wavecode/dist/». Возражение: shared ubuntu-latest
-  не имеет ни pnpm-кеша, ни локального path-настройки corepack.
-  Build на CI добавляет 60-90s задержки + требует secret'а
-  `.env.local` в CI (тоже secret, тоже в UI). Build на angara-1
-  уже настроен, бесплатен, и использует тот же скрипт что и
-  manual deploy. Single source of truth.
-  (2) «Можно webhook из GitVerse → systemd timer на angara-1».
-  Возражение: требует webhook-listening демона + auth-secret'а
-  + дополнительного moving part. GitVerse Actions — стандартный
-  паттерн, логи видны в UI, retry из коробки. `kb-changes-poll`
-  в AngaraConfig делает так для KB, но у wavecode таких
-  реляционных constraints нет — GitVerse Actions проще.
-  (3) «Можно self-hosted runner на angara-1, тогда SSH не нужен».
-  Возражение: requires `actions-runner` install + systemd unit +
-  registration token + auto-update cron. Дороже в setup'е, не
-  даёт функционального выигрыша (runner всё равно должен
-  делать то же самое: git fetch + reset + clean + bin/deploy.sh).
-  См. Phase 2 в `bin/deploy-angara-2.sh` (AngaraConfig) — это
-  eventual, не Phase 1.
-  (4) «Можно deploy-ключ с NOPASSWD sudo, чтобы CI сам делал
-  `sudo cp` без forced command». Возражение: тогда compromise
-  ключа = arbitrary sudo = root-equivalent. Forced command
-  ограничивает blast radius до "прогнать тот же deploy" —
-  idempotent, auditable, revocable.
-  (5) «Нужно atomic swap (dist.new → dist) чтобы не было
-  half-deployed». Возражение: Caddy не блокирует файлы
-  (read-only open()), `sudo cp -r dist/. dist/` пишет
-  файлы по очереди. Между первым и последним файлом
-  /var/lib/wavecode/dist/index.html может ссылаться на
-  assets, которых ещё нет → 404 на полсекунды. Это ок для
-  SPA (browser re-fetches index.html на любой 404), и
-  исправление добавило бы complexity (rename, sync) без
-  real benefit. Если критично — Phase 2.
-  (6) «`git reset --hard` стирает локальный WIP разработчика,
-  это неожиданно». Возражение: dev-дерево на angara-1 — НЕ
-  место для WIP. WIP живёт в worktree (`paseo_create_workspace
-  isolation="worktree"`), не в main checkout'е. Если
-  разработчик правит main checkout напрямую — он уже не
-  следует convention. Convention документирована в AGENTS.md
-  и kb-publish skill.
-  (7) «Пакет не нужен, trivial change». Возражение: precedent
-  (math/wavecode-mobile-transport-bar, math/wavecode-ui-state,
-  math/wavecode-preset-row-and-toast-z) — каждый
-  infrastructure-уровневое изменение (CI, deploy, persistence)
-  сопровождается packet. Compromise deploy key = full RCE на
-  production — non-trivial enough to require the paper trail.
 axiom_link:
   - A5
 scope:
@@ -173,7 +121,7 @@ obligations:
       The original v1.0 packet applied on the recorded date in its `witness` file; this migration preserves that evidence as an `attestations/<id>-evidence.json` file.
     acceptance:
       all:
-        - verifier: "attestation-store-has-subject"
+        - verifier: "mathc self-check"
           result: pass
 assumptions:
   - id: wavecode-ci-deploy-assumption-1
@@ -233,4 +181,3 @@ risk:
 relations:
   addresses:
     - wavecode-bootstrap-math-coding-3.3@1
----

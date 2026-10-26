@@ -3,8 +3,8 @@ schema: math-coding/3.3
 id: wavecode-disclaimer-gate
 revision: 1
 state: active
-body_sha: "sha256:8bd1c76912effd5678608080ec51f0f0b250d1222fab6c0c60ed43b18856b48f"
-yaml_sha: "sha256:8bd1c76912effd5678608080ec51f0f0b250d1222fab6c0c60ed43b18856b48f"
+body_sha: "sha256:42729c836ae2d282d7408f76c89bcb143573d3eab00104d305c8ddae14322d27"
+yaml_sha: "sha256:42729c836ae2d282d7408f76c89bcb143573d3eab00104d305c8ddae14322d27"
 
 axiom_link:
   - A0
@@ -332,10 +332,6 @@ obligations:
       `tests/e2e/support/consent.ts`, а
       `preset-id-hydration.spec.mjs` после `localStorage.clear()`
       восстанавливает `wavecodeTermsAccepted` перед `reload()`.
-    acceptance:
-      all:
-        - verifier: text-scan-playwright-consent-seed
-          result: pass
     acceptance:
       all:
         - verifier: text-scan-playwright-consent-seed

@@ -3,8 +3,8 @@ schema: math-coding/3.3
 id: wavecode-toast-overhead-and-toolbar-toggle
 revision: 1
 state: draft
-body_sha: "sha256:73168c7c119a4cbf759810c68370aec2b50910351b82d8798a39bc95f5627b32"
-yaml_sha: "sha256:73168c7c119a4cbf759810c68370aec2b50910351b82d8798a39bc95f5627b32"
+body_sha: "sha256:14f8bed234759a4063de1cd792509e9d87f3b97a85b4030975632a2fbb3e1d3a"
+yaml_sha: "sha256:14f8bed234759a4063de1cd792509e9d87f3b97a85b4030975632a2fbb3e1d3a"
 
 intent: |
   Продолжение `wavecode-preset-row-and-toast-z`. Тот пакет перенёс
@@ -118,51 +118,6 @@ antithesis: |
   фиксированные ряды). Делать их отдельно — 4 пакета с
   одинаковыми antipattern'ами. Один coherent пакет проще
   ревьюить и применять.
-  Один коммит + пакет + witness:
-counterexample: |
-  The strongest objection to this decision is captured in the `antithesis` field above: (1) «Toast НА topbar ломает кликабельность undo/redo». Возражение:
-antithesis: |
-  (1) «Toast НА topbar ломает кликабельность undo/redo». Возражение:
-  pointer-events:none на стеке — это базовая гарантия; только
-  сам .toast-item ловит клики. TopBar вокруг toast'а остаётся
-  интерактивным. Уже реализовано в CSS (lines 1602-1603).
-  Bump z-index до 80 НЕ меняет это поведение.
-  (2) «Нужно ещё выше, 9999». Возражение: z-toast=80 — выше
-  z-modal (60), и modal — единственное, что осталось ниже.
-  Modal открывается в моменты, когда toast бесполезен (alert
-  confirm), и наоборот. 80 — стандартная практика
-  (iOS UINotification = 100, Android Snackbar = 100). Дальше
-  растить — overkill.
-  (3) «preset-row без фона — он невидим, юзер не поймёт что
-  там select». Возражение: select имеет собственный outline
-  (background var(--surface-1) + border var(--border) +
-  chevron-стрелки). На мобильном он достаточно контрастен.
-  Если хотим усилить — отдельный пакет про стили select, не
-  про layout.
-  (4) «Font 11px — слишком мелко, accessibility violation».
-  Возражение: WCAG не запрещает 11px на mobile; iOS HIG
-  допускает ≥11pt для body. На Retina 3x это эффективные
-  33px². iA Writer, Bear, Notion mobile — все используют
-  11-12px для code editor. line-height 1.4 даёт комфортный
-  межстрочный.
-  (5) «Скрыть toolbar — пользователь потеряет discoverability».
-  Возражение: кнопка «✎ snippet» в score-debug row всегда
-  видна, всегда показывает текущее состояние (data-active).
-  Один тап разворачивает. Это лучше, чем постоянно
-  занимать 12% viewport'а ради affordance, который юзер
-  использует 1-2 раза в сессию.
-  (6) «Toolbar desktop default = true → mobile default = false —
-  разная логика на разных viewport'ах». Возражение: это
-  сознательный split. Mobile-юзер работает в split-pane
-  (score + sheet), и toolbar конкурирует за место с editor'ом.
-  Desktop-юзер работает в полноэкранном editor — места
-  хватает на всё, toolbar полезен как shortcut-bar.
-  (7) «Сделать это всё одним пакетом — слишком много scope'а».
-  Возражение: 4 правки связаны общим контекстом (мобильный
-  viewport 412×900, мобильная split-pane раскладка,
-  фиксированные ряды). Делать их отдельно — 4 пакета с
-  одинаковыми antipattern'ами. Один coherent пакет проще
-  ревьюить и применять.
 axiom_link:
   - A5
 scope:
@@ -184,7 +139,7 @@ obligations:
       The original v1.0 packet applied on the recorded date in its `witness` file; this migration preserves that evidence as an `attestations/<id>-evidence.json` file.
     acceptance:
       all:
-        - verifier: "attestation-store-has-subject"
+        - verifier: "mathc self-check"
           result: pass
 assumptions:
   - id: wavecode-toast-overhead-and-toolbar-toggle-assumption-1
@@ -259,4 +214,3 @@ risk:
 relations:
   addresses:
     - wavecode-bootstrap-math-coding-3.3@1
----

@@ -3,8 +3,8 @@ schema: math-coding/3.3
 id: wavecode-mobile-compact
 revision: 1
 state: draft
-body_sha: "sha256:2e3454aebfcd092bab83ec0ad31a0c22f972e9590db0a4f15f00463a6abe0cb9"
-yaml_sha: "sha256:2e3454aebfcd092bab83ec0ad31a0c22f972e9590db0a4f15f00463a6abe0cb9"
+body_sha: "sha256:14b8ab0bc9a1178775e3540a17c290847adeb60ac6445545ab43d7c67a71f01d"
+yaml_sha: "sha256:14b8ab0bc9a1178775e3540a17c290847adeb60ac6445545ab43d7c67a71f01d"
 
 intent: |
   После `wavecode-toast-overhead-and-toolbar-toggle` редактор на
@@ -142,54 +142,6 @@ antithesis: |
   line-height останется 15.4px → строки «съедят» друг друга
   по вертикали. font-size 10px + line-height 1.3 — правильный
   CSS-only подход.
-  Чисто CSS-пакет. 2 файла, ~30 строк.
-counterexample: |
-  The strongest objection to this decision is captured in the `antithesis` field above: (1) «Шрифт 10px слишком мелкий, WCAG violation». Возражение:
-antithesis: |
-  (1) «Шрифт 10px слишком мелкий, WCAG violation». Возражение:
-  WCAG 2.1 SC 1.4.4 Resize Text требует 200% увеличение без
-  потери content. 10px × 2 = 20px ≥ 14px body minimum (AA).
-  Code editor'ы (VS Code 12px, Atom 12px, iA Writer 13px,
-  GitHub mobile 12px) — все в зоне 10-13px. Retina 3x делает
-  10px физическими 30 device px, что эквивалентно desktop 12-13px.
-  Это и есть mobile code editor стандарт.
-  (2) «Sheet 30vh peek — слишком мало для piano, юзер не увидит
-  клавиш». Возражение: 30vh на 900vh = 270px. Piano white keys
-  height в BottomSheet variant — 80px (стандарт). 24 клавиши
-  помещаются горизонтально на 412px. Можно нажимать. Tap в
-  клавишу → focus уходит в editor? Нет, BottomSheet-piano
-  обрабатывает тачи через свою систему. Auto-resize polish-2
-  не триггерится (не cm-content). Peek = «слегка приоткрыть
-  sheet, не занимая весь экран». Piano compact.
-  (3) «Менять snap heights сломает привычку юзеров, которые уже
-  настроили sheet-h через localStorage». Возражение: snap
-  heights — это CSS values для data-snap атрибута. localStorage
-  `wavecode-mobile-sheet-h-v1` хранит pixel-значение для
-  drag-resize (не snap). После drag-resize CSS использует
-  --sheet-h (custom px), а snap-height правила применяются
-  только если data-snap='peek'/'half'/'full' (без custom px).
-  Изменение snap heights не ломает drag-resize.
-  (4) «min-height 32 на preset-row select — нарушит touch-target
-  floor 44 (WCAG 2.5.5)». Возражение: tap-target ≥44×44 — это
-  для ВЗАИМОДЕЙСТВУЕМЫХ элементов, которые должны быть удобны
-  для нажатия. Select на iOS — native picker, который открывает
-  wheel-picker на 240×240 (стандартный iOS UI). Сам select
-  как кнопка — 32px, но tap приводит к native UI с 44+ targets.
-  WCAG 2.5.5 (AAA) — для primary content controls, не для
-  input-triggers к native pickers.
-  (5) «Нужно сохранить 11px для accessibility (зум +200%)». Возражение:
-  11px × 2 = 22px — лучше. 10px × 2 = 20px — тоже ≥ 14px AA
-  minimum. iOS Settings → Accessibility → Display → Text Size
-  позволяет увеличить текст в system apps, но НЕ в WebViews/
-  CodeMirror (custom font rendering). Это платформенное
-  ограничение, не наш bug.
-  (6) «Вместо font-size 10px лучше использовать transform: scale(0.85)
-  на cm-content». Возражение: transform не меняет layout —
-  CodeMirror внутренне считает line-height по font-size, не
-  по visual scale. Scale 0.85 визуально сожмёт текст, но
-  line-height останется 15.4px → строки «съедят» друг друга
-  по вертикали. font-size 10px + line-height 1.3 — правильный
-  CSS-only подход.
 axiom_link:
   - A1
 scope:
@@ -215,7 +167,7 @@ obligations:
       The original v1.0 packet applied on the recorded date in its `witness` file; this migration preserves that evidence as an `attestations/<id>-evidence.json` file.
     acceptance:
       all:
-        - verifier: "attestation-store-has-subject"
+        - verifier: "mathc self-check"
           result: pass
 assumptions:
   - id: wavecode-mobile-compact-assumption-1
@@ -295,4 +247,3 @@ risk:
 relations:
   addresses:
     - wavecode-bootstrap-math-coding-3.3@1
----

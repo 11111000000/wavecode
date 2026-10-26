@@ -3,8 +3,8 @@ schema: math-coding/3.3
 id: wavecode-sample-synth
 revision: 1
 state: active
-body_sha: "sha256:adf645447e68a8fe87824faefbba958bff0c49f7b437f7d247f61ca160725041"
-yaml_sha: "sha256:adf645447e68a8fe87824faefbba958bff0c49f7b437f7d247f61ca160725041"
+body_sha: "sha256:1633f9cc76b02cc518a6ce25e6a4040fb53aca25862f7e6ea38804e57ded8ad0"
+yaml_sha: "sha256:1633f9cc76b02cc518a6ce25e6a4040fb53aca25862f7e6ea38804e57ded8ad0"
 
 intent: |
   `public/samples/synth/` — 12 MP3 семплов analog synth (CC0 / public
@@ -57,36 +57,6 @@ antithesis: |
   `public/samples/` при install; после первого load всё
   работает offline. Префикс `synth:` гарантирует, что Strudel
   ищет только в нашем локальном банке.
-  Synth samples (CC0, 1.3MB) + Strudel `samples({synth: ...})` loader
-  + 3 demo presets. Вместе с piano (720KB) + drums (80KB) =
-  ~2.1MB sample bundle, всё offline после первого SW install.
-  Источники: Freesound preview CDN с явной CC0-лицензией.
-  Vanyamba "Waveform Stereo" series — звуковой дизайн (32s
-  sustained); menegass "MOOG_*" — 2-3s analog plucks; Garzul
-  "minimoog_vibrating_*" — 5s Minimoog lead с vibrato; CAT-FOX_ALEX
-  "IDM Atmosphare" — 8s atmospheric pads; brotherandroid "Suiko
-  Vs-1 Strings" — 2s synth strings. Strudel pitch-shifts от
-  recorded pitch к target note в mini-notation.
-counterexample: |
-  The strongest objection to this decision is captured in the `antithesis` field above: (1) «4 bass файла по 5-30KB — слишком короткие, не дадут
-antithesis: |
-  (1) «4 bass файла по 5-30KB — слишком короткие, не дадут
-  sustain». Возражение: Vanyamba "Waveform Stereo" — 32 секунды
-  sustained; menegass "MOOG_BASS_SPACE_ECHO" — 2-3 секунды с
-  встроенным space-echo. Strudel attack/release envelope
-  вытягивает короткие сэмплы. (2) «Pitch-shift на 12 полутонов
-  вниз для bass-c1 (от C2 записи) даст артефакты». Возражение:
-  Bass-частоты (60-100Hz) менее чувствительны к pitch artifacts,
-  чем середина. Salamander-piano делает то же самое без
-  жалоб. (3) «Vanyamba pads 32s × 4 = ~1MB только на pads —
-  перебор». Решение: 1.3MB total всё ещё в 1-3MB бюджете;
-  длинные сэмплы нужны для sustained pad-звука (короткие
-  сэмплы здесь не работают — нет sustain). (4) «Все сэмплы с
-  Freesound preview CDN — не надёжно, упадёт в offline».
-  Возражение: PWA service worker precache всех файлов из
-  `public/samples/` при install; после первого load всё
-  работает offline. Префикс `synth:` гарантирует, что Strudel
-  ищет только в нашем локальном банке.
 axiom_link:
   - A1
 scope:
@@ -109,7 +79,7 @@ obligations:
       The original v1.0 packet applied on the recorded date in its `witness` file; this migration preserves that evidence as an `attestations/<id>-evidence.json` file.
     acceptance:
       all:
-        - verifier: "attestation-store-has-subject"
+        - verifier: "mathc self-check"
           result: pass
 assumptions: []
 risk:
@@ -119,4 +89,3 @@ risk:
 relations:
   addresses:
     - wavecode-bootstrap-math-coding-3.3@1
----

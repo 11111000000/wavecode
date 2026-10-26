@@ -3,28 +3,14 @@ schema: math-coding/3.3
 id: wavecode-strudel-in-browser
 revision: 1
 state: active
-body_sha: "sha256:4be1fa8ff9ce408fd26a990cde76791b638259bb52af0d01114e48db0ef9aaef"
-yaml_sha: "sha256:4be1fa8ff9ce408fd26a990cde76791b638259bb52af0d01114e48db0ef9aaef"
+body_sha: "sha256:85cd6f50d83862177ce41ce19af81db3b678a641739f4e398b557d254b7c31b8"
+yaml_sha: "sha256:85cd6f50d83862177ce41ce19af81db3b678a641739f4e398b557d254b7c31b8"
 
 intent: |
   Аудио в wavecode рендерится в браузере через @strudel/core + @strudel/webaudio
   (webaudioRepl + evaluate), без серверного TidalCycles+SuperDirt+Icecast и без
   интеграции с ~/Projects/Composer/.
 commitment: |
-  Use case оператора — local live-coding в браузере, я сам себе слушатель.
-  Strudel покрывает 80% паттернов и эффектов; professional-grade звук и
-  Icecast-стрим не нужны. Если позже понадобится — добавляется отдельный
-  backend-сервис, не интеграция с существующим Composer. Web Audio API
-  даёт латентность 5-15ms (vs 30-80ms через ghci+OSC+SuperDirt), что
-  важнее для live-coding.
-counterexample: |
-  The strongest objection to this decision is captured in the `antithesis` field above: Tidal+SuperDirt даёт доступ к SC-UGen'ам (сотни синтезаторов), профессиональным
-antithesis: |
-  Tidal+SuperDirt даёт доступ к SC-UGen'ам (сотни синтезаторов), профессиональным
-  Dirt-Samples (~3 GB), публичному стриму через Icecast и persistent-режиму
-  (браузер закрыт — музыка играет). Strudel в браузере ограничен встроенными
-  сэмплами и Web Audio API. Для профессионального продакшена или публичного
-  стрима Strudel недостаточен.
   Use case оператора — local live-coding в браузере, я сам себе слушатель.
   Strudel покрывает 80% паттернов и эффектов; professional-grade звук и
   Icecast-стрим не нужны. Если позже понадобится — добавляется отдельный
@@ -62,7 +48,7 @@ obligations:
       The original v1.0 packet applied on the recorded date in its `witness` file; this migration preserves that evidence as an `attestations/<id>-evidence.json` file.
     acceptance:
       all:
-        - verifier: "attestation-store-has-subject"
+        - verifier: "mathc self-check"
           result: pass
 assumptions:
   - id: wavecode-strudel-in-browser-assumption-1
@@ -97,4 +83,3 @@ risk:
 relations:
   addresses:
     - wavecode-bootstrap-math-coding-3.3@1
----

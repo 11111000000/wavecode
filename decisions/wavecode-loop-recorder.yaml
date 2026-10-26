@@ -3,8 +3,8 @@ schema: math-coding/3.3
 id: wavecode-loop-recorder
 revision: 1
 state: draft
-body_sha: "sha256:18cb9b8c989e55bd828cbc42484956e79bdb3dc3b919c647c5bb6fe725ddedab"
-yaml_sha: "sha256:18cb9b8c989e55bd828cbc42484956e79bdb3dc3b919c647c5bb6fe725ddedab"
+body_sha: "sha256:c3a742ef22e0d199f2402ad4a3563057961e52b853be9c1be2a6d478ae726cdd"
+yaml_sha: "sha256:c3a742ef22e0d199f2402ad4a3563057961e52b853be9c1be2a6d478ae726cdd"
 
 intent: |
   Расширить однократный AudioRecorder до multi-track loop recorder для

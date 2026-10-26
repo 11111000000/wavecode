@@ -3,8 +3,8 @@ schema: math-coding/3.3
 id: wavecode-mobile-transport-bar
 revision: 1
 state: draft
-body_sha: "sha256:b9d0dde165fcc9346c49e338cbc16d9a172ccfb396a61f4b8b65ad906331c3ee"
-yaml_sha: "sha256:b9d0dde165fcc9346c49e338cbc16d9a172ccfb396a61f4b8b65ad906331c3ee"
+body_sha: "sha256:506bead7c0839663331aee7eced85f78c75c7327d2c606e7ff4a3ef09c9478a0"
+yaml_sha: "sha256:506bead7c0839663331aee7eced85f78c75c7327d2c606e7ff4a3ef09c9478a0"
 
 intent: |
   Объединить `.app-preset-row` (выбор композиции) и `.app-controls-row`
@@ -96,63 +96,6 @@ antithesis: |
   (визуально невидимо — bar background rgba(10,10,14,0.92)
   почти совпадает с cmHost bg). Buffer 0 intentional — mobile
   editor получает каждый доступный пиксель.
-  Один коммит + пакет + witness. Один новый компонент TransportBar.tsx,
-  один новый тест-файл TransportBar.test.tsx. CSS-изменения: новые
-  rules в components.css (TransportBar block + mobile @media),
-  обновлены токены в tokens.css, обновлена inline копия в index.html.
-counterexample: |
-  The strongest objection to this decision is captured in the `antithesis` field above: (1) «Оставить два отдельных row, просто скрывать один на mobile
-antithesis: |
-  (1) «Оставить два отдельных row, просто скрывать один на mobile
-  когда collapsed». Возражение: это создаёт два stacked fixed
-  containers (top: 56, top: 100). Когда один hidden, его top
-  не двигается — останется пустое место или overlap. Один
-  контейнер с collapse-body решает оба случая чисто.
-  (2) «Сделать collapse через CSS-only :focus-within / :hover на
-  bar, без JS state». Возражение: hover-to-expand плох для
-  touch (юзер хочет explicitly tap чтобы раскрыть). Focus-
-  within теряет focus когда user тапает мимо bar. JS state
-  с localStorage persistence — единственный UX-acceptable
-  вариант для mobile.
-  (3) «Использовать sibling combinator `.app-transport-bar ~ .app-body`
-  в CSS вместо data-attribute mirroring». Возражение: sibling
-  combinator fragile — если между ними вставить ещё один
-  элемент (например, error banner, toast container) — selector
-  ломается. data-attribute + JS effect — robust pattern,
-  не зависит от DOM-структуры. Цена: одна extra write на
-  каждый toggle (~1ms) — приемлемо.
-  (4) «Скрыть toggle на desktop (зачем collapse если много места)».
-  Возражение: юзер явно попросил «чтобы оно не занимало место
-  непрерывно потому что где ему не нужно редактировать постоянно»
-  — это applies to both mobile и desktop. Desktop editor maximized
-  state полезен (больше space для score). Toggle остаётся видимым
-  и на desktop.
-  (5) «Не persistить в localStorage, считать session-only». Возражение:
-  mobile юзер каждый раз при reload будет видеть expanded state
-  (default mobile = collapsed не сработает если юзер явно
-  выбрал expanded раньше в session). Persistence — expected
-  behavior, юзер не хочет re-toggle каждую session.
-  (6) «CSS-Layers gotcha: inline .app-preset-row в index.html нужно
-  удалить чтобы избежать dead rules». Возражение: inline
-  `<style>` — не @layer, бьёт все @layer rules в bundled CSS.
-  Я обновил inline копию на .app-transport-bar (включая collapse
-  rule) — это consistent с wavecode-mobile-compact / preset-row-
-  and-toast-z / mobile-fixed-h (все они обновляли inline copy
-  синхронно). Удалять inline копию рискованно — если Vite
-  miniфицирует не так, как ожидаем, можно сломать CSS ordering.
-  (7) «Mobile expanded body height 53px не вмещает swing/cps-presets/
-  playhead — регрессия vs original». Возражение: original
-  (master) mobile controls-row уже 59px и показывал только
-  cps slider (swing/cps-presets/playhead height 0) — pre-existing
-  поведение. НЕ регрессия, preserved. Body content = тот же cps
-  slider + preset select (новое).
-  (8) «1px overlap cmHost.top (104) < bar.bottom (105) на mobile
-  collapsed». Возражение: bar = strip 48 + border-top 1 = 49.
-  appBody padding-top 48 = ровно strip. cmHost стартует на
-  padding-top edge. Border-top bar'а лежит на 1px выше cmHost
-  (визуально невидимо — bar background rgba(10,10,14,0.92)
-  почти совпадает с cmHost bg). Buffer 0 intentional — mobile
-  editor получает каждый доступный пиксель.
 axiom_link:
   - A5
 scope:
@@ -174,7 +117,7 @@ obligations:
       The original v1.0 packet applied on the recorded date in its `witness` file; this migration preserves that evidence as an `attestations/<id>-evidence.json` file.
     acceptance:
       all:
-        - verifier: "attestation-store-has-subject"
+        - verifier: "mathc self-check"
           result: pass
 assumptions:
   - id: wavecode-mobile-transport-bar-assumption-1
@@ -244,4 +187,3 @@ risk:
 relations:
   addresses:
     - wavecode-bootstrap-math-coding-3.3@1
----

@@ -3,8 +3,8 @@ schema: math-coding/3.3
 id: wavecode-ui-minimal-pass-phase-2
 revision: 1
 state: active
-body_sha: "sha256:343fd9945c6d02adbcbe2aad21529182b0844997cd515f0fa4516ebd447ce949"
-yaml_sha: "sha256:343fd9945c6d02adbcbe2aad21529182b0844997cd515f0fa4516ebd447ce949"
+body_sha: "sha256:e8b56e85a433b75b2dad8992cdcc0a1b526dc97237c0f00c3e51dd9eca24e53c"
+yaml_sha: "sha256:e8b56e85a433b75b2dad8992cdcc0a1b526dc97237c0f00c3e51dd9eca24e53c"
 
 intent: |
   Phase 1 (`math/wavecode-ui-minimal-pass`) убрал визуальный шум,
@@ -52,25 +52,6 @@ antithesis: |
   OS-level setting (iOS Reduce Motion, Android Remove
   Animations). Юзеры с вестибулярными расстройствами это
   ценят. Реализация стоит 3 строки CSS.
-  Три правки в одной серии:
-counterexample: |
-  The strongest objection to this decision is captured in the `antithesis` field above: (1) «Убрать Mixer из TabBar — потеряем power-user shortcut».
-antithesis: |
-  (1) «Убрать Mixer из TabBar — потеряем power-user shortcut».
-  Возражение: Mixer уже доступен 1-tap в BottomToolstrip
-  (`/app` → BottomToolstrip → [Mixer]). Это ровно тот же
-  shortcut. Tab'ы в mobile-bottom-nav — для primary navigation,
-  Mixer — инструмент, ему место рядом со Step/Piano.
-  (2) «Pulse-анимации — это feedback, их отключение ухудшит UX».
-  Возражение: pulse — декорация, не сигнал об ошибке.
-  Информационная нагрузка pulse'а низкая (юзер уже слышит
-  звук ошибки в audio-lastError). Для тех кому нужны
-  «указатели» — admin-warn текст в title и `aria-label`.
-  (3) «prefers-reduced-motion — это нишевая фича, не нужна».
-  Возражение: WCAG 2.1 Success Criterion 2.3.3 (AAA) +
-  OS-level setting (iOS Reduce Motion, Android Remove
-  Animations). Юзеры с вестибулярными расстройствами это
-  ценят. Реализация стоит 3 строки CSS.
 axiom_link:
   - A3
 scope:
@@ -95,7 +76,7 @@ obligations:
       The original v1.0 packet applied on the recorded date in its `witness` file; this migration preserves that evidence as an `attestations/<id>-evidence.json` file.
     acceptance:
       all:
-        - verifier: "attestation-store-has-subject"
+        - verifier: "mathc self-check"
           result: pass
 assumptions: []
 risk:
@@ -105,4 +86,3 @@ risk:
 relations:
   addresses:
     - wavecode-bootstrap-math-coding-3.3@1
----

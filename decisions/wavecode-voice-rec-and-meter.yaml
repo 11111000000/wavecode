@@ -3,8 +3,8 @@ schema: math-coding/3.3
 id: wavecode-voice-rec-and-meter
 revision: 1
 state: active
-body_sha: "sha256:0000000000000000000000000000000000000000000000000000000000000000"
-yaml_sha: "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+body_sha: "sha256:8d5d422604debaad21ed3f284df77f4965f0bb85d55822934f916c2a6bff5da3"
+yaml_sha: "sha256:8d5d422604debaad21ed3f284df77f4965f0bb85d55822934f916c2a6bff5da3"
 
 axiom_link:
   - A0
@@ -480,7 +480,7 @@ obligations:
       завершается exit 0 без `MC-*` reject-диагностик.
     acceptance:
       all:
-        - verifier: mathc-validate
+        - verifier: mathc validate
           result: pass
 
 risk:

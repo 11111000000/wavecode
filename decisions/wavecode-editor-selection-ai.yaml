@@ -3,8 +3,8 @@ schema: math-coding/3.3
 id: wavecode-editor-selection-ai
 revision: 1
 state: draft
-body_sha: "sha256:0000000000000000000000000000000000000000000000000000000000000000"
-yaml_sha: "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+body_sha: "sha256:4fad2989d484f7c87df6a0b4a2d1f65fecd3e107c7944e132132375c2a093280"
+yaml_sha: "sha256:4fad2989d484f7c87df6a0b4a2d1f65fecd3e107c7944e132132375c2a093280"
 
 intent: |
   When the user selects a fragment of the Strudel score in the

@@ -3,8 +3,8 @@ schema: math-coding/3.3
 id: wavecode-step-grid-modes
 revision: 1
 state: active
-body_sha: "sha256:b1ba6279d0903f3081def64e46ffad79c4952182a885179811d78327757d3a93"
-yaml_sha: "sha256:b1ba6279d0903f3081def64e46ffad79c4952182a885179811d78327757d3a93"
+body_sha: "sha256:e8f1d75a56f9f90e0777e88dd0f07a509f045294787b0ad684e8e83a0aedbc3e"
+yaml_sha: "sha256:e8f1d75a56f9f90e0777e88dd0f07a509f045294787b0ad684e8e83a0aedbc3e"
 
 intent: |
   StepGrid toolbar has three semantically-overloaded buttons
@@ -118,85 +118,6 @@ antithesis: |
   as the first row, edit-mode taps replace just the
   tokens in that row. Adjacent `note("…")` or `n("…")`
   rows are untouched.
-  Six changes:
-counterexample: |
-  The strongest objection to this decision is captured in the `antithesis` field above: (1) «Keep three buttons, just rename them». Возражение:
-antithesis: |
-  (1) «Keep three buttons, just rename them». Возражение:
-  renaming `↑ load & play` → `↑ commit` doesn't fix the core
-  problem: the *meaning of a tap* changes per-mode but the
-  visual state (flash + dot) doesn't. The user's question
-  "что произойдёт если я нажму?" has three different answers
-  depending on the toolbar state. A mode pill is the canonical
-  UI affordance for "what does this control do RIGHT NOW"
-  (Ableton Push Note Mode / Step Mode / Session Mode, FL
-  Studio Pattern / Song / Mixer). Three buttons with renamed
-  labels is still three distinct decisions to make; one
-  mode-pill + a contextual action button is two decisions
-  total.
-
-  (2) «Always-commit-on-tap is simpler». Возражение: this is
-  the OLD behavior (`wavecode-step-sequencer` packet) that was
-  superseded by `wavecode-step-append-sync` *specifically*
-  because it clobbered the user's main composition. Reverting
-  that would be a regression. The current `appendGridToScore`
-  path is safer (it wraps/splices instead of replacing), but
-  still mutates the editor's text and pushes a history entry.
-  A misclick in `view` mode must do NOTHING to the score.
-
-  (3) «Edit mode is just sketch with auto-commit — why
-  bother?». Возражение: sketch operates on a *separate
-  draft*; edit operates *in-place on one layer*. In edit
-  mode, tapping cell (0, 0) replaces just the first `s("…")`
-  row's first token — preserving the rest of the score
-  including any other `s("…")` rows the user added manually.
-  Sketch's commit replaces the whole draft (all 4 rows) at
-  once. These are different shapes of work:
-  - "tweak my existing drum pattern" → edit
-  - "I sketched a new 4-row beat from scratch" → sketch
-  Confusing them is what the user is asking us to fix.
-
-  (4) «Just hide the toolbar in view mode, keep two buttons
-  for sketch/edit». Возражение: view mode needs to be
-  discoverable. If the pill isn't there, new users won't know
-  there's a "view" option. The pill must always be visible so
-  users can return to view (the safe default) at any time.
-
-  (5) «Edit mode is dangerous — what if score has 7 layers?».
-  Возражение: the mode is GATED on `parseStackTopLayers`
-  returning exactly 4 layers whose first token is `s(`. We
-  reuse the same parser as `MixerPanel` (already in
-  `domain/layers/parseStack.ts:168`). If the score isn't
-  parseable into 4 `s("…")` rows, the mode button is
-  disabled with a tooltip explaining why. This is a
-  fail-safe — no accidental corruption of unrelated layers.
-
-  (6) «Just persist in localStorage — IDB is overkill».
-  Возражение: IDB is already wired through `Repo` and
-  `useAutoSave` (500ms debounce, same pattern as score +
-  messages). Adding a 4th key (`grid-state-v1`) costs ~10
-  lines. localStorage has synchronous blocking, IDB has
-  the same async plumbing we already use.
-
-  (7) «Per-tap eval is too expensive, batch them with
-  a long debounce». Возражение: per-tap `repl.evaluate` is
-  ~25KB CPU + AudioWorklet reinit. `LiveAudioEngine` already
-  exposes `setPattern(pattern, autostart=false)` (see
-  `LiveAudioEngine.ts:99`) which swaps the parsed Pattern
-  into the live scheduler at the next lookahead window
-  without `repl.stop` + `repl.evaluate`. We reuse this
-  exact same hot-swap path that `setLayerMix` already uses
-  for the MixerPanel (debounced 50ms via
-  `MIX_DEBOUNCE_MS`). No new mechanism.
-
-  (8) «What if edit mode modifies a layer that was
-  originally NOT in the grid's 4 rows?». Возражение: the
-  gate `parseStackTopLayers(score)` + per-layer check
-  that the first token is `s(` ensures we only touch
-  `s("…")` rows. If a user had `s("bd ~ ~ bd ~ ~ hh ~"),`
-  as the first row, edit-mode taps replace just the
-  tokens in that row. Adjacent `note("…")` or `n("…")`
-  rows are untouched.
 axiom_link:
   - A4
 scope:
@@ -222,7 +143,7 @@ obligations:
       The original v1.0 packet applied on the recorded date in its `witness` file; this migration preserves that evidence as an `attestations/<id>-evidence.json` file.
     acceptance:
       all:
-        - verifier: "attestation-store-has-subject"
+        - verifier: "mathc self-check"
           result: pass
 assumptions:
   - id: wavecode-step-grid-modes-assumption-1
@@ -272,4 +193,3 @@ risk:
 relations:
   addresses:
     - wavecode-bootstrap-math-coding-3.3@1
----

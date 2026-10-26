@@ -3,8 +3,8 @@ schema: math-coding/3.3
 id: wavecode-preset-row-and-toast-z
 revision: 1
 state: draft
-body_sha: "sha256:a617d1efcadffcf61a3265d19b3241a525baf276374d3ff8caa7f8ca91a13571"
-yaml_sha: "sha256:a617d1efcadffcf61a3265d19b3241a525baf276374d3ff8caa7f8ca91a13571"
+body_sha: "sha256:fc1730e01181aa5c3372eef9a5b062f10b66b950f465fa16c87178e0dd04bfad"
+yaml_sha: "sha256:fc1730e01181aa5c3372eef9a5b062f10b66b950f465fa16c87178e0dd04bfad"
 
 intent: |
   Два визуальных дефекта, появившихся как побочный эффект
@@ -94,40 +94,6 @@ antithesis: |
   — каждое layout-fix в math-coding packet. Поддерживаем
   convention, иначе следующий агент не поймёт почему именно
   такая высота / z-index.
-  Три коммита в одной серии на ветке `fix/preset-and-toast-z`:
-counterexample: |
-  The strongest objection to this decision is captured in the `antithesis` field above: (1) «Можно просто поднять preset-row над controls-row через
-antithesis: |
-  (1) «Можно просто поднять preset-row над controls-row через
-  z-index без position: fixed». Возражение: relative + z-index
-  не работает когда controls-row fixed и занимает то же место
-  в DOM-flow, что и preset-row. Поскольку preset-row в flow
-  сразу после TopBar, а controls-row fixed поверх — preset-row
-  не отрисуется. Нужно вывести preset-row из flow, т.е. fixed.
-  (2) «Объединить preset-row и controls-row в один fixed-ряд».
-  Возражение: select и transport — разные affordances
-  (composition-picker vs playback). Слияние ломает mental
-  model: «пресеты сверху, контролы воспроизведения под ними».
-  Гармошка в одной полосе — anti-pattern на маленьких
-  viewport'ах (iPhone 12 mini — 360×780, обе сущности не
-  влезают горизонтально с человеческим font-size).
-  (3) «Toast НАД topbar ломает кликабельность undo/redo».
-  Возражение: toast-stack имеет `pointer-events: none`, и только
-  сам `.toast-item` ловит клики. TopBar вокруг toast'а остаётся
-  полностью интерактивным. Это уже реализовано в существующем
-  CSS (lines 1602-1603) — packet только меняет `top`, не трогает
-  pointer-events.
-  (4) «Можно toast оставить внизу как bottom-snackbar, тогда он
-  точно не мешает topbar'у». Возражение: юзер явно сказал
-  «поверх всего». Material Design рекомендует top-position для
-  high-priority (error / critical) уведомлений — они должны
-  привлекать внимание, а не тихо висеть внизу.
-  (5) «Это всё минор, можно починить в одном коммите без пакета».
-  Возражение: precedent в репо (`wavecode-transport-always-visible`,
-  `wavecode-piano-toolbar-fix`, `wavecode-ui-minimal-pass-phase-2`)
-  — каждое layout-fix в math-coding packet. Поддерживаем
-  convention, иначе следующий агент не поймёт почему именно
-  такая высота / z-index.
 axiom_link:
   - A5
 scope:
@@ -153,7 +119,7 @@ obligations:
       The original v1.0 packet applied on the recorded date in its `witness` file; this migration preserves that evidence as an `attestations/<id>-evidence.json` file.
     acceptance:
       all:
-        - verifier: "attestation-store-has-subject"
+        - verifier: "mathc self-check"
           result: pass
 assumptions:
   - id: wavecode-preset-row-and-toast-z-assumption-1
@@ -218,4 +184,3 @@ risk:
 relations:
   addresses:
     - wavecode-bootstrap-math-coding-3.3@1
----

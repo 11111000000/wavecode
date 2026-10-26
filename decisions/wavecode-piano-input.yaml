@@ -3,8 +3,8 @@ schema: math-coding/3.3
 id: wavecode-piano-input
 revision: 1
 state: active
-body_sha: "sha256:16864ee7f4a210e97e440c56d3b762044e2d3e1b0dd133efa3cb06cfdab28626"
-yaml_sha: "sha256:16864ee7f4a210e97e440c56d3b762044e2d3e1b0dd133efa3cb06cfdab28626"
+body_sha: "sha256:ccca13afec62e4b291fa972b2c91cfafc8c1e591aaf2b4fde067ccf435ef5e00"
+yaml_sha: "sha256:ccca13afec62e4b291fa972b2c91cfafc8c1e591aaf2b4fde067ccf435ef5e00"
 
 intent: |
   В `.app-controls-row` появляется кнопка `🎹 Piano`. В on — над
@@ -18,33 +18,6 @@ intent: |
   устройства отражаются на визуальной клавиатуре. iOS-юзеры получают
   только on-screen.
 commitment: |
-  Two-octave piano (24 keys) в ScorePanel:
-  - Tap = note-on через `audio.eval(s('reverb/casio:note-X'))` — single
-  note; release = `audio.eval('silence')` (встроенный Strudel
-  pseudo-pattern).
-  - Big whites (60×180 mobile / 80×220 desktop) + 16 black keys
-  overlaid via absolute positioning.
-  - WebMIDI: auto-detect, populate `inputs[]`, listen `midimessage`.
-  On note-on: mark key active + trigger same audio.eval. On note-off:
-  silence. iOS: WebMIDI returns undefined → UI silently hides MIDI
-  status, only on-screen works.
-  - Tests: pure fn `noteNumberToName(midiNum)` (C3..B4), pure
-  `midiNoteToSampleName(num)` → 'a4'..'c5' for Strudel.
-  - UI integration: App.tsx toggle, ScorePanel conditional render.
-counterexample: |
-  The strongest objection to this decision is captured in the `antithesis` field above: (1) «24-клавишная клавиатура перегружает UI». Возражение: 2 октавы
-antithesis: |
-  (1) «24-клавишная клавиатура перегружает UI». Возражение: 2 октавы
-  = 24 клавиши, ~720px ширина. В ScorePanel`е есть место над
-  editor'ом. (2) «Зачем WebMIDI если у юзера нет клавиатуры?».
-  Возражение: iOS-юзеры получают on-screen, desktop-юзеры с MIDI
-  клавиатурой получают hardware. (3) `eval` на каждый tap = много
-  overhead. Решение: `eval` только на note-on (включая repeat через
-  holding), на note-off `eval` тишины. (4) WebMIDI permissions могут
-  зависнуть в `pending`. Решение: 1-секундный таймаут, fallback
-  на on-screen. (5) Чёрные клавиши < 44px на мобиле. Решение:
-  позиционируем absolute поверх whites на нужной x-позиции;
-  hit-target увеличиваем через padding, не через размер.
   Two-octave piano (24 keys) в ScorePanel:
   - Tap = note-on через `audio.eval(s('reverb/casio:note-X'))` — single
   note; release = `audio.eval('silence')` (встроенный Strudel
@@ -93,7 +66,7 @@ obligations:
       The original v1.0 packet applied on the recorded date in its `witness` file; this migration preserves that evidence as an `attestations/<id>-evidence.json` file.
     acceptance:
       all:
-        - verifier: "attestation-store-has-subject"
+        - verifier: "mathc self-check"
           result: pass
 assumptions: []
 risk:
@@ -103,4 +76,3 @@ risk:
 relations:
   addresses:
     - wavecode-bootstrap-math-coding-3.3@1
----
