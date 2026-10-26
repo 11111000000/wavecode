@@ -9,6 +9,7 @@ import {
   initialTransientState,
   DEFAULT_TRANSIENT_TUNE,
   DEFAULT_INSTRUMENT_MAP,
+  filterPercussionHits,
   type TransientFrame,
   type Transient,
 } from '~/domain/audio/transient';
@@ -413,5 +414,60 @@ describe('transientsToSnippet — envelope-aware .decay wrapper', () => {
     expect(out).toBe(
       's("drums_bd ~ ~ ~ drums_bd ~ ~ ~ drums_bd ~ ~ ~ drums_bd ~ ~ ~").decay(0.250)',
     );
+  });
+});
+
+/* =========================================================================
+ *  filterPercussionHits — telling a whistle's onset from a finger tap.
+ * ========================================================================= */
+describe('filterPercussionHits', () => {
+  const hit = (startMs: number, type: Transient['type'] = 'hat'): Transient => ({
+    type,
+    startMs,
+    amplitude: 0.4,
+    spectralCentroidHz: 6000,
+    envelopeMs: 30,
+  });
+
+  const note = (startMs: number, durationMs: number) => ({
+    midi: 60,
+    cents: 0,
+    startMs,
+    durationMs,
+    vibratoCents: 0,
+  });
+
+  it('drops the transient that IS the onset of a sustained note', () => {
+    // The 2026-10-19 complaint: whistling sprouted a clap, because
+    // the whistle's own onset is a transient too.
+    const filtered = filterPercussionHits([hit(0)], [note(0, 300)]);
+    expect(filtered).toHaveLength(0);
+  });
+
+  it('keeps a transient that lands before the note opens (detection lag)', () => {
+    // The transient fires on the RMS jump, the note opens a few
+    // frames later — the tolerance covers that window.
+    const filtered = filterPercussionHits([hit(0)], [note(30, 300)]);
+    expect(filtered).toHaveLength(0);
+  });
+
+  it('keeps a tapped hit that has no note behind it', () => {
+    // The 2026-10-26 request: tapping a rhythm must be audible.
+    const filtered = filterPercussionHits([hit(2000)], [note(0, 300)]);
+    expect(filtered).toHaveLength(1);
+    expect(filtered[0]?.startMs).toBe(2000);
+  });
+
+  it('keeps the taps and drops the onsets in a mixed take', () => {
+    const filtered = filterPercussionHits(
+      [hit(0, 'click'), hit(800), hit(1600)],
+      [note(0, 600)],
+    );
+    expect(filtered.map((t) => t.startMs)).toEqual([800, 1600]);
+  });
+
+  it('keeps every transient when the take has no notes at all', () => {
+    const filtered = filterPercussionHits([hit(0), hit(500)], []);
+    expect(filtered).toHaveLength(2);
   });
 });

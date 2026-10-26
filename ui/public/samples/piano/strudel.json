@@ -1,33 +1,35 @@
 {
   "_base": "/samples/piano/",
-  "piano_a1": [
-    "A1.mp3"
-  ],
-  "piano_a2": [
-    "A2.mp3"
-  ],
-  "piano_a3": [
-    "A3.mp3"
-  ],
-  "piano_a4": [
-    "A4.mp3"
-  ],
-  "piano_c2": [
-    "C2.mp3"
-  ],
-  "piano_c3": [
-    "C3.mp3"
-  ],
-  "piano_c4": [
-    "C4.mp3"
-  ],
-  "piano_c5": [
-    "C5.mp3"
-  ],
-  "piano_c6": [
-    "C6.mp3"
-  ],
-  "piano_c7": [
-    "C7.mp3"
-  ]
+  "piano": {
+    "a1": [
+      "A1.mp3"
+    ],
+    "a2": [
+      "A2.mp3"
+    ],
+    "a3": [
+      "A3.mp3"
+    ],
+    "a4": [
+      "A4.mp3"
+    ],
+    "c2": [
+      "C2.mp3"
+    ],
+    "c3": [
+      "C3.mp3"
+    ],
+    "c4": [
+      "C4.mp3"
+    ],
+    "c5": [
+      "C5.mp3"
+    ],
+    "c6": [
+      "C6.mp3"
+    ],
+    "c7": [
+      "C7.mp3"
+    ]
+  }
 }

@@ -16,11 +16,12 @@
  * so we `runSync` it on init (Refs are `never` requirements).
  * `startWhistle` acquires `mic-direct` for the `whistle` owner,
  * starts the live `micStore` pipeline, and runs the orchestrator.
- * `commitWhistle` triggers `notesToSnippet` + `audio.eval` via the
- * orchestrator AND splices the same snippet into `appStore.score`
- * via a presentation-layer dispatch — the orchestrator (application
- * layer) does not touch the editor, mirroring
- * `micStore.applyToScore` and `pianoRecStore.applyToScore`.
+ * `commitWhistle` builds the take's snippet (the whistled NOTES plus
+ * the TAPPED transients) through `micSnippetFromBuffers`, auditions it
+ * via the orchestrator AND splices the same snippet into
+ * `appStore.score` via a presentation-layer dispatch — the
+ * orchestrator (application layer) does not touch the editor,
+ * mirroring `micStore.applyToScore` and `pianoRecStore.applyToScore`.
  * `stopWhistle` releases the mic and stops the live mic. Acquire
  * failure (another mic-direct owner is active) surfaces as a typed
  * `MicBusyError` — the WhistleMiniFAB surfaces a toast.
@@ -32,7 +33,9 @@ import { Effect, Layer, Ref, Stream } from 'effect';
 import type { WhistleSessionState } from '~/domain/audio/whistleSession';
 import { initialWhistleSession } from '~/domain/audio/whistleSession';
 import type { AudioNote } from '~/domain/audio/micCapture';
-import { notesToSnippet } from '~/domain/audio/micCapture';
+import { micSnippetFromBuffers } from '~/domain/audio/micSnippet';
+import { filterPercussionHits } from '~/domain/audio/transient';
+import { soundLabel, isMelodicSound } from '~/domain/sounds';
 import { appendToTopStack } from '~/domain/strudel';
 import { AudioEngine } from '~/domain/services';
 import type { MicBusyError } from '~/domain/audio/MicChannel';
@@ -41,7 +44,15 @@ import {
   type MicCaptureLike,
   type WhistleSessionHandle,
 } from '~/application/voice/WhistleSession';
-import { startMic, stopMic, micPreviewNotes, setMicPreviewNotes, subscribeMicFrame, clearPreview } from './micStore';
+import {
+  startMic,
+  stopMic,
+  micPreviewNotes,
+  micTransients,
+  setMicPreviewNotes,
+  subscribeMicFrame,
+  clearPreview,
+} from './micStore';
 import { acquireMic, releaseMic, resetMicMutexForTests } from './micMutexStore';
 import { dispatch, appStore } from './appStore';
 import { consoleStore } from '~/presentation/components/consoleStore';
@@ -89,15 +100,16 @@ export const clearWhistlePanelArmed = (): void => {
 };
 
 /**
- * The Strudel sample a whistle session commits its notes to. There is
- * deliberately no selector for it — the mini-FAB dropped piano/synth/
- * drums to make whistle a one-gesture action — so this constant is the
- * only place the choice is written down. `startWhistle` forwards it to
- * the orchestrator and both surfaces that mention the timbre
- * (`WhistleMiniFAB`'s hint chip, `RecordingPanel`'s whistle body) read
- * `whistleInstrumentLabel()` rather than restating the name; a second
- * hardcoded copy in a component is how the label starts lying about
- * what `notesToSnippet` actually emits.
+ * The default melodic sound a whistle take commits its notes to.
+ *
+ * It MUST be a name superdough knows — the catalogue in
+ * `domain/sounds.ts` is exactly the set of registered names, and an
+ * unknown name is fatal at trigger time (`sound X not found!`), not
+ * merely quiet. The user picks another sound from the same catalogue
+ * through `chooseWhistleInstrument`; the panel and the hint chip read
+ * `whistleInstrumentLabel()` rather than restating the name, so a
+ * second hardcoded copy in a component cannot make the label lie about
+ * what the take actually plays.
  */
 export const WHISTLE_INSTRUMENT = 'piano';
 
@@ -108,30 +120,40 @@ export const [whistleInstrument, setWhistleInstrument] = createSignal<string>(
   WHISTLE_INSTRUMENT,
 );
 
-/** Russian instrument names for the hint chips. Covers the whole
- *  `PianoInstrument` union even though whistle has no selector today,
- *  so an override passed to `startWhistle` still renders a name. */
-const INSTRUMENT_LABEL: Readonly<Record<string, string>> = {
-  piano: 'пианино',
-  casio: 'казино',
-  guitar: 'гитара',
-  synth: 'синтезатор',
-  triangle: 'треугольник',
-  sine: 'синус',
-  sawtooth: 'пила',
-  square: 'меандр',
+/**
+ * Pick the melodic sound of the next whistle take.
+ *
+ * Only names from the catalogue (`domain/sounds.ts`) are accepted: a
+ * `.s("…")` name that superdough does not know is FATAL at trigger
+ * time (`sound <name> not found!`), it does not just fall silent.
+ * The catalogue is exactly the set of registered names, so the
+ * guard here is what keeps an unplayable sound out of a take.
+ */
+export const chooseWhistleInstrument = (id: string): void => {
+  if (!isMelodicSound(id)) return;
+  setWhistleInstrument(id);
 };
+
+/**
+ * The instrument the RUNNING take was started with.
+ *
+ * A take's timbre is fixed when it starts: the notes are committed as
+ * one snippet, so a mid-take switch would make the audition and the
+ * score disagree (the orchestrator holds the instrument it was
+ * started with, the store would splice a different one).
+ */
+let activeInstrument: string = WHISTLE_INSTRUMENT;
 
 /** Display name of the instrument the session will commit to. Falls
  *  through to the raw name for an unknown instrument rather than
  *  rendering `undefined` into the chip. */
 export const whistleInstrumentLabel = (): string =>
-  INSTRUMENT_LABEL[whistleInstrument()] ?? whistleInstrument();
+  soundLabel(whistleInstrument());
 
 /** Options for `startWhistle`. */
 export type WhistleStartOpts = {
   readonly sessionId: string;
-  /** Defaults to `'piano'`. Forwarded into `notesToSnippet`. */
+  /** Defaults to `'piano'`. Forwarded into the snippet builder. */
   readonly instrument?: string;
 };
 
@@ -230,6 +252,11 @@ export const initWhistle = (deps: {
         notesRef.current = captureLiveNotes();
         return notesRef.current;
       }),
+    // The percussive hits of the same take: a tapped rhythm. The
+    // transient detector classifies them (kick / snare / hat / click)
+    // and the snippet builder maps them onto the drum bank — this is
+    // what makes "щёлкнуть ритм" audible instead of dropped.
+    getTransients: () => Effect.sync(() => micTransients()),
   };
 
   const sessionProgram = createWhistleSession({
@@ -289,10 +316,12 @@ export const startWhistle = (
       return yield* Effect.fail(claimed.error);
     }
     activeSessionId = opts.sessionId;
+    const instrument = opts.instrument ?? WHISTLE_INSTRUMENT;
+    activeInstrument = instrument;
     yield* Effect.sync(() => {
       setWhistleError(null);
       setWhistleNotes(micPreviewNotes());
-      setWhistleInstrument(opts.instrument ?? WHISTLE_INSTRUMENT);
+      setWhistleInstrument(instrument);
     });
     if (handle === null) {
       // Fallback path: orchestrator not yet built. Mirror the FSM
@@ -310,7 +339,7 @@ export const startWhistle = (
     // doesn't match the public `MicBusyError` signature, so we
     // catchAll and degrade gracefully (the wavecode-MicPanel still
     // works through its own dedicated UI).
-    yield* handle.start({ instrument: opts.instrument ?? WHISTLE_INSTRUMENT }).pipe(
+    yield* handle.start({ instrument }).pipe(
       Effect.catchAll((err) =>
         Effect.sync(() => {
           setWhistleError(err.message);
@@ -320,19 +349,18 @@ export const startWhistle = (
     );
   });
 
-/** Default instrument forwarded to `notesToSnippet`. Mirrors the
- *  default in `startWhistle` (kept here as a single source of truth
- *  for the commit path because the orchestrator's `instrumentRef`
- *  is private to the application layer). */
-const WHISTLE_DEFAULT_INSTRUMENT = 'piano';
-
 /**
- * Commit the buffered notes. Two parallel effects:
- *   1. `handle.commit()` inside the orchestrator runs
- *      `notesToSnippet` + `AudioEngine.eval` so the user hears
- *      the result.
- *   2. This function additionally splices the same snippet into
+ * Commit the buffered take. Two parallel effects:
+ *   1. `handle.commit()` inside the orchestrator builds the snippet
+ *      (notes + transients) and runs `AudioEngine.eval` so the user
+ *      hears the result.
+ *   2. This function additionally splices the SAME snippet into
  *      `appStore.score` so the editor mirrors what was whistled.
+ *
+ * Both sides call `micSnippetFromBuffers` — the one function that
+ * turns the mic's two buffers into a Strudel snippet — so the
+ * audition and the commit are the same string, and a tapped rhythm
+ * (the transients) survives the trip into the score.
  *
  * Audio is intentionally NOT replayed here — the orchestrator already
  * drove `deps.audio.eval(snippet)`; a second eval would layer the
@@ -355,10 +383,16 @@ export const commitWhistle = (): Effect.Effect<void, never, never> => {
     // dependency — even if `stopMic` clears the live buffer first,
     // we still have the notes we observed at the start of commit.
     const notes = micPreviewNotes();
+    // Same filter as the orchestrator: a transient that belongs to a
+    // sustained note is that note's onset (and used to become a stray
+    // clap); a transient with no note behind it is a tapped hit.
+    const transients = filterPercussionHits(micTransients(), notes);
     yield* handle!.commit();
-    if (notes.length === 0) return;
-    const snippet = notesToSnippet(notes, {
-      instrument: WHISTLE_DEFAULT_INSTRUMENT,
+    // The instrument of the TAKE (captured when it started), not the
+    // live picker value: the notes are committed as one snippet, so
+    // the timbre must not change under the user's feet.
+    const snippet = micSnippetFromBuffers(notes, transients, {
+      instrument: activeInstrument,
     });
     if (snippet === null) return;
     const result = appendToTopStack(appStore.score, snippet);

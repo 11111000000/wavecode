@@ -28,12 +28,19 @@ import {
   type MicSnippetOptions as NoteSnippetOptions,
 } from './micCapture';
 import { transientsToSnippet, type Transient } from './transient';
+import { isDrumsOnlyInstrument } from '../sounds';
 
 export type MicSnippetFromBuffersOptions = {
   /** Strudel sample instrument for the notes layer (default "piano"). */
   readonly instrument?: string;
   /** Pass-through for `notesToSnippet` (tempo quantisation, slowFactor). */
   readonly notesOptions?: NoteSnippetOptions;
+  /**
+   * Force the note layer on / off. By default it follows the
+   * instrument: the "drums only" pseudo-instrument (`drums`) drops
+   * the notes and commits the percussive hits alone.
+   */
+  readonly includeNotes?: boolean;
 };
 
 export const micSnippetFromBuffers = (
@@ -41,7 +48,9 @@ export const micSnippetFromBuffers = (
   transients: ReadonlyArray<Transient>,
   opts: MicSnippetFromBuffersOptions = {},
 ): string | null => {
-  const notesSnippet = notes.length === 0
+  const instrument = opts.instrument ?? 'piano';
+  const includeNotes = opts.includeNotes ?? !isDrumsOnlyInstrument(instrument);
+  const notesSnippet = !includeNotes || notes.length === 0
     ? null
     : notesToSnippet(notes, {
         ...opts.notesOptions,
