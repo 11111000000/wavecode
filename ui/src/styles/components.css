@@ -5874,6 +5874,8 @@ textarea.ai-textarea:focus-visible {
   display: flex;
   flex-direction: column;
   width: 100%;
+  flex: 1 1 auto;
+  min-height: 220px;
   background: var(--surface-0, #0a0a0e);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
@@ -5930,7 +5932,12 @@ textarea.ai-textarea:focus-visible {
 
 .pianoroll-canvas-wrap {
   position: relative;
-  flex: 1 1 auto;
+  /* flex-basis 0 (not auto): the canvas sets its own width/height
+     attributes on every draw, and an `auto` basis would make the
+     wrapper's size depend on the canvas — a resize feedback loop that
+     pegs the renderer. */
+  flex: 1 1 0;
+  min-height: 0;
   overflow: hidden;
 }
 
@@ -6011,6 +6018,8 @@ textarea.ai-textarea:focus-visible {
 .pianoroll-pane {
   width: 100%;
   min-height: 220px;
+  flex: 1 1 auto;
+  display: flex;
   border-radius: var(--radius-md);
   overflow: hidden;
 }
