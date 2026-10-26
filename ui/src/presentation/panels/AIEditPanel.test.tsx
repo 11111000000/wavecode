@@ -70,6 +70,7 @@ import * as compositionMod from '~/infrastructure/composition';
     setLayerMix: () => Effect.succeed(undefined),
     setScore: () => Effect.succeed(undefined),
     getCycleProgress: () => Effect.succeed(0),
+    getCyclePosition: () => Effect.succeed(0),
     registerMicStream: () => Effect.succeed(undefined),
     setRepl: () => undefined,
     getReplState: () => ({ cps: 0.5, isPlaying: false }),

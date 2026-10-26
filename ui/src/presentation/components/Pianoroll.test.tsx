@@ -16,7 +16,7 @@ import { appStore, dispatch } from '../state/appStore';
  * Strategy: render via @solidjs/testing-library + jsdom. We mock
  *   - `audioActions.evalScore` (so click → eval doesn't dispatch)
  *   - `Effect.runPromise` (so the RAF playhead loop deterministically
- *     reads our fake `getCycleProgress`)
+ *     reads our fake `getCyclePosition`)
  *   - `requestAnimationFrame` (so the RAF loop runs synchronously
  *     instead of waiting on jsdom's idle callback)
  *
@@ -27,6 +27,8 @@ import { appStore, dispatch } from '../state/appStore';
  *   - Zoom in/out signals update on the toolbar buttons
  *   - extractNoteEvents on Creep preset returns > 0 events
  *   - debounce: re-parse uses COMPILE_DEBOUNCE_MS window
+ *   - playhead: follows the ABSOLUTE cycle and wraps at the period
+ *     (the bug it used to have: the playhead was pinned to bar 1)
  *   - pure helpers (midiToY, midiName, isBlackKey) verified
  */
 
@@ -240,6 +242,57 @@ describe('Pianoroll — add/delete via click (smoke)', () => {
     const newScore = onChange.mock.calls[0]?.[0] as string | undefined;
     expect(typeof newScore).toBe('string');
     expect(newScore).toMatch(/^note\(/);
+  });
+});
+
+describe('Pianoroll — playhead (absolute cycle → pattern phase)', () => {
+  const flush = async (): Promise<void> => {
+    await new Promise<void>((res) => setTimeout(res, 0));
+  };
+
+  it('the playhead advances with the scheduler clock instead of sticking to bar 1', async () => {
+    const { container } = render(() => (
+      <Pianoroll
+        score={'cat([note("c4"), note("d4"), note("e4"), note("f4")])'}
+        onChange={() => { /* noop */ }}
+      />
+    ));
+    await new Promise<void>((res) => setTimeout(res, 400));
+    tickRaf();
+    const host = container.querySelector('.pianoroll-host') as HTMLElement;
+    expect(host.getAttribute('data-period-cycles')).toBe('4');
+
+    // The scheduler is on its third bar.
+    effectRunPromiseSpy.mockReturnValue(Promise.resolve(2.5));
+    tickRaf();
+    await flush();
+    expect(host.getAttribute('data-playhead-cycle')).toBe('2.5000');
+
+    // One repetition later the pattern starts over — the playhead is
+    // back at the first bar, not stuck there forever.
+    effectRunPromiseSpy.mockReturnValue(Promise.resolve(6.5));
+    tickRaf();
+    await flush();
+    expect(host.getAttribute('data-playhead-cycle')).toBe('2.5000');
+  });
+
+  it('a slowed score advances the playhead slower than the clock', async () => {
+    const { container } = render(() => (
+      <Pianoroll
+        score={'cat([note("c4"), note("d4"), note("e4"), note("f4")]).slow(1.3)'}
+        onChange={() => { /* noop */ }}
+      />
+    ));
+    await new Promise<void>((res) => setTimeout(res, 400));
+    tickRaf();
+    const host = container.querySelector('.pianoroll-host') as HTMLElement;
+    expect(host.getAttribute('data-period-cycles')).toBe('4');
+
+    // 2.6 scheduler cycles = 2 bars of a pattern slowed by 1.3.
+    effectRunPromiseSpy.mockReturnValue(Promise.resolve(2.6));
+    tickRaf();
+    await flush();
+    expect(host.getAttribute('data-playhead-cycle')).toBe('2.0000');
   });
 });
 

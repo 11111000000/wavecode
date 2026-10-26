@@ -795,6 +795,36 @@ await repl.evaluate(snippet);
         const progress = (elapsed * cps) - Math.floor(elapsed * cps);
         return Number.isFinite(progress) ? progress : 0;
       }),
+    getCyclePosition: () =>
+      Effect.tryPromise({
+        try: async (): Promise<number> => {
+          // Preferred source: the scheduler's own cycle counter. It
+          // counts the cycles the pattern has actually played and stays
+          // correct when the tempo changes mid-flight (the elapsed×cps
+          // fallback below uses the cps captured at eval time and
+          // drifts after a tempo change).
+          const repl = cachedRepl ? await cachedRepl : undefined;
+          const scheduler = repl?.scheduler as
+            | { now?: () => number }
+            | undefined;
+          const fromScheduler = scheduler?.now?.();
+          if (
+            typeof fromScheduler === 'number'
+            && Number.isFinite(fromScheduler)
+          ) {
+            return fromScheduler;
+          }
+          // Fallback: cycles elapsed since the last successful eval.
+          const ctx = (window as unknown as { __wavecodeAudioCtx?: AudioContext }).__wavecodeAudioCtx;
+          if (!ctx) return 0;
+          const cps = debugState.evalCps;
+          const anchor = debugState.lastEvalClock;
+          if (cps <= 0 || anchor <= 0) return 0;
+          const elapsed = ctx.currentTime - anchor;
+          return Number.isFinite(elapsed) ? elapsed * cps : 0;
+        },
+        catch: () => 0,
+      }).pipe(Effect.catchAll(() => Effect.succeed(0))),
     getActiveHaps: () =>
       Effect.tryPromise({
         try: async (): Promise<ReadonlyArray<{ readonly midi: number }>> => {

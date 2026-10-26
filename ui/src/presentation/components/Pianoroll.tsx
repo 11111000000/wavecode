@@ -6,12 +6,17 @@ import { Effect } from 'effect';
 import { AudioEngine } from '~/domain/services';
 import { AppLayer } from '~/infrastructure/composition';
 import {
-  extractNoteEvents,
   defaultMidiBounds,
-  defaultCycleBounds,
   type MidiBounds,
   type CycleBounds,
 } from '~/domain/music/noteEvents';
+import {
+  EMPTY_TIMELINE,
+  extractScoreTimeline,
+  playheadPhase,
+  timelineCycleBounds,
+  type ScoreTimeline,
+} from '~/domain/music/scoreTimeline';
 import type { NoteEvent } from '~/domain/midi/encoder';
 import { evalScore } from '../state/audioActions';
 
@@ -19,10 +24,20 @@ import { evalScore } from '../state/audioActions';
  * <Pianoroll /> — DAW-style score visualiser + editor.
  *
  * Visual:
- *   X axis: time, in `cycle` units (1 cycle = 1 quarter note at cps=1).
- *           Auto-fits to the score's note range, padded to whole
- *           cycles on both sides.
+ *   X axis: time, in the score's own `cycle` units (1 cycle = 1 bar).
+ *           Shows ONE repetition of the pattern: bar 0 is the pattern's
+ *           first bar, the axis ends one bar after the last one.
  *   Y axis: pitch, in MIDI numbers. Auto-fits, padded ±2 semitones.
+ *
+ * Playhead:
+ *   The scheduler counts ABSOLUTE cycles (it keeps counting while the
+ *   pattern repeats). The roll draws the score's own bars, so the
+ *   position is converted before it is drawn: divide by the score's
+ *   global time scale (`.slow(f)` makes the pattern advance slower)
+ *   and wrap at the length of one repetition (`~/domain/music/
+ *   scoreTimeline.ts`). Without that conversion the playhead is
+ *   pinned to the first bar while the music plays on — the bug this
+ *   component's playhead was born with.
  *
  * Interactivity:
  *   - Click on empty area      → fire `onChange(note("..."))` to add
@@ -42,7 +57,9 @@ import { evalScore } from '../state/audioActions';
  * Architecture:
  *   - Canvas (HTML5, NOT SVG) for performance even with the dense
  *     Creep preset (160+ note events).
- *   - RAF loop drives the playhead — same pattern as StepGrid.
+ *   - RAF loop drives the playhead — same pattern as StepGrid, but
+ *     reading `getCyclePosition()` (absolute) instead of
+ *     `getCycleProgress()` (fraction inside the current cycle).
  *   - Re-parse `score` is DEBOUNCED 350ms (matches VisualizerPanel's
  *     COMPILE_DEBOUNCE_MS). Click/drag edits do NOT debounce — they
  *     immediately overwrite via `onChange`.
@@ -133,14 +150,21 @@ const midiToY = (midi: number, bounds: MidiBounds, h: number): number => {
   return (bounds.hi - midi) / range * h;
 };
 
+/**
+ * Cycle → X projection. Mirrors the drawing maths exactly (the label
+ * gutter on the left, the right pad, the zoom factor) — a helper that
+ * disagrees with the canvas is a trap for whoever tunes the view.
+ */
 const cycleToX = (
   cycle: number,
   bounds: CycleBounds,
   w: number,
   panX: number,
+  zoomX: number,
 ): number => {
-  const span = bounds.hi - bounds.lo;
-  return ((cycle - bounds.lo) / span) * w + panX;
+  const span = Math.max(1, bounds.hi - bounds.lo);
+  const pxPerCycle = (w - LANE_BG_PAD_LEFT - LANE_BG_PAD_RIGHT) / span * zoomX;
+  return LANE_BG_PAD_LEFT + (cycle - bounds.lo) * pxPerCycle + panX;
 };
 
 const midiName = (midi: number): string => {
@@ -268,10 +292,16 @@ export function Pianoroll(props: PianorollProps): JSX.Element {
 
   // ---- Reactive score state ----
   // The Pianoroll re-parses `props.score` debounced; the parsed
-  // events drive the canvas. Edits write a new score via `onChange`
+  // timeline drives the canvas. Edits write a new score via `onChange`
   // and the parent re-renders props.score (re-feeding the loop).
-  const [events, setEvents] = createSignal<ReadonlyArray<NoteEvent>>([]);
+  //
+  // The timeline carries more than the note events: the length of one
+  // pattern repetition and the score's global time scale. Both are
+  // needed to place the playhead — see `~/domain/music/scoreTimeline.ts`.
+  const [timeline, setTimeline] = createSignal<ScoreTimeline>(EMPTY_TIMELINE);
   const [scoreDigest, setScoreDigest] = createSignal(0);
+
+  const events = (): ReadonlyArray<NoteEvent> => timeline().events;
 
   // ---- Playhead state (RAF poll) ----
   const [playheadCycle, setPlayheadCycle] = createSignal(0);
@@ -293,10 +323,9 @@ export function Pianoroll(props: PianorollProps): JSX.Element {
       // Re-parse on next tick so a parent-driven score mutation
       // (from our own onChange) doesn't trigger a recursive loop.
       try {
-        const next = extractNoteEvents(props.score);
-        setEvents(next);
+        setTimeline(extractScoreTimeline(props.score));
       } catch {
-        setEvents([]);
+        setTimeline(EMPTY_TIMELINE);
       }
     }, COMPILE_DEBOUNCE_MS);
   });
@@ -311,7 +340,7 @@ export function Pianoroll(props: PianorollProps): JSX.Element {
 
   // ---- Compute bounding boxes ----
   const midiBounds = createMemo<MidiBounds>(() => defaultMidiBounds(events()));
-  const cycleBounds = createMemo<CycleBounds>(() => defaultCycleBounds(events()));
+  const cycleBounds = createMemo<CycleBounds>(() => timelineCycleBounds(timeline()));
 
   // ---- RAF loop for playhead ----
   let rafId: number | null = null;
@@ -320,11 +349,15 @@ export function Pianoroll(props: PianorollProps): JSX.Element {
       void Effect.runPromise(
         Effect.gen(function* () {
           const a = yield* AudioEngine;
-          return yield* a.getCycleProgress();
+          return yield* a.getCyclePosition();
         }).pipe(Effect.provide(AppLayer)),
       ).then((p) => {
-        const clamped = Number.isFinite(p) ? Math.max(0, Math.min(1, p)) : 0;
-        setPlayheadCycle(clamped);
+        // The scheduler counts absolute cycles; the roll draws the
+        // score's own bars, so the position has to be converted into
+        // the pattern's phase (time scale + period) — see
+        // `playheadPhase`.
+        const tl = timeline();
+        setPlayheadCycle(playheadPhase(p, tl.timeScale, tl.periodCycles));
       }).catch(() => { /* keep last value on engine error */ });
       rafId = requestAnimationFrame(loop);
     };
@@ -424,7 +457,7 @@ export function Pianoroll(props: PianorollProps): JSX.Element {
       ctx.fillRect(x0, yTop, noteW, noteH);
       // Highlight the note that's playing at the playhead position.
       if (
-        playheadCycle() >= e.startCycle && playheadCycle() <= e.endCycle
+        playheadCycle() >= e.startCycle && playheadCycle() < e.endCycle
       ) {
         ctx.fillStyle = COLORS.notePlayhead;
         ctx.fillRect(x0, yTop, noteW, noteH);
@@ -650,6 +683,8 @@ export function Pianoroll(props: PianorollProps): JSX.Element {
       data-empty={isEmpty() ? 'true' : 'false'}
       data-event-count={events().length}
       data-score-digest={scoreDigest()}
+      data-playhead-cycle={playheadCycle().toFixed(4)}
+      data-period-cycles={timeline().periodCycles}
       style={{ height: `${height()}px` }}
     >
       <div class="pianoroll-toolbar">

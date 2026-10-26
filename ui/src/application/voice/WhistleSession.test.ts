@@ -67,6 +67,7 @@ const buildAudio = (): AudioService => ({
   setLayerMix: () => Effect.void,
   setScore: () => Effect.void,
   getCycleProgress: () => Effect.succeed(0),
+  getCyclePosition: () => Effect.succeed(0),
   getActiveHaps: () => Effect.succeed([]),
   recordLive: () => Effect.die('not used'),
   renderOffline: () => Effect.die('not used'),

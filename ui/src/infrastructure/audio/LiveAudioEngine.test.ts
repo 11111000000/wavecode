@@ -46,6 +46,20 @@ describe('AudioEngine.setCps — race against cachedRepl', () => {
     expect(p).toBeGreaterThanOrEqual(0);
     expect(p).toBeLessThanOrEqual(1);
   });
+
+  it('getCyclePosition returns a non-negative absolute position', async () => {
+    await import('~/infrastructure/audio/LiveAudioEngine');
+    const p = await runWith(
+      Effect.gen(function* () {
+        const audio = yield* AudioEngine;
+        return yield* audio.getCyclePosition();
+      }),
+    );
+    // No audio has been evaluated in the test env → 0. The contract is
+    // "absolute scheduler cycles", so the value only ever grows.
+    expect(p).toBeGreaterThanOrEqual(0);
+    expect(Number.isFinite(p)).toBe(true);
+  });
 });
 /**
  * Boot-order invariant for superdough's AudioWorklet modules.

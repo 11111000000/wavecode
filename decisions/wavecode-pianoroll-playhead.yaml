@@ -1,0 +1,183 @@
+---
+schema: math-coding/3.3
+id: wavecode-pianoroll-playhead
+revision: 1
+state: active
+body_sha: "sha256:ea04ccd37853ee76b0547b1117a53dd6b96921843c2fa5a85a9842436fa8a3f3"
+yaml_sha: "sha256:ea04ccd37853ee76b0547b1117a53dd6b96921843c2fa5a85a9842436fa8a3f3"
+
+intent: |
+  Piano roll — это «диаграмма-гант» по нотам: слева направо такты,
+  снизу вверх высоты. Пока играет композиция, по ганту должна идти
+  линия playhead, чтобы видеть, ГДЕ сейчас звучит мелодия.
+
+  Эта линия была намертво прибита к первому такту: при любой
+  композиции длиннее одного такта она ездила по первому бару туда-
+  сюда, пока музыка играла дальше. Причина — не в Strudel и не в
+  отрисовке, а в подмене величин: RAF-цикл брал у движка
+  `getCycleProgress()`, который по контракту возвращает ДОЛЮ внутри
+  текущего цикла (0..1 — так удобно степ-секвенсору), а рисовал её
+  как АБСОЛУТНЫЙ номер такта. Позиция физически не могла выйти за
+  пределы первого такта.
+
+axiom_link:
+  - A0
+  - A1
+  - A3
+
+commitment: |
+  1. Playhead движка читает АБСОЛУТНУЮ позицию планировщика
+     (`AudioEngine.getCyclePosition()` — счётчик циклов, который
+     продолжает расти, пока паттерн повторяется), а не долю внутри
+     текущего цикла.
+  2. Абсолютная позиция переводится в такты САМОГО скорба:
+     делится на глобальный масштаб времени (`.slow(f)` замедляет
+     паттерн — такты идут медленнее) и заворачивается по длине
+     одной репетиции паттерна. Обе величины считаются из того же
+     AST, по которому нарисованы ноты, — playhead и ноты живут в
+     одной системе координат и не могут разойтись.
+  3. Подсветка играющей ноты использует ту же фазу: подсвечивается
+     та нота, которая звучит СЕЙЧАС, в любом месте таймлайна (а не
+     только в первом такте).
+  4. Ось X начинается с фазы 0 паттерна (первый такт репетиции) и
+     заканчивается на один такт после последнего — запас справа, в
+     который playhead не уезжает.
+  5. `getCycleProgress()` сохраняет контракт 0..1: StepGrid,
+     MelodyGrid и TransportPanel завязаны именно на долю внутри
+     текущего цикла. Новый метод — отдельный, с явным именем.
+  6. Время масштабирования читается только с верхнего уровня скорба:
+     `.slow()` внутри ветки `stack` относится к этой ветке, и
+     нарисованная модель её тоже не растягивает.
+
+outcomes:
+  - id: playhead-crosses-the-timeline
+    statement: |
+      На многобарной композиции playhead идёт слева направо по всем
+      тактам репетиции и возвращается на первый такт, когда паттерн
+      повторяется.
+  - id: sounding-note-is-highlighted
+    statement: |
+      Подсвечивается нота, которая звучит в данный момент, в любом
+      месте таймлайна.
+  - id: slowed-score-stays-in-sync
+    statement: |
+      Для скорба с `.slow(f)` playhead движется в f раз медленнее
+      тактовscheduler'а — визуально он остаётся на тех нотах, которые
+      слышны.
+  - id: fraction-contract-untouched
+    statement: |
+      `AudioEngine.getCycleProgress()` по-прежнему возвращает долю
+      внутри текущего цикла (0..1) — потребители степ-секвенсора не
+      затронуты.
+
+obligations:
+  - id: timeline-domain-unit-tests
+    claim: |
+      `ui/src/domain/music/scoreTimeline.test.ts` покрывает: период
+      паттерна (`cat` из N секций → N тактов), глобальный slow/fast,
+      границы оси и формулу фазы playhead.
+    acceptance:
+      all:
+        - verifier: tests/domain/music/scoreTimeline.test.ts
+          result: pass
+  - id: playhead-component-tests
+    claim: |
+      `Pianoroll.test.tsx` держит регрессию: playhead идёт по
+      абсолютному циклу, заворачивается по периоду и медленнее на
+      замедленном скорбе.
+    acceptance:
+      all:
+        - verifier: tests/presentation/components/Pianoroll.test.tsx
+          result: pass
+  - id: unit-suite-green
+    claim: |
+      `npm --dir ui run test:run` — весь набор unit-тестов зелёный.
+    acceptance:
+      all:
+        - verifier: bash npm --dir ui run test:run
+          result: pass
+  - id: typecheck-green
+    claim: |
+      `npm --dir ui run typecheck` — 0 ошибок (контракт AudioEngine
+      расширен новым методом, все моки обновлены).
+    acceptance:
+      all:
+        - verifier: bash npm --dir ui run typecheck
+          result: pass
+  - id: lint-green
+    claim: |
+      `npm --dir ui run lint:no-console` — 0 ошибок.
+    acceptance:
+      all:
+        - verifier: bash npm --dir ui run lint:no-console
+          result: pass
+  - id: presets-validate-green
+    claim: |
+      `npm --dir ui run validate:presets` — 15/15 пресетов валидны
+      (таймлайн считается по AST, пресеты не тронуты).
+    acceptance:
+      all:
+        - verifier: bash npm --dir ui run validate:presets
+          result: pass
+
+scope:
+  paths:
+    - "ui/src/domain/music/scoreTimeline.ts"
+    - "ui/src/domain/music/scoreTimeline.test.ts"
+    - "ui/src/domain/music/noteEvents.ts"
+    - "ui/src/domain/services.ts"
+    - "ui/src/infrastructure/audio/LiveAudioEngine.ts"
+    - "ui/src/infrastructure/audio/LiveAudioEngine.test.ts"
+    - "ui/src/presentation/components/Pianoroll.tsx"
+    - "ui/src/presentation/components/Pianoroll.test.tsx"
+    - "ui/src/application/voice/**/*.test.ts"
+    - "ui/src/presentation/panels/AIEditPanel.test.tsx"
+    - "decisions/wavecode-pianoroll-playhead.yaml"
+  exclusions:
+    - "ui/src/presentation/components/PianoRollPreview.tsx"
+    - "ui/src/presentation/components/StepGrid.tsx"
+    - "ui/src/presentation/components/MelodyGrid.tsx"
+    - "ui/src/presentation/panels/VisualizerPanel.tsx"
+
+risk:
+  declared_triggers:
+    - scheduler-now-unavailable-and-fallback-drifts
+    - score-with-nested-slow-gets-a-wrong-time-scale
+    - cat-sections-longer-than-one-bar-draw-wrong
+    - playhead-jumps-on-hot-swap
+  owner: human:operator
+
+reversal:
+  - signal: playhead-and-audio-disagree-on-a-long-score
+    action: revert-the-phase-conversion
+  - signal: getCyclePosition-breaks-other-consumers
+    action: revert-the-engine-contract-change
+
+counterexample: |
+  "Проще всего отдать playheadу фазу из самого планировщика: Strudel
+   знает, что играет — пусть он и рисует стрелку."
+
+  Возражение: у Strudel нет понятия «позиция внутри паттерна» —
+  паттерн бесконечен, и его API отдаёт только абсолютные координаты
+  хапов. Фазу приходится считать, а считать её можно двумя
+  способами: по структуре скорба (AST) или эмпирически, сравнивая
+  хапы цикла N с циклом 0. Эмпирический способ врёт на
+  самоподобных паттернах (`cat([x, x])` — период определится как 1
+  вместо 2), а AST-способ считает период ровно так же, как
+  нарисованные ноты, — то есть playhead гарантированно не может
+  указать на несуществующий такт. Поэтому AST.
+
+antithesis: |
+  "Не трогать движок: добавить в presentation-слой второй
+   таймер, который сам считает доли цикла по `cps`."
+
+  Отклонено: presentation-слой не знает ни момента старта eval, ни
+  текущего `cps`, ни того, что паттерн замедлен `.slow(1.3)`.
+  Свой таймер в UI — это вторая копия часов движка, которая
+  разъедется с ним при первой же смене темпа или hot-swap. Часы
+  принадлежат движку; presentation получает от них число и сам
+  решает, как его нарисовать.
+
+relations:
+  addresses:
+    - wavecode-pianoroll@1
