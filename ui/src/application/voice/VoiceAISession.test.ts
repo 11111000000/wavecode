@@ -99,6 +99,7 @@ const buildServices = (responseText: string): { layer: Layer.Layer<LLMClient | A
       setLayerMix: () => Effect.void,
       setScore: () => Effect.void,
       getCycleProgress: () => Effect.succeed(0),
+      getCyclePosition: () => Effect.succeed(0),
       getActiveHaps: () => Effect.succeed([]),
       recordLive: () => Effect.die('not used'),
       renderOffline: () => Effect.die('not used'),
@@ -368,6 +369,7 @@ describe('createVoiceAISession — barge-in', () => {
         setLayerMix: () => Effect.void,
         setScore: () => Effect.void,
         getCycleProgress: () => Effect.succeed(0),
+        getCyclePosition: () => Effect.succeed(0),
         getActiveHaps: () => Effect.succeed([]),
         recordLive: () => Effect.die('not used'),
         renderOffline: () => Effect.die('not used'),
@@ -725,7 +727,7 @@ describe('createVoiceAISession — a press during the LLM round trip', () => {
       eval: () => Effect.void,
       stop: () => Effect.void, compileAndQuery: () => Effect.succeed([]),
       setCps: () => Effect.void, setLayerMix: () => Effect.void,
-      setScore: () => Effect.void, getCycleProgress: () => Effect.succeed(0),
+      setScore: () => Effect.void, getCycleProgress: () => Effect.succeed(0), getCyclePosition: () => Effect.succeed(0),
       getActiveHaps: () => Effect.succeed([]), recordLive: () => Effect.die('x'),
       renderOffline: () => Effect.die('x'),
     });
@@ -754,7 +756,7 @@ describe('createVoiceAISession — a press during the LLM round trip', () => {
       }),
       stop: () => Effect.void, compileAndQuery: () => Effect.succeed([]),
       setCps: () => Effect.void, setLayerMix: () => Effect.void,
-      setScore: () => Effect.void, getCycleProgress: () => Effect.succeed(0),
+      setScore: () => Effect.void, getCycleProgress: () => Effect.succeed(0), getCyclePosition: () => Effect.succeed(0),
       getActiveHaps: () => Effect.succeed([]), recordLive: () => Effect.die('x'),
       renderOffline: () => Effect.die('x'),
     });

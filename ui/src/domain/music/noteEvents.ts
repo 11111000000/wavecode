@@ -184,7 +184,13 @@ const parseMiniNotation = (mini: string): ReadonlyArray<NotePair> => {
   return out;
 };
 
-const isMelodyFn = (name: string | null): boolean => {
+/**
+ * Is this call a pitched-melody function (`note` / `n` / `chord`)?
+ *
+ * Exported for `~/domain/music/scoreTimeline.ts`, which walks the
+ * same AST to learn the score's pattern period.
+ */
+export const isMelodyFn = (name: string | null): boolean => {
   if (name === null) return false;
   const lc = name.toLowerCase();
   return lc === 'note' || lc === 'n' || lc === 'chord';
@@ -309,8 +315,11 @@ const collectFromArgText = (
  * Used to break an opaque `expr` arg back into its comma-separated
  * parts before re-parsing — this preserves the `cat([…, …])`
  * cycle-step semantics when we descend into a cat wrapper.
+ *
+ * Exported for `~/domain/music/scoreTimeline.ts`, which counts the
+ * sections of a `cat` with the same split the extractor uses.
  */
-const splitTopLevelCommas = (text: string): ReadonlyArray<string> => {
+export const splitTopLevelCommas = (text: string): ReadonlyArray<string> => {
   const out: string[] = [];
   let depth = 0;
   let start = 0;
@@ -383,6 +392,18 @@ const collectFromCall = (
 export const extractNoteEvents = (score: string): ReadonlyArray<NoteEvent> => {
   if (!score || !score.trim()) return [];
   const ast: ScoreAST = parseScore(score);
+  return extractNoteEventsFromAst(ast);
+};
+
+/**
+ * Same as `extractNoteEvents`, but for an already-parsed AST.
+ *
+ * The piano roll needs the AST twice: once for the note events and
+ * once for the score's timeline shape (pattern period + global time
+ * scale — see `~/domain/music/scoreTimeline.ts`). Parsing once and
+ * walking the tree twice keeps the two answers consistent.
+ */
+export const extractNoteEventsFromAst = (ast: ScoreAST): ReadonlyArray<NoteEvent> => {
   const out: { events: NoteEvent[] } = { events: [] };
   for (const node of ast.nodes) {
     collectFromNode(node, 0, out);
