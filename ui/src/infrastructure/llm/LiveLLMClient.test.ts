@@ -232,6 +232,151 @@ describe('LiveLLMClient.streamCompletion — SSE streaming', () => {
     const body = JSON.parse(init.body as string) as Record<string, unknown>;
     expect(body['stream']).toBe(true);
     expect(body['model']).toBe('fast');
+    // DeepSeek-профиль (по умолчанию): reasoning_effort едет в extra_body,
+    // потому что LiteLLM дропает provider-специфичные поля верхнего уровня.
+    // 'off' → 'low': DeepSeek не умеет выключать reasoning.
+    expect(body['extra_body']).toEqual({ reasoning_effort: 'low' });
+    expect(body['reasoning_effort']).toBeUndefined();
+  });
+
+  it('sends max_tokens=4000 so reasoning cannot eat the whole budget', async () => {
+    fetchMock.mockResolvedValueOnce(
+      fakeResponse({ chunks: ['data: {"choices":[{"delta":{"content":"x"}}]}\n\n'] }),
+    );
+    const layer = makeLiveLLMClient({
+      apiKey: 'sk-litellm-test',
+      apiUrl: 'https://example.test/v1',
+    });
+    await Effect.runPromise(
+      Effect.gen(function* () {
+        const llm = yield* LLMClient;
+        yield* llm.streamCompletion(makeRequest());
+      }).pipe(Effect.provide(layer)),
+    );
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const body = JSON.parse(init.body as string) as Record<string, unknown>;
+    expect(body['max_tokens']).toBe(4000);
+  });
+
+  it('maps thinking=high to reasoning_effort=high in extra_body', async () => {
+    fetchMock.mockResolvedValueOnce(
+      fakeResponse({ chunks: ['data: {"choices":[{"delta":{"content":"x"}}]}\n\n'] }),
+    );
+    const layer = makeLiveLLMClient({
+      apiKey: 'sk-litellm-test',
+      apiUrl: 'https://example.test/v1',
+    });
+    await Effect.runPromise(
+      Effect.gen(function* () {
+        const llm = yield* LLMClient;
+        yield* llm.streamCompletion(makeRequest({ model: 'smart', thinking: 'high' }));
+      }).pipe(Effect.provide(layer)),
+    );
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const body = JSON.parse(init.body as string) as Record<string, unknown>;
+    expect(body['extra_body']).toEqual({ reasoning_effort: 'high' });
+  });
+
+  it('keeps the MiniMax body shape when the upstream profile is minimax', async () => {
+    fetchMock.mockResolvedValueOnce(
+      fakeResponse({ chunks: ['data: {"choices":[{"delta":{"content":"x"}}]}\n\n'] }),
+    );
+    const layer = makeLiveLLMClient({
+      apiKey: 'sk-litellm-test',
+      apiUrl: 'https://example.test/v1',
+      upstream: 'minimax',
+    });
+    await Effect.runPromise(
+      Effect.gen(function* () {
+        const llm = yield* LLMClient;
+        yield* llm.streamCompletion(makeRequest({ model: 'fast', thinking: 'off' }));
+      }).pipe(Effect.provide(layer)),
+    );
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const body = JSON.parse(init.body as string) as Record<string, unknown>;
     expect(body['extra_body']).toEqual({ thinking: { type: 'disabled' } });
+  });
+
+  it('explains an exhausted provider plan instead of blaming the proxy', async () => {
+    // Fresh Response per call — a Response body is single-use, so a shared
+    // instance would make the second assertion read an empty body.
+    fetchMock.mockImplementation(() =>
+      Promise.resolve(
+        new Response(
+          JSON.stringify({
+            error: {
+              type: 'rate_limit_error',
+              message:
+                'Token Plan usage limit reached: Upgrade your Token Plan or purchase Credits for more usage. (2056)',
+            },
+          }),
+          { status: 429, headers: { 'Content-Type': 'application/json' } },
+        ),
+      ),
+    );
+    const layer = makeLiveLLMClient({
+      apiKey: 'sk-litellm-test',
+      apiUrl: 'https://example.test/v1',
+    });
+    await expect(
+      Effect.runPromise(
+        Effect.gen(function* () {
+          const llm = yield* LLMClient;
+          yield* llm.streamCompletion(makeRequest());
+        }).pipe(Effect.provide(layer)),
+      ),
+    ).rejects.toThrow(/исчерпан лимит\/баланс upstream-провайдера/);
+    await expect(
+      Effect.runPromise(
+        Effect.gen(function* () {
+          const llm = yield* LLMClient;
+          yield* llm.streamCompletion(makeRequest());
+        }).pipe(Effect.provide(layer)),
+      ),
+    ).rejects.not.toThrow(/rate-limited by proxy/);
+  });
+
+  it('reports a provider rate limit as a rate limit, with the reason attached', async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({ error: { type: 'rate_limit_error', message: 'Too many requests, slow down' } }),
+        { status: 429, headers: { 'Content-Type': 'application/json' } },
+      ),
+    );
+    const layer = makeLiveLLMClient({
+      apiKey: 'sk-litellm-test',
+      apiUrl: 'https://example.test/v1',
+    });
+    await expect(
+      Effect.runPromise(
+        Effect.gen(function* () {
+          const llm = yield* LLMClient;
+          yield* llm.streamCompletion(makeRequest());
+        }).pipe(Effect.provide(layer)),
+      ),
+    ).rejects.toThrow(/rate limit от провайдера: Too many requests/);
+  });
+
+  it('fails loudly when the model spent the whole budget on reasoning', async () => {
+    fetchMock.mockResolvedValueOnce(
+      fakeResponse({
+        chunks: [
+          'data: {"choices":[{"delta":{"reasoning_content":"сколько тут ещё Think"}}]}\n\n',
+          'data: {"choices":[{"delta":{},"finish_reason":"length"}]}\n\n',
+          'data: [DONE]\n\n',
+        ],
+      }),
+    );
+    const layer = makeLiveLLMClient({
+      apiKey: 'sk-litellm-test',
+      apiUrl: 'https://example.test/v1',
+    });
+    const stream = await Effect.runPromise(
+      Effect.gen(function* () {
+        const llm = yield* LLMClient;
+        return yield* llm.streamCompletion(makeRequest());
+      }).pipe(Effect.provide(layer)),
+    );
+    await expect(collectChunks(stream)).rejects.toThrow(/лимит токенов исчерпан на размышления/);
   });
 });

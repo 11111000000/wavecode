@@ -8,7 +8,9 @@ import { SettingsIcon } from '~/presentation/icons';
 const THINKING_OPTIONS: ReadonlyArray<{ value: Thinking; label: string }> = [
   { value: 'low', label: 'мало' },
   { value: 'high', label: 'много' },
-  { value: 'off', label: 'выкл' },
+  // 2026-10-26: не «выкл» — DeepSeek не умеет выключать reasoning
+  // (effort=off игнорируется). Это минимальный доступный уровень.
+  { value: 'off', label: 'минимум' },
 ];
 
 /**

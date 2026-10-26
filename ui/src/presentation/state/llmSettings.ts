@@ -24,7 +24,7 @@ export type Thinking = 'low' | 'high' | 'off';
  */
 export type ModelTier = {
   readonly value: Model;
-  /** Short label for the collapsed button, e.g. `M2.1`. */
+  /** Short label for the collapsed button, e.g. `Flash`. */
   readonly label: string;
   /** Upstream model the proxy is configured to route this tier to. */
   readonly routesTo: string;
@@ -32,17 +32,34 @@ export type ModelTier = {
   readonly hint: string;
 };
 
+/**
+ * 2026-10-26: прокси переключён с MiniMax на DeepSeek
+ * (`smart` → deepseek-v4-pro, `fast` → deepseek-flash). Лейблы обновлены
+ * вместе с маршрутизацией: до этого UI обещал «M3 / M2.1», а прокси
+ * отдавал DeepSeek — то есть подпись врала.
+ *
+ * `routesTo` дублирует маршрутизацию llm-proxy (AngaraConfig,
+ * services.llm-proxy.models) — это единственное место в UI, где видно,
+ * что именно стоит за тиром. При следующей смене прокси правится здесь
+ * и в `VITE_LLM_UPSTREAM` (ui/.env.example).
+ */
 export const MODEL_TIERS: ReadonlyArray<ModelTier> = [
-  { value: 'smart', label: 'M3', routesTo: 'MiniMax-M3', hint: 'умнее, медленнее' },
-  { value: 'fast', label: 'M2.1', routesTo: 'MiniMax-M2.1-highspeed', hint: 'быстрее, проще' },
+  { value: 'smart', label: 'V4-Pro', routesTo: 'deepseek-v4-pro', hint: 'умнее, медленнее' },
+  { value: 'fast', label: 'Flash', routesTo: 'deepseek-flash', hint: 'быстрее, проще' },
 ];
 
 export const modelTier = (value: Model): ModelTier =>
   MODEL_TIERS.find((t) => t.value === value) ?? MODEL_TIERS[1]!;
 
-/** Collapsed-button rendering: `M2.1 · low`. */
+/** Collapsed-button rendering: `Flash · low`. */
 export const modelLabel = (value: Model): string => modelTier(value).label;
-export const thinkingLabel = (t: Thinking): string => (t === 'low' ? 'low' : t === 'high' ? 'high' : 'off');
+/**
+ * 2026-10-26: у DeepSeek нет «выключить размышление» — effort=off
+ * игнорируется провайдером (проверено: reasoning даже растёт). Поэтому
+ * опция `off` подписана «min»: клиент отправляет минимальный доступный
+ * уровень (`reasoning_effort=low`), а не обещает полное отключение.
+ */
+export const thinkingLabel = (t: Thinking): string => (t === 'low' ? 'low' : t === 'high' ? 'high' : 'min');
 
 type LLMSettings = {
   readonly model: Model;
@@ -53,12 +70,15 @@ const KEY = 'wavecode-llm-settings-v1';
 
 const defaults: LLMSettings = {
   // 2026-10-16: default flipped smart → fast. На типовых applyEdit в wavecode
-  // (правки mini-notation, 1-2K tokens) fast с thinking=disabled даёт
-  // ~1.0-1.5s end-to-end с готовым ответом, тогда как smart (deepseek-v4-pro)
-  // даже с budget_tokens лимитами убегает в 3-21s reasoning на полный
-  // max_tokens budget и приходит с finish_reason='length', content=''.
-  // Юзер может переключиться на smart в UI для задач, где важнее качество
-  // рассуждений (coding, debugging), но дефолт = fast.
+  // (правки mini-notation, 1-2K tokens) fast отвечает быстрее, тогда как
+  // smart (deepseek-v4-pro) убегает в длинное reasoning и приходит с
+  // finish_reason='length', content=''.
+  // 2026-10-26: после перехода прокси на DeepSeek замер через
+  // llm.kosov.online: model=fast + extra_body.reasoning_effort=low →
+  // 125 completion-токенов, 1.8 s (без effort было 1221 токенов, 7.9 s).
+  // Дефолт = fast + low: быстрый ответ с приемлемым качеством.
+  // Юзер может переключиться на smart для задач, где важнее качество
+  // рассуждений (coding, debugging).
   model: 'fast',
   thinking: 'low',
 };
