@@ -29,6 +29,8 @@
  *   - Tune           = thresholds (RMS-flux dB jump, refractory ms, etc.)
  */
 
+import type { AudioNote } from './micCapture';
+
 export type OnsetType = 'kick' | 'snare' | 'hat' | 'click';
 
 export type TransientFrame = {
@@ -316,6 +318,43 @@ export const feedTransient = (
 /** Force-close semantics — no-op for transients. The transient
  *  pipeline has no "open" state; each frame either fires or doesn't. */
 export const closeOpenTransient = (state: TransientState): TransientState => state;
+
+/**
+ * Keep only the transients that are NOT the onset of a sustained note.
+ *
+ * The mic pipeline runs two detectors side by side: the note
+ * segmenter (sustained pitches) and the transient detector (onsets).
+ * A WHISTLE fires both — the onset is a broadband transient (the
+ * classifier calls it a 'click') AND the beginning of a sustained
+ * note. Feeding the raw transients into the snippet therefore made
+ * every whistled phrase sprout a clap, which is exactly the bug the
+ * 2026-10-19 whistle commit removed the transients for.
+ *
+ * A TAPPED rhythm is the mirror image: a transient with no sustained
+ * note behind it (the segmenter drops hits shorter than `minNoteMs`,
+ * so a finger tap leaves no note at all).
+ *
+ * The note buffer is therefore what tells the two apart: a transient
+ * that lands inside — or within `toleranceMs` before — a sustained
+ * note is that note's onset and is dropped; a transient with no note
+ * anywhere near it is a percussive hit and is kept.
+ *
+ * The tolerance covers the detection lag: the transient fires on the
+ * RMS jump, the note only opens once the pitch has been stable for a
+ * few frames, so the transient lands a few ms BEFORE the note.
+ */
+export const filterPercussionHits = (
+  transients: ReadonlyArray<Transient>,
+  notes: ReadonlyArray<AudioNote>,
+  opts: { readonly toleranceMs?: number } = {},
+): ReadonlyArray<Transient> => {
+  const tolerance = opts.toleranceMs ?? 60;
+  return transients.filter((t) => !notes.some((n) => {
+    const from = n.startMs - tolerance;
+    const to = n.startMs + n.durationMs + tolerance;
+    return t.startMs >= from && t.startMs <= to;
+  }));
+};
 
 /**
  * Convert a buffer of detected transients into a Strudel snippet.

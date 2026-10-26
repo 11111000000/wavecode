@@ -71,7 +71,10 @@ describe('WhistleMiniFAB — hint chip names the instrument', () => {
     const hint = container.querySelector('.voice-mini-fab__hint');
     expect(hint?.textContent).toContain('слушаю…');
     expect(hint?.textContent).toContain(whistleInstrumentLabel());
-    expect(hint?.textContent).toContain('пианино');
+    // The label comes from the sound catalogue — the same place the
+    // picker gets its names from, so the chip can never name a sound
+    // the app cannot play.
+    expect(hint?.textContent).toContain('Пианино');
   });
 });
 

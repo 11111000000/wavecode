@@ -35,12 +35,24 @@
  * Snippet generation
  * ------------------
  * On `commit` the reducer hands the buffered `AudioNote[]` to this
- * orchestrator; we convert them via `notesToSnippet` (already in
- * domain/audio/micCapture.ts) and call `audio.eval`. No segmenter
- * heuristics here — the `notes` array IS the segmenter output. If
- * a future "enhanced" snippet is needed (transients, vibrato),
- * `micSnippetFromBuffers` from `domain/audio/micSnippet.ts` takes
- * `transients` as a second arg.
+ * orchestrator; the percussive `Transient[]` come from the same mic
+ * adapter. Both buffers go through `micSnippetFromBuffers` (the ONE
+ * function that turns the mic's two buffers into a Strudel snippet) and
+ * the result is passed to `audio.eval`. No segmenter heuristics here —
+ * the `notes` array IS the segmenter output.
+ *
+ * Why the transients matter
+ * -------------------------
+ * A whistle take is not only a melody: the user also TAPS a rhythm
+ * with their fingers, and the transient detector already classifies
+ * those hits as kick / snare / hat / click. The old path threw the
+ * transients away (`notesToSnippet` only), so a tapped rhythm was
+ * invisible — the take sounded like a thin melody with no drums. With
+ * both buffers the same take becomes `stack(note(...), s("~ ~ hh"))`.
+ *
+ * The very same builder is used by the presentation layer to splice
+ * the snippet into the score, so what the user hears on commit and
+ * what lands in the editor are the same string.
  */
 
 import { Effect, Ref, Queue, Stream, type Context } from 'effect';
@@ -51,7 +63,8 @@ import {
   type WhistleSessionState,
   type WhistleSessionEvent,
 } from '~/domain/audio/whistleSession';
-import { notesToSnippet } from '~/domain/audio/micCapture';
+import { micSnippetFromBuffers } from '~/domain/audio/micSnippet';
+import { filterPercussionHits, type Transient } from '~/domain/audio/transient';
 import type { AudioEngine } from '~/domain/services';
 
 /** Error from `mic.start`. Carries the underlying DOM exception name
@@ -76,6 +89,14 @@ export type MicCaptureLike = {
   readonly feed: (frame: PitchFrame) => Effect.Effect<void, never, never>;
   /** Read every accumulated AudioNote. Called once on `commit`. */
   readonly getNotes: () => Effect.Effect<ReadonlyArray<AudioNote>, never, never>;
+  /**
+   * Read the percussive hits (kick / snare / hat / click) the
+   * transient detector saw in the same take. Called once on `commit`.
+   *
+   * Empty when the take had no percussive content — a pure whistle
+   * has no transients, and the snippet is then notes-only.
+   */
+  readonly getTransients: () => Effect.Effect<ReadonlyArray<Transient>, never, never>;
 };
 
 export type WhistleSessionDeps = {
@@ -161,7 +182,17 @@ export const createWhistleSession = (
           const s = yield* Ref.get(stateRef);
           if (s.tag !== 'segmenting') return;
           const instrument = yield* Ref.get(instrumentRef);
-          const snippet = notesToSnippet(s.notes, { instrument });
+          // The same builder the presentation layer uses to splice the
+          // snippet into the score — one function, one string, so the
+          // audition and the commit cannot drift apart.
+          // The raw transients include the ONSET of every whistled
+          // note — that is the 2026-10-19 bug (a whistle sprouted a
+          // clap). `filterPercussionHits` drops the onsets that belong
+          // to a sustained note and keeps the ones that are real
+          // taps, so a tapped rhythm survives and a whistle stays clean.
+          const raw = yield* deps.mic.getTransients();
+          const transients = filterPercussionHits(raw, s.notes);
+          const snippet = micSnippetFromBuffers(s.notes, transients, { instrument });
           if (snippet !== null) {
             // Synth errors are best-effort — the user already has
             // the buffered `notes`, the orchestrator shouldn't

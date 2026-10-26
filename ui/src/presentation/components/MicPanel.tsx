@@ -19,6 +19,7 @@ import {
 } from '../state/micStore';
 import { evalScore, stopAudio } from '../state/audioActions';
 import { micSnippetFromBuffers } from '~/domain/audio/micSnippet';
+import { MELODIC_SOUNDS, DRUMS_ONLY_ID } from '~/domain/sounds';
 import { PianoRollPreview } from './PianoRollPreview';
 import { MicMeter } from './MicMeter';
 
@@ -57,14 +58,28 @@ import { MicMeter } from './MicMeter';
  * on first try.
  */
 
+/**
+ * The instrument options of the mic panel.
+ *
+ * The list comes from the sound catalogue (`domain/sounds.ts`) — the
+ * set of names superdough REALLY has. The old hard-coded trio
+ * ('piano' / 'synth' / 'drums') was mostly fiction: `synth` and
+ * `drums` were never registered, so choosing them committed a snippet
+ * that threw `sound synth not found!` on playback. `piano` was
+ * registered only as `piano_a4` (a single sample), so it played two
+ * octaves above the written note.
+ *
+ * `drums` stays as the last entry, but it is the PSEUDO instrument
+ * "drums only": the note layer is dropped and only the tapped hits
+ * are committed.
+ */
 const INSTRUMENTS: ReadonlyArray<{
   readonly id: string;
   readonly label: string;
   readonly glyph: string;
 }> = [
-  { id: 'piano',  label: 'Piano',     glyph: '🎹' },
-  { id: 'synth',  label: 'Synth',     glyph: '🎚' },
-  { id: 'drums',  label: 'Drum kit',  glyph: '🥁' },
+  ...MELODIC_SOUNDS.map((s) => ({ id: s.id, label: s.label, glyph: s.glyph })),
+  { id: DRUMS_ONLY_ID, label: 'Только барабаны', glyph: '🥁' },
 ];
 
 const SLOTS: ReadonlyArray<{
@@ -293,29 +308,33 @@ const PreviewPill = (): JSX.Element => {
   );
 };
 
+/**
+ * The instrument picker.
+ *
+ * A native <select> rather than a row of buttons: the catalogue has
+ * 15 melodic sounds plus the drums-only mode, and 16 buttons do not
+ * fit a 360 px phone. The OS picker sheet is the one control that
+ * behaves well on a phone.
+ */
 const InstrumentSelector = (): JSX.Element => (
-  <div class="mic-ux-inst-selector" role="group" aria-label="Instrument">
-    <For each={INSTRUMENTS}>
-      {(inst) => {
-        const isActive = (): boolean => micInstrument() === inst.id;
-        return (
-          <button
-            type="button"
-            class="mic-ux-inst-btn"
-            data-instrument={inst.id}
-            data-active={isActive() ? 'true' : 'false'}
-            aria-label={`Instrument: ${inst.label}`}
-            aria-pressed={isActive()}
-            title={`Instrument: ${inst.label}`}
-            onClick={() => setMicInstrument(inst.id)}
-          >
-            <span>{inst.glyph}</span>
-            <span class="mic-ux-inst-label">{inst.label}</span>
-          </button>
-        );
-      }}
-    </For>
-  </div>
+  <label class="mic-ux-inst-selector" aria-label="Instrument">
+    <span class="mic-ux-inst-glyph" aria-hidden="true">
+      {INSTRUMENTS.find((i) => i.id === micInstrument())?.glyph ?? '♪'}
+    </span>
+    <select
+      class="mic-ux-inst-select"
+      value={micInstrument()}
+      onChange={(e) => { setMicInstrument(e.currentTarget.value); }}
+    >
+      <For each={INSTRUMENTS}>
+        {(inst) => (
+          <option value={inst.id} data-instrument={inst.id}>
+            {inst.label}
+          </option>
+        )}
+      </For>
+    </select>
+  </label>
 );
 
 const SlotSelect = (props: {

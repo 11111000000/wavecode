@@ -123,29 +123,53 @@ describe('synth sample pack — file inventory (CC0 analog bass + pad + lead + b
   });
 });
 
-describe('strudel.json manifests — keys use bank_sound (underscore) for bank:sound pattern', () => {
-  const PIANO_KEYS = ['piano_a1', 'piano_a2', 'piano_a3', 'piano_a4',
-    'piano_c2', 'piano_c3', 'piano_c4', 'piano_c5', 'piano_c6', 'piano_c7'];
+describe('strudel.json manifests — the shape superdough can actually transpose', () => {
+  /**
+   * superdough's sampler has two branches (`superdough/util.mjs`):
+   *
+   *   - the bank is an ARRAY  → the sample is assumed to be C2-rooted
+   *     and `transpose = midi - 36`. A per-sample bank (`piano_a4`)
+   *     therefore plays every note two octaves too high.
+   *   - the bank is an OBJECT keyed by NOTE → superdough picks the
+   *     CLOSEST shipped note and transposes by the difference. That
+   *     is the shape a sampled instrument has to use.
+   *
+   * So the melodic banks are note-keyed (`piano: {a1: [...], …}`) and
+   * the drum one-shots stay arrays (`drums_bd: ["bd.mp3"]` — a drum
+   * hit carries no note).
+   */
+  const PIANO_NOTES = ['a1', 'a2', 'a3', 'a4',
+    'c2', 'c3', 'c4', 'c5', 'c6', 'c7'];
   const DRUMS_KEYS = ['drums_bd', 'drums_bd-sub', 'drums_sd', 'drums_rim',
     'drums_hh', 'drums_oh', 'drums_cp', 'drums_cb', 'drums_sh',
     'drums_tom-l', 'drums_tom-m', 'drums_tom-h',
     'drums_crash', 'drums_ride'];
-  const SYNTH_KEYS = ['synth_bass-c1', 'synth_bass-c2', 'synth_bass-e1', 'synth_bass-a1',
-    'synth_pad-c3', 'synth_pad-e3', 'synth_pad-g3', 'synth_pad-a3',
-    'synth_lead-e4', 'synth_lead-g4',
-    'synth_strings-c4', 'synth_brass-c3'];
+  const SYNTH_FAMILIES: ReadonlyArray<readonly [string, ReadonlyArray<string>]> = [
+    ['synth_bass', ['c1', 'c2', 'e1', 'a1']],
+    ['synth_pad', ['c3', 'e3', 'g3', 'a3']],
+    ['synth_lead', ['e4', 'g4']],
+    ['synth_strings', ['c4']],
+    ['synth_brass', ['c3']],
+  ];
+
+  const readManifest = (dir: string): Record<string, unknown> =>
+    JSON.parse(
+      readFileSync(resolve(__dirname, `../../../public/samples/${dir}/strudel.json`), 'utf8'),
+    ) as Record<string, unknown>;
 
   const readKeys = (dir: string): Set<string> => {
-    const json = JSON.parse(readFileSync(resolve(__dirname, `../../../public/samples/${dir}/strudel.json`), 'utf8'));
+    const json = readManifest(dir);
     return new Set(Object.keys(json).filter((k) => k !== '_base'));
   };
 
-  it('piano manifest keys are piano_<note> (underscore, not slash)', () => {
-    const keys = readKeys('piano');
-    for (const k of PIANO_KEYS) {
-      expect(keys.has(k), `piano manifest missing key ${k}`).toBe(true);
+  it('the piano manifest is ONE note-keyed bank', () => {
+    const json = readManifest('piano');
+    expect(readKeys('piano')).toEqual(new Set(['piano']));
+    const bank = json['piano'] as Record<string, unknown>;
+    expect(Object.keys(bank).sort()).toEqual([...PIANO_NOTES].sort());
+    for (const note of PIANO_NOTES) {
+      expect(Array.isArray(bank[note]), `piano bank missing samples for ${note}`).toBe(true);
     }
-    expect(keys.has('piano/a1'), 'piano manifest still has slash key — Strudel soundMap lookup uses underscore').toBe(false);
   });
 
   it('drums manifest keys are drums_<name> (underscore, not slash)', () => {
@@ -156,12 +180,13 @@ describe('strudel.json manifests — keys use bank_sound (underscore) for bank:s
     expect(keys.has('drums/bd'), 'drums manifest still has slash key').toBe(false);
   });
 
-  it('synth manifest keys are synth_<name> (underscore, not slash)', () => {
-    const keys = readKeys('synth');
-    for (const k of SYNTH_KEYS) {
-      expect(keys.has(k), `synth manifest missing key ${k}`).toBe(true);
+  it('the synth manifest is one note-keyed bank per family', () => {
+    const json = readManifest('synth');
+    for (const [family, notes] of SYNTH_FAMILIES) {
+      expect(readKeys('synth').has(family), `synth manifest missing family ${family}`).toBe(true);
+      const bank = json[family] as Record<string, unknown>;
+      expect(Object.keys(bank).sort()).toEqual([...notes].sort());
     }
-    expect(keys.has('synth/bass-c1'), 'synth manifest still has slash key').toBe(false);
   });
 });
 

@@ -5193,6 +5193,24 @@ textarea.ai-textarea:focus-visible {
   border: 1px solid var(--border);
   border-radius: var(--radius-pill);
 }
+.mic-ux-inst-glyph {
+  padding-left: var(--space-2xs);
+  font-size: var(--fs-xs);
+  line-height: 1;
+}
+.mic-ux-inst-select {
+  appearance: none;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-pill);
+  color: var(--fg);
+  font-family: var(--font-mono);
+  font-size: var(--fs-2xs);
+  padding: 0 var(--space-2xs);
+  max-width: 132px;
+  cursor: pointer;
+}
+.mic-ux-inst-select:hover { color: var(--fg); }
 .mic-ux-inst-btn {
   display: inline-flex;
   align-items: center;
@@ -6809,10 +6827,35 @@ textarea.ai-textarea:focus-visible {
   color: var(--fg);
 }
 
+/* Instrument picker — the whistle's melodic sound. A native <select>
+ * so a phone opens its own picker sheet (a row of 15 buttons would be
+ * unusable on a 360 px screen). Disabled while a take runs or while
+ * notes are buffered: a take's timbre is fixed when it starts. */
+.voice-recording-panel__instrument {
+  appearance: none;
+  background: var(--surface-3);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  color: var(--fg);
+  font-family: var(--font-sans);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-medium);
+  padding: 2px var(--space-xs);
+  cursor: pointer;
+  max-width: 140px;
+}
+.voice-recording-panel__instrument:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.voice-recording-panel__instrument:hover:not(:disabled) {
+  border-color: var(--cyan);
+  color: var(--cyan);
+}
+
 /* «Удалить» — deletes the recorded AUDIO and keeps the text. Sits
  * next to the ✕ in the panel head, one step quieter than the ✕:
- * the ✕ closes the panel, this one keeps it open. */
-.voice-recording-panel__delete {
+ * the ✕ closes the panel, this one keeps it open. */.voice-recording-panel__delete {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -7376,4 +7419,32 @@ textarea.ai-textarea:focus-visible {
 
 @media (prefers-reduced-motion: reduce) {
   .disclaimer-gate { animation: none; }
+}
+
+/* Instrument picker — click a sound name in the score to swap it.
+ * The host clips its overflow, so the card is clamped inside the
+ * editor (see `pickerPosition` in CodeMirrorEditorImpl). */
+.cm-host {
+  position: relative;
+}
+.cm-instrument-picker {
+  position: absolute;
+  z-index: 40;
+  padding: var(--space-2xs);
+  background: var(--surface-3);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-fab);
+}
+.cm-instrument-picker__select {
+  appearance: none;
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  color: var(--fg);
+  font-family: var(--font-sans);
+  font-size: var(--fs-xs);
+  padding: var(--space-2xs) var(--space-xs);
+  min-width: 180px;
+  cursor: pointer;
 }

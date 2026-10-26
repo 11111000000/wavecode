@@ -157,6 +157,74 @@ describe('whistleStore — replaceScore dispatch', () => {
   });
 });
 
+describe('whistleStore — the instrument', () => {
+  it('accepts a catalogue sound and refuses an unregistered one', async () => {
+    // A `.s("…")` name that superdough does not know is FATAL at
+    // trigger time (`sound X not found!`), not merely quiet. The
+    // guard is what keeps such a name out of a take.
+    const { chooseWhistleInstrument, whistleInstrument } = await import('./whistleStore');
+    chooseWhistleInstrument('synth_pad');
+    expect(whistleInstrument()).toBe('synth_pad');
+    chooseWhistleInstrument('not-a-sound');
+    expect(whistleInstrument()).toBe('synth_pad');
+  });
+});
+
+describe('whistleStore — the commit keeps the tapped rhythm', () => {
+  it('the committed snippet carries the notes AND the drums', async () => {
+    const { setMicPreviewNotes, setMicTransients } = await import('./micStore');
+    const { appStore, dispatch } = await import('./appStore');
+    installFake();
+    dispatch({ type: 'replaceScore', text: '' });
+    await Effect.runPromise(startWhistle({ sessionId: 'sess-d1' }));
+    // The buffers fill while the take runs.
+    setMicPreviewNotes([
+      { midi: 60, cents: 0, startMs: 0, durationMs: 500, vibratoCents: 0 },
+    ]);
+    // A tap 2 s later — no note anywhere near it, so it is a real
+    // percussive hit and not the whistle's own onset.
+    setMicTransients([
+      {
+        type: 'hat',
+        startMs: 2000,
+        amplitude: 0.4,
+        spectralCentroidHz: 6000,
+        envelopeMs: 30,
+      },
+    ]);
+    await Effect.runPromise(commitWhistle());
+    // The melody…
+    expect(appStore.score).toContain('c4');
+    // …AND the tapped hi-hat.
+    expect(appStore.score).toContain('drums_hh');
+  });
+
+  it('the whistle\'s own onset does NOT become a drum hit', async () => {
+    const { setMicPreviewNotes, setMicTransients } = await import('./micStore');
+    const { appStore, dispatch } = await import('./appStore');
+    installFake();
+    dispatch({ type: 'replaceScore', text: '' });
+    await Effect.runPromise(startWhistle({ sessionId: 'sess-d2' }));
+    setMicPreviewNotes([
+      { midi: 60, cents: 0, startMs: 0, durationMs: 500, vibratoCents: 0 },
+    ]);
+    // The transient fires on the whistle's onset — the same
+    // millisecond the note opens. This is the 2026-10-19 bug.
+    setMicTransients([
+      {
+        type: 'click',
+        startMs: 0,
+        amplitude: 0.4,
+        spectralCentroidHz: 3000,
+        envelopeMs: 30,
+      },
+    ]);
+    await Effect.runPromise(commitWhistle());
+    expect(appStore.score).toContain('c4');
+    expect(appStore.score).not.toContain('drums_');
+  });
+});
+
 describe('whistleStore — mic mutex contention', () => {
   it('start fails with MicBusyError when another mic-direct owner holds the channel', async () => {
     installFake();
