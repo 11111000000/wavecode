@@ -1,16 +1,12 @@
 /**
- * ScoreTimeline — the coordinate system the piano roll draws in.
+ * Score timing — where are we in the score's own time?
  *
- * The roll shows ONE repetition of the score along the X axis, laid
- * out in the score's own ("nominal") cycle coordinates: the note
- * events extracted from the score text, one bar per `cat` section.
- *
- * Two facts about the score are needed to place a playhead on that
- * axis, and neither is available from the note events alone:
+ * Two facts the piano roll needs about a score, both read from the
+ * same AST the notes are drawn from:
  *
  *   1. `periodCycles` — how many bars one repetition of the pattern
  *      lasts. The pattern is cyclic in Strudel (a `cat` of N
- *      sections repeats forever), so the playhead has to wrap at the
+ *      sections repeats forever), so a playhead has to wrap at the
  *      period instead of running off the right edge.
  *
  *   2. `timeScale` — the global `.slow(f)` / `.fast(f)` factor. A
@@ -19,14 +15,8 @@
  *      would drift away from the notes it is supposed to mark.
  *
  * Everything here is pure: no Solid, no Effect, no DOM.
- *
- * The score's own coordinates are the ones the note events already
- * use, so the playhead and the notes share one coordinate system by
- * construction — the playhead cannot drift out of the drawing area
- * and cannot point at a bar that does not exist.
  */
 
-import type { NoteEvent } from '~/domain/midi/encoder';
 import {
   argText,
   parseScore,
@@ -34,26 +24,13 @@ import {
   type ScoreAST,
   type ScoreNode,
 } from '~/domain/strudel';
-import {
-  extractNoteEventsFromAst,
-  isMelodyFn,
-  splitTopLevelCommas,
-  type CycleBounds,
-} from './noteEvents';
+import { isMelodyFn, splitTopLevelCommas } from './noteEvents';
 
-export type ScoreTimeline = {
-  /** Note events in the score's own (nominal) cycle coordinates. */
-  readonly events: ReadonlyArray<NoteEvent>;
+export type ScoreTiming = {
   /** One repetition of the pattern, in drawn bars (≥ 1). */
   readonly periodCycles: number;
   /** Global `.slow()` / `.fast()` factor (1 = the score runs 1:1). */
   readonly timeScale: number;
-};
-
-export const EMPTY_TIMELINE: ScoreTimeline = {
-  events: [],
-  periodCycles: 1,
-  timeScale: 1,
 };
 
 /**
@@ -153,44 +130,26 @@ const timeScaleOfAst = (ast: ScoreAST): number => {
   return scale;
 };
 
-/**
- * Build the timeline of a score: its note events, the length of one
- * pattern repetition, and its global time scale.
- */
-export const extractScoreTimeline = (score: string): ScoreTimeline => {
-  if (!score || !score.trim()) return EMPTY_TIMELINE;
-  let ast: ScoreAST;
-  try {
-    ast = parseScore(score);
-  } catch {
-    return EMPTY_TIMELINE;
-  }
-  const events = extractNoteEventsFromAst(ast);
+/** Timing of an already-parsed score. */
+export const scoreTimingFromAst = (ast: ScoreAST): ScoreTiming => {
   let periodCycles = 1;
   for (const node of ast.nodes) {
     periodCycles = Math.max(periodCycles, periodOfNode(node));
   }
   return {
-    events,
     periodCycles,
     timeScale: timeScaleOfAst(ast),
   };
 };
 
-/**
- * X-axis bounds of the roll.
- *
- * `lo` is the pattern's phase 0 — the first bar of the repetition —
- * so the playhead (which lives in pattern coordinates) always has
- * somewhere to sit, even when the first bars carry no pitched notes
- * (drum-only `cat` sections).
- *
- * `hi` adds one bar of margin after the last bar of the repetition.
- */
-export const timelineCycleBounds = (timeline: ScoreTimeline): CycleBounds => {
-  if (timeline.events.length === 0) return { lo: 0, hi: 16 };
-  const period = Math.max(1, Math.round(timeline.periodCycles));
-  return { lo: 0, hi: Math.max(period + 1, 4) };
+/** Timing of a score string. */
+export const scoreTiming = (score: string): ScoreTiming => {
+  if (!score || !score.trim()) return { periodCycles: 1, timeScale: 1 };
+  try {
+    return scoreTimingFromAst(parseScore(score));
+  } catch {
+    return { periodCycles: 1, timeScale: 1 };
+  }
 };
 
 /**

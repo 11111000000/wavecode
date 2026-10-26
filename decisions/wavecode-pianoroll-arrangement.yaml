@@ -1,0 +1,204 @@
+---
+schema: math-coding/3.3
+id: wavecode-pianoroll-arrangement
+revision: 1
+state: active
+body_sha: "sha256:16c81527aa0e111f788663ad71f2173ea05109fe1604fd4b70662755392c4605"
+yaml_sha: "sha256:16c81527aa0e111f788663ad71f2173ea05109fe1604fd4b70662755392c4605"
+
+intent: |
+  Piano roll — это «диаграмма-гант» по музыке. Она должна показывать
+  не серые прямоугольники, а АРАНЖИРОВКУ: какие слои играют, где
+  секции, где ударные, что сейчас звучит.
+
+  До этого решения roll показывал только ноты — одним цветом, без
+  секций и без барабанов. На пресете Creep (8 секций: куплет без
+  ударных, припев с полным набором) это выглядело как однородная
+  каша: из визуализации невозможно было понять, где куплет, где
+  припев и почему один такт звучит совсем иначе, чем следующий.
+
+axiom_link:
+  - A0
+  - A1
+  - A3
+
+commitment: |
+  1. Roll показывает СТРУКТУРУ скорба:
+     - слой = ветка `stack(...)`; каждый слой получает свой цвет
+       (мелодия — холодная половина круга, ударные — тёплая), и
+       цвет закреплён за ПОЗИЦИЕЙ слоя, поэтому один и тот же
+       инструмент сохраняет цвет от секции к секции;
+     - ударные (`s("...")`) рисуются отдельными дорожками под
+       линейкой — с названием сэмпла (bd/sd/hh/crash);
+     - секции (`cat`) рисуются полосами с разделителями и номерами
+       S1..SN в линейке; секция под playhead'ом подсвечена ярче.
+  2. Громкость слоя (`.gain(...)` из скорба) видна как яркость:
+     тихий слой нарисован тише.
+  3. Дорожки ударных живут ПОД линейкой, а не внизу холста: низ
+     ролла перекрывает панель ИИ, а дорожка под панелью — это
+     дорожка, которой нет.
+  4. Полоса ударных не съедает область высот: под неё остаётся не
+     меньше 96 px.
+  5. Roll занимает ту высоту, которую даёт раскладка (панель ИИ
+     докирует снизу), и перерисовывается при её изменении
+     (ResizeObserver). Раньше высота была жёстко 320 px, и низ
+     ролла (басовая линия) обрезался.
+  6. Модель ролла — ЕДИНСТВЕННЫЙ источник правды: `rollModel`
+     отдаёт ноты, удары, слои, секции и тайминг из одного обхода
+     AST. Двух параллельных извлечений (таймлайн + события) больше
+     нет — они могли разойтись, и playhead рисовался бы по другой
+     модели, чем ноты.
+  7. Mini-notation разбирается одним парсером: `parseMiniSteps`
+     отдаёт токены с их позициями, из них строятся и ноты
+     (токен → MIDI), и удары (токен → имя сэмпла). `*N` раскрывается
+     и в голой последовательности (`s("drums_hh*8")` = 8 хэтов).
+
+outcomes:
+  - id: layers-have-colours
+    statement: |
+      Каждая ветка `stack` нарисована своим цветом; ударные — тёплой
+      палитрой, мелодия — холодной, один и тот же инструмент сохраняет
+      цвет между секциями.
+  - id: drums-are-visible
+    statement: |
+      Ударные рисуются отдельными дорожками (bd/sd/hh/crash) с
+      реальными ударами: куплет без ударных и припев с кистью видны
+      как разные.
+  - id: sections-are-visible
+    statement: |
+      Секции `cat` видны как полосы с разделителями и номерами S1..SN;
+      текущая секция подсвечена.
+  - id: gain-is-visible
+    statement: |
+      Тихое слоя нарисовано тише (его `.gain` из скорба).
+  - id: nothing-is-clipped
+    statement: |
+      Roll занимает всю доступную высоту и не обрезается нижней
+      панелью; при изменении раскладки он перерисовывается.
+  - id: one-model
+    statement: |
+      Ноты, удары, слои, секции и тайминг приходят из одного
+      `extractRollModel`; отдельного извлечения событий для playhead
+      больше нет.
+
+obligations:
+  - id: roll-model-unit-tests
+    claim: |
+      `ui/src/domain/music/rollModel.test.ts` покрывает: слои стека,
+      гейн слоя, ударные (включая `*N`), секции и их границы, палитру
+      (мелодия — холодная, ударные — тёплая), границы оси и то, что
+      каждый встроенный пресет разбирается в модель.
+    acceptance:
+      all:
+        - verifier: tests/domain/music/rollModel.test.ts
+          result: pass
+  - id: timing-unit-tests
+    claim: |
+      `ui/src/domain/music/scoreTimeline.test.ts` покрывает период
+      паттерна, глобальный slow/fast и формулу фазы playhead.
+    acceptance:
+      all:
+        - verifier: tests/domain/music/scoreTimeline.test.ts
+          result: pass
+  - id: component-tests
+    claim: |
+      `Pianoroll.test.tsx` держит регрессии: playhead идёт по
+      абсолютному циклу и заворачивается по периоду; ролл показывает
+      число секций, слоёв и ударов; скорб только из ударных — не
+      «пустой» ролл.
+    acceptance:
+      all:
+        - verifier: tests/presentation/components/Pianoroll.test.tsx
+          result: pass
+  - id: unit-suite-green
+    claim: |
+      `npm --dir ui run test:run` — весь набор unit-тестов зелёный.
+    acceptance:
+      all:
+        - verifier: bash npm --dir ui run test:run
+          result: pass
+  - id: typecheck-green
+    claim: |
+      `npm --dir ui run typecheck` — 0 ошибок.
+    acceptance:
+      all:
+        - verifier: bash npm --dir ui run typecheck
+          result: pass
+  - id: lint-green
+    claim: |
+      `npm --dir ui run lint:no-console` — 0 ошибок.
+    acceptance:
+      all:
+        - verifier: bash npm --dir ui run lint:no-console
+          result: pass
+  - id: presets-validate-green
+    claim: |
+      `npm --dir ui run validate:presets` — 15/15 пресетов валидны.
+    acceptance:
+      all:
+        - verifier: bash npm --dir ui run validate:presets
+          result: pass
+
+scope:
+  paths:
+    - "ui/src/domain/music/rollModel.ts"
+    - "ui/src/domain/music/rollModel.test.ts"
+    - "ui/src/domain/music/noteEvents.ts"
+    - "ui/src/domain/music/scoreTimeline.ts"
+    - "ui/src/domain/music/scoreTimeline.test.ts"
+    - "ui/src/presentation/components/Pianoroll.tsx"
+    - "ui/src/presentation/components/Pianoroll.test.tsx"
+    - "ui/src/styles/components.css"
+    - "decisions/wavecode-pianoroll-arrangement.yaml"
+  exclusions:
+    - "ui/src/presentation/components/PianoRollPreview.tsx"
+    - "ui/src/presentation/components/StepGrid.tsx"
+    - "ui/src/presentation/components/MelodyGrid.tsx"
+    - "ui/src/presentation/panels/VisualizerPanel.tsx"
+
+risk:
+  declared_triggers:
+    - drum-lanes-eat-the-pitch-area
+    - canvas-resize-feedback-loop
+    - layer-colours-collide-on-deep-stacks
+    - slow-in-a-stack-branch-misplaces-the-section
+  owner: human:operator
+
+reversal:
+  - signal: renderer-pegs-or-crashes-on-the-roll-view
+    action: revert-the-adaptive-height
+  - signal: the-pitch-area-becomes-unreadable
+    action: move-the-drum-lanes-back-below
+
+counterexample: |
+  "Слои, секции и ударные — это уже визуализатор Strudel (панель
+   Visualize) и StepGrid; дублировать их в piano roll не нужно."
+
+  Возражение: Visualize показывает ОДНУ репетицию паттерна как
+  «визуализацию» (спектро/форму волны), а StepGrid — сетку 16×8 для
+  ручного набора ударных. Ни один из них не показывает аранжировку
+  на таймлайне: где куплет, где припев, какой слой играет, где
+  бас, а где хэт. Именно это и есть «диаграмма-гант» по музыке,
+  ради которой человек открывает roll. Плюс Visualize и StepGrid
+  живут в других панелях — рядом с партитурой они не сравнимы.
+
+antithesis: |
+  "Вместо самодельной модели слоёв взять настоящие хапы Strudel
+   (`compileAndQuery` → queryArc): они уже содержат и точные
+   времена, и длительности, и реальные события."
+
+  Отклонено — но с оговоркой, что это правильная цель на
+  следующую итерацию. `queryArc` даёт абсолютные координаты
+  планировщика, а у ролла — собственные такты скорба (и `.slow(1.3)`
+  на весь скорб растягивает их по-разному). Свести эти две системы
+  координат — отдельная работа, и она тянет за собой перенос
+  редактирования (клик-add сейчас пишет в номинальную модель).
+  Сейчас модель честно разбирает AST скорба: если скорб написан
+  слоями — он нарисован слоями; если это не так (например, один
+  `note(...)` с европейским ритмом), ролл покажет ноты, но не
+  покажет «слои», которых в скорбе нет.
+
+relations:
+  addresses:
+    - wavecode-pianoroll@1
+    - wavecode-pianoroll-playhead@1

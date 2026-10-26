@@ -78,21 +78,33 @@ const tokenToMidi = (token: string): number => {
 };
 
 /**
- * Parse a mini-notation string into a flat list of `(midi, startCycle)` pairs.
+ * One step of a mini-notation pattern: the raw token and the span it
+ * occupies inside one cycle.
+ *
+ * The token is kept as text so the same parser can serve both
+ * domains: a melody layer maps it to a MIDI number (`c4` → 60), a
+ * drum layer keeps it as the sample name (`drums_bd`).
+ */
+export type MiniStep = {
+  readonly token: string;
+  readonly start: number;
+  readonly end: number;
+};
+
+/**
+ * Parse a mini-notation string into its steps.
  *
  * `endCycle` defaults to `startCycle + 1/N` where N is the number
  * of steps (`<a b c>` has 3 → 1/3 each; `[a b c]` has 1 step →
  * note length = 1; bare token has 1 step).
  *
- * `*N` repeats the previous token N times within the same envelope;
- * the dominant pattern in wavecode presets is `hh*8` which becomes
+ * `*N` repeats the token N times within the same envelope; the
+ * dominant pattern in wavecode presets is `hh*8` which becomes
  * 8 evenly-spaced hats.
  */
-type NotePair = { readonly midi: number; readonly start: number; readonly end: number };
-
-const parseMiniNotation = (mini: string): ReadonlyArray<NotePair> => {
+export const parseMiniSteps = (mini: string): ReadonlyArray<MiniStep> => {
   if (!mini) return [];
-  const out: NotePair[] = [];
+  const out: MiniStep[] = [];
   // Strip outer brackets for `< >` and the chord `[ ]` containers.
   // We don't recursively descend: `[a b]` and `<a b>` are leaf shapes.
   let s = mini;
@@ -126,37 +138,16 @@ const parseMiniNotation = (mini: string): ReadonlyArray<NotePair> => {
   if (tokens.length === 0) return [];
   if (mode === 'chord') {
     // All tokens share the same start (and end) — a chord.
-    const start = 0;
-    const end = 1;
     for (const t of tokens) {
-      const midi = tokenToMidi(t);
-      if (Number.isNaN(midi)) continue;
-      out.push({ midi, start, end });
+      out.push({ token: t, start: 0, end: 1 });
     }
     return out;
   }
-  if (mode === 'single') {
-    // Bare token: a single-note pattern, usually something like
-    // `g2` or `c4` — one full cycle. We treat each token as one
-    // step distributed evenly.
-    const n = tokens.length;
-    for (let i = 0; i < n; i += 1) {
-      const t = tokens[i]!;
-      const midi = tokenToMidi(t);
-      if (Number.isNaN(midi)) continue;
-      const stepStart = i / n;
-      const stepEnd = (i + 1) / n;
-      out.push({ midi, start: stepStart, end: stepEnd });
-    }
-    return out;
-  }
-  // mode === 'sequence' — `<a b c d>` is 4 evenly spaced steps.
-  // Handle `*N` repeat suffix on each token: token `hh*8` becomes
-  // 8 evenly-spaced `hh` hits across the cycle (matching `hh*8`
-  // in Strudel mini-notation).
-  // Plan: expand each token into a list of (midi, stepIndexInCycle),
-  // collected into a master sequence. The total step count is the
-  // sum of all repeat multipliers.
+  // `<a b c d>` and a bare `a b c` are both even sequences of steps.
+  // Handle the `*N` repeat suffix on each token: token `hh*8`
+  // becomes 8 evenly-spaced hits across the cycle (matching `hh*8`
+  // in Strudel mini-notation). The step count is the sum of all
+  // repeat multipliers.
   type Expanded = { readonly token: string; readonly repeat: number };
   const expanded: Expanded[] = [];
   for (const t of tokens) {
@@ -171,15 +162,31 @@ const parseMiniNotation = (mini: string): ReadonlyArray<NotePair> => {
   if (totalSteps <= 0) return [];
   let stepCursor = 0;
   for (const e of expanded) {
-    const baseMidi = tokenToMidi(e.token);
     for (let i = 0; i < e.repeat; i += 1) {
-      if (!Number.isNaN(baseMidi)) {
-        const start = stepCursor / totalSteps;
-        const end = (stepCursor + 1) / totalSteps;
-        out.push({ midi: baseMidi, start, end });
-      }
+      out.push({
+        token: e.token,
+        start: stepCursor / totalSteps,
+        end: (stepCursor + 1) / totalSteps,
+      });
       stepCursor += 1;
     }
+  }
+  return out;
+};
+
+type NotePair = { readonly midi: number; readonly start: number; readonly end: number };
+
+/**
+ * Parse a mini-notation string into a flat list of `(midi, startCycle)` pairs.
+ *
+ * Rests (`~`, `-`) and tokens that are not pitches are skipped.
+ */
+const parseMiniNotation = (mini: string): ReadonlyArray<NotePair> => {
+  const out: NotePair[] = [];
+  for (const step of parseMiniSteps(mini)) {
+    const midi = tokenToMidi(step.token);
+    if (Number.isNaN(midi)) continue;
+    out.push({ midi, start: step.start, end: step.end });
   }
   return out;
 };

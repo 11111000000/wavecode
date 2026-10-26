@@ -296,6 +296,56 @@ describe('Pianoroll — playhead (absolute cycle → pattern phase)', () => {
   });
 });
 
+describe('Pianoroll — the arrangement is visible', () => {
+  const flush = async (): Promise<void> => {
+    await new Promise<void>((res) => setTimeout(res, 0));
+  };
+
+  it('exposes the layers, the sections and the drum hits of the score', async () => {
+    const { container } = render(() => (
+      <Pianoroll
+        score={'cat([stack(note("c4"), note("g3")), stack(note("d4"), s("drums_bd ~"))])'}
+        onChange={() => { /* noop */ }}
+      />
+    ));
+    await new Promise<void>((res) => setTimeout(res, 400));
+    tickRaf();
+    const host = container.querySelector('.pianoroll-host') as HTMLElement;
+    expect(host.getAttribute('data-section-count')).toBe('2');
+    expect(host.getAttribute('data-layer-count')).toBe('2');
+    expect(host.getAttribute('data-hit-count')).toBe('1');
+    expect(host.getAttribute('data-event-count')).toBe('3');
+  });
+
+  it('a drum-only score is not an empty score', async () => {
+    const { container } = render(() => (
+      <Pianoroll score={'stack(s("drums_bd ~ drums_bd ~"))'} onChange={() => { /* noop */ }} />
+    ));
+    await new Promise<void>((res) => setTimeout(res, 400));
+    tickRaf();
+    const host = container.querySelector('.pianoroll-host') as HTMLElement;
+    expect(host.getAttribute('data-empty')).toBe('false');
+    expect(container.querySelector('.pianoroll-empty')).toBeNull();
+    expect(host.getAttribute('data-hit-count')).toBe('2');
+  });
+
+  it('the toolbar tells how much of the arrangement there is', async () => {
+    const { container } = render(() => (
+      <Pianoroll
+        score={'cat([stack(note("c4"), s("drums_bd"))])'}
+        onChange={() => { /* noop */ }}
+      />
+    ));
+    await new Promise<void>((res) => setTimeout(res, 400));
+    tickRaf();
+    const count = container.querySelector('.pianoroll-count')?.textContent ?? '';
+    expect(count).toContain('1 note');
+    expect(count).toContain('1 hit');
+    expect(count).toContain('2 layers');
+    await flush();
+  });
+});
+
 describe('Pianoroll — pure helpers', () => {
   it('defaultMidiBounds for empty → 24..96 (C1..C7)', () => {
     expect(defaultMidiBounds([])).toEqual({ lo: 24, hi: 96 });

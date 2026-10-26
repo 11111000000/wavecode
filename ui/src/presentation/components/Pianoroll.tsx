@@ -10,13 +10,15 @@ import {
   type MidiBounds,
   type CycleBounds,
 } from '~/domain/music/noteEvents';
+import { playheadPhase } from '~/domain/music/scoreTimeline';
 import {
-  EMPTY_TIMELINE,
-  extractScoreTimeline,
-  playheadPhase,
-  timelineCycleBounds,
-  type ScoreTimeline,
-} from '~/domain/music/scoreTimeline';
+  EMPTY_ROLL_MODEL,
+  extractRollModel,
+  layerColor,
+  rollCycleBounds,
+  type RollLayer,
+  type RollModel,
+} from '~/domain/music/rollModel';
 import type { NoteEvent } from '~/domain/midi/encoder';
 import { evalScore } from '../state/audioActions';
 
@@ -84,7 +86,9 @@ export type PianorollProps = {
 const NOTE_HEIGHT_PX = 14;
 const LANE_BG_PAD_LEFT = 56;   // labels area (semitone name)
 const LANE_BG_PAD_RIGHT = 8;
-const RULER_HEIGHT_PX = 18;
+const RULER_HEIGHT_PX = 24;    // two lines: the section names + the cycles
+const DRUM_LANE_PX = 13;       // the height of one drum lane
+const MIN_PITCH_PX = 96;       // the pitch area never shrinks below this
 const COMPILE_DEBOUNCE_MS = 350;
 
 // =============================================================================
@@ -97,14 +101,34 @@ const COLORS = {
   grid: 'rgba(255,255,255,0.06)',
   gridStrong: 'rgba(255,255,255,0.18)',
   rulerBg: 'rgba(255,255,255,0.04)',
-  rulerText: 'rgba(255,255,255,0.55)',
+  rulerText: 'rgba(255,255,255,0.45)',
   noteDefault: 'hsl(174 80% 60%)',
   noteHover: 'hsl(174 95% 75%)',
+  noteHoverOverlay: 'rgba(255,255,255,0.35)',
   noteSelected: 'hsl(42 95% 65%)',
   notePlayhead: 'hsl(0 90% 65%)',
   playhead: 'rgba(255,80,80,0.85)',
   label: 'rgba(255,255,255,0.55)',
   labelBlack: 'rgba(255,255,255,0.25)',
+  // The song's form: alternating section bands, a brighter band under
+  // the playhead, and a hairline between the sections.
+  sectionBand: 'rgba(255,255,255,0.035)',
+  sectionBandAlt: 'rgba(255,255,255,0.012)',
+  sectionBandActive: 'rgba(120,190,255,0.10)',
+  sectionEdge: 'rgba(255,255,255,0.22)',
+  sectionText: 'rgba(255,255,255,0.72)',
+  drumLaneAlt: 'rgba(255,255,255,0.02)',
+};
+
+/**
+ * How loud a layer looks. The score's own `.gain(...)` is the mix
+ * level of the layer — a quiet hi-hat should LOOK quieter than the
+ * kick, otherwise the roll flattens the arrangement it is supposed
+ * to reveal.
+ */
+const alphaForGain = (gain: number | null): number => {
+  if (gain === null || !Number.isFinite(gain)) return 1;
+  return Math.max(0.45, Math.min(1, 0.45 + gain));
 };
 
 const SAMPLE_PALETTE: ReadonlyArray<string> = [
@@ -298,10 +322,22 @@ export function Pianoroll(props: PianorollProps): JSX.Element {
   // The timeline carries more than the note events: the length of one
   // pattern repetition and the score's global time scale. Both are
   // needed to place the playhead — see `~/domain/music/scoreTimeline.ts`.
-  const [timeline, setTimeline] = createSignal<ScoreTimeline>(EMPTY_TIMELINE);
+  const [roll, setRoll] = createSignal<RollModel>(EMPTY_ROLL_MODEL);
   const [scoreDigest, setScoreDigest] = createSignal(0);
 
-  const events = (): ReadonlyArray<NoteEvent> => timeline().events;
+  /**
+   * The pitched events of the roll — the model's notes, projected onto
+   * the shape the rest of the component expects.
+   */
+  const events = createMemo<ReadonlyArray<NoteEvent>>(() =>
+    roll().notes.map((n) => ({
+      midi: n.midi,
+      startCycle: n.startCycle,
+      endCycle: n.endCycle,
+      velocity: 100,
+      channel: 1,
+    })),
+  );
 
   // ---- Playhead state (RAF poll) ----
   const [playheadCycle, setPlayheadCycle] = createSignal(0);
@@ -310,7 +346,18 @@ export function Pianoroll(props: PianorollProps): JSX.Element {
   let canvas: HTMLCanvasElement | undefined;
   let container: HTMLDivElement | undefined;
 
-  const height = (): number => props.height ?? 320;
+  /**
+   * The roll fills the space the layout gives it.
+   *
+   * A fixed height was clipped by the score column (the chat panel
+   * docks below it), so the lowest pitches — the bass line — fell out
+   * of sight. The canvas measures its own box instead, and a
+   * ResizeObserver redraws when the layout changes.
+   */
+  const height = (): number => {
+    if (props.height !== undefined) return props.height;
+    return container?.clientHeight ?? 320;
+  };
   const width = (): number => container?.clientWidth ?? 600;
 
   // ---- Debounced re-parse ----
@@ -323,9 +370,9 @@ export function Pianoroll(props: PianorollProps): JSX.Element {
       // Re-parse on next tick so a parent-driven score mutation
       // (from our own onChange) doesn't trigger a recursive loop.
       try {
-        setTimeline(extractScoreTimeline(props.score));
+        setRoll(extractRollModel(props.score));
       } catch {
-        setTimeline(EMPTY_TIMELINE);
+        setRoll(EMPTY_ROLL_MODEL);
       }
     }, COMPILE_DEBOUNCE_MS);
   });
@@ -338,9 +385,61 @@ export function Pianoroll(props: PianorollProps): JSX.Element {
     if (parseTimer !== undefined) window.clearTimeout(parseTimer);
   });
 
+  // The canvas has no reactive size: redraw when the layout gives the
+  // roll a different box. The observer only fires on a REAL size
+  // change — the draw writes the canvas' own width/height attributes,
+  // and reacting to those would be a feedback loop.
+  const [sizeTick, setSizeTick] = createSignal(0);
+  let resizeObserver: ResizeObserver | null = null;
+  let lastSize = '';
+  onMount(() => {
+    if (typeof ResizeObserver === 'undefined' || container === undefined) return;
+    resizeObserver = new ResizeObserver(() => {
+      const size = `${container?.clientWidth ?? 0}x${container?.clientHeight ?? 0}`;
+      if (size === lastSize) return;
+      lastSize = size;
+      setSizeTick((n) => n + 1);
+    });
+    resizeObserver.observe(container);
+  });
+  onCleanup(() => {
+    resizeObserver?.disconnect();
+    resizeObserver = null;
+  });
+
+  /** The drum layers of the score, in draw order. */
+  const drumLayers = (): ReadonlyArray<RollLayer> =>
+    roll().layers.filter((l) => l.kind === 'drum');
+
+  /**
+   * The vertical layout of the roll.
+   *
+   * The drum lanes sit UNDER THE RULER, not at the bottom: the bottom
+   * of the roll is where the chat panel docks, and a lane hidden
+   * behind a panel is a lane that does not exist. The top of the
+   * canvas is always visible.
+   */
+  const rollLayout = (): {
+    readonly drumTop: number;
+    readonly drumBandH: number;
+    readonly pitchTop: number;
+    readonly pitchH: number;
+  } => {
+    const h = height();
+    const lanes = drumLayers();
+    // The drum band may not eat the pitch area: a squeezed roll keeps
+    // its pitches, the lanes get thinner.
+    const room = Math.max(0, h - RULER_HEIGHT_PX - MIN_PITCH_PX);
+    const drumBandH = lanes.length === 0
+      ? 0
+      : Math.max(0, Math.min(DRUM_LANE_PX * lanes.length, h * 0.32, room));
+    const pitchTop = RULER_HEIGHT_PX + drumBandH;
+    return { drumTop: RULER_HEIGHT_PX, drumBandH, pitchTop, pitchH: h - pitchTop };
+  };
+
   // ---- Compute bounding boxes ----
   const midiBounds = createMemo<MidiBounds>(() => defaultMidiBounds(events()));
-  const cycleBounds = createMemo<CycleBounds>(() => timelineCycleBounds(timeline()));
+  const cycleBounds = createMemo<CycleBounds>(() => rollCycleBounds(roll()));
 
   // ---- RAF loop for playhead ----
   let rafId: number | null = null;
@@ -356,8 +455,8 @@ export function Pianoroll(props: PianorollProps): JSX.Element {
         // score's own bars, so the position has to be converted into
         // the pattern's phase (time scale + period) — see
         // `playheadPhase`.
-        const tl = timeline();
-        setPlayheadCycle(playheadPhase(p, tl.timeScale, tl.periodCycles));
+        const model = roll();
+        setPlayheadCycle(playheadPhase(p, model.timeScale, model.periodCycles));
       }).catch(() => { /* keep last value on engine error */ });
       rafId = requestAnimationFrame(loop);
     };
@@ -385,6 +484,7 @@ export function Pianoroll(props: PianorollProps): JSX.Element {
     ctx.fillStyle = COLORS.bg;
     ctx.fillRect(0, 0, w, h);
 
+    const model = roll();
     const mb = midiBounds();
     const cb = cycleBounds();
     const spanCycles = Math.max(1, cb.hi - cb.lo);
@@ -392,18 +492,61 @@ export function Pianoroll(props: PianorollProps): JSX.Element {
     const pxPerCycle = (w - LANE_BG_PAD_LEFT - LANE_BG_PAD_RIGHT) / spanCycles * zoomX;
     void panY; // visual Y pan reserved for a future vertical-zoom enhancement
     const noteH = NOTE_HEIGHT_PX;
+    const phase = playheadCycle();
 
-    // ----- Ruler (cycle numbers) -----
+    // The drum lanes live under the ruler, the pitches below them: a
+    // `s("...")` row is a rhythm, not a pitch, and squeezing it into
+    // the MIDI rows would make both unreadable.
+    const layout = rollLayout();
+    const lanes = model.layers.filter((l) => l.kind === 'drum');
+    const pitchTop = layout.pitchTop;
+    const pitchH = layout.pitchH;
+
+    const xOf = (cycle: number): number =>
+      LANE_BG_PAD_LEFT + (cycle - cb.lo) * pxPerCycle + panX();
+
+    // ----- Section bands (the song's form) -----
+    // Alternating shades make the `cat` sections visible at a glance;
+    // the section under the playhead is brighter — "we are HERE".
+    for (const section of model.sections) {
+      const x0 = xOf(section.startCycle);
+      const bw = Math.max(1, xOf(section.endCycle) - x0);
+      ctx.fillStyle = section.index % 2 === 0
+        ? COLORS.sectionBand
+        : COLORS.sectionBandAlt;
+      ctx.fillRect(x0, RULER_HEIGHT_PX, bw, h - RULER_HEIGHT_PX);
+      if (phase >= section.startCycle && phase < section.endCycle) {
+        ctx.fillStyle = COLORS.sectionBandActive;
+        ctx.fillRect(x0, RULER_HEIGHT_PX, bw, h - RULER_HEIGHT_PX);
+      }
+    }
+    // Section separators.
+    ctx.strokeStyle = COLORS.sectionEdge;
+    ctx.beginPath();
+    for (const section of model.sections) {
+      const x = xOf(section.startCycle);
+      ctx.moveTo(x, RULER_HEIGHT_PX);
+      ctx.lineTo(x, h);
+    }
+    ctx.stroke();
+
+    // ----- Ruler (section names + cycle numbers) -----
     ctx.fillStyle = COLORS.rulerBg;
     ctx.fillRect(0, 0, w, RULER_HEIGHT_PX);
     ctx.font = '10px ui-monospace, SFMono-Regular, monospace';
-    ctx.fillStyle = COLORS.rulerText;
     ctx.textBaseline = 'middle';
     const labelEvery = spanCycles > 16 ? 4 : spanCycles > 8 ? 2 : 1;
     for (let cIdx = Math.ceil(cb.lo); cIdx <= cb.hi; cIdx += 1) {
       if (Math.floor(cIdx) % labelEvery !== 0) continue;
-      const x = LANE_BG_PAD_LEFT + (cIdx - cb.lo) * pxPerCycle + panX();
-      ctx.fillText(`c${cIdx}`, x + 3, RULER_HEIGHT_PX / 2);
+      const x = xOf(cIdx);
+      ctx.fillStyle = COLORS.rulerText;
+      ctx.fillText(`c${cIdx}`, x + 3, RULER_HEIGHT_PX - 6);
+    }
+    // The section names sit on the top line of the ruler.
+    ctx.fillStyle = COLORS.sectionText;
+    for (const section of model.sections) {
+      const x = xOf(section.startCycle);
+      ctx.fillText(`S${section.index + 1}`, x + 3, 6);
     }
     ctx.strokeStyle = COLORS.gridStrong;
     ctx.beginPath();
@@ -415,7 +558,7 @@ export function Pianoroll(props: PianorollProps): JSX.Element {
     ctx.strokeStyle = COLORS.grid;
     ctx.beginPath();
     for (let cIdx = Math.ceil(cb.lo); cIdx <= cb.hi; cIdx += 1) {
-      const x = LANE_BG_PAD_LEFT + (cIdx - cb.lo) * pxPerCycle + panX();
+      const x = xOf(cIdx);
       ctx.moveTo(x, RULER_HEIGHT_PX);
       ctx.lineTo(x, h);
     }
@@ -423,7 +566,7 @@ export function Pianoroll(props: PianorollProps): JSX.Element {
 
     // ----- Vertical grid (semitone rows; black-key rows slightly darker) -----
     for (let midi = Math.floor(mb.lo); midi <= Math.ceil(mb.hi); midi += 1) {
-      const y = RULER_HEIGHT_PX + midiToY(midi, mb, h - RULER_HEIGHT_PX);
+      const y = pitchTop + midiToY(midi, mb, pitchH);
       ctx.strokeStyle = isBlackKey(midi) ? COLORS.labelBlack : COLORS.grid;
       ctx.beginPath();
       ctx.moveTo(LANE_BG_PAD_LEFT, y);
@@ -436,36 +579,84 @@ export function Pianoroll(props: PianorollProps): JSX.Element {
     ctx.textBaseline = 'middle';
     ctx.textAlign = 'right';
     for (let midi = Math.floor(mb.lo); midi <= Math.ceil(mb.hi); midi += 1) {
-      const y = RULER_HEIGHT_PX + midiToY(midi, mb, h - RULER_HEIGHT_PX);
+      const y = pitchTop + midiToY(midi, mb, pitchH);
       ctx.fillStyle = isBlackKey(midi) ? COLORS.labelBlack : COLORS.label;
       ctx.fillText(midiName(midi), LANE_BG_PAD_LEFT - 4, y);
     }
     ctx.textAlign = 'left';
 
-    // ----- Notes -----
-    const evts = events();
-    for (let i = 0; i < evts.length; i += 1) {
-      const e = evts[i]!;
-      const x0 = LANE_BG_PAD_LEFT + (e.startCycle - cb.lo) * pxPerCycle + panX();
-      const x1 = LANE_BG_PAD_LEFT + (e.endCycle - cb.lo) * pxPerCycle + panX();
-      const yMid = RULER_HEIGHT_PX + midiToY(e.midi, mb, h - RULER_HEIGHT_PX);
+    // ----- Notes (one colour per layer of the arrangement) -----
+    const layerById = new Map(model.layers.map((l) => [l.id, l]));
+    const notes = model.notes;
+    for (let i = 0; i < notes.length; i += 1) {
+      const e = notes[i]!;
+      const layer = layerById.get(e.layerId);
+      const x0 = xOf(e.startCycle);
+      const x1 = xOf(e.endCycle);
+      const yMid = pitchTop + midiToY(e.midi, mb, pitchH);
       const yTop = yMid - noteH / 2;
       const noteW = Math.max(2, x1 - x0);
-      ctx.fillStyle = i === hoverNoteIdx()
-        ? COLORS.noteHover
-        : COLORS.noteDefault;
+      // A quiet layer is drawn quieter — the score's own mix, visible.
+      ctx.globalAlpha = layer === undefined ? 1 : alphaForGain(layer.gain);
+      ctx.fillStyle = layer === undefined ? COLORS.noteDefault : layerColor(layer);
       ctx.fillRect(x0, yTop, noteW, noteH);
+      ctx.globalAlpha = 1;
+      if (i === hoverNoteIdx()) {
+        ctx.fillStyle = COLORS.noteHoverOverlay;
+        ctx.fillRect(x0, yTop, noteW, noteH);
+      }
       // Highlight the note that's playing at the playhead position.
-      if (
-        playheadCycle() >= e.startCycle && playheadCycle() < e.endCycle
-      ) {
+      if (phase >= e.startCycle && phase < e.endCycle) {
         ctx.fillStyle = COLORS.notePlayhead;
         ctx.fillRect(x0, yTop, noteW, noteH);
       }
     }
 
+    // ----- Drum lanes (between the ruler and the pitches) -----
+    if (lanes.length > 0) {
+      const bandTop = layout.drumTop;
+      const laneH = layout.drumBandH / lanes.length;
+      ctx.strokeStyle = COLORS.gridStrong;
+      ctx.beginPath();
+      ctx.moveTo(0, bandTop);
+      ctx.lineTo(w, bandTop);
+      ctx.stroke();
+      ctx.font = '9px ui-monospace, SFMono-Regular, monospace';
+      ctx.textBaseline = 'middle';
+      ctx.textAlign = 'right';
+      lanes.forEach((layer, index) => {
+        const y = bandTop + index * laneH;
+        if (index % 2 === 1) {
+          ctx.fillStyle = COLORS.drumLaneAlt;
+          ctx.fillRect(LANE_BG_PAD_LEFT, y, w - LANE_BG_PAD_LEFT, laneH);
+        }
+        // The lane's name: the sample without its `drums_` prefix.
+        ctx.fillStyle = layerColor(layer);
+        ctx.fillText(
+          layer.sampleName?.replace(/^drums_/u, '') ?? layer.label,
+          LANE_BG_PAD_LEFT - 4,
+          y + laneH / 2,
+        );
+        const hitH = Math.max(3, laneH - 4);
+        for (const hit of model.hits) {
+          if (hit.layerId !== layer.id) continue;
+          const hx0 = xOf(hit.startCycle);
+          const hw = Math.max(2, xOf(hit.endCycle) - hx0);
+          ctx.globalAlpha = alphaForGain(layer.gain);
+          ctx.fillStyle = layerColor(layer);
+          ctx.fillRect(hx0, y + 2, hw, hitH);
+          ctx.globalAlpha = 1;
+          if (phase >= hit.startCycle && phase < hit.endCycle) {
+            ctx.fillStyle = COLORS.notePlayhead;
+            ctx.fillRect(hx0, y + 2, hw, hitH);
+          }
+        }
+      });
+      ctx.textAlign = 'left';
+    }
+
     // ----- Playhead line -----
-    const pxX = LANE_BG_PAD_LEFT + (playheadCycle() - cb.lo) * pxPerCycle + panX();
+    const pxX = xOf(phase);
     ctx.strokeStyle = COLORS.playhead;
     ctx.lineWidth = 2;
     ctx.beginPath();
@@ -487,6 +678,7 @@ export function Pianoroll(props: PianorollProps): JSX.Element {
     void hoverNoteIdx();
     void width();
     void height();
+    void sizeTick();
     draw();
   });
 
@@ -519,11 +711,12 @@ export function Pianoroll(props: PianorollProps): JSX.Element {
     const spanCycles = Math.max(1, cb.hi - cb.lo);
     const pxPerCycle = (w - LANE_BG_PAD_LEFT - LANE_BG_PAD_RIGHT) / spanCycles * zoom();
     const noteH = NOTE_HEIGHT_PX;
+    const layout = rollLayout();
     for (let i = evts.length - 1; i >= 0; i -= 1) {
       const e = evts[i]!;
       const x0 = LANE_BG_PAD_LEFT + (e.startCycle - cb.lo) * pxPerCycle + panX();
       const x1 = LANE_BG_PAD_LEFT + (e.endCycle - cb.lo) * pxPerCycle + panX();
-      const yMid = RULER_HEIGHT_PX + midiToY(e.midi, mb, height() - RULER_HEIGHT_PX);
+      const yMid = layout.pitchTop + midiToY(e.midi, mb, layout.pitchH);
       if (
         cx >= x0 && cx <= x1
         && cy >= yMid - noteH / 2 && cy <= yMid + noteH / 2
@@ -675,7 +868,7 @@ export function Pianoroll(props: PianorollProps): JSX.Element {
     setPanY((y) => y - e.deltaY * 0.2);
   };
 
-  const isEmpty = (): boolean => events().length === 0;
+  const isEmpty = (): boolean => events().length === 0 && roll().hits.length === 0;
 
   return (
     <div
@@ -684,12 +877,17 @@ export function Pianoroll(props: PianorollProps): JSX.Element {
       data-event-count={events().length}
       data-score-digest={scoreDigest()}
       data-playhead-cycle={playheadCycle().toFixed(4)}
-      data-period-cycles={timeline().periodCycles}
-      style={{ height: `${height()}px` }}
+      data-period-cycles={roll().periodCycles}
+      data-section-count={roll().sections.length}
+      data-layer-count={roll().layers.length}
+      data-hit-count={roll().hits.length}
+      style={props.height === undefined ? undefined : { height: `${props.height}px` }}
     >
       <div class="pianoroll-toolbar">
         <span class="pianoroll-count">
           {events().length} note{events().length === 1 ? '' : 's'}
+          {roll().hits.length > 0 ? ` · ${roll().hits.length} hit${roll().hits.length === 1 ? '' : 's'}` : ''}
+          {` · ${roll().layers.length} layer${roll().layers.length === 1 ? '' : 's'}`}
         </span>
         <button
           type="button"
@@ -720,7 +918,6 @@ export function Pianoroll(props: PianorollProps): JSX.Element {
       <div
         class="pianoroll-canvas-wrap"
         ref={container}
-        style={{ height: `${height() - 36}px` }}
       >
         <canvas
           ref={canvas}
