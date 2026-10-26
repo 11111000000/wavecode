@@ -13,13 +13,14 @@ import {
 import {
   whistleState,
   whistleError,
-  whistleInstrumentLabel,
+  whistleInstrument,
   whistlePanelArmed,
   startWhistle,
   commitWhistle,
   stopWhistle,
   clearWhistlePanelArmed,
   discardWhistleTake,
+  chooseWhistleInstrument,
   ensureWhistleSessionId,
 } from '../state/whistleStore';
 import {
@@ -33,6 +34,7 @@ import { Effect } from 'effect';
 import type { AudioNote } from '~/domain/audio/micCapture';
 import type { MicBusyError } from '~/domain/audio/MicChannel';
 import { noteNumberToName } from '~/domain/music/notes';
+import { MELODIC_SOUNDS } from '~/domain/sounds';
 import { consoleStore } from './consoleStore';
 
 /**
@@ -495,9 +497,22 @@ const WhistleBody = (): JSX.Element => {
         >
           <WhistleIcon size={16} />
         </span>
-        <span class="voice-recording-panel__title">
-          Свист · {whistleInstrumentLabel()}
-        </span>
+        <span class="voice-recording-panel__title">Свист</span>
+        {/* The instrument picker. A native <select> — it is the one
+         * control that behaves well on a phone (the OS picker sheet)
+         * and it lists ONLY sounds that superdough really has. */}
+        <select
+          class="voice-recording-panel__instrument"
+          aria-label="Инструмент записи"
+          title="Инструмент записи"
+          value={whistleInstrument()}
+          disabled={isRecording() || hasNotes()}
+          onChange={(e) => { chooseWhistleInstrument(e.currentTarget.value); }}
+        >
+          <For each={MELODIC_SOUNDS}>
+            {(s) => <option value={s.id}>{s.label}</option>}
+          </For>
+        </select>
         <Show when={whistleState().tag === 'errored'}>
           <span class="voice-recording-panel__err-pill">⚠ {whistleError() ?? 'ошибка'}</span>
         </Show>

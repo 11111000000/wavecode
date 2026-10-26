@@ -8,6 +8,7 @@ import {
   whistlePanelArmed,
   setWhistlePanelArmed,
   requestWhistlePanelArmed,
+  whistleInstrument,
 } from '../state/whistleStore';
 import {
   __resetVoiceAIForTests,
@@ -124,11 +125,16 @@ describe('RecordingPanel — visibility', () => {
     const panel = container.querySelector('.voice-recording-panel');
     expect(panel).toBeTruthy();
     expect(panel?.getAttribute('data-mode')).toBe('whistle');
-    // Whistle has no instrument selector, so the panel title is the
-    // only place the timbre shows up — and it reads it from
-    // whistleStore, not from a copy local to this component.
+    // The timbre lives in a PICKER next to the title now (the user
+    // asked to see and choose the really-available instruments), and
+    // the picker reads its value from whistleStore, not from a copy
+    // local to this component.
     expect(panel?.querySelector('.voice-recording-panel__title')?.textContent)
-      .toBe('Свист · пианино');
+      .toBe('Свист');
+    const picker = panel?.querySelector<HTMLSelectElement>(
+      '.voice-recording-panel__instrument',
+    );
+    expect(picker?.value).toBe('piano');
   });
 });
 
@@ -725,6 +731,52 @@ describe('RecordingPanel — «Удалить»', () => {
       '.voice-recording-panel__btn--apply',
     ) as HTMLButtonElement;
     expect(apply.disabled).toBe(true);
+  });
+});
+
+describe('RecordingPanel — the instrument picker', () => {
+  it('lists ONLY sounds that superdough really has', () => {
+    // The picker is the one place a user can put a `.s("…")` name into
+    // the score. A name that is not registered is FATAL at trigger
+    // time (`sound X not found!`), so the list must be the catalogue.
+    requestWhistlePanelArmed();
+    const { container } = render(() => <RecordingPanel />);
+    const picker = container.querySelector<HTMLSelectElement>(
+      '.voice-recording-panel__instrument',
+    );
+    expect(picker).toBeTruthy();
+    const values = Array.from(picker?.querySelectorAll('option') ?? [])
+      .map((o) => o.getAttribute('value'));
+    expect(values).toContain('piano');
+    expect(values).toContain('synth_pad');
+    expect(values).toContain('sawtooth');
+    // The old fiction — 'synth' and 'drums' were never registered.
+    expect(values).not.toContain('synth');
+    expect(values).not.toContain('drums');
+  });
+
+  it('is disabled while a take is running (the take\'s timbre is fixed)', () => {
+    setWhistleState({
+      tag: 'recording',
+      micState: { openNote: null, notes: [], lastClosedMs: null, notesPrunedCount: 0 },
+      startedAtMs: 0,
+      lastFrameMs: 0,
+    });
+    const { container } = render(() => <RecordingPanel />);
+    const picker = container.querySelector<HTMLSelectElement>(
+      '.voice-recording-panel__instrument',
+    );
+    expect(picker?.disabled).toBe(true);
+  });
+
+  it('picking a sound switches the whistle instrument', () => {
+    requestWhistlePanelArmed();
+    const { container } = render(() => <RecordingPanel />);
+    const picker = container.querySelector<HTMLSelectElement>(
+      '.voice-recording-panel__instrument',
+    )!;
+    fireEvent.change(picker, { target: { value: 'synth_pad' } });
+    expect(whistleInstrument()).toBe('synth_pad');
   });
 });
 
