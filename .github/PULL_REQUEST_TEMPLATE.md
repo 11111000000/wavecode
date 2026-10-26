@@ -3,7 +3,7 @@
 - [ ] CI green (`typecheck + vitest + lint + build` — `Actions` tab)
 - [ ] Pre-commit hook зелёный (`bash scripts/pre-commit`)
 - [ ] Если меняется поведение — есть запись в `CHANGELOG.md` (секция Unreleased)
-- [ ] Если архитектурное изменение — есть YAML в `decisions/<id>.yaml` (math-coding 3.3)
+- [ ] Если архитектурное изменение — есть YAML в `decisions/<id>.yaml` (math-coding 3.3 schema) и пересчитаны дайджесты (`mathc rehash --write`)
 
 ## Что меняет этот PR
 

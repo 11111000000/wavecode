@@ -46,19 +46,40 @@ this section, but defer to the source of truth above.
 ---
 
 Этот репозиторий использует методологию
-[math-coding 3.3](../math-coding/AGENTS.md) для документирования решений.
+[math-coding 3.7](../math-coding/adoption/SKILL.md) для документирования
+решений.
 
 Каждое не-тривиальное решение фиксируется YAML-файлом в
 `decisions/<id>.yaml` со схемой `math-coding/3.3`. Каждый файл
 валидируется ядром (`mathc validate`) и участвует в gate-gate
 (`mathc self-check`). Перед началом работы обязательно прочитать:
 
-1. [math-coding/AGENTS.md](../math-coding/AGENTS.md) — методология 3.3
-2. [math-coding/docs/axioms.md](../math-coding/docs/axioms.md) — пять аксиом
+1. [math-coding/adoption/SKILL.md](../math-coding/adoption/SKILL.md) — протокол
+   для проектов-адоптеров (совместим с `mathc@>=3.7.4`)
+2. [math-coding/axioms/index.md](../math-coding/axioms/index.md) — пять аксиом
 3. [`decisions/decision.yaml`](decisions/decision.yaml) — active policy
    (что входит в scope, какие paths закрыты)
 4. [schemas/decision.json](schemas/decision.json) — JSON-schema,
    валидируемая ядром
+
+### Две версии — не путать
+
+| что | значение | где лежит |
+|---|---|---|
+| **версия ядра** | 3.7.4 (`mathc` — бинарь и методология) | `../math-coding/VERSION` |
+| **семейство схемы** | `math-coding/3.3` (формат файла решения) | `schema:` в каждом `decisions/*.yaml` |
+
+Ядро ушло на 3.7.x, а **формат decision-файла не менялся**: 3.7-ядро
+принимает семейства `3.0-alpha`, `3.2`, `3.3` — и только их
+(`lib/schema_embedded.ml` в math-coding). Upstream в дереве 3.7.4
+сам пишет `schema: math-coding/3.3` (118 решений) и `3.2` (127), а
+`mathc new-decision` до сих пор скеффолдит `math-coding/3.3`.
+
+**Поэтому `schema:` в `decisions/*.yaml` НЕ бампится на `3.7`.**
+Строка `math-coding/3.7` — это опечатка-ловушка: ядро её примет
+(enum не проверяется в YAML-форме), но она перестанет соответствовать
+`schemas/decision.json` и policy-решению `wavecode-bootstrap-math-coding-3.3`.
+Бампится **ядро**, не формат.
 
 ### Установка `mathc`
 
@@ -66,12 +87,17 @@ this section, but defer to the source of truth above.
 curl -fsSL https://github.com/11111000000/math-coding/releases/download/edge/install.sh \
   | sh -s --
 export PATH="$HOME/.local/bin:$PATH"
-mathc version  # должен вернуть "math-coding 3.3.0-alpha: bootstrap"
+(cd ../math-coding && mathc version)  # → "math-coding 3.7.4: bootstrap"
 ```
 
 Edge release бинарь работает на NixOS angara-1 (glibc 2.40 совместим).
 Старая заметка "CLI сломан" — устарела (относится к pre-2026-10 setup,
 когда бинарь линковался на удалённый glibc).
+
+`mathc version` читает номер из файла `VERSION` **относительно текущего
+каталога** (`bin/Mathc.ml::read_cli_version`), поэтому из корня wavecode
+он печатает fallback `math-coding math-coding: bootstrap`. Это не
+поломка — проверять версию надо из checkout'а math-coding.
 
 ### Создание нового решения
 
@@ -79,9 +105,54 @@ Edge release бинарь работает на NixOS angara-1 (glibc 2.40 со�
 mathc new-decision <id>          # печатает scaffold (id в kebab-case)
 # отредактировать decisions/<id>.yaml: intent, commitment, scope,
 # obligations[].acceptance.all[].verifier, outcomes, antithesis, counterexample
+mathc rehash decisions/<id>.yaml --write   # пересчитать body_sha/yaml_sha
 mathc validate decisions/<id>.yaml
 mathc self-check                  # exit 0 = ok, 1 = reject, 3 = unknown
 ```
+
+**`mathc rehash --write` — обязательный шаг после правки тела
+решения.** `body_sha`/`yaml_sha` — это sha256 тела файла; ядро
+сверяет их с фактическим содержимым и режет решение как
+`MC-SHA-DIGEST-STALE` (severity: block), если содержимое менялось без
+пересчёта. Именно так был красным гейт wavecode до 2026-10-26: 102
+решения с устаревшим дайджестом.
+
+Полезные команды 3.7 (ядро):
+
+| команда | что делает |
+|---|---|
+| `mathc rehash --write` | пересчитать `body_sha`/`yaml_sha` (проверяет fixed point) |
+| `mathc doctor --json` | диагностика установки/путей/решений/attestations |
+| `mathc verify FILE` | выполнить `acceptance.all[*].verifier` в песочнице |
+| `mathc attest-batch` | выпустить attestations по manifest'у |
+| `mathc decision-state <id> --state=...` | смена lifecycle-состояния решения |
+| `mathc explain-diagnostic MC-*` | расшифровка диагностики ядра |
+
+### Миграция v1.0 → 3.7
+
+```bash
+python3 scripts/migrate-math-coding-3.7.py   # хвостовой `---`, дубли ключей, verifier-схемы
+mathc rehash --write                          # дайджесты
+mathc validate decisions/*.yaml               # ожидается parse-ok по всем файлам
+```
+
+Скрипт идемпотентен. Что он чинит:
+
+* **MC-UNPARSED-TAIL** — хвостовой `---` (второй маркер документа) в
+  92 файлах: 3.7-ядро читает front-matter между первым и вторым `---`
+  и всё, что после второго, считает непрочитанным хвостом.
+* **MC-DUPLICATE-KEY** — 175 дубликатов: генератор
+  `scripts/migrate-v1-packets.py` писал пару `counterexample:`/
+  `antithesis:` дважды; ядро читает первое вхождение, второе —
+  мёртвый контент. Генератор починен в этом же коммите.
+* **MC-VERIFIER-SCHEME-UNKNOWN** — переименованы два scheme
+  (`attestation-store-has-subject` → `mathc self-check`,
+  `mathc-validate` → `mathc validate`). Остальные 217 предупреждений —
+  идентификаторные метки (`vitest-run-*`, `pnpm-ui-*`, `playwright*`),
+  реальную команду которых из строки не восстановить без угадывания.
+  Этот долг зафиксирован follow-up-обязательством в
+  `decisions/wavecode-math-coding-3.7.yaml` (upstream несёт такой же
+  долг: 35 из 251 его решений).
 
 ### Legacy `math/<name>/packet.md`
 
@@ -100,10 +171,11 @@ AGENTS.md         этот файл
 .gitignore        стандартный для Node-проекта
 .gitverse/        GitVerse Actions — только math-coding gate (деплоя нет)
 math/<name>/      legacy пакеты решений math-coding v1.0 (будут удалены)
-decisions/        решения math-coding 3.3 (active source of truth)
+decisions/        решения math-coding 3.7 (active source of truth;
+                  schema family файла — `math-coding/3.3`)
 attestations/     attestation store (kernel evidence для `mathc self-check`)
-schemas/          JSON-schema reference (math-coding 3.3 kernel input)
-scripts/          утилиты (миграция v1→v3.3, проверка)
+schemas/          JSON-schema reference (kernel input 3.7, family 3.3)
+scripts/          утилиты (миграция v1→v3.7, проверка)
 ui/               браузерный SPA (TypeScript + Effect-TS + Solid.js)
 ```
 

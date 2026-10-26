@@ -1,4 +1,4 @@
-# GitVerse Actions — math-coding 3.3 gate (warn-only transition step).
+# GitVerse Actions — math-coding 3.7 gate (warn-only transition step).
 #
 # Триггеры:
 #   - push в master           → проверка live tree (warn)
@@ -6,15 +6,23 @@
 #   - workflow_dispatch       → ручной запуск
 #
 # Что делает:
-#   1. Скачивает `mathc` из edge release math-coding (kernel 3.3).
-#   2. `mathc validate decisions/*.yaml` — структурная валидность.
+#   1. Скачивает `mathc` из edge release math-coding (kernel 3.7).
+#      Формат decision-файла при этом остаётся `math-coding/3.3` —
+#      семейство схемы меняется только вместе с форматом, а формат
+#      в 3.7.x не менялся (см. AGENTS.md § «Две версии — не путать»).
+#   2. `mathc rehash --dry-run` — проверяет, что `body_sha`/`yaml_sha`
+#      каждого решения соответствуют его телу. Устаревший дайджест —
+#      MC-SHA-DIGEST-STALE (severity: block): ядро читает первое
+#      вхождение и отказывается верить содержимому. Лечится
+#      `mathc rehash --write` (обязательный шаг после правки тела).
+#   3. `mathc validate decisions/*.yaml` — структурная валидность.
 #      Если хоть одна decision имеет MC-* reject, step fails.
-#   3. `mathc self-check` — kernel gate verdict (pass / unknown / fail).
+#   4. `mathc self-check` — kernel gate verdict (pass / unknown / fail).
 #      В переходный период step выставлен в `continue-on-error: true`,
 #      потому что obligations на свеже-мигрированных решениях не имеют
 #      свежих attestations (legacy пакеты v1.0 → unknown). Promotion
 #      в fail-режим — отдельное решение (см. AGENTS.md).
-#   4. Артефакт: self-check-verdict.json (для отладки).
+#   5. Артефакт: self-check-verdict.json (для отладки).
 #
 # Promotion из warn в fail:
 #   Требует решения decisions/promote-math-coding-gate-to-fail.yaml со
@@ -55,6 +63,20 @@ jobs:
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
           mathc version
 
+      - name: Digests are current (body_sha / yaml_sha)
+        run: |
+          set -eu
+          # `mathc rehash --dry-run` exits 0 even when a digest is
+          # stale, so the verdict is read from its own report. The
+          # count is matched as a NON-ZERO number: the report always
+          # contains "0 changed", which must not trip the check.
+          report=$(mathc rehash --dry-run 2>&1)
+          echo "$report"
+          if echo "$report" | grep -qE '[1-9][0-9]* changed'; then
+            echo "::error::stale body_sha/yaml_sha — run 'mathc rehash --write'"
+            exit 1
+          fi
+
       - name: Validate every decision file
         run: |
           set -eu
@@ -62,7 +84,10 @@ jobs:
           fail=0
           for f in decisions/*.yaml; do
             [ "$f" = "decisions/decision.yaml" ] && continue
-            if mathc validate "$f" --format=json 2>&1 | grep -q '"verdict":"accept"'; then
+            # 3.7 kernel prints verdict "parse-ok"; the 3.3-era
+            # kernel printed "accept" (renamed in math-coding
+            # a602b361). Accept either so the gate works on both.
+            if mathc validate "$f" --format=json 2>&1 | grep -qE '"verdict":"(accept|parse-ok)"'; then
               pass=$((pass + 1))
             else
               echo "REJECT: $f"
