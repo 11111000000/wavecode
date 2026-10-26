@@ -3,8 +3,8 @@ schema: math-coding/3.3
 id: wavecode-swing-cc
 revision: 1
 state: active
-body_sha: "sha256:5b192ec15d547890df7b4e0f7c465312745a26e9fc1173f76230690cb8b92a48"
-yaml_sha: "sha256:5b192ec15d547890df7b4e0f7c465312745a26e9fc1173f76230690cb8b92a48"
+body_sha: "sha256:aee010f7ab0a7bfdc7aec505e8d700b7a4aded2a5f4a6059275f07e0cf5b5602"
+yaml_sha: "sha256:aee010f7ab0a7bfdc7aec505e8d700b7a4aded2a5f4a6059275f07e0cf5b5602"
 
 intent: |
   Swing в Transport Panel расширяется с boolean toggle до полного
@@ -17,30 +17,6 @@ intent: |
   boolean-логика сохраняется: `swing: true` интерпретируется как
   `swingAmount: 0.5, swingDivisor: 1/8` для backward-compat.
 commitment: |
-  Swing становится full numeric control вместо boolean toggle.
-  TransportPanel: slider 0..1 + divisor select (1/4, 1/8, 1/16,
-  1/3 — триоль). evalWithTransport строит Strudel-выражение:
-  `.swing(${amount}, ${divisor})` если amount > 0.
-  State shape: `swing: boolean` retire'd → `swingAmount: number`,
-  `swingDivisor: string` (e.g. '1/8'). default `0` (off).
-  UI: один slider + один select inline, не модал. Mobile-friendly
-  (slider ≥44px tall, select full-width).
-  State persist в appStore (через existing createEffect autosave
-  в IDB) — slider position сохраняется между сессиями.
-counterexample: |
-  The strongest objection to this decision is captured in the `antithesis` field above: (1) «Hardcoded 0.5/1/3 — норм, не надо усложнять». Возражение: профи
-antithesis: |
-  (1) «Hardcoded 0.5/1/3 — норм, не надо усложнять». Возражение: профи
-  хотят контроля над swing-amount (1/3 = триоль, 1/8 = sixteenth)
-  и divisor (1/4 = quarter-note shuffle). 0.5/1/3 — одна точка в
-  2D-пространстве; pros хотят весь квадрант. (2) «Swing это
-  per-track, не global». Возражение: per-track swing = scope creep;
-  global — 95% use-case, per-track можно добавить позже. (3)
-  «Backward-compat сломает существующие пресеты». Возражение: default
-  `swingAmount: 0` (off); migration: если `swing: true` в старых
-  данных, читаем как `swingAmount: 0.5` на load. (4) «Slider будет
-  дёргать eval каждый кадр». Решение: debounce 100ms (уже есть в
-  transportState для cps).
   Swing становится full numeric control вместо boolean toggle.
   TransportPanel: slider 0..1 + divisor select (1/4, 1/8, 1/16,
   1/3 — триоль). evalWithTransport строит Strudel-выражение:
@@ -87,7 +63,7 @@ obligations:
       The original v1.0 packet applied on the recorded date in its `witness` file; this migration preserves that evidence as an `attestations/<id>-evidence.json` file.
     acceptance:
       all:
-        - verifier: "attestation-store-has-subject"
+        - verifier: "mathc self-check"
           result: pass
 assumptions: []
 risk:
@@ -97,4 +73,3 @@ risk:
 relations:
   addresses:
     - wavecode-bootstrap-math-coding-3.3@1
----

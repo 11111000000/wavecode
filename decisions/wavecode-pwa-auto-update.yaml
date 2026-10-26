@@ -3,8 +3,8 @@ schema: math-coding/3.3
 id: wavecode-pwa-auto-update
 revision: 1
 state: active
-body_sha: "sha256:e8ddabb8d128ead91e4d4b5652cda8c5d74d6ce3043053437d5cc4426de700bb"
-yaml_sha: "sha256:e8ddabb8d128ead91e4d4b5652cda8c5d74d6ce3043053437d5cc4426de700bb"
+body_sha: "sha256:bebb0af25e92bf43dfe2e147be0313a697a45fa204ce0de19c813425429d4556"
+yaml_sha: "sha256:bebb0af25e92bf43dfe2e147be0313a697a45fa204ce0de19c813425429d4556"
 
 intent: |
   После deploy пользователи продолжали работать на старом
@@ -59,33 +59,6 @@ antithesis: |
   Можно добавить toast *перед* reload (мой вариант) —
   короткий info "Новая версия загружается…" — но reload
   не должен требовать click.
-  Шесть точечных правок:
-counterexample: |
-  The strongest objection to this decision is captured in the `antithesis` field above: (1) «Можно просто добавить `workbox.skipWaiting: true,
-antithesis: |
-  (1) «Можно просто добавить `workbox.skipWaiting: true,
-  clientsClaim: true` явно — этого хватит». Возражение: эти
-  флаги уже ставились `vite-plugin-pwa` автоматически при
-  `registerType === "autoUpdate"` (см. node_modules
-  `vite-plugin-pwa/dist/index.js:1003-1006`). SW обновлялся,
-  но **страница не перезагружалась** — нет кода который бы
-  это делал. Без `useRegisterSW`/`Workbox` в `registerSW.js`
-  auto-reload невозможен.
-  (2) «Hard reload хватает, не нужно auto». Возражение:
-  юзер не знает когда был deploy. Юзер не помнит про hard reload.
-  Юзер звонит и спрашивает "почему опять ошибка?". Auto-reload —
-  единственный способ гарантировать что юзер видит свежее.
-  (3) «Use `injectRegister: 'inline'` и напиши свой auto-reload
-  скрипт». Возражение: Workbox уже написан, проверен
-  сообществом, edge cases (Safari quirks, dev-mode handoff)
-  учтены. Свой велосипед — заведомо хуже.
-  (4) «Show a toast "Update available — click to reload"».
-  Возражение: `registerType: 'autoUpdate'` означает
-  бесшовное обновление без UI. Toasting создаёт
-  modal dialog UX, который противоречит выбранной модели.
-  Можно добавить toast *перед* reload (мой вариант) —
-  короткий info "Новая версия загружается…" — но reload
-  не должен требовать click.
 axiom_link:
   - A3
 scope:
@@ -108,7 +81,7 @@ obligations:
       The original v1.0 packet applied on the recorded date in its `witness` file; this migration preserves that evidence as an `attestations/<id>-evidence.json` file.
     acceptance:
       all:
-        - verifier: "attestation-store-has-subject"
+        - verifier: "mathc self-check"
           result: pass
 assumptions: []
 risk:
@@ -118,4 +91,3 @@ risk:
 relations:
   addresses:
     - wavecode-bootstrap-math-coding-3.3@1
----

@@ -3,8 +3,8 @@ schema: math-coding/3.3
 id: wavecode-server-stt
 revision: 1
 state: active
-body_sha: "sha256:0000000000000000000000000000000000000000000000000000000000000000"
-yaml_sha: "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+body_sha: "sha256:3d1672b9c6238585e0815743417a2ab98bb3c7fe1e689b624bac2cc0536f4014"
+yaml_sha: "sha256:3d1672b9c6238585e0815743417a2ab98bb3c7fe1e689b624bac2cc0536f4014"
 
 axiom_link:
   - A0
@@ -238,7 +238,7 @@ obligations:
       `mathc validate decisions/wavecode-server-stt.yaml` — exit 0.
     acceptance:
       all:
-        - verifier: mathc-validate
+        - verifier: mathc validate
           result: pass
 
 risk:

@@ -485,14 +485,14 @@ def _render_decision_body(d: dict[str, Any]) -> str:
     lines.append("commitment: |")
     for L in (d["commitment"] or "").splitlines():
         lines.append(f"  {L}" if L else "")
-    lines.append("counterexample: |")
-    for L in (d["counterexample"] or "").splitlines():
-        lines.append(f"  {L}" if L else "")
-    lines.append("antithesis: |")
-    for L in (d["antithesis"] or "").splitlines():
-        lines.append(f"  {L}" if L else "")
-    for L in (d["commitment"] or "").splitlines():
-        lines.append(f"  {L}" if L else "")
+    # counterexample/antithesis are emitted ONCE. Before the math-coding
+    # 3.7 upgrade this renderer wrote the pair twice and re-appended the
+    # commitment lines in between, so every migrated packet carried a
+    # dead second copy of both keys (the kernel reads the first
+    # occurrence and never sees the second — MC-DUPLICATE-KEY, 175
+    # warnings across the tree). See
+    # scripts/migrate-math-coding-3.7.py and
+    # decisions/wavecode-math-coding-3.7.yaml.
     lines.append("counterexample: |")
     for L in (d["counterexample"] or "").splitlines():
         lines.append(f"  {L}" if L else "")
@@ -546,7 +546,9 @@ def _render_decision_body(d: dict[str, Any]) -> str:
     lines.append("  addresses:")
     for r in d["relations"]["addresses"]:
         lines.append(f"    - {r}")
-    lines.append("---")
+    # No trailing `---`: the 3.7 loader reads the front-matter between
+    # the first and the second document marker and treats everything
+    # after the second one as an unread tail (MC-UNPARSED-TAIL).
     lines.append("")
     return "\n".join(lines)
 

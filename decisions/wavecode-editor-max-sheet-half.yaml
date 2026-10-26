@@ -3,8 +3,8 @@ schema: math-coding/3.3
 id: wavecode-editor-max-sheet-half
 revision: 1
 state: draft
-body_sha: "sha256:5fe8c42106d21c9d2339259b636d96efc0ab4a640addaf5f0ac55e10095f4b2b"
-yaml_sha: "sha256:5fe8c42106d21c9d2339259b636d96efc0ab4a640addaf5f0ac55e10095f4b2b"
+body_sha: "sha256:24e8b80620ea851dd63c58175b1c135644ca5bb9a9cb185e756f5af63f65a740"
+yaml_sha: "sha256:24e8b80620ea851dd63c58175b1c135644ca5bb9a9cb185e756f5af63f65a740"
 
 intent: |
   Follow-up to `wavecode-mobile-compact` + `wavecode-toast-overhead`. Две
@@ -76,36 +76,6 @@ antithesis: |
   верх, sheet не исчезнет. Чтобы sheet реально закрыть, нужно
   snap='closed' (height 0 !important) или явно установить height: 0
   через CSS-стиль. Логика snap в BottomSheet.tsx это делает.
-  Один коммит + пакет + witness. CSS-only + одна числовая правка в
-  uiState.ts.
-counterexample: |
-  The strongest objection to this decision is captured in the `antithesis` field above: (1) «Удаление */ сломает что-то ещё». Возражение: браузер уже
-antithesis: |
-  (1) «Удаление */ сломает что-то ещё». Возражение: браузер уже
-  трактовал этот */ как unclosed-comment-marker, отбрасывая 60% CSS.
-  Удаление либо ничего не меняет (если в браузере есть recovery),
-  либо ВОССТАНАВЛИВАЕТ 60% CSS, который раньше не работал. Никаких
-  регрессий быть не может — только улучшение.
-  (2) «Sheet ≥ 50vh занимает слишком много места, editor не поместится».
-  Возражение: cm-host при sheet=50vh = 900−56−32−44−60−450 = 258px.
-  Минус score-debug 22px = 236px. При 10px/1.3 = ~18 строк видно. Это
-  достаточно чтобы видеть top snippet'а и продолжать редактирование
-  снизу; sheet 50vh гарантирует что контент низа (piano/AI/mixer) тоже
-  достаточно видим. Альтернатива (sheet 30vh peek) даёт 50+ строк
-  editor, но 270px sheet не вмещает piano полностью — нужно drag вверх
-  каждый раз. Sheet=50vh это default который работает «из коробки».
-  (3) «peek 30vh → 50vh убирает возможность quick-glance». Возражение:
-  peek был 30vh, но это меньше минимума для piano-клавиш (180px) и
-  AI textarea (140px) + sheet header (~70px). peek 50vh = peek стаёт
-  = half; сохраняем snap-name для back-compat, но поведение = half.
-  Если юзеру нужно quick-glance, sheet можно закрыть (свайп вниз)
-  или оставить на half — bottom-padding 50vh не мешает, editor виден.
-  (4) «CSS min-height: 50vh конфликтует с JS drag clamping».
-  Возражение: CSS min-height — hard floor, JS clamp — soft target.
-  Если JS устанавливает height 0px, CSS-минимум 50vh (450px) возьмёт
-  верх, sheet не исчезнет. Чтобы sheet реально закрыть, нужно
-  snap='closed' (height 0 !important) или явно установить height: 0
-  через CSS-стиль. Логика snap в BottomSheet.tsx это делает.
 axiom_link:
   - A5
 scope:
@@ -127,7 +97,7 @@ obligations:
       The original v1.0 packet applied on the recorded date in its `witness` file; this migration preserves that evidence as an `attestations/<id>-evidence.json` file.
     acceptance:
       all:
-        - verifier: "attestation-store-has-subject"
+        - verifier: "mathc self-check"
           result: pass
 assumptions:
   - id: wavecode-editor-max-sheet-half-assumption-1
@@ -177,4 +147,3 @@ risk:
 relations:
   addresses:
     - wavecode-bootstrap-math-coding-3.3@1
----

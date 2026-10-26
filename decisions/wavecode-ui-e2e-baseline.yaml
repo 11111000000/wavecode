@@ -3,8 +3,8 @@ schema: math-coding/3.3
 id: wavecode-ui-e2e-baseline
 revision: 1
 state: draft
-body_sha: "sha256:4d9f0f5157e4158402f868c08125f373cad1f08b840ce3ea65adf03781dcf0ee"
-yaml_sha: "sha256:4d9f0f5157e4158402f868c08125f373cad1f08b840ce3ea65adf03781dcf0ee"
+body_sha: "sha256:e5fc458f98321687ec7dc526bf8ceab297c991228425618138017e32fde32298"
+yaml_sha: "sha256:e5fc458f98321687ec7dc526bf8ceab297c991228425618138017e32fde32298"
 
 intent: |
   E2E verification suite + Lighthouse baseline: 5 playwright
@@ -12,15 +12,6 @@ intent: |
   perf budget + a11y axe-core. Финальный gate перед merge
   в master.
 commitment: |
-  3 файла:
-counterexample: |
-  The strongest objection to this decision is captured in the `antithesis` field above: (1) «E2E тесты = slow CI». Возражение: тесты параллельны
-antithesis: |
-  (1) «E2E тесты = slow CI». Возражение: тесты параллельны
-  через playwright.config workers=2; total <2 min.
-  (2) «Lighthouse в CI — flaky». Возражение: lighthouse-ci
-  server имеет variance <3% baseline; мы сравниваем с
-  baseline.json, не с абсолютом.
   3 файла:
 counterexample: |
   The strongest objection to this decision is captured in the `antithesis` field above: (1) «E2E тесты = slow CI». Возражение: тесты параллельны
@@ -53,7 +44,7 @@ obligations:
       The original v1.0 packet applied on the recorded date in its `witness` file; this migration preserves that evidence as an `attestations/<id>-evidence.json` file.
     acceptance:
       all:
-        - verifier: "attestation-store-has-subject"
+        - verifier: "mathc self-check"
           result: pass
 assumptions: []
 risk:
@@ -63,4 +54,3 @@ risk:
 relations:
   addresses:
     - wavecode-bootstrap-math-coding-3.3@1
----

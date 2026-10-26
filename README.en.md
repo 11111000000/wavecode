@@ -112,7 +112,7 @@ npm run build               # → ui/dist/
 
 ## Architectural decisions
 
-Full traceability — every decision is captured as a YAML in `decisions/` under the **math-coding 3.3** schema (see [AGENTS.md § math-coding](AGENTS.md)). 97 decisions cover everything from stack choice down to per-source log throttling.
+Full traceability — every decision is captured as a YAML in `decisions/` under the **math-coding 3.3** schema (kernel math-coding 3.7, see [AGENTS.md § math-coding](AGENTS.md)). 119 decisions cover everything from stack choice down to per-source log throttling.
 
 **Foundational 16** (see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for details):
 
@@ -137,7 +137,7 @@ Full traceability — every decision is captured as a YAML in `decisions/` under
 | `wavecode-test-strategy` | draft | wavecode's test strategy is a pyramid: many unit tests on domain and application (vitest, no mocks), moderate coverage on infrastructure (vitest with mocked Layers), and a small set of e2e tests on Playwright for the critical user-… |
 <!-- END decisions-table -->
 
-> **Full list (97 decisions):** `ls decisions/*.yaml` or `python3 scripts/build-readme-decisions.py`. About `draft`/`active` states — see [math-coding AGENTS.md](../math-coding/AGENTS.md): in 3.3, `state: active` is assigned explicitly, migrated v1.0 packets remain `draft` until the next revision. This does **not** mean they don't apply — all of them are applied in code and backed by attestations.
+> **Full list (119 decisions):** `ls decisions/*.yaml` or `python3 scripts/build-readme-decisions.py`. About `draft`/`active` states — see [math-coding SKILL.md](../math-coding/adoption/SKILL.md): `state: active` is assigned explicitly, migrated v1.0 packets remain `draft` until the next revision. This does **not** mean they don't apply — all of them are applied in code and backed by attestations.
 
 ---
 
@@ -175,9 +175,9 @@ wavecode/
 ├── .github/               GitHub-specific: workflows, issue/PR templates, CODEOWNERS
 ├── .gitverse/             GitVerse Actions: math-coding gate only (no deploy)
 ├── bin/                   deploy.sh, check-llm-key.sh
-├── decisions/             97 architectural decisions (math-coding 3.3 schema)
+├── decisions/             119 architectural decisions (math-coding 3.3 schema, kernel 3.7)
 ├── attestations/          evidence store for math-coding self-check
-├── schemas/               JSON-schema for math-coding 3.3
+├── schemas/               JSON-schema for math-coding (kernel 3.7, family 3.3)
 ├── scripts/               utilities: pre-commit, validate:presets, build-readme-decisions
 ├── docs/                  ARCHITECTURE.md, design.md, PLAN.md (internal)
 └── ui/                    browser SPA

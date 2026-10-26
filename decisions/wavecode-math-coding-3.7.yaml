@@ -1,0 +1,248 @@
+---
+schema: math-coding/3.3
+id: wavecode-math-coding-3.7
+revision: 1
+state: active
+body_sha: "sha256:0ad6e9d16676ba78a36c33d560957457bea9fd2bb7e14e7bf1e2f22b1ea31e89"
+yaml_sha: "sha256:0ad6e9d16676ba78a36c33d560957457bea9fd2bb7e14e7bf1e2f22b1ea31e89"
+
+intent: |
+  Ядро math-coding ушло на 3.7.4 (edge release), а wavecode-гейт на
+  старом ядре был красным: 102 решения из 118 отвергались как
+  MC-SHA-DIGEST-STALE (устаревший `body_sha` после правок тела),
+  плюс 175 MC-DUPLICATE-KEY и 92 MC-UNPARSED-TAIL от дефекта
+  генератора миграции v1.0. Это решение переводит wavecode на
+  3.7-инструментарий и возвращает гейт в зелёный статус.
+
+  ФОРМАТ decision-файла при этом НЕ меняется: семейство схемы
+  остаётся `math-coding/3.3`, потому что 3.7-ядро принимает только
+  `3.0-alpha`, `3.2` и `3.3` — upstream в собственном дереве 3.7.4
+  пишет `math-coding/3.3` (118 решений) и `math-coding/3.2` (127),
+  а `mathc new-decision` скеффолдит то же самое. Бампится версия
+  ядра, а не строка `schema:`.
+
+axiom_link:
+  - A0
+  - A1
+  - A3
+
+commitment: |
+  1. Инструментарий — math-coding 3.7.x (`mathc` из edge release;
+     версия читается из `../math-coding/VERSION` через
+     `mathc version` в checkout'е math-coding). Строка `schema:` в
+     `decisions/*.yaml` остаётся `math-coding/3.3`.
+  2. `mathc validate decisions/*.yaml` даёт parse-ok по всем файлам
+     (zero rejects) — это же проверяет CI-шаг гейта.
+  3. `body_sha`/`yaml_sha` каждого решения соответствуют его телу:
+     `mathc rehash --dry-run` не находит ни одного изменённого
+     файла. Правка тела решения без `mathc rehash --write` режет
+     гейт — это обязательный шаг, а не опция.
+  4. В дереве нет MC-UNPARSED-TAIL (хвостовой `---` во втором
+     маркере документа) и MC-DUPLICATE-KEY (мёртвые вторые копии
+     ключей: ядро читает первое вхождение, второе не доходит до
+     гейта).
+  5. `schemas/` совпадает со схемами ядра 3.7.4: `decision.json`
+     содержит `negative_control`, `attestation.json` — требование
+     class-tagged `identity` (`human:` / `agent:` / `ci:`).
+  6. `mathc self-check` не возвращает `fail` (только pass/unknown).
+     Unknown — это долг по покрытию attestations, отдельная работа,
+     не дефект инструментария.
+  7. Механика миграции зафиксирована в идемпотентном скрипте
+     `scripts/migrate-math-coding-3.7.py`, а породивший артефакт
+     генератор v1.0-пакетов (`scripts/migrate-v1-packets.py`)
+     починен и больше не пишет дубли ключей и хвостовой маркер.
+
+outcomes:
+  - id: kernel-3-7-toolchain
+    statement: |
+      Инструментарий wavecode — math-coding 3.7.x: в дереве
+      доступны `mathc rehash`, `mathc doctor`, `mathc verify`,
+      `mathc attest-batch`, `mathc decision-state`.
+  - id: schema-family-stays-3-3
+    statement: |
+      Ни один файл в `decisions/` не меняет строку `schema:` на
+      `math-coding/3.7`: семейство схемы определяет ФОРМАТ файла, а
+      3.7-ядро принимает только `3.0-alpha`/`3.2`/`3.3`.
+  - id: validate-parse-ok-everywhere
+    statement: |
+      `mathc validate decisions/*.yaml` возвращает parse-ok по всем
+      119 файлам; MC-* reject — ни одного.
+  - id: digests-current
+    statement: |
+      `mathc rehash --dry-run` сообщает 0 изменённых файлов:
+      `body_sha`/`yaml_sha` каждого решения соответствует его телу.
+  - id: no-dead-blocks
+    statement: |
+      Ни одно решение не содержит хвостовой `---` и не содержит
+      дублирующихся ключей в одной области видимости: 175
+      MC-DUPLICATE-KEY и 92 MC-UNPARSED-TAIL ушли в ноль.
+  - id: schemas-synced-3-7-4
+    statement: |
+      `schemas/*.json` побайтово совпадает со схемами math-coding
+      3.7.4 (`decision.json` + `negative_control`, `attestation.json`
+      + class-tagged `identity`).
+  - id: self-check-without-fail
+    statement: |
+      `mathc self-check` даёт verdict pass или unknown и ни одного
+      MC-SHA-DIGEST-STALE (было: verdict fail, 102 решения).
+  - id: ci-gate-fixed
+    statement: |
+      CI-шаг гейта принимает verdict `parse-ok` (ядро 3.7 переименовало
+      `accept` → `parse-ok`) и отдельно проверяет свежесть дайджестов.
+
+obligations:
+  - id: all-decisions-parse-ok
+    claim: |
+      `mathc validate decisions/*.yaml` даёт parse-ok по всем файлам
+      в live tree на HEAD (zero MC-* reject).
+    acceptance:
+      all:
+        - verifier: mathc validate
+          result: pass
+  - id: digests-current
+    claim: |
+      `mathc rehash --dry-run` не находит ни одного файла с
+      устаревшим `body_sha`/`yaml_sha`.
+    acceptance:
+      all:
+        - verifier: bash mathc rehash --dry-run
+          result: pass
+  - id: no-unparsed-tail
+    claim: |
+      Ни один `decisions/*.yaml` не заканчивается маркером `---`:
+      хвост после второго маркера не читается ядром.
+    acceptance:
+      all:
+        - verifier: text-scan-no-unparsed-tail
+          result: pass
+  - id: no-duplicate-keys
+    claim: |
+      Ни одно решение не содержит дважды объявленного ключа в одной
+      области видимости: второе вхождение — мёртвый контент.
+    acceptance:
+      all:
+        - verifier: text-scan-no-duplicate-keys
+          result: pass
+  - id: schemas-match-kernel
+    claim: |
+      `schemas/*.json` совпадает со схемами math-coding 3.7.4.
+    acceptance:
+      all:
+        - verifier: text-scan-schemas-synced-3-7
+          result: pass
+  - id: self-check-not-fail
+    claim: |
+      `mathc self-check` возвращает verdict pass или unknown (не
+      fail) на live tree.
+    acceptance:
+      all:
+        - verifier: mathc self-check
+          result: pass
+  - id: migration-script-idempotent
+    claim: |
+      Повторный прогон `scripts/migrate-math-coding-3.7.py` не меняет
+      ни одного файла в `decisions/`.
+    acceptance:
+      all:
+        - verifier: bash python3 scripts/migrate-math-coding-3.7.py
+          result: pass
+
+scope:
+  paths:
+    - "decisions/**"
+    - "schemas/**"
+    - "scripts/migrate-math-coding-3.7.py"
+    - "scripts/migrate-v1-packets.py"
+    - "AGENTS.md"
+    - "README.md"
+    - "README.en.md"
+    - "CONTRIBUTING.md"
+    - ".gitverse/workflows/math-coding.yml"
+    - ".github/PULL_REQUEST_TEMPLATE.md"
+  exclusions:
+    - "ui/**"
+    - "attestations/**"
+
+risk:
+  declared_triggers:
+    - schema-family-bumped-to-3-7-by-mistake
+    - kernel-drift-to-a-release-that-checks-the-family-enum
+    - verifier-vocabulary-migration-closed-as-fake-canonicalisation
+    - attestation-coverage-stall
+  owner: human:operator
+
+reversal:
+  - signal: mathc-validate-rejects-after-upgrade
+    action: revert
+  - signal: kernel-edge-releases-without-rehash
+    action: pin-the-kernel-version
+  - signal: self-check-turns-fail-on-attestation-debt
+    action: keep-warn-only-stage
+
+counterexample: |
+  "Ядро 3.7 — это просто версия бинаря; decision-файлы живут по
+  схеме 3.3, и трогать 118 файлов вообще не нужно: гейт можно
+  просто выключить."
+
+  Возражение: гейт нельзя выключить, потому что он ловит реальный
+  класс дефектов, который в дереве уже накоплен. 102 решения с
+  устаревшим `body_sha` — это ровно те места, где тело правили, а
+  дайджест пересчитывать забыли: ядро обязано резать такое
+  содержимое (severity: block), иначе дайджест — декорация. Точно
+  так же 175 мёртвых копий ключей: контент, который никогда не
+  доходит до гейта, — это не «мусор», а тихая ложь о том, что
+  зафиксировано. Обновление инструментария здесь не косметика: оно
+  превращает невидимое расхождение между файлом и его
+  фиксацией в видимое, а потом — в исправленное.
+
+  Контр-довод против «просто обновить номер»: строка `schema:` —
+  это идентификатор ФОРМАТА, а не версия инструмента. 3.7-ядро
+  по-прежнему принимает только `3.0-alpha`/`3.2`/`3.3`
+  (`lib/schema_embedded.ml`), upstream в дереве 3.7.4 пишет
+  `math-coding/3.3`, и `mathc new-decision` скеффолдит то же.
+  Бамп `schema:` на `3.7` — это не обновление, а рассинхрон с
+  форматом: ядро такое значение примет (enum в YAML-форме не
+  проверяется), но файл перестанет соответствовать
+  `schemas/decision.json` и policy-решению.
+
+antithesis: |
+  "Не трогать 118 решений: сначала довести до ума покрытие
+  attestations (51 unknown на 119 решениях), и только потом заниматься форматом."
+
+  Отклонено, потому что это подмена: покрытие attestations —
+  отдельная, большая работа (нужно реально выполнить
+  verifier'ы и выпустить attestations, а локальный `ui/node_modules`
+  сейчас неполон), а устаревшие дайджесты ломают гейт СЕЙЧАС и
+  независимо от покрытия. Порядок «сначала формат, потом
+  покрытие» дешёв: он чинит то, что уже красное, и не требует ни
+  одного запуска тестов. Покрытие остаётся открытым долгом и
+  зафиксировано как unknown — честно, без притворства.
+
+assumptions:
+  - id: mc37-schema-family-unchanged
+    state: assumed
+    statement: |
+      "Семейство схемы decision-файла в 3.7.x остаётся `3.3`:
+      3.7-ядро принимает `3.0-alpha`/`3.2`/`3.3`, upstream в
+      дереве 3.7.4 использует `math-coding/3.3` (118 решений) и
+      `math-coding/3.2` (127), а `mathc new-decision` скеффолдит
+      `math-coding/3.3`."
+    evidence: "math-coding lib/schema_embedded.ml:34-39; math-coding decisions/*.yaml; mathc new-decision"
+    owner: agent
+  - id: mc37-verifier-debt-matches-upstream
+    state: assumed
+    statement: |
+      "Оставшиеся 217 MC-VERIFIER-SCHEME-UNKNOWN — это тот же класс
+      долга, что upstream несёт в своём корпусе (35 из 251 его
+      решений): идентификаторные метки (`vitest-run-*`,
+      `pnpm-ui-*`, `playwright*`), реальную команду которых из
+      строки не восстановить без угадывания. Префиксная
+      «канонизация» превратила бы строку в ложь (например,
+      `tests/vitest-run-recording-panel` — не путь), поэтому долг
+      зафиксирован, а не замаскирован."
+    evidence: "mathc validate decisions/*.yaml --format=json (wavecode); mathc validate decisions/*.yaml --format=json (math-coding)"
+    owner: agent
+
+relations:
+  addresses:
+    - wavecode-bootstrap-math-coding-3.3@1

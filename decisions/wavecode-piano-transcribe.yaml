@@ -3,8 +3,8 @@ schema: math-coding/3.3
 id: wavecode-piano-transcribe
 revision: 1
 state: draft
-body_sha: "sha256:0000000000000000000000000000000000000000000000000000000000000000"
-yaml_sha: "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+body_sha: "sha256:5c1522ac53245121eb9c7508a35713202efae27cda7ff0f2cb395019aa62f915"
+yaml_sha: "sha256:5c1522ac53245121eb9c7508a35713202efae27cda7ff0f2cb395019aa62f915"
 
 intent: |
   Turn the on-screen piano (and any WebMIDI keyboard) into a SOURCE OF
@@ -240,4 +240,3 @@ relations:
   depends_on:
     - wavecode-bootstrap-math-coding-3.3@1
     - wavecode-strudel-ast@1
----

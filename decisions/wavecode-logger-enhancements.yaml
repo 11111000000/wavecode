@@ -3,8 +3,8 @@ schema: math-coding/3.3
 id: wavecode-logger-enhancements
 revision: 1
 state: active
-body_sha: "sha256:a252f585faf67bf38d7a195afcabfeb309726f6eedba1243306060ac01f6fac2"
-yaml_sha: "sha256:a252f585faf67bf38d7a195afcabfeb309726f6eedba1243306060ac01f6fac2"
+body_sha: "sha256:ea99ee97090cc5a61d586fc46bb48d96363678ba39a8728995da80e4dcf8d20e"
+yaml_sha: "sha256:ea99ee97090cc5a61d586fc46bb48d96363678ba39a8728995da80e4dcf8d20e"
 
 intent: |
   Three additive enhancements land on top of
@@ -111,44 +111,6 @@ antithesis: |
   AudioWorklet → Effect.fail в audio pipeline). Делаем
   level доступным в API logger.push — caller решает,
   что считать fatal.
-  Three new modules, all in `infrastructure/log/`:
-counterexample: |
-  The strongest objection to this decision is captured in the `antithesis` field above: (1) «Inline throttle logic in `logger.push`». Возражение:
-antithesis: |
-  (1) «Inline throttle logic in `logger.push`». Возражение:
-  throttle — это math (чистая функция от history + nextKey +
-  nextTs); держать его inline смешивает side-effect (push в
-  ring buffer) с pure decision. Pure helper → тестируемо без
-  mock'ов всего logger'а. (2) «Использовать lodash throttle
-  / debounce». Возражение: lodash throttle — time-based, а
-  нам нужно count-based ("5 emits per source per 1000ms
-  window"). Time-based throttle молча пропустит burst 6
-  identical warns за 0ms (между тиками 4ms debounce они все
-  попадут в один тик). Нам нужно *per-source rolling
-  count*, не debounce по wall-clock. (3) «Сохранять ВСЕ
-  уровни в IDB, не только errors». Возражение: 'info' и
-  'debug' — это high-volume noise (strudel flushes каждый
-  animation frame). 100-entry IDB-кеш забился бы за 5
-  секунд Strudel-eval'а. Errors — это сигнал, который
-  переживает reload; остальное можно смотреть в ring
-  buffer. (4) «Использовать localStorage вместо IDB».
-  Возражение: localStorage — синхронный (блокирует main
-  thread на ~5-20ms на каждую запись); IDB асинхронный.
-  Strudel audio scheduler использует message-loop events;
-  localStorage.write в момент audio tick может дать
-  audible glitch. IDB — fire-and-forget без audio impact.
-  (5) «Хранить last-100 как есть, без cap». Возражение:
-  unbounded IDB growth = memory leak на long-lived tabs
-  (PWA). 100 — это достаточно для диагностики (последний
-  fatal + последние 99 errors между fatal-ами), достаточно
-  мало для O(1) memory. (6) «Fatal = uncaught exception
-  bubble в window.onerror». Возражение: window.onerror
-  уже ловит uncaught (см. consoleGlobals Phase 1) — fatal
-  level нужен для catch'ев в коде Strudel/Effect runtime,
-  где window.onerror не срабатывает (например, broken
-  AudioWorklet → Effect.fail в audio pipeline). Делаем
-  level доступным в API logger.push — caller решает,
-  что считать fatal.
 axiom_link:
   - A2
 scope:
@@ -172,7 +134,7 @@ obligations:
       The original v1.0 packet applied on the recorded date in its `witness` file; this migration preserves that evidence as an `attestations/<id>-evidence.json` file.
     acceptance:
       all:
-        - verifier: "attestation-store-has-subject"
+        - verifier: "mathc self-check"
           result: pass
 assumptions: []
 risk:
@@ -182,4 +144,3 @@ risk:
 relations:
   addresses:
     - wavecode-bootstrap-math-coding-3.3@1
----

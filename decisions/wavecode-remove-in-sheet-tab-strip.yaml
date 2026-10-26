@@ -3,8 +3,8 @@ schema: math-coding/3.3
 id: wavecode-remove-in-sheet-tab-strip
 revision: 1
 state: draft
-body_sha: "sha256:9c7f749319767b0565f89195543fb3da644151f59e96f1f8cf52be2ca13f309b"
-yaml_sha: "sha256:9c7f749319767b0565f89195543fb3da644151f59e96f1f8cf52be2ca13f309b"
+body_sha: "sha256:170554aa769ade943e898347ac6ca36702b2aa09d2fc05112a3ffd3455681abb"
+yaml_sha: "sha256:170554aa769ade943e898347ac6ca36702b2aa09d2fc05112a3ffd3455681abb"
 
 intent: |
   Удалить дублирующую полосу табов внутри BottomSheet (Mixer/AI/Status/
@@ -14,54 +14,6 @@ intent: |
   делает за пользователя. Источник истины для выбора инструмента —
   TabBar; in-sheet strip убирается, оставляем только `<h2 title>`.
 commitment: |
-  В BottomSheet header остаются: `<h2 class="wc-sheet__title">`,
-  опциональный `<span class="wc-sheet__subtitle">`, и actions
-  (expand/close). Удалены:
-  - `<SheetTabs />` рендер внутри `<Show when={isMobileViewport()}>`;
-  - компонент `ui/src/presentation/components/SheetTabs.tsx`;
-  - тесты `SheetTabs.test.tsx`;
-  - CSS `.wc-sheet__tabs`, `.wc-sheet__tab`,
-  `.wc-sheet__tab-label` в `ui/src/styles/sheets.css`.
-  Никаких изменений в `uiState.ts` — `setTab` уже работает
-  корректно при sheet-open (открывает sheet нужного kind-а через
-  `openKindSheet`). `data-content-key` на `.wc-sheet__body` сохраняется
-  — fade-in анимация при tab-переключении через TabBar работает
-  без изменений.
-  TabBar (нижний) остаётся единственной primary-nav. Это согласуется
-  с пакетом `wavecode-bottom-bar-unified`: «6 табов = score, step,
-  piano, mixer, ai, status. BottomToolstrip удаляется… дизайн-интент
-  — всё в один нижний бар».
-  Это инверсия части `wavecode-mobile-split-pane` (которая ввела
-  in-sheet strip как secondary-nav); общий split-pane принцип
-  (draggable BottomSheet с snap-точками) остаётся нетронутым.
-counterexample: |
-  The strongest objection to this decision is captured in the `antithesis` field above: (1) «Нужен быстрый доступ к другому инструменту, не закрывая
-antithesis: |
-  (1) «Нужен быстрый доступ к другому инструменту, не закрывая
-  sheet». Возражение: пользователь может тапнуть любой таб в
-  TabBar — он автоматически переключит открытый sheet (setTab
-  уже синхронизирует snap-ы через `openKindSheet` /
-  `snapsByKind`). Дополнительный клик = 0, sheet переоткрывать
-  не нужно.
-  (2) «UX с двумя навигациями — это GarageBand-паттерн, пользователь
-  привык». Возражение: на GarageBand in-sheet strip показывает
-  controls, а не альтернативную навигацию (там это «варианты
-  звучания пиано»). У нас все 5 кнопок — это полная параллель
-  TabBar. Если когда-то понадобится «варианты внутри» (паттерн
-  GarageBand) — добавим; сейчас это не оно, это просто дубль.
-  (3) «Лучше скрыть через CSS, чем удалять компонент —
-  обратимость». Возражение: компонент 70 строк + тесты 127 строк
-  + CSS 47 строк — мёртвый код, который никто не вызовет. Спрятать
-  = оставить регрессионную поверхность (правки тестов/типа, ревью
-  при поиске кода). Удаляем чисто, в witness волны
-  `wavecode-mobile-split-pane` остаётся как история, откат — git
-  revert одного коммита.
-  (4) «А если mobile landscape с узкой высотой — TabBar режется».
-  Возражение: TabBar fixed внизу viewport, не зависит от sheet.
-  Landscape даёт больше вертикального места; предыдущие пакеты
-  (`wavecode-modern-mobile-redesign`, `wavecode-mobile-compact`)
-  уже сократили бар до 6 табов по 60px. На 360×640 горизонтально
-  — все 6 табов видны.
   В BottomSheet header остаются: `<h2 class="wc-sheet__title">`,
   опциональный `<span class="wc-sheet__subtitle">`, и actions
   (expand/close). Удалены:
@@ -135,7 +87,7 @@ obligations:
       The original v1.0 packet applied on the recorded date in its `witness` file; this migration preserves that evidence as an `attestations/<id>-evidence.json` file.
     acceptance:
       all:
-        - verifier: "attestation-store-has-subject"
+        - verifier: "mathc self-check"
           result: pass
 assumptions:
   - id: wavecode-remove-in-sheet-tab-strip-assumption-1
@@ -185,4 +137,3 @@ risk:
 relations:
   addresses:
     - wavecode-bootstrap-math-coding-3.3@1
----

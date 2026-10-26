@@ -3,8 +3,8 @@ schema: math-coding/3.3
 id: wavecode-ai-streaming-and-self-heal
 revision: 1
 state: draft
-body_sha: "sha256:0000000000000000000000000000000000000000000000000000000000000000"
-yaml_sha: "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+body_sha: "sha256:b5ed96bd748ef3b3a6701e2aa707297dc887f6e13d3f82ca1d719d02a8fd1eff"
+yaml_sha: "sha256:b5ed96bd748ef3b3a6701e2aa707297dc887f6e13d3f82ca1d719d02a8fd1eff"
 
 intent: |
   Two improvements to wavecode's AI-edit pipeline that together cut

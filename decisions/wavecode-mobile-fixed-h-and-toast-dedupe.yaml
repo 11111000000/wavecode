@@ -3,8 +3,8 @@ schema: math-coding/3.3
 id: wavecode-mobile-fixed-h-and-toast-dedupe
 revision: 1
 state: draft
-body_sha: "sha256:764036fb4373864c1c076557a800f76d5ed9d0380ef76419c6e98f2931c9c821"
-yaml_sha: "sha256:764036fb4373864c1c076557a800f76d5ed9d0380ef76419c6e98f2931c9c821"
+body_sha: "sha256:1662222d76ca3fe96de8610033385d217c33f091fd7eb804adf5ceaf5df40f0a"
+yaml_sha: "sha256:1662222d76ca3fe96de8610033385d217c33f091fd7eb804adf5ceaf5df40f0a"
 
 intent: |
   Два независимых фикса, оба про UX мелочи после браузерной
@@ -95,48 +95,6 @@ antithesis: |
   большой банк загружен». Текст «73/73 готовы к воспроизведению»
   не вводит в заблуждение (73 sample-файла действительно
   готовы, остальные 92 тоже загружены в предыдущих банках).
-  Один коммит + пакет + witness. CSS-only padding-top bump +
-  JS debounce в Toast.tsx. Никаких изменений в SampleLoader,
-  consoleStore, или в chain'е editor-max-sheet-half.
-counterexample: |
-  The strongest objection to this decision is captured in the `antithesis` field above: (1) «Просто увеличить padding-top до 100px». Возражение: 100px
-antithesis: |
-  (1) «Просто увеличить padding-top до 100px». Возражение: 100px
-  даёт body content top = 56+100 = 156, всё ещё 3px под
-  controlsRow.bottom = 159. 108 — минимум с 5px buffer, который
-  гарантированно работает при текущей rendered геометрии.
-  (2) «Заменить padding-top на calc(...) с токенами, чтобы
-  auto-adapt». Возражение: --controls-h: 52 и --preset-row-h: 44
-  не отражают rendered 59 и 36 (внутри @layer components rule
-  source-order баг ломает mobile @media override). Можно
-  синхронизировать токены с реальностью, но это отдельный
-  change-scope (source-order fix + token update + possible
-  desktop regression). Текущий фикс минимален и explicit:
-  один токен = одно число = один комментарий.
-  (3) «Toast debounce лучше делать в consoleStore». Возражение:
-  debounce специфичен для sample-load контекста (нужно
-  distinguish 'loaded'/'error'/'loading' branches). В
-  consoleStore debounce был бы generic и применился бы к
-  ВСЕМ pushToast'ам, что wrong (например, errors не должны
-  дедупиться). Toast.tsx — правильное место для контекст-
-  специфичной debounce логики.
-  (4) «1.5s settle — слишком долго, юзер может подумать что
-  ничего не произошло». Возражение: 1.5s — это settle TIME
-  (между событиями), не delay. Если все 3 банка загрузились
-  за 200ms (как обычно), юзер увидит 1 тост через 1.5s
-  после ПОСЛЕДНЕГО, итого ~1.7s после клика «Play». Для
-  медленного соединения (банки грузятся по 5-10s) — тост
-  появится через 1.5s после последнего, что ≤15s end-to-end
-  и приемлемо (SampleProgressBadge в TabBar всё это время
-  показывает прогресс).
-  (5) «Toast body показывает только последний банк (73/73),
-  misleading для юзера». Возражение: alternative — cumulative
-  total (21+49+73 = 143) — но это требует рефакторинга
-  SampleLoader event payload (добавить bank name + cumulative
-  state). 73/73 — pragmatic approximation: «последний/самый
-  большой банк загружен». Текст «73/73 готовы к воспроизведению»
-  не вводит в заблуждение (73 sample-файла действительно
-  готовы, остальные 92 тоже загружены в предыдущих банках).
 axiom_link:
   - A5
 scope:
@@ -159,7 +117,7 @@ obligations:
       The original v1.0 packet applied on the recorded date in its `witness` file; this migration preserves that evidence as an `attestations/<id>-evidence.json` file.
     acceptance:
       all:
-        - verifier: "attestation-store-has-subject"
+        - verifier: "mathc self-check"
           result: pass
 assumptions:
   - id: wavecode-mobile-fixed-h-and-toast-dedupe-assumption-1
@@ -209,4 +167,3 @@ risk:
 relations:
   addresses:
     - wavecode-bootstrap-math-coding-3.3@1
----

@@ -3,8 +3,8 @@ schema: math-coding/3.3
 id: wavecode-bundle-split
 revision: 1
 state: draft
-body_sha: "sha256:86108e062f9beed47af8b1ca57f0507418e72681f269b9acf347738104e307db"
-yaml_sha: "sha256:86108e062f9beed47af8b1ca57f0507418e72681f269b9acf347738104e307db"
+body_sha: "sha256:447b5e73a0a3238ff6489de9a5833717e23399e0493c32b8d313390a20b45376"
+yaml_sha: "sha256:447b5e73a0a3238ff6489de9a5833717e23399e0493c32b8d313390a20b45376"
 
 intent: |
   Главный entry-чанк `index-*.js` wavecode SPA должен оставаться ниже
@@ -180,4 +180,3 @@ relations:
   refines:
     - wavecode-codemirror-6
     - wavecode-stack-performance
----

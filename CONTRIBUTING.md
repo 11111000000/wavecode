@@ -16,7 +16,7 @@
 3. **Перед коммитом** — `bash scripts/pre-commit` (или `npm run precommit:install` для автоустановки hook'а).
 4. **Commit messages** — Conventional Commits, English, ≤72 char subject. Пример: `fix(audio): respect LanguageMode in setScore hot-swap`.
 5. **Push** в свой fork, откройте **PR** в `master`. CI гоняет typecheck + vitest + lint.
-6. **Architectural decisions** — каждое нетривиальное изменение фиксируется YAML в `decisions/<id>.yaml` (math-coding 3.3 schema). Без этого PR может быть отклонён.
+6. **Architectural decisions** — каждое нетривиальное изменение фиксируется YAML в `decisions/<id>.yaml` (math-coding 3.3 schema, ядро 3.7). После правки тела — `mathc rehash --write`. Без этого PR может быть отклонён.
 
 ## Code style
 
@@ -56,7 +56,7 @@ The same rules apply, in English:
 3. **Before commit** — `bash scripts/pre-commit` (or `npm run precommit:install` to install the hook).
 4. **Commit messages** — Conventional Commits, English, ≤72 char subject. Example: `fix(audio): respect LanguageMode in setScore hot-swap`.
 5. **Push** to your fork, open a **PR** to `master`. CI runs typecheck + vitest + lint.
-6. **Architectural decisions** — every non-trivial change is captured as YAML in `decisions/<id>.yaml` (math-coding 3.3 schema). Without this, the PR may be rejected.
+6. **Architectural decisions** — every non-trivial change is captured as YAML in `decisions/<id>.yaml` (math-coding 3.3 schema, kernel 3.7). Run `mathc rehash --write` after editing the body. Without this, the PR may be rejected.
 
 ### Code style
 

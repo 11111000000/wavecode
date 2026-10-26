@@ -3,8 +3,8 @@ schema: math-coding/3.3
 id: wavecode-mobile-single-panel
 revision: 1
 state: active
-body_sha: "sha256:0b9da0660a08d466cc3cd9a7d012f22a01d811cef7e38237cff285f4a5d62985"
-yaml_sha: "sha256:0b9da0660a08d466cc3cd9a7d012f22a01d811cef7e38237cff285f4a5d62985"
+body_sha: "sha256:54d85c102e13b69381856870204c65bd5be7d83f58ab0998406d1631c7351f35"
+yaml_sha: "sha256:54d85c102e13b69381856870204c65bd5be7d83f58ab0998406d1631c7351f35"
 
 intent: |
   На экранах ≤720px (`window.matchMedia('(max-width: 720px)').matches`)
@@ -17,25 +17,6 @@ intent: |
   юзер может явно переопределить toggle-button'ом («📱 mobile-режим»
   toggle в header, pin).
 commitment: |
-  Auto-detect viewport ≤720px на load + сохранять pref в localStorage
-  для explicitness. По умолчанию `auto`. Юзер может переопределить
-  через «📱 mobile-режим» toggle. AI и Status collapsed на mobile,
-  Score занимает 100% доступной высоты. CSS уже имеет @media для
-  mobile, расширяется на .app-body layout.
-counterexample: |
-  The strongest objection to this decision is captured in the `antithesis` field above: (1) auto-detection делает странное для iPad landscape (1180pt,
-antithesis: |
-  (1) auto-detection делает странное для iPad landscape (1180pt,
-  >720) — там пользователь видит все 3 панели и не страдает.
-  Решение: breakpoint 720 — landscape iPad остаётся full-panel.
-  (2) Юзер в mobile хочет иногда AI-панель открыть → tap на
-  toggleable header. Не нужен desktop-style horizontal layout.
-  (3) Если localStorage говорит «full», а breakpoint — mobile,
-  что важнее? — Решение: explicit user pref (`wavecode-mobile-
-  default: 'auto'|'compact'|'full'`) побеждает auto-detection.
-  Default = 'auto'. (4) single-panel layout на iPhone SE
-  (320×568, 16-year-old device) = 568 - 50 toolbar - 26 header
-  = 492pt editor height — приемлемо для typing.
   Auto-detect viewport ≤720px на load + сохранять pref в localStorage
   для explicitness. По умолчанию `auto`. Юзер может переопределить
   через «📱 mobile-режим» toggle. AI и Status collapsed на mobile,
@@ -76,7 +57,7 @@ obligations:
       The original v1.0 packet applied on the recorded date in its `witness` file; this migration preserves that evidence as an `attestations/<id>-evidence.json` file.
     acceptance:
       all:
-        - verifier: "attestation-store-has-subject"
+        - verifier: "mathc self-check"
           result: pass
 assumptions:
   - id: wavecode-mobile-single-panel-assumption-1
@@ -121,4 +102,3 @@ risk:
 relations:
   addresses:
     - wavecode-bootstrap-math-coding-3.3@1
----

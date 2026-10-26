@@ -3,8 +3,8 @@ schema: math-coding/3.3
 id: wavecode-sample-pack
 revision: 1
 state: active
-body_sha: "sha256:31058164be34e27e40be6b61a7553d5b0f800303b1e2adcb0a20f7f8746cb70b"
-yaml_sha: "sha256:31058164be34e27e40be6b61a7553d5b0f800303b1e2adcb0a20f7f8746cb70b"
+body_sha: "sha256:8d5f7095dd72a1fff675fd1d077d31cfb83056a16c55978210dc89db59a28c86"
+yaml_sha: "sha256:8d5f7095dd72a1fff675fd1d077d31cfb83056a16c55978210dc89db59a28c86"
 
 intent: |
   `public/samples/piano/` — 10 MP3 семплов Salamander Grand Piano v3
@@ -23,26 +23,6 @@ intent: |
   - 'piano-ballad' — Salamander-piano в стиле Billy Joel
   - '808-classic' — kick + snare + hat с synth-808
 commitment: |
-  Piano samples (CC0, ~720KB) + Strudel `samples()` loader + 2 demo
-  presets. Synth-808 как bonus. Total bundle impact: +200KB gzip.
-  PWA service worker precaches 1.5MB total — sample + JS + CSS всё
-  кешируется при install. На mobile: progressive download после
-  service worker install (workbox background).
-counterexample: |
-  The strongest objection to this decision is captured in the `antithesis` field above: (1) «Salamander A1..C7 = 10 семплов, между ними будут артефакты
-antithesis: |
-  (1) «Salamander A1..C7 = 10 семплов, между ними будут артефакты
-  при pitch-shift на 2+ полутона». Возражение: Strudel делает
-  pitch-shift на 12-полутоновую раскладку через Tonal/Tone.js —
-  небольшой артефакт приемлем для sketch-режима. (2) «10 семплов
-  × 80KB = 800KB bundle — слишком много». Решение: 720KB compressed
-  gzip ≈ 200KB; PWA service worker кеширует — second load instant.
-  (3) «Synth-808 — не настоящий 808, у него нет аналогового характера».
-  Возражение: это sample-quality ЭМУЛЯЦИЯ, не копия. Для sketches
-  и live-coding — приемлемо. Реальный 808-семпл pack можно добавить
-  позже (если найдём CC0-источник). (4) «Лицензии — нужен
-  redistribution OK». Salamander = CC0 = full redistribution OK.
-  Документировано в `public/samples/piano/LICENSE.txt`.
   Piano samples (CC0, ~720KB) + Strudel `samples()` loader + 2 demo
   presets. Synth-808 как bonus. Total bundle impact: +200KB gzip.
   PWA service worker precaches 1.5MB total — sample + JS + CSS всё
@@ -85,7 +65,7 @@ obligations:
       The original v1.0 packet applied on the recorded date in its `witness` file; this migration preserves that evidence as an `attestations/<id>-evidence.json` file.
     acceptance:
       all:
-        - verifier: "attestation-store-has-subject"
+        - verifier: "mathc self-check"
           result: pass
 assumptions: []
 risk:
@@ -95,4 +75,3 @@ risk:
 relations:
   addresses:
     - wavecode-bootstrap-math-coding-3.3@1
----

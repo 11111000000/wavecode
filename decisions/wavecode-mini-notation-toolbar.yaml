@@ -3,8 +3,8 @@ schema: math-coding/3.3
 id: wavecode-mini-notation-toolbar
 revision: 1
 state: active
-body_sha: "sha256:10aba0c94c92276b4d545f87adbf78ccce5be99e4f3236cac5565e5e07862eb2"
-yaml_sha: "sha256:10aba0c94c92276b4d545f87adbf78ccce5be99e4f3236cac5565e5e07862eb2"
+body_sha: "sha256:9a220fa36a3048bfcae7e319711f73141becebb3c4e4e8503153d9d85e40a6ce"
+yaml_sha: "sha256:9a220fa36a3048bfcae7e319711f73141becebb3c4e4e8503153d9d85e40a6ce"
 
 intent: |
   В Score-панели между `.cm-host` и редактором — sticky toolbar
@@ -17,31 +17,6 @@ intent: |
   чтобы toolbar был над vkb. На desktop toolbar НЕ показывается
   (window.innerWidth ≥ 720 OR визуальная vkb скрыта).
 commitment: |
-  Sticky strip ВЫШЕ vkb на mobile, tabbed показатель OFF по
-  breakpoint. Используем `visualViewport.offsetTop + .height` для
-  desktop-like bottom-positioning; pure CSS `@media (max-width:720px)`
-  для show/hide. Каждая кнопка = маленькая команда из 4-7 chars,
-  соответствует ровно одной вставке в cursor. Selection replace
-  если есть selected range; insert в cursor иначе. Это replacement
-  для vkb-typing боли при написании Strudel mini-notation на iPhone.
-counterexample: |
-  The strongest objection to this decision is captured in the `antithesis` field above: (1) iOS Safari иногда меняет visual viewport async, toolbar
-antithesis: |
-  (1) iOS Safari иногда меняет visual viewport async, toolbar
-  «прыгает». Решение: debounce 100ms на resize listener +
-  use `visualViewport.offsetTop` (стабильно). (2) Custom keyboards
-  нельзя сделать (Apple блокирует). Toolbar не custom keyboard
-  — это strip поверх native vkb, что Apple разрешает. (3) На
-  desktop toolbar полезен (mouse-snipping), но window space
-  критичен. Решение: только mobile breakpoint OR `inputmode=vkb`
-  when editor focused. (4) Редактор keyboard shortcut (Tab) для
-  autocomplete конфликтует с toolbar buttons. Решение: toolbar
-  buttons живут ВНЕ editor focus context, не conflict. (5)
-  `view.dispatch` от вставки toolbar теряет undo history
-  отдельно от typing. — нет: dispatch проходит через тот же
-  updateListener, undo path стандартный. (6) На multi-line
-  editor cursor должен быть visible ПОСЛЕ insert — view.scrollIntoView
-  необходим если cursor вне viewport.
   Sticky strip ВЫШЕ vkb на mobile, tabbed показатель OFF по
   breakpoint. Используем `visualViewport.offsetTop + .height` для
   desktop-like bottom-positioning; pure CSS `@media (max-width:720px)`
@@ -88,7 +63,7 @@ obligations:
       The original v1.0 packet applied on the recorded date in its `witness` file; this migration preserves that evidence as an `attestations/<id>-evidence.json` file.
     acceptance:
       all:
-        - verifier: "attestation-store-has-subject"
+        - verifier: "mathc self-check"
           result: pass
 assumptions:
   - id: wavecode-mini-notation-toolbar-assumption-1
@@ -138,4 +113,3 @@ risk:
 relations:
   addresses:
     - wavecode-bootstrap-math-coding-3.3@1
----

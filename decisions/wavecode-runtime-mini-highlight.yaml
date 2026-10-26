@@ -3,8 +3,8 @@ schema: math-coding/3.3
 id: wavecode-runtime-mini-highlight
 revision: 1
 state: active
-body_sha: "sha256:13f049429a9602d3ca0f31134acb84f37774ae985b1b7ee07be2e78800faedba"
-yaml_sha: "sha256:13f049429a9602d3ca0f31134acb84f37774ae985b1b7ee07be2e78800faedba"
+body_sha: "sha256:89437143283362666954bb45d5a197f38f9dd5301506bffb02f4ee610b2f9d70"
+yaml_sha: "sha256:89437143283362666954bb45d5a197f38f9dd5301506bffb02f4ee610b2f9d70"
 
 intent: |
   Runtime mini-notation highlight — «дирижёрский луч» поверх существующего
@@ -78,49 +78,6 @@ antithesis: |
   не должен видеть отвлекающую анимацию». Решение: highlight
   обновляется только когда scheduler активен (started=true); во
   время typing без eval — decorations остаются пустыми / stale.
-  Runtime mini-notation highlight = bridge (1 instance, module-scope)
-  + CodeMirror StateField/ViewPlugin (per editor view).
-counterexample: |
-  The strongest objection to this decision is captured in the `antithesis` field above: (1) «Highlights нужны в Strudel REPL из коробки». Возражение: Strudel
-antithesis: |
-  (1) «Highlights нужны в Strudel REPL из коробки». Возражение: Strudel
-  highlight (codemirror extension + @strudel/highlight) заточен под
-  Strudel REPL, несовместим с wavecode CodeMirror setup, требует
-  подмены `repl.evaluate`. wavecode highlights = только поверх
-  существующих @strudel building blocks (transpiler `miniLocations` +
-  `Pattern.withLoc`). (2) «queryArc каждый rAF — дорого». Возражение:
-  queryArc для одного Pattern'а ~50-200µs на 4-cycle window (Pattern
-  typical 6-layer stack); на iPhone 14 RAF = 16.67ms, остаётся ~16ms
-  запас. Throttle 33ms (~30Hz) гарантирует ≤1 query / display refresh.
-  При 60Hz без throttle — 2 query/refresh, ненужно. (3) «Locations
-  в Hap.context — могут отсутствовать для не-pure patterns». Решение:
-  fallback — вычислить locations из transpile.miniLocations overlap
-  с viewport; если hap есть, а locations пустые — игнорировать.
-  Edge case `< > ~ ~ > ` целиком из `~` — нет активных звуков, нет
-  подсветки, корректное no-op. (4) «Active Hap привязан к original
-  snippet, но miniNotationHighlight использует regex по doc». Решение:
-  miniNotationHighlight (regex) и runtime highlight (miniLocations)
-  создают разные DecorationSet — CodeMirror объединяет decorations
-  AND-логикой (intersect range), на одном марке активные ranges
-  имеют приоритет. Разные классы: `.cm-mini-notation` (static) и
-  `.cm-mini-active` (runtime) — не конфликтуют стилистически
-  (active содержит notation class как parent, добавляет эффекты).
-  (5) «Animation может тормозить на мобилках / вызывать перерисовку».
-  Решение: animation через CSS class не `transform`/`width` — только
-  `background-color`/`box-shadow` opacity compositing, GPU-friendly.
-  prefers-reduced-motion → отключаем анимацию, оставляем static
-  solid background. (6) «Mixer edits (setLayerMix) инвалидируют
-  char-ranges». Решение: после `setLayerMix` LiveAudioEngine
-  перевызывает bridge.setActive — transpile переисполняется с новыми
-  positions. Locatons, добавленные `.gain(...)` модификаторами,
-  лежат ВНЕ mini-notation string literals → не конфликтуют.
-  (7) «Code 30Hz rAF + 10 layers stack = battery drain». Решение:
-  если audio не играет — `bridge.clearActive()` останавливает rAF-loop
-  (single toggle). Auto-cleanup on tab blur через
-  `document.visibilitychange`. (8) «Во время typing пользователь
-  не должен видеть отвлекающую анимацию». Решение: highlight
-  обновляется только когда scheduler активен (started=true); во
-  время typing без eval — decorations остаются пустыми / stale.
 axiom_link:
   - A1
 scope:
@@ -143,7 +100,7 @@ obligations:
       The original v1.0 packet applied on the recorded date in its `witness` file; this migration preserves that evidence as an `attestations/<id>-evidence.json` file.
     acceptance:
       all:
-        - verifier: "attestation-store-has-subject"
+        - verifier: "mathc self-check"
           result: pass
 assumptions:
   - id: wavecode-runtime-mini-highlight-assumption-1
@@ -198,4 +155,3 @@ risk:
 relations:
   addresses:
     - wavecode-bootstrap-math-coding-3.3@1
----

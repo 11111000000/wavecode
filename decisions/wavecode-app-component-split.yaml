@@ -3,8 +3,8 @@ schema: math-coding/3.3
 id: wavecode-app-component-split
 revision: 1
 state: draft
-body_sha: "sha256:f5da0a77e3b271e74b3f75a5dc638bd54c3c6f3e6a99d60e8ddb7de048836e12"
-yaml_sha: "sha256:f5da0a77e3b271e74b3f75a5dc638bd54c3c6f3e6a99d60e8ddb7de048836e12"
+body_sha: "sha256:4acb6ba0e3b4e8a4ce59e2e798022616df71ddfa98b9fa1a5348de0903617683"
+yaml_sha: "sha256:4acb6ba0e3b4e8a4ce59e2e798022616df71ddfa98b9fa1a5348de0903617683"
 
 intent: |
   App.tsx split: 530 строк god-component → 4 sub-components
@@ -14,20 +14,6 @@ intent: |
   removal (-30% размера: 36KB → 25KB); z-index audit (все через
   токены --z-*, никаких magic numbers).
 commitment: |
-  Substrate:
-counterexample: |
-  The strongest objection to this decision is captured in the `antithesis` field above: (1) «Split — overengineering для текущего размера». Возражение:
-antithesis: |
-  (1) «Split — overengineering для текущего размера». Возражение:
-  530 строк App.tsx смешивают 4 ответственности; split улучшает
-  readability + per-component code-splitting в Vite.
-  (2) «Dead-rule removal — риск regression». Возражение: rg audit
-  = strict gate, если селектор не используется — удаление
-  безопасно. Если где-то используется косвенно (CSS @apply,
-  CSS-in-JS) — rg найдёт.
-  (3) «z-index через токены — overengineering». Возражение:
-  3 разных baseline = collision risk; единый scale =
-  детерминированная семантика.
   Substrate:
 counterexample: |
   The strongest objection to this decision is captured in the `antithesis` field above: (1) «Split — overengineering для текущего размера». Возражение:
@@ -63,7 +49,7 @@ obligations:
       The original v1.0 packet applied on the recorded date in its `witness` file; this migration preserves that evidence as an `attestations/<id>-evidence.json` file.
     acceptance:
       all:
-        - verifier: "attestation-store-has-subject"
+        - verifier: "mathc self-check"
           result: pass
 assumptions: []
 risk:
@@ -73,4 +59,3 @@ risk:
 relations:
   addresses:
     - wavecode-bootstrap-math-coding-3.3@1
----

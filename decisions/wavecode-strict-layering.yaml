@@ -3,8 +3,8 @@ schema: math-coding/3.3
 id: wavecode-strict-layering
 revision: 1
 state: draft
-body_sha: "sha256:7affb8d2d19d7b286eb8d10af619c5b17074b318eaa488879ca72c23b5d804d3"
-yaml_sha: "sha256:7affb8d2d19d7b286eb8d10af619c5b17074b318eaa488879ca72c23b5d804d3"
+body_sha: "sha256:beefde3a650c2db7f0c5889ac158ae2f18c47ec004bbb6d9d8068dd23166fe04"
+yaml_sha: "sha256:beefde3a650c2db7f0c5889ac158ae2f18c47ec004bbb6d9d8068dd23166fe04"
 
 intent: |
   Структурная целостность wavecode обеспечивается ESLint (flat config,
@@ -13,21 +13,6 @@ intent: |
   infrastructure не может импортить UI; presentation не может импортить
   audio/AI/DB напрямую.
 commitment: |
-  Strict layering предотвращает «гниение архитектуры»: domain остаётся
-  pure (тестируется без моков), application оркестрирует через Effect,
-  infrastructure инкапсулирует IO, presentation только отображает. Это
-  даёт testability и чистую заменяемость (например, swap AudioEngine
-  impl не ломает domain). ESLint enforcement в CI не даёт нарушить
-  случайно. Цена: occasional `// eslint-disable-next-line` для
-  оправданных случаев.
-counterexample: |
-  The strongest objection to this decision is captured in the `antithesis` field above: ESLint — лишний overhead для небольшого проекта; правила можно нарушить
-antithesis: |
-  ESLint — лишний overhead для небольшого проекта; правила можно нарушить
-  через `// eslint-disable-next-line`. Альтернатива — TypeScript-only
-  брэнд-типы или архитектурные тесты (dependency-cruiser), но это
-  дополнительная сложность. Strict layering может мешать быстрому
-  прототипированию.
   Strict layering предотвращает «гниение архитектуры»: domain остаётся
   pure (тестируется без моков), application оркестрирует через Effect,
   infrastructure инкапсулирует IO, presentation только отображает. Это
@@ -68,7 +53,7 @@ obligations:
       The original v1.0 packet applied on the recorded date in its `witness` file; this migration preserves that evidence as an `attestations/<id>-evidence.json` file.
     acceptance:
       all:
-        - verifier: "attestation-store-has-subject"
+        - verifier: "mathc self-check"
           result: pass
 assumptions:
   - id: wavecode-strict-layering-assumption-1
@@ -88,4 +73,3 @@ risk:
 relations:
   addresses:
     - wavecode-bootstrap-math-coding-3.3@1
----

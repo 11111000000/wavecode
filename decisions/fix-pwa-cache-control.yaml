@@ -3,8 +3,8 @@ schema: math-coding/3.3
 id: fix-pwa-cache-control
 revision: 1
 state: active
-body_sha: "sha256:0000000000000000000000000000000000000000000000000000000000000000"
-yaml_sha: "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+body_sha: "sha256:dd29de7da0396391cb2193230eab66270483d6af8ccf7ca3c2deb1917ab21fe3"
+yaml_sha: "sha256:dd29de7da0396391cb2193230eab66270483d6af8ccf7ca3c2deb1917ab21fe3"
 
 intent: |
   2026-10-18 юзер на десктопе (Chrome, работал с wavecode.kosov.online

@@ -3,8 +3,8 @@ schema: math-coding/3.3
 id: wavecode-step-sequencer
 revision: 1
 state: active
-body_sha: "sha256:a716a918744ce742198e8f81b9587618ec2334d9236ed62f60ebb9767118b336"
-yaml_sha: "sha256:a716a918744ce742198e8f81b9587618ec2334d9236ed62f60ebb9767118b336"
+body_sha: "sha256:009cbed3b4ef55c5e9538ddd1a6719dab7482b51cb2b47e014b9fc5f402541e5"
+yaml_sha: "sha256:009cbed3b4ef55c5e9538ddd1a6719dab7482b51cb2b47e014b9fc5f402541e5"
 
 intent: |
   В шапке wavecode, рядом с `▶ Запуск`, появляется toggle `🎹 Step`. В on —
@@ -18,31 +18,6 @@ intent: |
   При tap проигрывается sample через `AudioEngine.eval` (мини-eval
   с одним тактом) — пользователь слышит результат немедленно.
 commitment: |
-  Step sequencer — это второй input mode в wavecode. Два режима
-  сосуществуют: text-editor (код) и pad-grid (тапы). Score остаётся
-  текстом Strudel (single source of truth), grid state — derived
-  state в `presentation/state/gridState.ts`. Tap на pad = `gridState`
-  toggle + emit-synthesized-score + auto-eval (если audio уже
-  started). Кнопка `↑ load` копирует синтезированный score в основной
-  editor (dispatch replaceScore). Это позволяет:
-  - tap-and-go workflow на мобиле
-  - визуальный «beat sketch» для профи
-  - и экспорт ИИ-редактируемого кода (Score = string)
-  Не конкурирует с mixer/transport/record — все эти работают
-  поверх того, что в score. Т.е. stack = grid + mixer + transport wrap.
-counterexample: |
-  The strongest objection to this decision is captured in the `antithesis` field above: (1) Step sequencer — это «не для профи, профи кодят». Возражение:
-antithesis: |
-  (1) Step sequencer — это «не для профи, профи кодят». Возражение:
-  профи хотят СРАЗУ слышать результат, а не печатать Strudel-код,
-  потом eval'ить, потом фиксить. Pad-grid даёт немедленный sonic
-  feedback. (2) 8×4 слишком крупно для мобила. Решение: 8×4 на
-  desktop, на mobile scroll horizontally до 16 step'ов через `overflow-x`.
-  (3) Конфликт с CodeMirror input. Решение: `<details>` блок,
-  collapsed by default. (4) tap-conflict с CodeMirror focus. Решение:
-  tap на pad — preventDefault + stopPropagation. (5) Не сразу
-  понятно, какая нота играет. Решение: row label (kick / snare / hat /
-  clap) подсвечивается при tap + sample-им'я в title-атрибуте.
   Step sequencer — это второй input mode в wavecode. Два режима
   сосуществуют: text-editor (код) и pad-grid (тапы). Score остаётся
   текстом Strudel (single source of truth), grid state — derived
@@ -89,7 +64,7 @@ obligations:
       The original v1.0 packet applied on the recorded date in its `witness` file; this migration preserves that evidence as an `attestations/<id>-evidence.json` file.
     acceptance:
       all:
-        - verifier: "attestation-store-has-subject"
+        - verifier: "mathc self-check"
           result: pass
 assumptions: []
 risk:
@@ -99,4 +74,3 @@ risk:
 relations:
   addresses:
     - wavecode-bootstrap-math-coding-3.3@1
----

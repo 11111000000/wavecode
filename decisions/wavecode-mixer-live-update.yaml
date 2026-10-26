@@ -3,8 +3,8 @@ schema: math-coding/3.3
 id: wavecode-mixer-live-update
 revision: 1
 state: draft
-body_sha: "sha256:6a5dffb2bce802ecef299cde42234eeb4dab1670f90697a03d2b1961575ac1ab"
-yaml_sha: "sha256:6a5dffb2bce802ecef299cde42234eeb4dab1670f90697a03d2b1961575ac1ab"
+body_sha: "sha256:ee488dc7e22ef88f237437ee06c83e2861dfeb20341db097bac832f9e501b4c1"
+yaml_sha: "sha256:ee488dc7e22ef88f237437ee06c83e2861dfeb20341db097bac832f9e501b4c1"
 
 intent: |
   Mixer changes (gain / mute / solo) пушатся в живой Strudel-паттерн
@@ -18,58 +18,6 @@ intent: |
   Без пакета — слайдер должен ждать ручного ▶ Play; с пакетом —
   реакция слышна через ~50 ms (один lookahead), как в DAW.
 commitment: |
-  AudioEngine получает capability `setLayerMix(layerMix: LayerMix[])`,
-  симметричную существующему `setCps`. MixerPanel на каждый
-  dispatch вызывает (debounce 50 ms) `audio.setLayerMix(layerMix)`.
-  Под капотом: кеш последнего snippet (`audioActions.evalScore`
-  сохраняет его в `debugState.lastEvaluatedSnippet`, уже там),
-  `injectMix(snippet, layerMix)` → строка → `repl.setPattern(
-  parseOnly(newSnippet), autostart=false)`. Layer-mix state
-  остаётся в `appStore.layerMix`, как раньше — single source of
-  truth. Ручной ▶ Play перестаёт быть обязательным, но остаётся
-  валидным (для случая «юзер хочет форсировать full re-init
-  после preset-load, который и так зовёт evalScore сейчас»).
-  Effect-architecture не ломается: capability пишется в domain/
-  interface, реализуется в infrastructure/audio/, MixerPanel +
-  audioActions зовут её через DI AppLayer. Тесты: новый unit на
-  AudioEngine.setLayerMix с mock repl (verify setPattern called
-  с autos tart=false), новый e2e «drag slider → audio changes
-  без ▶ Play» в tests/e2e/.
-counterexample: |
-  The strongest objection to this decision is captured in the `antithesis` field above: (1) "Push gain напрямую в Pattern" — Strudel Pattern API не
-antithesis: |
-  (1) "Push gain напрямую в Pattern" — Strudel Pattern API не
-  предоставляет мутабельного `.setGain(i, g)`. Patterns immutable.
-  Самый дешёвый hot-swap — `setPattern(newPat, false)`, но
-  `newPat` всё равно требует перепарсинга (а Pattern мы из
-  `stack(...)` целиком не разбираем обратно по слоям — Stack
-  использует internal lazy-query contract, нет `.layers`).
-  Решение: пересобрать snippet через `injectMix` (он у нас уже
-  есть в application/useCases/) → `transpiler.evaluate` → pattern.
-  Полностью skip нельзя; skip можно ТОЛЬКО post-eval side-effects
-  (`repl.evaluate` внутри делает: parse → evalScope →
-  `beforeEval` → `setPattern(autostart=true)` → register runtime
-  hooks — мы вызываем `setPattern` напрямую и пропускаем всё
-  остальное). (2) Solo/mute cascade через `.gain(0)` vs `.mul(0)`
-  — proposition остаётся той же что и в wavecode-track-mixer,
-  injectMix не меняется. (3) Race на быстрый drag слайдера —
-  60Hz mousemove = 60 setLayerMix вызовов/сек. Без дебаунса
-  каждый тянет парсинг snippet (~30 ms на 6 layers на iPhone SE).
-  Решение: 50 ms debounce в presentation-слое, НЕ в AudioEngine
-  (engine остаётся idempotent и synchronous-safe). (4) Конфликт
-  с уже идущим `setCps` (debounce 100 ms в
-  useTransportAudioSync). Если оба debounce'ятся одновременно
-  в одном тике — Strudel scheduler ставит `this.pattern = newPat`
-  атомарно, не теряем состояния. Confirmed через
-  `@strudel/core/cyclist.mjs:3171-3173`. (5) A11y / откат при
-  ошибке парсинга — если перепарсинг фейлится (юзер сохранил
-  кривой snippet через undo между eval и mix), старый pattern
-  всё ещё в `repl.scheduler.pattern`, мы его НЕ трогаем. Failure
-  mode — silent retry на следующем изменении миксера, юзер слышит
-  что ничего не меняется (degraded, но не crash). (6) Зависимость
-  от внутреннего API — `repl.setPattern` экспортирован публично
-  в `@strudel/core/repl.mjs:105-110`, через `@strudel/webaudio`
-  d.ts-обёртку уже доступен. Никакого хака внутренних модулей.
   AudioEngine получает capability `setLayerMix(layerMix: LayerMix[])`,
   симметричную существующему `setCps`. MixerPanel на каждый
   dispatch вызывает (debounce 50 ms) `audio.setLayerMix(layerMix)`.
@@ -144,7 +92,7 @@ obligations:
       The original v1.0 packet applied on the recorded date in its `witness` file; this migration preserves that evidence as an `attestations/<id>-evidence.json` file.
     acceptance:
       all:
-        - verifier: "attestation-store-has-subject"
+        - verifier: "mathc self-check"
           result: pass
 assumptions:
   - id: wavecode-mixer-live-update-assumption-1
@@ -184,4 +132,3 @@ risk:
 relations:
   addresses:
     - wavecode-bootstrap-math-coding-3.3@1
----

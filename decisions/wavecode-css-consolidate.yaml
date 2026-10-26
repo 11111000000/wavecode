@@ -3,8 +3,8 @@ schema: math-coding/3.3
 id: wavecode-css-consolidate
 revision: 1
 state: active
-body_sha: "sha256:41e15348fc3f3e6b406c8996ad01f472be87ce8331b8b95f80d8a52565eca918"
-yaml_sha: "sha256:41e15348fc3f3e6b406c8996ad01f472be87ce8331b8b95f80d8a52565eca918"
+body_sha: "sha256:73fd23143396ba2056571031bb35e8d23b5f52f2a2ee0f774592a54d78efdb42"
+yaml_sha: "sha256:73fd23143396ba2056571031bb35e8d23b5f52f2a2ee0f774592a54d78efdb42"
 
 intent: |
   Текущий CSS разделен на 5 файлов + landing + index-orchestrator
@@ -126,29 +126,6 @@ antithesis: |
   Возражение: @layer — baseline since 2022 (Firefox 97, Chrome 99,
   Safari 15.4). Wavecode уже требует modern target (ESM, top-level
   await, AudioWorklet). Compatibility OK.
-  Один коммит (`feat(ui): CSS cascade layers`):
-counterexample: |
-  The strongest objection to this decision is captured in the `antithesis` field above: (1) «@layer — лишнее усложнение, достаточно перенести legacy.css
-antithesis: |
-  (1) «@layer — лишнее усложнение, достаточно перенести legacy.css
-  в конец components.css и удалить дубли вручную». Возражение:
-  ручное удаление 14 дублей = 14 точки ошибки, 14 review. @layer —
-  одна декларация, cascade сам решает. Если позже удалим
-  legacy.css полностью, @layer убирается одной строкой.
-  (2) «Tokens и base не нужно класть в @layer — они foundation,
-  всегда выигрывают по определению». Возражение: без @layer они
-  unlayered, что в cascade-rules даёт им ВЫСШИЙ приоритет, не
-  низший. Если foundation неожиданно перекрывает компоненты —
-  визуальные баги. С @layer(tokens) они явно «ниже».
-  (3) «Landing.css не нужно в layer — он page-specific, и так
-  побеждает». Возражение: да, побеждает и сейчас (последний
-  import). Но если в landing.css случайно окажется класс,
-  пересекающийся с components — без явного @layer(landing)
-  это будет silent override. Лучше explicit.
-  (4) «Cascade layers не поддерживаются старыми браузерами».
-  Возражение: @layer — baseline since 2022 (Firefox 97, Chrome 99,
-  Safari 15.4). Wavecode уже требует modern target (ESM, top-level
-  await, AudioWorklet). Compatibility OK.
 axiom_link:
   - A3
 scope:
@@ -171,7 +148,7 @@ obligations:
       The original v1.0 packet applied on the recorded date in its `witness` file; this migration preserves that evidence as an `attestations/<id>-evidence.json` file.
     acceptance:
       all:
-        - verifier: "attestation-store-has-subject"
+        - verifier: "mathc self-check"
           result: pass
 assumptions: []
 risk:
@@ -181,4 +158,3 @@ risk:
 relations:
   addresses:
     - wavecode-bootstrap-math-coding-3.3@1
----

@@ -3,6 +3,8 @@ schema: math-coding/3.3
 id: wavecode-app-component-decompose
 revision: 1
 state: draft
+body_sha: "sha256:2bee3b5097ff488be10fc740f8696feb019a70090ed2467b41e6c2eac9b5b704"
+yaml_sha: "sha256:2bee3b5097ff488be10fc740f8696feb019a70090ed2467b41e6c2eac9b5b704"
 
 intent: |
   Разбить App.tsx (273 строки в одном монолитном AppShell) на 4
@@ -150,4 +152,3 @@ risk:
 relations:
   addresses:
     - wavecode-bootstrap-math-coding-3.3@1
----

@@ -3,6 +3,8 @@ schema: math-coding/3.3
 id: fix-new-composition-flow
 revision: 1
 state: active
+body_sha: "sha256:5df23af9f93f80e000c35e5c079ca1d0ffb02bbb6e8f3f553c0d1a5dbd55100c"
+yaml_sha: "sha256:5df23af9f93f80e000c35e5c079ca1d0ffb02bbb6e8f3f553c0d1a5dbd55100c"
 
 intent: |
   Когда юзер нажимает «Новая композиция» (asterisk в TopBar),

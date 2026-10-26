@@ -3,8 +3,8 @@ schema: math-coding/3.3
 id: wavecode-voice-fab-toggle-rec
 revision: 1
 state: active
-body_sha: "sha256:9cf72f7520967e9cc8c09177cb135ebfaeff3eb49d59ef1c5cbbbf2d5bbce7c6"
-yaml_sha: "sha256:9cf72f7520967e9cc8c09177cb135ebfaeff3eb49d59ef1c5cbbbf2d5bbce7c6"
+body_sha: "sha256:dae23d1dd60855ce3a483ba22b7621866831f7450cb22cefa7ff008b725a3c5f"
+yaml_sha: "sha256:dae23d1dd60855ce3a483ba22b7621866831f7450cb22cefa7ff008b725a3c5f"
 
 axiom_link:
   - A0
@@ -270,7 +270,7 @@ obligations:
       завершается exit 0 без `MC-*` reject-диагностик.
     acceptance:
       all:
-        - verifier: mathc-validate
+        - verifier: mathc validate
           result: pass
 
 risk:

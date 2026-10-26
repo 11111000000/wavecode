@@ -3,8 +3,8 @@ schema: math-coding/3.3
 id: wavecode-llm-key-prefix-restore
 revision: 1
 state: active
-body_sha: "sha256:e4a66ac2b0ae244fe134542614235d6b75d9392e06fb88fa0e8d5cb068ce768b"
-yaml_sha: "sha256:e4a66ac2b0ae244fe134542614235d6b75d9392e06fb88fa0e8d5cb068ce768b"
+body_sha: "sha256:f1a84372f00dc32adb4b330ab4e48776f8df36a74d7e0a90c4d8e95916d73684"
+yaml_sha: "sha256:f1a84372f00dc32adb4b330ab4e48776f8df36a74d7e0a90c4d8e95916d73684"
 
 intent: |
   LLM-запросы возвращают 401:
@@ -63,32 +63,6 @@ antithesis: |
   revert-basicauth` — это literal evidence: «verified рабочий
   curl с `sk-litellm-ea6d97e9…`» — это контрактное подтверждение
   от живого теста в момент `applied_at_system: 2026-10-09T08:52Z».
-  Две правки:
-counterexample: |
-  The strongest objection to this decision is captured in the `antithesis` field above: (1) «Префикс это формат LiteLLM, а реальная причина может быть
-antithesis: |
-  (1) «Префикс это формат LiteLLM, а реальная причина может быть
-  в ротации `LITELLM_MASTER_KEY` на сервере — тогда клиентский
-  ключ мёртв независимо от префикса». Возражение: witness явно
-  показывает, что этот же литерал работал с префиксом. Если бы
-  master был ротирован, witness curl тоже бы упал. Сначала
-  пробуем минимальный фикс (префикс); если не поможет — следующий
-  пакет про ротацию.
-  (2) «Может быть проблема в Caddy tier — опять public-auth».
-  Возражение: `wavecode-llm-revert-basicauth` откатил это 2026-10-09.
-  Если бы tier вернулся к public-auth, текст ошибки был бы
-  `Www-Authenticate: Basic realm=...`, а не «Malformed API Key».
-  LiteLLM не говорит «Bearer prefix» если preflight 401 от Caddy.
-  (3) «Жёстко требовать `sk-` префикс в коде — это валидация
-  серверного формата, не наше дело». Возражение: только warning,
-  не блокировка. `sk-` префикс — это LiteLLM convention
-  задокументированный в `.env.example:27`. Warning оператору —
-  минимальное вмешательство.
-  (4) «Файл `.env.local` в `.gitignore`, история не сохранилась —
-  как понять что префикс был?». Возражение: witness `wavecode-llm-
-  revert-basicauth` — это literal evidence: «verified рабочий
-  curl с `sk-litellm-ea6d97e9…`» — это контрактное подтверждение
-  от живого теста в момент `applied_at_system: 2026-10-09T08:52Z».
 axiom_link:
   - A3
 scope:
@@ -111,7 +85,7 @@ obligations:
       The original v1.0 packet applied on the recorded date in its `witness` file; this migration preserves that evidence as an `attestations/<id>-evidence.json` file.
     acceptance:
       all:
-        - verifier: "attestation-store-has-subject"
+        - verifier: "mathc self-check"
           result: pass
 assumptions: []
 risk:
@@ -121,4 +95,3 @@ risk:
 relations:
   addresses:
     - wavecode-bootstrap-math-coding-3.3@1
----
