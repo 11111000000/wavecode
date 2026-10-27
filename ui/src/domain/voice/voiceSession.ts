@@ -42,6 +42,10 @@
  *   - `errored`       = unrecoverable failure (stt-init / llm / eval)
  *   - `review`        = STT stopped, transcript frozen for user
  *                       review-and-edit before send-to-AI
+ *   - `sent`          = the instruction was sent AND applied; the
+ *                       buffer survives so the user can edit it and
+ *                       send it again (see `decisions/
+ *                       wavecode-voice-composer-ux`)
  */
 
 import {
@@ -61,6 +65,7 @@ export type VoiceSessionState =
   | { readonly tag: 'applying'; readonly transcript: TranscriptState; readonly score: string; readonly continuous: boolean }
   | { readonly tag: 'paused'; readonly transcript: TranscriptState }
   | { readonly tag: 'review'; readonly transcript: TranscriptState; readonly editedText: string }
+  | { readonly tag: 'sent'; readonly transcript: TranscriptState; readonly editedText: string }
   | { readonly tag: 'errored'; readonly error: string; readonly transcript: TranscriptState };
 
 export type VoiceSessionEvent =
@@ -78,7 +83,8 @@ export type VoiceSessionEvent =
   | { readonly type: 'enter-review' }
   | { readonly type: 'edit-review'; readonly text: string }
   | { readonly type: 'send-review'; readonly text: string }
-  | { readonly type: 'cancel-review' };
+  | { readonly type: 'cancel-review' }
+  | { readonly type: 'cancel-send' };
 
 /**
  * Fresh session. `transcript` is allocated lazily so the
@@ -106,6 +112,18 @@ export const voiceSessionReducer = (
   if (event.type === 'error') {
     return errorFrom(state, event.message);
   }
+  // `dismiss` is a wildcard too, and it has to be: it is the event
+  // behind the panel's ✕ («закрыть»), and a ✕ that leaves the FSM
+  // where it was is a lie — the panel would keep rendering «записываю…
+  // N с» for a session that no longer exists. Before this rule the
+  // reducer only honoured `dismiss` from `paused` and `errored`, so
+  // pressing ✕ while recording left the machine pinned in
+  // `listening` forever: the mic was released, the take was thrown
+  // away, and the only way out was the FAB (which then started a
+  // take nobody asked for). See `decisions/wavecode-voice-composer-ux`.
+  if (event.type === 'dismiss') {
+    return dismissFrom(state);
+  }
 
   switch (state.tag) {
     case 'idle':
@@ -124,6 +142,8 @@ export const voiceSessionReducer = (
       return fromPaused(state, event);
     case 'review':
       return fromReview(state, event);
+    case 'sent':
+      return fromSent(state, event);
     case 'errored':
       return fromErrored(state, event);
   }
@@ -245,6 +265,11 @@ const fromRequesting = (
     return rearmFresh(state.transcript.lang);
   }
   if (event.type === 'barge-in') return { tag: 'idle' };
+  if (event.type === 'cancel-send') {
+    // The request never reached the score editor — put the text back
+    // into the review form so the user can edit it and try again.
+    return enterReviewFrom(state.transcript);
+  }
   return state;
 };
 
@@ -265,7 +290,16 @@ const fromApplying = (
         continuous: true,
       };
     }
-    return { tag: 'idle' };
+    // The edit landed. The machine stops here — in `sent`, NOT in
+    // `idle` — because the user's text is still on screen and they
+    // must be able to edit it and send it again. `idle` closed the
+    // panel the moment the score was written, which is exactly the
+    // "no feedback, no second chance" the composer UX removes.
+    return {
+      tag: 'sent',
+      transcript: state.transcript,
+      editedText: reviewBufferText(state.transcript),
+    };
   }
   if (event.type === 'arm') {
     return rearmFresh(state.transcript.lang);
@@ -275,6 +309,12 @@ const fromApplying = (
     // transcript; the orchestrator handles the AudioEngine revert
     // and re-arm decision.
     return { tag: 'idle' };
+  }
+  if (event.type === 'cancel-send') {
+    // The user pulled the plug on the in-flight request. The text
+    // goes back to the review form untouched — the whole point of
+    // the cancel affordance is "fix it and send it again".
+    return enterReviewFrom(state.transcript);
   }
   return state;
 };
@@ -309,7 +349,6 @@ const fromPaused = (
   if (event.type === 'arm') {
     return rearmFrom(state.transcript);
   }
-  if (event.type === 'dismiss') return { tag: 'idle' };
   if (event.type === 'chunk') {
     // A chunk that lands while the FSM is parked must not be thrown
     // away. `paused` is where a take parks when the STT stream ends
@@ -380,6 +419,68 @@ const fromReview = (
     return rearmFrom(state.transcript);
   }
   if (event.type === 'barge-in') return { tag: 'idle' };
+  if (event.type === 'cancel-send') {
+    // Nothing is in flight from `review` — the request was either
+    // never made or already cancelled. Staying in `review` is the
+    // honest answer: the buffer is still there, still editable.
+    return state;
+  }
+  return state;
+};
+
+/**
+ * `sent` — the instruction reached the LLM and the score it produced
+ * was written into the editor. The machine is idle (no mic, no
+ * request in flight) but the BUFFER IS STILL THE USER'S: the text
+ * stays on screen, editable, and can be sent again.
+ *
+ * Why this is a state and not a toast
+ * ----------------------------------
+ * The old flow ended the session in `idle` the moment the score was
+ * written. The panel disappeared, the text disappeared with it, and
+ * the user's only feedback was a composition that changed (or, worse,
+ * did not). There was no way to see what was sent, no way to fix a
+ * misheard word, and no way to send the same instruction again with
+ * one word changed. `sent` keeps the buffer alive and says out loud
+ * that the round trip finished.
+ *
+ * Transitions:
+ *   - `arm`         → a NEW take with an EMPTY buffer. The
+ *                      instruction is already in the score; carrying
+ *                      it over would apply it twice.
+ *   - `send-review` → re-send the (possibly edited) text. This is
+ *                      the "отправить заново" affordance.
+ *   - `edit-review` → the user fixed a word; the buffer follows.
+ */
+const fromSent = (
+  state: {
+    readonly tag: 'sent';
+    readonly transcript: TranscriptState;
+    readonly editedText: string;
+  },
+  event: VoiceSessionEvent,
+): VoiceSessionState => {
+  if (event.type === 'edit-review') {
+    if (event.text === state.editedText) return state;
+    return {
+      tag: 'sent',
+      transcript: state.transcript,
+      editedText: event.text,
+    };
+  }
+  if (event.type === 'send-review') {
+    // Re-send. `continuous: false` — a re-sent instruction ends the
+    // session when it lands, exactly like the first send did.
+    return {
+      tag: 'requesting',
+      transcript: { ...state.transcript, final: event.text },
+      continuous: false,
+    };
+  }
+  if (event.type === 'arm') {
+    return rearmFresh(state.transcript.lang);
+  }
+  if (event.type === 'barge-in') return { tag: 'idle' };
   return state;
 };
 
@@ -387,7 +488,8 @@ const fromErrored = (
   state: { readonly tag: 'errored'; readonly error: string; readonly transcript: TranscriptState },
   event: VoiceSessionEvent,
 ): VoiceSessionState => {
-  if (event.type === 'dismiss') return { tag: 'idle' };
+  // `dismiss` is handled by the wildcard above, so it never reaches
+  // this branch.
   if (event.type === 'arm') return { tag: 'arming' };
   return state;
 };
@@ -406,12 +508,43 @@ const pauseFrom = (state: VoiceSessionState): VoiceSessionState => {
       return state;
     case 'review':
       return state;
+    case 'sent':
+      // Nothing is being captured, so there is nothing to pause. The
+      // buffer stays; the panel stays.
+      return state;
     case 'errored':
       return state;
     case 'arming':
       return state;
     case 'idle':
       return state;
+  }
+};
+
+/**
+ * `dismiss` — «the user closed this and wants it gone».
+ *
+ * Every active state collapses to `idle`. The alternative (honouring
+ * `dismiss` only from `paused` and `errored`) is what made the panel's
+ * ✕ a no-op in the states where it matters most: pressing it during a
+ * take released the mic and threw the audio away, but left the FSM
+ * pinned in `listening` — the panel went on counting seconds for a
+ * session that no longer existed.
+ */
+const dismissFrom = (state: VoiceSessionState): VoiceSessionState => {
+  switch (state.tag) {
+    case 'idle':
+      return state;
+    case 'arming':
+    case 'listening':
+    case 'transcribing':
+    case 'requesting':
+    case 'applying':
+    case 'paused':
+    case 'review':
+    case 'sent':
+    case 'errored':
+      return { tag: 'idle' };
   }
 };
 
@@ -430,6 +563,7 @@ const errorFrom = (state: VoiceSessionState, message: string): VoiceSessionState
     case 'applying':
     case 'paused':
     case 'review':
+    case 'sent':
       return { tag: 'errored', error: message, transcript: state.transcript };
   }
 };

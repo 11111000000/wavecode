@@ -13,9 +13,9 @@ import {
 import {
   __resetVoiceAIForTests,
   voiceAIState,
-  setVoiceAITranscript,
   setVoiceAIRmsLevel,
   setVoiceAIFlushing,
+  voiceAIDraft,
   __dispatchVoiceAIForTests,
 } from '../state/voiceAIStore';
 import { resetMicMutexForTests } from '../state/micMutexStore';
@@ -198,152 +198,198 @@ describe('RecordingPanel — whistle body content', () => {
   });
 });
 
-describe('RecordingPanel — voice-AI body content', () => {
-  it('shows a recording counter while listening with no transcript yet', () => {
-    // Server STT has no interim text: one upload covers the whole
-    // utterance, so the only honest signal that the mic is hot is
-    // the elapsed-seconds counter (decisions/wavecode-server-stt).
-    armAndListen();
-    const { container } = render(() => <RecordingPanel />);
-    const body = container.querySelector('.voice-recording-panel__transcript');
-    expect(body).toBeTruthy();
-    expect(body?.textContent).toBe('записываю… 0 с');
-  });
 
-  it('prefers the transcript over the counter once text arrives', () => {
-    armAndListen();
-    // `setVoiceAITranscript` rather than `__dispatchVoiceAIForTests`:
-    // the panel reads the transcript signal, which in production is
-    // fed by `initVoiceAI`'s subscription to the FSM stream.
-    setVoiceAITranscript({
-      chunks: [{
-        kind: 'interim',
-        text: 'слышу: сделай',
-        confidence: 0.8,
-        lang: 'ru-RU',
-        timestampMs: 0,
-      }],
-      interim: 'слышу: сделай',
-      final: '',
-      startedAtMs: 0,
-      stoppedAtMs: null,
-      lang: 'ru-RU',
-    });
-    const { container } = render(() => <RecordingPanel />);
-    const body = container.querySelector('.voice-recording-panel__transcript');
-    expect(body?.textContent).toBe('слышу: сделай');
-  });
+/* =========================================================================
+ *  The composer (`decisions/wavecode-voice-composer-ux`).
+ *
+ *  ONE field, ALWAYS on screen, ALWAYS editable — while the mic is
+ *  open, while the recogniser thinks, while the LLM answers and
+ *  after the edit was applied. The old panel had two faces (a
+ *  read-only transcript and a review form that existed only in
+ *  `review`); the split is exactly what the user reported as
+ *  «текст не редактируется» and «непонятно, ушло ли».
+ * ========================================================================= */
+describe('RecordingPanel — the composer', () => {
+  /**
+   * The composer's contract (`decisions/wavecode-voice-composer-ux`):
+   * ONE field, ALWAYS on screen, ALWAYS editable. The old panel had
+   * two faces — a read-only transcript while recording and an
+   * editable form that existed only in the `review` state — and the
+   * split is exactly what the user hit as «текст не редактируется».
+   */
+  const states = [
+    'arming',
+    'listening',
+    'transcribing',
+    'review',
+    'requesting',
+    'applying',
+    'sent',
+    'errored',
+  ] as const;
 
-  it('does NOT show the review affordance while listening (live transcript owns the primary loop)', () => {
-    // decisions/wavecode-voice-fab, outcome `voice-ai-fab-press-and-hold`:
-    // press → speak → auto-commit on the final chunk. The
-    // `wavecode-voice-live-transcript` path makes the transcript
-    // visible on the panel itself — a separate «Проверить» button is
-    // redundant. The button must not be in the DOM at all — not merely
-    // disabled, which still renders a visible target.
-    armAndListen();
-    expect(voiceAIState().tag).toBe('listening');
-    const { container } = render(() => <RecordingPanel />);
-    expect(container.querySelector('.voice-recording-panel__btn--primary')).toBeNull();
-    expect(container.querySelector('.voice-recording-panel__actions')).toBeNull();
-    // The rest of the panel keeps working — we hid a button, not the card.
-    expect(container.querySelector('.voice-recording-panel__close')).toBeTruthy();
-  });
-
-  it('keeps the review affordance hidden through transcribing / requesting / applying', () => {
-    const toTranscribing = (): void => {
-      armAndListen();
+  it.each(states)('the field is present in the %s state', (tag) => {
+    __dispatchVoiceAIForTests({ type: 'arm' });
+    if (tag !== 'arming') {
+      __dispatchVoiceAIForTests({ type: 'stt-ready' });
+    }
+    if (tag === 'transcribing') {
       __dispatchVoiceAIForTests({ type: 'chunk', chunk: FINAL_CHUNK });
-    };
-    toTranscribing();
-    expect(voiceAIState().tag).toBe('transcribing');
-    const transcribing = render(() => <RecordingPanel />);
-    expect(transcribing.container.querySelector('.voice-recording-panel__btn--primary')).toBeNull();
-    cleanup();
-
-    __dispatchVoiceAIForTests({ type: 'commit' });
-    expect(voiceAIState().tag).toBe('requesting');
-    const requesting = render(() => <RecordingPanel />);
-    expect(requesting.container.querySelector('.voice-recording-panel__btn--primary')).toBeNull();
-    cleanup();
-
-    __dispatchVoiceAIForTests({ type: 'request-sent', score: 's("bd")' });
-    expect(voiceAIState().tag).toBe('applying');
-    const applying = render(() => <RecordingPanel />);
-    expect(applying.container.querySelector('.voice-recording-panel__btn--primary')).toBeNull();
-  });
-
-  it('REGRESSION: ✕ closes the panel instead of parking it at «на паузе»', async () => {
-    // ✕ called `stopVoiceAI()`, which dispatches `pause` — and `mode`
-    // treats `paused` as a VISIBLE state, so the panel stayed on screen
-    // showing «на паузе». The button is labelled «закрыть», so it must
-    // close: `dismissVoiceAI()` tears the session down AND forces the
-    // FSM back to `idle`.
-    armAndListen();
-    expect(voiceAIState().tag).toBe('listening');
-
+    }
+    if (tag === 'review' || tag === 'requesting' || tag === 'applying'
+      || tag === 'sent') {
+      __dispatchVoiceAIForTests({ type: 'chunk', chunk: FINAL_CHUNK });
+      __dispatchVoiceAIForTests({ type: 'enter-review' });
+    }
+    if (tag === 'requesting' || tag === 'applying' || tag === 'sent') {
+      __dispatchVoiceAIForTests({ type: 'send-review', text: 'сделай потише' });
+    }
+    if (tag === 'applying' || tag === 'sent') {
+      __dispatchVoiceAIForTests({ type: 'request-sent', score: 's("bd")' });
+    }
+    if (tag === 'sent') {
+      __dispatchVoiceAIForTests({ type: 'applied' });
+    }
+    if (tag === 'errored') {
+      __dispatchVoiceAIForTests({ type: 'error', message: 'микрофон недоступен' });
+    }
+    expect(voiceAIState().tag).toBe(tag);
     const { container } = render(() => <RecordingPanel />);
-    const close = container.querySelector<HTMLButtonElement>(
-      '.voice-recording-panel__close',
-    )!;
-    expect(close).not.toBeNull();
-    fireEvent.click(close);
-    await new Promise<void>((resolve) => setTimeout(resolve, 50));
-
-    // Either the test handle never had a real orchestrator (so the
-    // panel's mode is driven purely by the FSM), in which case the
-    // FSM must be `idle`; either way the panel must be gone.
-    expect(voiceAIState().tag).toBe('idle');
+    const field = container.querySelector(
+      '.voice-recording-panel__review-textarea',
+    ) as HTMLTextAreaElement;
+    expect(field).toBeTruthy();
+    // Editable, not read-only: the whole point.
+    expect(field.hasAttribute('readonly')).toBe(false);
+    expect(field.hasAttribute('disabled')).toBe(false);
   });
 
-  it('does NOT show the review affordance in paused either (live transcript made it redundant)', () => {
-    // After `wavecode-voice-live-transcript`, the panel's transcript
-    // area carries the latest interim or final text directly. The
-    // «Проверить» escape hatch into the review modal is gone — the
-    // user reads their words on the panel itself. The FSM `paused`
-    // tag is still reachable via ✕ but has no UI affordance any more.
+  it('the recognised text lands in the field as soon as it arrives', () => {
     armAndListen();
+    const { container } = render(() => <RecordingPanel />);
+    const field = container.querySelector(
+      '.voice-recording-panel__review-textarea',
+    ) as HTMLTextAreaElement;
+    expect(field.value).toBe('');
     __dispatchVoiceAIForTests({ type: 'chunk', chunk: FINAL_CHUNK });
-    __dispatchVoiceAIForTests({ type: 'pause' });
-    expect(voiceAIState().tag).toBe('paused');
-    const { container } = render(() => <RecordingPanel />);
-    expect(container.querySelector('.voice-recording-panel__btn--primary')).toBeNull();
-    expect(container.querySelector('.voice-recording-panel__actions')).toBeNull();
+    expect(field.value).toBe('сделай потише');
   });
 
-  it('hides the review affordance when the session errored', () => {
-    __dispatchVoiceAIForTests({ type: 'arm' });
-    __dispatchVoiceAIForTests({ type: 'error', message: 'permission denied' });
+  it('the field is editable while the mic is open', () => {
+    armAndListen();
     const { container } = render(() => <RecordingPanel />);
-    expect(container.querySelector('.voice-recording-panel__btn--primary')).toBeNull();
+    const field = container.querySelector(
+      '.voice-recording-panel__review-textarea',
+    ) as HTMLTextAreaElement;
+    fireEvent.input(field, { target: { value: 'сделай по-тише' } });
+    expect(field.value).toBe('сделай по-тише');
+    expect(voiceAIDraft()).toBe('сделай по-тише');
   });
 
-  it('shows the error pill when FSM is in errored', () => {
-    __dispatchVoiceAIForTests({ type: 'arm' });
-    __dispatchVoiceAIForTests({ type: 'error', message: 'permission denied' });
-    expect(voiceAIState().tag).toBe('errored');
+  it('the recogniser does not overwrite what the user typed', () => {
+    armAndListen();
     const { container } = render(() => <RecordingPanel />);
-    const panel = container.querySelector('.voice-recording-panel');
-    expect(panel?.getAttribute('data-state')).toBe('errored');
-    expect(container.querySelector('.voice-recording-panel__err-pill')).toBeTruthy();
-    expect(container.querySelector('.voice-recording-panel__error')?.textContent).toContain(
-      'permission denied',
+    const field = container.querySelector(
+      '.voice-recording-panel__review-textarea',
+    ) as HTMLTextAreaElement;
+    fireEvent.input(field, { target: { value: 'сделай по-тише' } });
+    __dispatchVoiceAIForTests({ type: 'chunk', chunk: FINAL_CHUNK });
+    expect(field.value).toBe('сделай по-тише');
+  });
+
+  it('«→ В ИИ» is disabled while the field is empty', () => {
+    armAndListen();
+    const { container } = render(() => <RecordingPanel />);
+    const send = container.querySelector(
+      '.voice-recording-panel__btn--primary',
+    ) as HTMLButtonElement;
+    expect(send).toBeTruthy();
+    expect(send.disabled).toBe(true);
+  });
+
+  it('«→ В ИИ» is enabled as soon as there is text to send', () => {
+    armAndListen();
+    const { container } = render(() => <RecordingPanel />);
+    const send = container.querySelector(
+      '.voice-recording-panel__btn--primary',
+    ) as HTMLButtonElement;
+    fireEvent.input(
+      container.querySelector(
+        '.voice-recording-panel__review-textarea',
+      ) as HTMLTextAreaElement,
+      { target: { value: 'сделай потише' } },
     );
+    expect(send.disabled).toBe(false);
   });
 });
 
-/* =========================================================================
- *  Inline review form (`decisions/wavecode-voice-confirm-before-send`).
- *  Asserts that in the FSM's `review` state the panel surfaces an
- *  editable textarea seeded with the joined final transcript plus a
- *  «→ В ИИ» primary button that is disabled while the text is empty.
- *  The head ✕ in `review` doubles as the "drop the buffer, do not
- *  send" affordance.
- * ========================================================================= */
-describe('RecordingPanel — review form (voice-AI inline confirmation)', () => {
-  /** Drive FSM to `review` with a known transcript. We use
-   *  `__dispatchVoiceAIForTests` to skip the orchestrator's auto-
-   *  review path; the test only cares about the rendered DOM. */
+describe('RecordingPanel — the status line', () => {
+  /**
+   * «ушло не ушло, крутится или нет» — the panel always says what
+   * the machine is doing, in one phrase per state.
+   */
+  it('says what the machine is doing in every state', () => {
+    const status = (): string => {
+      const { container, unmount } = render(() => <RecordingPanel />);
+      const text = container.querySelector(
+        '.voice-recording-panel__status-text',
+      )?.textContent ?? '';
+      unmount();
+      return text;
+    };
+
+    __dispatchVoiceAIForTests({ type: 'arm' });
+    expect(status()).toContain('микрофон');
+
+    __dispatchVoiceAIForTests({ type: 'stt-ready' });
+    expect(status()).toContain('Записываю');
+
+    __dispatchVoiceAIForTests({ type: 'chunk', chunk: FINAL_CHUNK });
+    __dispatchVoiceAIForTests({ type: 'enter-review' });
+    expect(status()).toContain('Текст готов');
+
+    __dispatchVoiceAIForTests({ type: 'send-review', text: 'сделай потише' });
+    expect(status()).toContain('Отправляю');
+
+    __dispatchVoiceAIForTests({ type: 'request-sent', score: 's("bd")' });
+    expect(status()).toContain('Применяю');
+
+    __dispatchVoiceAIForTests({ type: 'applied' });
+    expect(status()).toContain('Правка применена');
+  });
+
+  it('shows the spinner only while the app is waiting for something', () => {
+    const spinner = (): Element | null => {
+      const { container, unmount } = render(() => <RecordingPanel />);
+      const el = container.querySelector('.voice-recording-panel__spinner');
+      unmount();
+      return el;
+    };
+
+    __dispatchVoiceAIForTests({ type: 'arm' });
+    __dispatchVoiceAIForTests({ type: 'stt-ready' });
+    // Recording: the user is the one doing something, no spinner.
+    expect(spinner()).toBeNull();
+
+    __dispatchVoiceAIForTests({ type: 'chunk', chunk: FINAL_CHUNK });
+    __dispatchVoiceAIForTests({ type: 'enter-review' });
+    expect(spinner()).toBeNull();
+
+    __dispatchVoiceAIForTests({ type: 'send-review', text: 'сделай потише' });
+    expect(spinner()).toBeTruthy();
+  });
+
+  it('says «Распознаю…» while the stopped take is being uploaded', () => {
+    armAndListen();
+    setVoiceAIFlushing(true);
+    const { container } = render(() => <RecordingPanel />);
+    expect(
+      container.querySelector('.voice-recording-panel__status-text')?.textContent,
+    ).toContain('Распознаю');
+  });
+});
+
+describe('RecordingPanel — sending, cancelling and sending again', () => {
   const enterReviewWith = (text: string): void => {
     __dispatchVoiceAIForTests({ type: 'arm' });
     __dispatchVoiceAIForTests({ type: 'stt-ready' });
@@ -358,145 +404,108 @@ describe('RecordingPanel — review form (voice-AI inline confirmation)', () => 
     expect(voiceAIState().tag).toBe('review');
   };
 
-  it('renders an editable textarea seeded with the recognised text', () => {
+  it('the send button becomes «Отменить отправку» while the request is on the wire', () => {
     enterReviewWith('сделай потише');
+    __dispatchVoiceAIForTests({ type: 'send-review', text: 'сделай потише' });
+    expect(voiceAIState().tag).toBe('requesting');
     const { container } = render(() => <RecordingPanel />);
-    const ta = container.querySelector(
-      '.voice-recording-panel__review-textarea',
-    ) as HTMLTextAreaElement;
-    expect(ta).toBeTruthy();
-    expect(ta.value).toBe('сделай потише');
-    expect(ta.getAttribute('aria-label')).toContain('Распознанный текст');
-  });
-
-  it('seeds the buffer from the interim when the take produced no final chunk', () => {
-    // The relay answers `{"text": ""}` often enough that a take can
-    // end with an interim and no final. Before the fix the review
-    // form opened EMPTY — the recognised text was on screen and the
-    // send button was disabled, so there was no way to send it.
-    __dispatchVoiceAIForTests({ type: 'arm' });
-    __dispatchVoiceAIForTests({ type: 'stt-ready' });
-    __dispatchVoiceAIForTests({ type: 'chunk', chunk: {
-      kind: 'interim',
-      text: 'сделай бас быстрее',
-      confidence: 0.9,
-      lang: 'ru-RU',
-      timestampMs: 0,
-    } });
-    __dispatchVoiceAIForTests({ type: 'enter-review' });
-    expect(voiceAIState().tag).toBe('review');
-
-    const { container } = render(() => <RecordingPanel />);
-    const ta = container.querySelector(
-      '.voice-recording-panel__review-textarea',
-    ) as HTMLTextAreaElement;
-    const send = container.querySelector(
-      '.voice-recording-panel__btn--primary',
+    const cancel = container.querySelector(
+      '.voice-recording-panel__btn--cancel',
     ) as HTMLButtonElement;
-    expect(ta.value).toBe('сделай бас быстрее');
-    expect(send.disabled).toBe(false);
+    expect(cancel).toBeTruthy();
+    expect(cancel.textContent).toContain('Отменить отправку');
+    // The send button is gone — sending again is not possible while
+    // the first request is in flight, cancelling is.
+    expect(container.querySelector('.voice-recording-panel__btn--primary')).toBeNull();
   });
 
-  it('renders the → В ИИ button enabled when the buffer is non-empty', () => {
+  it('after the send the panel stays open with the text — «отправить заново»', () => {
     enterReviewWith('сделай потише');
+    __dispatchVoiceAIForTests({ type: 'send-review', text: 'сделай потише' });
+    __dispatchVoiceAIForTests({ type: 'request-sent', score: 's("bd")' });
+    __dispatchVoiceAIForTests({ type: 'applied' });
+    expect(voiceAIState().tag).toBe('sent');
+
     const { container } = render(() => <RecordingPanel />);
+    const panel = container.querySelector('.voice-recording-panel');
+    expect(panel).toBeTruthy();
+    const field = container.querySelector(
+      '.voice-recording-panel__review-textarea',
+    ) as HTMLTextAreaElement;
+    expect(field.value).toBe('сделай потише');
+    // The send button is back: the same text can go again.
     const send = container.querySelector(
       '.voice-recording-panel__btn--primary',
     ) as HTMLButtonElement;
     expect(send).toBeTruthy();
-    expect(send.textContent).toContain('В ИИ');
     expect(send.disabled).toBe(false);
   });
 
-  it('disables the → В ИИ button when the buffer is whitespace-only', () => {
-    enterReviewWith('   ');
-    const { container } = render(() => <RecordingPanel />);
-    const send = container.querySelector(
-      '.voice-recording-panel__btn--primary',
-    ) as HTMLButtonElement;
-    expect(send).toBeTruthy();
-    expect(send.disabled).toBe(true);
-  });
-
-  it('disables the → В ИИ button after the user clears the textarea', () => {
+  it('the text stays editable after the send', () => {
     enterReviewWith('сделай потише');
+    __dispatchVoiceAIForTests({ type: 'send-review', text: 'сделай потише' });
+    __dispatchVoiceAIForTests({ type: 'request-sent', score: 's("bd")' });
+    __dispatchVoiceAIForTests({ type: 'applied' });
+
     const { container } = render(() => <RecordingPanel />);
-    const ta = container.querySelector(
+    const field = container.querySelector(
       '.voice-recording-panel__review-textarea',
     ) as HTMLTextAreaElement;
-    const send = container.querySelector(
-      '.voice-recording-panel__btn--primary',
+    fireEvent.input(field, { target: { value: 'сделай потише и тише' } });
+    expect(field.value).toBe('сделай потише и тише');
+  });
+
+  it('the head ✕ says what it does in each state', () => {
+    armAndListen();
+    const { container } = render(() => <RecordingPanel />);
+    const close = container.querySelector(
+      '.voice-recording-panel__close',
     ) as HTMLButtonElement;
-    expect(send.disabled).toBe(false);
-    fireEvent.input(ta, { target: { value: '' } });
-    expect(send.disabled).toBe(true);
+    // Outside `review` the ✕ abandons the take — it does NOT "stop
+    // the recording" (that is the ●REC button) and it does not send
+    // anything.
+    expect(close.getAttribute('aria-label')).toBe('Отменить запись и закрыть панель');
+
+    cleanup();
+    enterReviewWith('сделай потише');
+    const review = render(() => <RecordingPanel />);
+    const reviewClose = review.container.querySelector(
+      '.voice-recording-panel__close',
+    ) as HTMLButtonElement;
+    expect(reviewClose.getAttribute('aria-label') ?? '').toContain('Отменить');
+    expect(reviewClose.getAttribute('title') ?? '').toContain('не уйдёт');
+    expect(reviewClose.getAttribute('title') ?? '').not.toContain('Остановить');
+  });
+
+  it('REGRESSION: ✕ closes the panel instead of pinning the FSM', async () => {
+    // The old reducer honoured `dismiss` only from `paused` and
+    // `errored`, so pressing ✕ while recording left the FSM in
+    // `listening` for ever: the mic was released, the take was
+    // gone, and the panel went on counting seconds for a session
+    // that no longer existed.
+    armAndListen();
+    expect(voiceAIState().tag).toBe('listening');
+
+    const { container } = render(() => <RecordingPanel />);
+    const close = container.querySelector<HTMLButtonElement>(
+      '.voice-recording-panel__close',
+    )!;
+    fireEvent.click(close);
+    await new Promise<void>((resolve) => setTimeout(resolve, 50));
+
+    expect(voiceAIState().tag).toBe('idle');
   });
 
   it('keeps the textarea in the same panel — never opens a modal', () => {
-    // The explicit accept criterion for re-introducing the
-    // confirmation step (`decisions/wavecode-voice-confirm-before-send`):
-    // confirmation lives on the same bottom panel as the live
-    // transcript, NOT in a modal. Lock the layout: no element with
-    // modal-ish classes, no `.voice-review-panel` (the deleted
-    // modal's class name) anywhere.
     enterReviewWith('сделай потише');
     const { container } = render(() => <RecordingPanel />);
     expect(
-      container.querySelector('.voice-recording-panel .voice-recording-panel__review'),
+      container.querySelector('.voice-recording-panel .voice-recording-panel__composer'),
     ).toBeTruthy();
     expect(container.querySelector('.voice-review-panel')).toBeNull();
     expect(container.querySelector('[role="dialog"]')).toBeNull();
-  });
-
-  it('re-uses the live panel — no two-panels-at-once layout', () => {
-    enterReviewWith('сделай потише');
-    const { container } = render(() => <RecordingPanel />);
-    // Only ONE .voice-recording-panel in the DOM, even though we're
-    // rendering the inline review form (the legacy modal used to
-    // overlay a SECOND panel on top of this one).
-    const panels = container.querySelectorAll('.voice-recording-panel');
-    expect(panels).toHaveLength(1);
-  });
-
-  it('head ✕ label switches to "Отменить и не отправлять текст в ИИ" in review', () => {
-    // Functional test, not behavioural: verifies that in `review`
-    // state, the head ✕ button advertises its drop-buffer
-    // semantics (rather than its listening-state "stop recording"
-    // semantics). The aria-label is what the screen reader reads,
-    // which is the user-visible contract.
-    enterReviewWith('сделай потише');
-    const { container } = render(() => <RecordingPanel />);
-    const close = container.querySelector(
-      '.voice-recording-panel__close',
-    ) as HTMLButtonElement;
-    expect(close).toBeTruthy();
-    expect(close.getAttribute('aria-label') ?? '').toContain('Отменить');
-    expect(close.getAttribute('title') ?? '').toContain('Отменить');
-    expect(close.getAttribute('title') ?? '').toContain('не уйдёт');
-  });
-
-  it('head ✕ label keeps the "stop recording" semantics outside of review', () => {
-    armAndListen();
-    expect(voiceAIState().tag).toBe('listening');
-    const { container } = render(() => <RecordingPanel />);
-    const close = container.querySelector(
-      '.voice-recording-panel__close',
-    ) as HTMLButtonElement;
-    expect(close).toBeTruthy();
-    expect(close.getAttribute('aria-label')).toBe('Остановить запись');
-  });
-
-  it('does NOT show the review form when the FSM is listening (textarea would overwrite live text)', () => {
-    // Sanity check on the inverse invariant: in `listening` the
-    // user must see the live transcript evolving; showing a
-    // textarea on top of it would freeze the visible text and
-    // break the live-utterance loop.
-    armAndListen();
-    const { container } = render(() => <RecordingPanel />);
-    expect(container.querySelector('.voice-recording-panel__review-textarea')).toBeNull();
-    expect(container.querySelector('.voice-recording-panel__btn--primary')).toBeNull();
-    // ...but the live transcript is still there.
-    expect(container.querySelector('.voice-recording-panel__transcript')).toBeTruthy();
+    // Only ONE panel in the DOM.
+    expect(container.querySelectorAll('.voice-recording-panel')).toHaveLength(1);
   });
 });
 /* =========================================================================
@@ -822,6 +831,31 @@ describe('RecordingPanel — «Очистить текст»', () => {
     fireEvent.click(clear);
     expect(send.disabled).toBe(true);
   });
+
+  it('the cleared field is not refilled by the recogniser', () => {
+    // «Очистить» means «this is my text now» — the next chunk must
+    // not write the old words back into the field.
+    armAndListen();
+    __dispatchVoiceAIForTests({ type: 'chunk', chunk: FINAL_CHUNK });
+    const { container } = render(() => <RecordingPanel />);
+    const ta = container.querySelector(
+      '.voice-recording-panel__review-textarea',
+    ) as HTMLTextAreaElement;
+    const clear = container.querySelector(
+      '.voice-recording-panel__btn--clear',
+    ) as HTMLButtonElement;
+    expect(ta.value).toBe('сделай потише');
+    fireEvent.click(clear);
+    expect(ta.value).toBe('');
+    __dispatchVoiceAIForTests({ type: 'chunk', chunk: {
+      kind: 'interim',
+      text: 'и ещё тише',
+      confidence: 0.9,
+      lang: 'ru-RU',
+      timestampMs: 0,
+    } });
+    expect(ta.value).toBe('');
+  });
 });
 
 describe('RecordingPanel — arming is a visible state', () => {
@@ -837,8 +871,8 @@ describe('RecordingPanel — arming is a visible state', () => {
     expect(panel).toBeTruthy();
     expect(panel?.getAttribute('data-mode')).toBe('voice-ai');
     expect(
-      container.querySelector('.voice-recording-panel__transcript')?.textContent,
-    ).toBe('готовлю микрофон…');
+      container.querySelector('.voice-recording-panel__status-text')?.textContent,
+    ).toBe('Готовлю микрофон…');
   });
 });
 

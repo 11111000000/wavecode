@@ -261,7 +261,7 @@ describe('createVoiceAISession — happy-path FSM transitions', () => {
     expect(rec.evalCalls).toBe(0);
   });
 
-  it('sendReview after auto-review routes the edited text and FSM reaches idle', async () => {
+  it('sendReview after auto-review routes the edited text and FSM reaches sent', async () => {
     const response = 'note("e4")';
     const { layer, rec } = buildServices(response);
     const stt = fakeStt([interim('сейчас', 10), finalChunk('сделай e4', 100)]);
@@ -276,8 +276,10 @@ describe('createVoiceAISession — happy-path FSM transitions', () => {
 
     // User presses «→ В ИИ» with the (un-edited) transcript.
     await Effect.runPromise(handle.sendReview('сделай e4'));
-    const final = await waitForState(handle, (s) => s.tag === 'idle');
-    expect(final.tag).toBe('idle');
+    // `sent`, not `idle`: the panel stays open with the text so the
+    // user can fix a misheard word and send it again.
+    const final = await waitForState(handle, (s) => s.tag === 'sent');
+    expect(final.tag).toBe('sent');
     expect(rec.llmCalls).toBe(1);
     expect(rec.evalCalls).toBe(1);
     expect(rec.evalInputs[0]).toBe(response);
@@ -458,8 +460,8 @@ describe('createVoiceAISession — review-and-edit', () => {
     await waitForState(handle, (s) => s.tag === 'review');
 
     await Effect.runPromise(handle.sendReview('сделай хай-хэт побыстрее'));
-    const final = await waitForState(handle, (s) => s.tag === 'idle');
-    expect(final.tag).toBe('idle');
+    const final = await waitForState(handle, (s) => s.tag === 'sent');
+    expect(final.tag).toBe('sent');
     expect(rec.llmCalls).toBe(1);
     expect(rec.evalInputs[0]).toBe(response);
   });
@@ -868,5 +870,104 @@ describe('createVoiceAISession — a press during the LLM round trip', () => {
     // Without the interim counted as text this parks in `paused`,
     // which has no review form and therefore no send button.
     expect(parked.tag).toBe('review');
+  });
+});
+
+/**
+ * «Отменить отправку» and «отправить заново».
+ *
+ * The user's report: once «→ В ИИ» was pressed the text left the
+ * screen together with the panel, the round trip took seconds, and
+ * there was no way to say "no, not that one". These two tests pin
+ * the replacement: the request can be cancelled mid-flight with the
+ * text intact, and the result of a successful send keeps the buffer
+ * alive for a second attempt.
+ */
+describe('createVoiceAISession — cancel and re-send', () => {
+  /** An LLM that never finishes, so the route stays in flight. */
+  const hangingServices = (): {
+    layer: Layer.Layer<LLMClient | AudioEngine, never, never>;
+    started: Promise<void>;
+  } => {
+    let mark: (() => void) | null = null;
+    const started = new Promise<void>((resolve) => { mark = resolve; });
+    const llmLayer = Layer.succeed(
+      LLMClient,
+      {
+        streamCompletion: (_req: CompletionRequest) => {
+          if (mark) mark();
+          return Effect.succeed(
+            new ReadableStream<CompletionChunk>({
+              start(controller) {
+                // Never closed: the route stays in flight until it is
+                // interrupted.
+                controller.enqueue({ type: 'text', delta: 'note("g4")' });
+              },
+            }),
+          );
+        },
+      },
+    );
+    const audioLayer = Layer.succeed(
+      AudioEngine,
+      {
+        eval: () => Effect.void,
+        stop: () => Effect.void,
+        compileAndQuery: () => Effect.succeed([]),
+        setCps: () => Effect.void,
+        setLayerMix: () => Effect.void,
+        setScore: () => Effect.void,
+        getCycleProgress: () => Effect.succeed(0),
+        getCyclePosition: () => Effect.succeed(0),
+        getActiveHaps: () => Effect.succeed([]),
+        recordLive: () => Effect.die('not used'),
+        renderOffline: () => Effect.die('not used'),
+      },
+    );
+    return { layer: Layer.merge(llmLayer, audioLayer), started };
+  };
+
+  it('cancelSend puts the text back into review while the route is in flight', async () => {
+    const { layer, started } = hangingServices();
+    const stt = fakeStt([finalChunk('сделай потише')]);
+    const { deps } = await buildDeps(stt, layer);
+    const handle = await Effect.runPromise(createVoiceAISession(deps));
+
+    await Effect.runPromise(
+      handle.start({ mode: 'oneshot', lang: 'ru-RU', bargeInMode: 'replace' }),
+    );
+    await waitForState(handle, (s) => s.tag === 'review');
+    await Effect.runPromise(handle.sendReview('сделай потише'));
+    await started;
+    await waitForState(handle, (s) => s.tag === 'requesting' || s.tag === 'applying');
+
+    await Effect.runPromise(handle.cancelSend());
+    await new Promise<void>((resolve) => setTimeout(resolve, 10));
+    const after = await Effect.runPromise(Ref.get(handle.stateRef));
+    expect(after.tag).toBe('review');
+    if (after.tag !== 'review') throw new Error('unreachable');
+    // The text survived the cancellation — that is the whole point.
+    expect(after.editedText).toBe('сделай потише');
+  });
+
+  it('the sent state can be sent again (the re-send)', async () => {
+    const response = 'note("e4")';
+    const { layer, rec } = buildServices(response);
+    const stt = fakeStt([finalChunk('сделай e4')]);
+    const { deps } = await buildDeps(stt, layer);
+    const handle = await Effect.runPromise(createVoiceAISession(deps));
+
+    await Effect.runPromise(
+      handle.start({ mode: 'oneshot', lang: 'ru-RU', bargeInMode: 'replace' }),
+    );
+    await waitForState(handle, (s) => s.tag === 'review');
+    await Effect.runPromise(handle.sendReview('сделай e4'));
+    await waitForState(handle, (s) => s.tag === 'sent');
+
+    // The user fixes a word and sends it again.
+    await Effect.runPromise(handle.sendReview('сделай e4 но тише'));
+    await waitForState(handle, (s) => s.tag === 'sent');
+    expect(rec.llmCalls).toBe(2);
+    expect(rec.evalCalls).toBe(2);
   });
 });

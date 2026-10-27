@@ -1,0 +1,302 @@
+---
+schema: math-coding/3.3
+id: wavecode-voice-composer-ux
+revision: 1
+state: active
+body_sha: "sha256:9a7d12ef2b91c79a4d0a2bc1dd65992f35278f93651a161bc80d15c1155b5e63"
+yaml_sha: "sha256:9a7d12ef2b91c79a4d0a2bc1dd65992f35278f93651a161bc80d15c1155b5e63"
+
+axiom_link:
+  - A0
+  - A3
+
+intent: |
+  Жалоба пользователя на голосовой ввод (2026-10-27): «Сейчас
+  повторная запись не работает… вообще это всё работает при отправке
+  в ИИ, и нет обратной связи: ушло не ушло, что оно крутится или
+  нет. Остановить/отменить тоже непонятно как. И возможность
+  отредактировать текст должна быть сразу как только он появляется
+  — то есть вообще всегда текст в поле вводом, хотим отредактируем,
+  тут же отменим текущую отправку и например отправим заново».
+
+  Разбор кода (FSM `ui/src/domain/voice/voiceSession.ts`,
+  оркестратор `ui/src/application/voice/VoiceAISession.ts`, стор
+  `ui/src/presentation/state/voiceAIStore.ts`, панель
+  `ui/src/presentation/components/RecordingPanel.tsx`) показал, что
+  жалоба — не один баг, а следствие того, что у голосового ввода
+  ДВА РАЗНЫХ лица в одном и том же месте:
+
+  (1) **Текст редактируем только в одном состоянии.** Пока FSM в
+      `listening`, панель показывала ТОЛЬКО ЧТЕНИЕ (`<span
+      class="…__transcript">`), а `<textarea>` рендерилась лишь в
+      состоянии `review`. Между ними — `transcribing`, `requesting`,
+      `applying` — поля не было вовсе. Нажатие «→ В ИИ» переводило
+      FSM в `requesting`, textarea размонтировалась, и ТЕКСТ
+      ИСЧЕЗАЛ вместе с возможностью его поправить.
+
+  (2) **Обратной связи нет.** `requesting`/`applying` отображались
+      одной строкой текста («жду ответ ИИ…»), а по событию `applied`
+      редуктор переходил в `idle` — панель исчезала целиком. Ни
+      спиннера, ни «✓ применено», ни следа отправленного текста.
+      Пользователь физически не мог отличить «ушло» от «не ушло» и
+      «ещё крутится» от «зависло».
+
+  (3) **«Отменить» было нечем.** Кнопка ✕ в голове панели
+      вызывала `dismissVoiceAI` → `dispatch({type:'dismiss'})`, но
+      редукер обрабатывал `dismiss` ТОЛЬКО из `paused` и `errored`.
+      Из `listening`/`transcribing`/`requesting`/`applying`/`review`
+      событие было no-op: микрофон освобождался, take выбрасывался,
+      а FSM оставался ПИННУТЫМ в `listening` — панель продолжала
+      считать секунды для сессии, которой больше нет. Выйти можно
+      было только через mini-FAB, который тут же начинал новую
+      запись, о которой никто не просил.
+
+  (4) **«Повторная запись не работает».** В окне флаша (аудио уже
+      ушло в распознаватель, транскрипт ещё не пришёл — на серверном
+      реле это 16–32 с) mini-FAB находился в фазе `stopping`, и
+      нажатие на него ПРОГЛАТЫВАЛОСЬ. Оркестратор умел дождаться
+      дренажа и взять следующий take, но UI до него не допускал.
+
+  (5) **Правки терялись.** Буфер жил локальным сигналом внутри
+      компонента review-формы. Запись ещё раз → FSM уходит из
+      `review` → форма размонтируется → правки пропали; при
+      возврате в `review` поле перезаполнялось сырой расшифровкой.
+
+  Итог: пользователь не мог ни поправить услышанное, ни понять,
+  что происходит с его словами, ни остановить процесс, ни
+  отправить второй раз. Это не «мелкая косметика» — это четыре
+  отказа одного базового жеста.
+
+commitment: |
+  Голосовой ввод становится ОДНИМ композером: одно редактируемое
+  поле, которое существует и редактируется в каждом состоянии
+  сессии; строка статуса, которая в любой момент говорит, что
+  именно делает приложение; кнопка отмены отправки, которая
+  возвращает текст в поле; и состояние `sent`, в котором панель
+  остаётся открытой с текстом, чтобы его можно было поправить и
+  отправить заново.
+
+counterexample: |
+  «Текст и так редактируется — в состоянии `review` есть
+  textarea, этого достаточно». Возражения: состояние `review`
+  существует меньше секунды в happy path и недостижимо во время
+  работы LLM. Пользователь, который правит распознанное, должен
+  успеть это сделать — а править нечего, потому что половина
+  времени поля на экране нет. «Достаточно» здесь означает «в
+  остальных случаях — нет».
+
+  «Спиннер и статусная строка — украшение, а не контракт».
+  Возражения: панель — единственное место, где пользователь видит
+  состояние машины. Если в нём написано «применяю правку…», а
+  через секунду панель исчезает, у пользователя нет ни способа
+  узнать, применилось ли, ни способа это отменить. Отсутствие
+  обратной связи — это не «украшение», это отсутствие управления
+  собственным действием.
+
+  «`dismiss` не обрабатывался из активных состояний случайно —
+  возможно, так задумано: закрыть панель должен только `idle`».
+  Возражения: событие, на которое реагирует кнопка с подписью
+  «закрыть», обязано закрывать. Иначе кнопка врёт: она освобождает
+  микрофон, выбрасывает take и оставляет панель на экране с
+  продолжающимся счётчиком — состояние, которого не существует.
+  Проверка «событие не приводит ни к какому изменению ⇒ оно
+  бессмысленно» и здесь выполняется: изменение есть, и оно ровно
+  одно — FSM возвращается в `idle`.
+
+antithesis: |
+  (1) «Сделать поле всегда редактируемым — значит показать
+      пользователю текст, который ещё не готов: полупустую
+      расшифровку, пока распознаватель думает». Возражения: в
+      живой расшифровке полно мусора, и его правка вручную бессмысленна.
+      Но поле и не обязано быть «правимым» — оно обязано быть
+      ДОСТУПНЫМ. Пользователь может стереть лишнее, может
+      подготовить формулировку заранее, может исправить опечатку,
+      которую уже видит. Право вмешаться — не право получить
+      идеальный текст.
+
+  (2) «Оставить панель открытой после отправки — значит она
+      будет висеть над редактором и мешать работать». Возражения:
+      панель и так висит над редактором во время записи. Разница
+      в том, что после отправки у пользователя появляется выбор
+      (закрыть ✕ / поправить и отправить снова), а без этого
+      выбора панель просто исчезает. Кроме того, закрытие теперь
+      явно: одна кнопка с подписью «Отменить запись и закрыть
+      панель».
+
+  (3) «Отмена отправки — это лишнее: LLM всё равно ответит, и
+      правка применится». Возражения: `cancelSend` прерывает fiber
+      маршрута ДО того, как он допишет score в редактор, поэтому
+      отменённая отправка не применяется. Это ровно тот случай,
+      где «пользователь ошибся» должно стоить дешевле, чем
+      «композиция молча изменена».
+
+scope:
+  paths:
+    - "ui/src/domain/voice/voiceSession.ts"
+    - "ui/src/domain/voice/voiceSession.test.ts"
+    - "ui/src/domain/voice/Transcript.ts"
+    - "ui/src/application/voice/VoiceAISession.ts"
+    - "ui/src/application/voice/VoiceAISession.test.ts"
+    - "ui/src/presentation/state/voiceAIStore.ts"
+    - "ui/src/presentation/state/voiceAIStore.test.ts"
+    - "ui/src/presentation/components/RecordingPanel.tsx"
+    - "ui/src/presentation/components/RecordingPanel.test.tsx"
+    - "ui/src/presentation/components/VoiceAIMiniFAB.tsx"
+    - "ui/src/presentation/components/VoiceAIMiniFAB.test.tsx"
+    - "ui/src/styles/components.css"
+  exclusions:
+    - "ui/node_modules/**"
+    - "ui/dist/**"
+    - "ui/src/infrastructure/**"
+
+outcomes:
+  - id: one-field-always-editable
+    statement: |
+      `.voice-recording-panel__review-textarea` присутствует в DOM
+      и не disabled во всех состояниях голосового ввода (`arming`,
+      `listening`, `transcribing`, `review`, `requesting`,
+      `applying`, `sent`, `errored`). Текст, который пришёл от
+      распознавателя, попадает в поле сразу, а после того как
+      пользователь что-то в нём напечатал, распознаватель больше
+      не переписывает поле (`voiceAIDraftDirty`).
+  - id: status-line-never-silent
+    statement: |
+      `.voice-recording-panel__status-text` показывает ровно одну
+      фразу на состояние: «Готовлю микрофон…», «Записываю… N с»,
+      «Распознаю…», «Текст готов — правьте и отправляйте»,
+      «Отправляю в ИИ…», «Применяю правку…»,
+      «✓ Правка применена — можно отправить заново»,
+      «Запись на паузе…» или текст ошибки. Спиннер
+      (`.voice-recording-panel__spinner`) появляется ровно в тех
+      состояниях, где приложение ждёт не пользователя
+      (`requesting`, `applying`, `transcribing`, флаш).
+  - id: cancel-and-resend
+    statement: |
+      Пока запрос в проводе (`requesting`/`applying`), первичная
+      кнопка панели — «Отменить отправку»: fiber маршрута
+      прерывается, FSM возвращается в `review`, текст остаётся в
+      поле. После успешной отправки FSM приходит в новое состояние
+      `sent`: панель остаётся открытой с тем же текстом, который
+      можно править и отправить снова (`send-review` из `sent`).
+  - id: dismiss-works-everywhere
+    statement: |
+      `dismiss` — wildcard-переход редукера: из любого активного
+      состояния он даёт `idle`. Кнопка ✕ в голове панели поэтому
+      реально закрывает панель (а не «останавливает запись»
+      в одних состояниях, «отменяет отправку» в других и «ничего»
+      в третьих). Остановить запись, оставив текст, — отдельная
+      кнопка ●REC в теле панели.
+  - id: second-take-is-not-swallowed
+    statement: |
+      Нажатие на mini-FAB в окне флаша (аудио ушло, транскрипт ещё
+      не пришёл) больше не игнорируется: фаза `stopping` переименована
+      в `busy`, и нажатие запускает следующий take — оркестратор
+      дожидается дренажа сам (`drainRef`).
+  - id: buffer-lives-in-the-store
+    statement: |
+      Буфер (то, что видит пользователь и что уходит в LLM) живёт в
+      `voiceAIStore` как `voiceAIDraft` + `voiceAIDraftDirty`, а не
+      в локальном сигнале компонента и не в FSM. Он переживает
+      размонтирование панели (переключение на режим свиста) и все
+      переходы FSM; новый take с пустым буфером отличает «продолжить
+      take» от «начать заново» (`continuesCurrentTake`).
+
+obligations:
+  - id: field-present-in-every-state
+    claim: |
+      `RecordingPanel.test.tsx` параметризованным тестом проверяет
+      наличие `.voice-recording-panel__review-textarea` без
+      `readonly`/`disabled` в восьми состояниях FSM.
+    acceptance:
+      all:
+        - verifier: vitest-run-recording-panel
+          result: pass
+  - id: status-phrase-per-state
+    claim: |
+      `RecordingPanel.test.tsx` проверяет фразу статусной строки в
+      каждом состоянии (`arming` → «Готовлю микрофон…», `listening` →
+      «Записываю», `review` → «Текст готов», `requesting` →
+      «Отправляю», `applying` → «Применяю», `sent` → «Правка
+      применена») и наличие спиннера только в «ждущих» состояниях.
+    acceptance:
+      all:
+        - verifier: vitest-run-recording-panel
+          result: pass
+  - id: dismiss-wildcard-tested
+    claim: |
+      `voiceSession.test.ts` параметризованным тестом проверяет
+      `dismiss → idle` из девяти активных состояний.
+    acceptance:
+      all:
+        - verifier: vitest-run-voice-session
+          result: pass
+  - id: cancel-send-tested
+    claim: |
+      `VoiceAISession.test.ts` проверяет, что `cancelSend` во время
+      висящего маршрута возвращает FSM в `review` с текстом, и
+      что из `sent` текст можно отправить снова (второй вызов LLM).
+    acceptance:
+      all:
+        - verifier: vitest-run-voice-ai-session
+          result: pass
+  - id: buffer-rules-tested
+    claim: |
+      `voiceAIStore.test.ts` проверяет: буфер зеркалит расшифровку;
+      `final` и `interim` соединяются (две фразы в одной сессии не
+      теряются); правка пользователя не перезаписывается
+      распознавателем; «Очистить» не даёт распознавателю вернуть
+      текст; новый take обнуляет буфер, а продолженный — нет.
+    acceptance:
+      all:
+        - verifier: vitest-run-voiceai-store
+          result: pass
+  - id: second-take-press-tested
+    claim: |
+      `VoiceAIMiniFAB.test.tsx` проверяет, что нажатие в окне флаша
+      вызывает `start` (а не игнорируется) — это регрессия
+      «повторная запись не работает».
+    acceptance:
+      all:
+        - verifier: vitest-run-voice-ai-mini-fab
+          result: pass
+  - id: gate-green
+    claim: |
+      `npm run test:precommit` (tsc --noEmit + vitest +
+      eslint lint:no-console + validate:presets) завершается
+      exit 0; `npx vite build` exit 0.
+    acceptance:
+      all:
+        - verifier: pnpm-ui-typecheck
+          result: pass
+        - verifier: pnpm-ui-lint
+          result: pass
+  - id: mathc-validate-clean
+    claim: |
+      `mathc validate decisions/wavecode-voice-composer-ux.yaml`
+      завершается exit 0 без `MC-*` reject-диагностик.
+    acceptance:
+      all:
+        - verifier: mathc validate
+          result: pass
+
+risk:
+  declared_triggers:
+    - the-panel-stays-open-after-every-send-and-covers-the-transport-bar
+    - the-buffer-survives-a-take-the-user-meant-to-discard
+    - the-recogniser-keeps-writing-into-a-field-the-user-is-editing
+    - the-cancel-button-is-read-as-a-second-send-button
+    - the-sent-state-makes-the-next-fab-press-look-like-a-reset
+  owner: human:operator
+
+reversal:
+  - signal: the-panel-blocks-the-editor-on-small-screens
+    action: revert
+  - signal: users-cannot-find-the-send-button-because-it-changes-label
+    action: halt
+
+relations:
+  addresses:
+    - wavecode-voice-confirm-before-send@1
+    - wavecode-voice-fab-toggle-rec@1
+    - wavecode-voice-take-continuation@1
+    - wavecode-voice-second-take-sendable@1

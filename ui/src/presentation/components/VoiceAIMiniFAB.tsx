@@ -7,7 +7,7 @@ import {
   startVoiceAI,
   stopVoiceAI,
   cancelVoiceAIInFlight,
-  voiceAITranscript,
+  voiceAIDraft,
   voiceAIFlushing,
 } from '../state/voiceAIStore';
 import { MicIcon } from '../icons';
@@ -26,15 +26,14 @@ type Props = {
  *
  *   off       — nothing is being captured. A press starts a take.
  *   recording — the mic is open (or opening). A press stops it.
- *   stopping  — the take was stopped and the engine is uploading it;
- *               the transcript is still on its way. A press is a
- *               no-op: there is nothing to stop and nothing to start
- *               until the flush lands (the orchestrator's `start`
- *               waits the drain out on its own).
+ *   busy      — the take was stopped and the engine is uploading it;
+ *               the transcript is still on its way. A press starts
+ *               the NEXT take — the orchestrator waits the drain
+ *               out on its own, so the press is never swallowed.
  *   blocked   — the browser cannot record (no STT engine, no
  *               permission). The button is disabled.
  */
-type Phase = 'off' | 'recording' | 'stopping' | 'blocked';
+type Phase = 'off' | 'recording' | 'busy' | 'blocked';
 
 /** Translate a typed fail reason into a user-facing message. */
 const formatError = (
@@ -138,7 +137,7 @@ export function VoiceAIMiniFAB(props: Props): JSX.Element {
     // The flush window comes first: the FSM is still `listening`
     // while the recogniser is uploading the take, and the recording
     // is over even though the tag has not moved yet.
-    if (voiceAIFlushing()) return 'stopping';
+    if (voiceAIFlushing()) return 'busy';
     const tag = voiceAIState().tag;
     if (tag === 'arming' || tag === 'listening') return 'recording';
     return 'off';
@@ -148,21 +147,28 @@ export function VoiceAIMiniFAB(props: Props): JSX.Element {
 
   const onToggle = (): void => {
     const p = phase();
-    if (p === 'blocked' || p === 'stopping') return;
+    if (p === 'blocked') return;
     if (p === 'recording') {
       // Second press: stop the take. `stopVoiceAI` flushes rather
       // than cancels — the audio is uploaded and the transcript lands
       // in the panel a round trip later. The effect is fire-and-
       // forget: blocking a touch handler on a ~16 s network round
-      // trip is not an option, and the panel shows «распознаю…» while
+      // trip is not an option, and the panel shows «Распознаю…» while
       // it waits.
       void runEffectSafely(Effect.suspend(() => stopVoiceAI()));
       return;
     }
-    // First press: start the take. `continuous` keeps the session
-    // alive between utterances so the next press can extend the same
-    // take (the reducer's `arm` from `review`/`paused` preserves the
-    // transcript).
+    // First press (or a press during the flush window): start the
+    // take. `continuous` keeps the session alive between utterances
+    // so the next press can extend the same take (the reducer's
+    // `arm` from `review`/`paused` preserves the transcript).
+    //
+    // The press during the flush used to be swallowed — the button
+    // sat in a `stopping` phase and did nothing. That is the
+    // «повторная запись не работает» report: the user released the
+    // button, waited for the recogniser, pressed again to add a
+    // sentence and got silence. Now the press starts the next take
+    // and the orchestrator waits the drain out by itself.
     void runEffectSafely(
       startVoiceAI({ mode: 'continuous', lang: props.lang ?? 'ru-RU' }),
     );
@@ -181,17 +187,14 @@ export function VoiceAIMiniFAB(props: Props): JSX.Element {
 
   const hintText = (): string => {
     if (phase() === 'recording') return 'Слушаю…';
-    if (phase() === 'stopping') return 'распознаю…';
-    return voiceAITranscript().interim || voiceAITranscript().final || '…';
+    if (phase() === 'busy') return 'Распознаю…';
+    return voiceAIDraft() || '…';
   };
 
   const showHint = (): boolean => {
     const p = phase();
-    if (p === 'recording' || p === 'stopping') return true;
-    return (
-      voiceAITranscript().interim.trim().length > 0
-      || voiceAITranscript().final.trim().length > 0
-    );
+    if (p === 'recording' || p === 'busy') return true;
+    return voiceAIDraft().trim().length > 0;
   };
 
   return (

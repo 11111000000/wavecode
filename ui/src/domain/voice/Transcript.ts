@@ -152,3 +152,35 @@ export const markStopped = (
   state: TranscriptState,
   nowMs: number,
 ): TranscriptState => (state.stoppedAtMs === nowMs ? state : { ...state, stoppedAtMs: nowMs });
+
+/**
+ * The whole take as ONE line of text — what the user sees in the
+ * composer's field and what the LLM receives.
+ *
+ * Why `final` and `interim` are JOINED and not one-or-the-other
+ * ---------------------------------------------------------
+ * The two fields carry different halves of the same utterance set,
+ * and which half depends on the engine:
+ *
+ *   - `final` accumulates the chunks the engine COMMITTED: one per
+ *     finished take (server relay) or one per finished utterance
+ *     (Web Speech). It is space-joined and never shrinks.
+ *   - `interim` is the engine's LIVE view of the take that is still
+ *     being captured. The server relay re-transcribes the audio
+ *     accumulated since the last flush, so its interim covers the
+ *     current take only; Web Speech reports the partial of the
+ *     current utterance.
+ *
+ * So while a SECOND take is being recorded, `final` holds the first
+ * take and `interim` holds the second — showing only one of them
+ * loses half of what the user said. `final + interim` is the union,
+ * and it never duplicates: within one take the interim REPLACES the
+ * previous interim (see `appendChunk`), and the final clears the
+ * interim when it lands.
+ */
+export const transcriptText = (state: TranscriptState): string => {
+  const final = state.final.trim();
+  const interim = state.interim.trim();
+  if (final.length > 0 && interim.length > 0) return `${final} ${interim}`;
+  return final.length > 0 ? final : interim;
+};

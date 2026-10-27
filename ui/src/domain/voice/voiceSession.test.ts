@@ -151,7 +151,7 @@ describe('voiceSessionReducer — happy paths', () => {
     expect(next.transcript.final).toBe('');
   });
 
-  it('applied in non-continuous → idle', () => {
+  it('applied in non-continuous → sent (the buffer survives the send)', () => {
     const start: VoiceSessionState = {
       tag: 'applying',
       transcript: {
@@ -166,7 +166,10 @@ describe('voiceSessionReducer — happy paths', () => {
       continuous: false,
     };
     const next = voiceSessionReducer(start, { type: 'applied' });
-    expect(next).toEqual({ tag: 'idle' });
+    // NOT `idle`: the panel must stay open with the text so the user
+    // can see what was sent, fix a misheard word and send it again.
+    expect(next.tag).toBe('sent');
+    expect(next.tag === 'sent' && next.editedText).toBe('сделай побыстрее');
   });
 });
 
@@ -369,7 +372,7 @@ describe('voiceSessionReducer — take continuation after release', () => {
 });
 
 describe('voiceSessionReducer — full press-and-talk flow', () => {
-  it('drives idle → arming → listening → transcribing → requesting → applying → idle', () => {
+  it('drives idle → arming → listening → transcribing → requesting → applying → sent', () => {
     const events: ReadonlyArray<VoiceSessionEvent> = [
       { type: 'arm' },
       { type: 'stt-ready' },
@@ -380,7 +383,7 @@ describe('voiceSessionReducer — full press-and-talk flow', () => {
       { type: 'applied' },
     ];
     const final = reduce(events);
-    expect(final).toEqual({ tag: 'idle' });
+    expect(final.tag).toBe('sent');
   });
 });
 
@@ -642,5 +645,115 @@ describe('voiceSessionReducer — an unsent buffer survives a press', () => {
     expect(next.tag).toBe('listening');
     if (next.tag !== 'listening') throw new Error('unreachable');
     expect(next.transcript.final).toBe('сделай композицию');
+  });
+});
+
+/**
+ * `dismiss` is the panel's ✕ — «закрой и забудь». It has to work in
+ * EVERY active state.
+ *
+ * Before the composer UX the reducer only honoured it from `paused`
+ * and `errored`, so pressing ✕ while recording released the mic and
+ * dropped the take — and left the FSM pinned in `listening`. The
+ * panel went on counting seconds for a session that no longer
+ * existed, and the only way out was the FAB (which then started a
+ * take nobody asked for). That is the «отменить непонятно как»
+ * report.
+ */
+describe('voiceSessionReducer — dismiss is a wildcard', () => {
+  const transcript = { ...initialTranscriptState('ru-RU'), final: 'сделай потише' };
+
+  it.each([
+    ['arming', { tag: 'arming' } as VoiceSessionState],
+    ['listening', { tag: 'listening', transcript, continuous: true } as VoiceSessionState],
+    ['transcribing', { tag: 'transcribing', transcript } as VoiceSessionState],
+    ['requesting', { tag: 'requesting', transcript, continuous: false } as VoiceSessionState],
+    ['applying', { tag: 'applying', transcript, score: 'note("c4")', continuous: false } as VoiceSessionState],
+    ['paused', { tag: 'paused', transcript } as VoiceSessionState],
+    ['review', { tag: 'review', transcript, editedText: 'сделай потише' } as VoiceSessionState],
+    ['sent', { tag: 'sent', transcript, editedText: 'сделай потише' } as VoiceSessionState],
+    ['errored', { tag: 'errored', error: 'boom', transcript } as VoiceSessionState],
+  ])('dismiss from %s → idle', (_name, state) => {
+    expect(voiceSessionReducer(state, { type: 'dismiss' })).toEqual({ tag: 'idle' });
+  });
+
+  it('dismiss from idle stays idle', () => {
+    expect(voiceSessionReducer(initialVoiceSession(), { type: 'dismiss' }))
+      .toEqual({ tag: 'idle' });
+  });
+});
+
+/**
+ * «Отменить отправку» — the user pulls the plug while the request is
+ * on the wire. The text goes back into the form, untouched, so the
+ * next attempt is one word away.
+ */
+describe('voiceSessionReducer — cancel-send', () => {
+  const transcript = { ...initialTranscriptState('ru-RU'), final: 'сделай потише' };
+
+  it('cancel-send from requesting → review with the text intact', () => {
+    const next = voiceSessionReducer(
+      { tag: 'requesting', transcript, continuous: false },
+      { type: 'cancel-send' },
+    );
+    expect(next.tag).toBe('review');
+    if (next.tag !== 'review') throw new Error('unreachable');
+    expect(next.editedText).toBe('сделай потише');
+    expect(next.transcript.final).toBe('сделай потише');
+  });
+
+  it('cancel-send from applying → review with the text intact', () => {
+    const next = voiceSessionReducer(
+      { tag: 'applying', transcript, score: 'note("c4")', continuous: false },
+      { type: 'cancel-send' },
+    );
+    expect(next.tag).toBe('review');
+    if (next.tag !== 'review') throw new Error('unreachable');
+    expect(next.editedText).toBe('сделай потише');
+  });
+
+  it('cancel-send from review is a no-op (nothing is in flight)', () => {
+    const start: VoiceSessionState = {
+      tag: 'review',
+      transcript,
+      editedText: 'сделай потише',
+    };
+    expect(voiceSessionReducer(start, { type: 'cancel-send' })).toBe(start);
+  });
+});
+
+/**
+ * `sent` — the instruction reached the LLM and the score was written.
+ * The buffer is still the user's: it can be edited and sent again.
+ */
+describe('voiceSessionReducer — the sent state', () => {
+  const transcript = { ...initialTranscriptState('ru-RU'), final: 'сделай потише' };
+
+  it('send-review from sent → requesting (the re-send)', () => {
+    const next = voiceSessionReducer(
+      { tag: 'sent', transcript, editedText: 'сделай потише' },
+      { type: 'send-review', text: 'сделай потише и добавь ритма' },
+    );
+    expect(next.tag).toBe('requesting');
+    if (next.tag !== 'requesting') throw new Error('unreachable');
+    expect(next.transcript.final).toBe('сделай потише и добавь ритма');
+  });
+
+  it('arm from sent starts a FRESH take (the instruction is already in the score)', () => {
+    const next = voiceSessionReducer(
+      { tag: 'sent', transcript, editedText: 'сделай потише' },
+      { type: 'arm' },
+    );
+    expect(next.tag).toBe('listening');
+    if (next.tag !== 'listening') throw new Error('unreachable');
+    expect(next.transcript.final).toBe('');
+  });
+
+  it('edit-review from sent keeps the state and updates the buffer', () => {
+    const next = voiceSessionReducer(
+      { tag: 'sent', transcript, editedText: 'сделай потише' },
+      { type: 'edit-review', text: 'сделай потише' },
+    );
+    expect(next.tag).toBe('sent');
   });
 });

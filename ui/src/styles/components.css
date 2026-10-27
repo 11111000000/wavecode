@@ -6929,29 +6929,24 @@ textarea.ai-textarea:focus-visible {
   font-weight: var(--fw-medium);
   color: var(--fg);
 }
-.voice-recording-panel__transcript {
-  font-family: var(--font-sans);
-  color: var(--fg);
-  word-break: break-word;
-  min-height: 1.4em;
-}
 
-/* Inline review form (`decisions/wavecode-voice-confirm-before-send`).
- * Renders INSIDE the existing RecordingPanel when voice-AI's FSM
- * enters `review` — replaces the deleted modal (VoiceAITextReview)
- * with the confirmation affordance co-located on the panel that
- * already shows the live transcript.
+/* The composer (`decisions/wavecode-voice-composer-ux`).
  *
- * The container row sets `min-height: 0` so the textarea's flex
- * grow can shrink the body when the panel hits its
- * `--voice-panel-max-h` cap, and so the ✕ in the head never gets
- * pushed off-screen by a long edit. The textarea is small on
- * purpose (rows=2 in JSX): the panel must not balloon into the
- * fixed transport bar on mobile viewports. */
-.voice-recording-panel__review {
+ * One editable field for the whole session + one line that says what
+ * the machine is doing right now. The field is ALWAYS there — while
+ * the mic is open, while the recogniser thinks, while the LLM
+ * answers, and after the edit was applied — because a text the user
+ * cannot reach is a text the user cannot fix.
+ *
+ * The container sets `min-height: 0` so the textarea's flex grow can
+ * shrink when the panel hits its `--voice-panel-max-h` cap, and so
+ * the ✕ in the head never gets pushed off-screen by a long edit. The
+ * textarea is small on purpose (rows=2 in JSX): the panel must not
+ * balloon into the fixed transport bar on mobile viewports. */
+.voice-recording-panel__composer {
   display: flex;
   flex-direction: column;
-  gap: var(--space-sm);
+  gap: var(--space-2xs);
   min-height: 0;
 }
 .voice-recording-panel__review-textarea {
@@ -6979,9 +6974,44 @@ textarea.ai-textarea:focus-visible {
   border-color: var(--primary);
   box-shadow: 0 0 0 2px var(--primary-soft);
 }
-.voice-recording-panel__error {
-  color: var(--err);
-  font-weight: var(--fw-medium);
+
+/* Status line — the answer to «ушло не ушло, крутится или нет».
+ * One phrase per machine state, always on screen while the panel is
+ * open. */
+.voice-recording-panel__status {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  min-height: 1.4em;
+  font-size: var(--fs-xs);
+  color: var(--fg-muted);
+}
+.voice-recording-panel__status-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  word-break: break-word;
+}
+/* The RMS meter lives in the status row now: it is a readout of the
+ * machine's state, not a separate widget. It keeps a fixed width so
+ * it never squeezes the phrase next to it. */
+.voice-recording-panel__status .voice-recording-panel__rms {
+  flex: 0 0 90px;
+  max-width: 90px;
+}
+/* The spinner is the ONLY motion in the panel: it appears exactly
+ * when the app is waiting for something that is not the user —
+ * the recogniser, the relay, the LLM. */
+.voice-recording-panel__spinner {
+  flex: 0 0 auto;
+  width: 10px;
+  height: 10px;
+  border-radius: var(--radius-full);
+  border: 2px solid var(--border-strong);
+  border-top-color: var(--primary);
+  animation: voice-recording-panel-spin 0.9s linear infinite;
+}
+@keyframes voice-recording-panel-spin {
+  to { transform: rotate(360deg); }
 }
 .voice-recording-panel__hz {
   font-family: var(--font-mono);
@@ -7045,6 +7075,18 @@ textarea.ai-textarea:focus-visible {
 }
 .voice-recording-panel__btn--primary:hover:not(:disabled) {
   background: var(--primary-soft);
+}
+
+/* «Отменить отправку» — the primary button while the request is on
+ * the wire. Same slot, different meaning, so the user never has to
+ * hunt for a second button to pull the plug: the thing that sends
+ * becomes the thing that stops sending. */
+.voice-recording-panel__btn--cancel {
+  border-color: var(--err);
+  color: var(--err);
+}
+.voice-recording-panel__btn--cancel:hover {
+  background: var(--err-soft);
 }
 
 /* «Очистить текст» — the small button that empties the recognised-text
@@ -7176,21 +7218,11 @@ textarea.ai-textarea:focus-visible {
  * right. The meter only renders on the server STT path (where our
  * code owns the mic and can run an AnalyserNode); on the Web Speech
  * path the meter is omitted and the transcript spans the row. */
-.voice-recording-panel__body--live {
-  display: flex;
-  align-items: center;
-  gap: var(--space-sm);
-  flex-wrap: wrap;
-}
 .voice-recording-panel__rms-row {
   display: flex;
   align-items: center;
   gap: var(--space-2xs);
   flex-shrink: 0;
-}
-.voice-recording-panel__body--live .voice-recording-panel__rms {
-  flex: 0 0 120px;
-  max-width: 160px;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -7198,6 +7230,9 @@ textarea.ai-textarea:focus-visible {
     animation: none;
   }
   .voice-recording-panel__rec--on {
+    animation: none;
+  }
+  .voice-recording-panel__spinner {
     animation: none;
   }
 }
