@@ -158,6 +158,15 @@ export type VoiceSessionHandle = {
   readonly sendReview: (text: string) => Effect.Effect<void, never, never>;
   /** Drop the review buffer and return to idle. */
   readonly cancelReview: () => Effect.Effect<void, never, never>;
+  /** Cancel the in-flight request and put the text back into the
+   *  review form.
+   *
+   *  The user pressed «Отменить отправку» while the LLM was working.
+   *  The route fiber is interrupted (so the half-finished edit never
+   *  reaches the score editor) and the FSM goes back to `review` with
+   *  the text intact — the user can fix a word and send it again.
+   *  From any other state it is a no-op. */
+  readonly cancelSend: () => Effect.Effect<void, never, never>;
 };
 
 /**
@@ -312,7 +321,10 @@ export const createVoiceAISession = (
       const t = Date.now();
       return Effect.gen(function* () {
         const prev = yield* Ref.get(stateRef);
-        if (prev.tag !== 'review') return;
+        // `review` is the first send, `sent` is a re-send: the user
+        // edited the text that already went through once and wants
+        // the corrected version applied. Both end in `requesting`.
+        if (prev.tag !== 'review' && prev.tag !== 'sent') return;
         yield* dispatch({ type: 'send-review', text });
         const fiber = yield* Effect.forkDaemon(runRoute(text, t));
         yield* Ref.set(inFlightRef, fiber);
@@ -588,6 +600,16 @@ export const createVoiceAISession = (
       cancelReview: () =>
         Effect.gen(function* () {
           yield* dispatch({ type: 'cancel-review' });
+        }),
+      cancelSend: () =>
+        Effect.gen(function* () {
+          // Kill the route first: the FSM must not fall back to
+          // `review` while a request is still on the wire — the
+          // interrupted route could otherwise land its edit after
+          // the user already cancelled.
+          const inFlight = yield* Ref.modify(inFlightRef, (curr) => [curr, null] as const);
+          if (inFlight !== null) yield* Fiber.interrupt(inFlight);
+          yield* dispatch({ type: 'cancel-send' });
         }),
     };
 

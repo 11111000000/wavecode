@@ -6,9 +6,13 @@ import {
   voiceAIError,
   voiceAIFlushing,
   voiceAISupported,
+  voiceAIDraft,
+  setVoiceAIDraftText,
+  clearVoiceAIDraft,
   startVoiceAI,
   stopVoiceAI,
   cancelVoiceAIInFlight,
+  cancelVoiceAISend,
   enterVoiceAIReview,
   sendVoiceAIReview,
   cancelVoiceAIReview,
@@ -69,11 +73,15 @@ const installFake = (): VoiceSessionHandle => {
     stateRef,
     start: () =>
       Effect.sync(() => {
-        setState({
-          tag: 'listening',
-          transcript: initialTranscriptState('ru-RU'),
-          continuous: false,
-        });
+        // Go through the REAL reducer, the way the orchestrator
+        // does: `arm` then `stt-ready`. A fake that always lands in
+        // `listening` with a FRESH transcript would hide the
+        // take-continuation contract (a press from `transcribing` /
+        // `review` keeps the text the user already dictated) and the
+        // tests would pass against a machine the app never runs.
+        const armed = voiceSessionReducer(voiceAIState(), { type: 'arm' });
+        const ready = voiceSessionReducer(armed, { type: 'stt-ready' });
+        setState(ready);
       }),
     stop: () =>
       Effect.sync(() => {
@@ -98,7 +106,7 @@ const installFake = (): VoiceSessionHandle => {
     sendReview: () =>
       Effect.sync(() => {
         const cur = voiceAIState();
-        if (cur.tag === 'review') {
+        if (cur.tag === 'review' || cur.tag === 'sent') {
           setState({
             tag: 'requesting',
             transcript: { ...cur.transcript, final: cur.editedText },
@@ -111,6 +119,17 @@ const installFake = (): VoiceSessionHandle => {
         const cur = voiceAIState();
         if (cur.tag === 'review') {
           setState({ tag: 'idle' });
+        }
+      }),
+    cancelSend: () =>
+      Effect.sync(() => {
+        const cur = voiceAIState();
+        if (cur.tag === 'requesting' || cur.tag === 'applying') {
+          setState({
+            tag: 'review',
+            transcript: cur.transcript,
+            editedText: cur.transcript.final.trim(),
+          });
         }
       }),
     dismiss: () =>
@@ -287,7 +306,9 @@ describe('voiceAIStore — reducer-driven FSM', () => {
     expect(voiceAIState().tag).toBe('applying');
     // Verify the reducer is the source of truth:
     const s = voiceSessionReducer(voiceAIState(), { type: 'applied' });
-    expect(s.tag).toBe('idle');
+    // NOT `idle`: the panel keeps the text so the user can send it
+    // again (see `decisions/wavecode-voice-composer-ux`).
+    expect(s.tag).toBe('sent');
   });
 
   it('enterVoiceAIReview transitions listening → review (snapshot of transcript)', async () => {
@@ -433,6 +454,7 @@ describe('voiceAIStore — silence watchdog is engine-aware', () => {
       enterReview: () => Effect.void,
       sendReview: () => Effect.void,
       cancelReview: () => Effect.void,
+      cancelSend: () => Effect.void,
       dismiss: () => Effect.void,
       stream: Stream.empty,
     } as unknown as VoiceSessionHandle);
@@ -465,5 +487,111 @@ describe('voiceAIStore — silence watchdog is engine-aware', () => {
       __setVoiceAIHandleForTests(null);
       await Effect.runPromise(dismissVoiceAI());
     }
+  });
+});
+
+/**
+ * The composer's buffer (`decisions/wavecode-voice-composer-ux`).
+ *
+ * The buffer is what the user SEES and what the LLM RECEIVES. Two
+ * rules make it work:
+ *
+ *   1. While the user has not touched it, it mirrors the recogniser's
+ *      text — the field fills itself as the words arrive.
+ *   2. Once the user has typed, it is THEIRS: the recogniser no
+ *      longer overwrites it.
+ */
+describe('voiceAIStore — the composer buffer', () => {
+  const chunk = (kind: 'interim' | 'final', text: string) => ({
+    type: 'chunk' as const,
+    chunk: { kind, text, confidence: 0.9, lang: 'ru-RU', timestampMs: 0 },
+  });
+
+  it('mirrors the recogniser text into the buffer', () => {
+    __dispatchVoiceAIForTests({ type: 'arm' });
+    __dispatchVoiceAIForTests({ type: 'stt-ready' });
+    __dispatchVoiceAIForTests(chunk('interim', 'сделай по'));
+    expect(voiceAIDraft()).toBe('сделай по');
+    __dispatchVoiceAIForTests(chunk('final', 'сделай потише'));
+    expect(voiceAIDraft()).toBe('сделай потише');
+  });
+
+  it('joins the committed text and the live partial (two takes in one session)', () => {
+    // The final accumulates the finished takes; the interim is the
+    // take being captured RIGHT NOW. Showing only one of them loses
+    // half of what the user said.
+    __dispatchVoiceAIForTests({ type: 'arm' });
+    __dispatchVoiceAIForTests({ type: 'stt-ready' });
+    __dispatchVoiceAIForTests(chunk('final', 'сделай бас'));
+    __dispatchVoiceAIForTests({ type: 'enter-review' });
+    // The user adds a second take.
+    __dispatchVoiceAIForTests({ type: 'arm' });
+    __dispatchVoiceAIForTests(chunk('interim', 'покрепче'));
+    expect(voiceAIDraft()).toBe('сделай бас покрепче');
+  });
+
+  it('the user edit is not overwritten by the next chunk', () => {
+    __dispatchVoiceAIForTests({ type: 'arm' });
+    __dispatchVoiceAIForTests({ type: 'stt-ready' });
+    __dispatchVoiceAIForTests(chunk('interim', 'сделай по'));
+    setVoiceAIDraftText('сделай по-тише');
+    expect(voiceAIDraft()).toBe('сделай по-тише');
+    // The recogniser says something else now — the user's text wins.
+    __dispatchVoiceAIForTests(chunk('final', 'сделай потише'));
+    expect(voiceAIDraft()).toBe('сделай по-тише');
+  });
+
+  it('clearing the buffer keeps it empty (the recogniser must not write it back)', () => {
+    __dispatchVoiceAIForTests({ type: 'arm' });
+    __dispatchVoiceAIForTests({ type: 'stt-ready' });
+    __dispatchVoiceAIForTests(chunk('final', 'сделай потише'));
+    expect(voiceAIDraft()).toBe('сделай потише');
+    clearVoiceAIDraft();
+    expect(voiceAIDraft()).toBe('');
+    __dispatchVoiceAIForTests(chunk('interim', 'ещё текст'));
+    expect(voiceAIDraft()).toBe('');
+  });
+
+  it('a fresh take starts with an empty buffer, a continued take keeps it', async () => {
+    installFake();
+    await Effect.runPromise(startVoiceAI({ mode: 'continuous', lang: 'ru-RU' }));
+    __dispatchVoiceAIForTests(chunk('final', 'сделай потише'));
+    expect(voiceAIDraft()).toBe('сделай потише');
+
+    // Continue the take (the FSM is in `transcribing`): the text the
+    // user already dictated must survive the next press.
+    await Effect.runPromise(startVoiceAI({ mode: 'continuous', lang: 'ru-RU' }));
+    expect(voiceAIDraft()).toBe('сделай потише');
+
+    // A fresh take (the FSM is in `requesting`/`applying`/`sent`):
+    // the instruction is already on its way, so the buffer starts
+    // empty.
+    __dispatchVoiceAIForTests({ type: 'enter-review' });
+    await Effect.runPromise(sendVoiceAIReview('сделай потише'));
+    expect(voiceAIState().tag).toBe('requesting');
+    await Effect.runPromise(startVoiceAI({ mode: 'continuous', lang: 'ru-RU' }));
+    expect(voiceAIDraft()).toBe('');
+  });
+});
+
+describe('voiceAIStore — cancelling the send', () => {
+  it('cancelVoiceAISend brings the text back to review', async () => {
+    installFake();
+    await Effect.runPromise(startVoiceAI({ mode: 'continuous', lang: 'ru-RU' }));
+    __dispatchVoiceAIForTests({ type: 'chunk', chunk: {
+      kind: 'final',
+      text: 'сделай потише',
+      confidence: 0.9,
+      lang: 'ru-RU',
+      timestampMs: 0,
+    } });
+    await Effect.runPromise(enterVoiceAIReview());
+    await Effect.runPromise(sendVoiceAIReview('сделай потише'));
+    expect(voiceAIState().tag).toBe('requesting');
+
+    await Effect.runPromise(cancelVoiceAISend());
+    expect(voiceAIState().tag).toBe('review');
+    // The buffer is still there — the whole point of the cancel.
+    expect(voiceAIDraft()).toBe('сделай потише');
   });
 });

@@ -148,10 +148,16 @@ describe('VoiceAIMiniFAB — the press toggles the take', () => {
     expect(btn.getAttribute('data-rec-state')).toBe('on');
   });
 
-  it('a press while the take is being flushed changes nothing', async () => {
+  it('a press while the take is being flushed starts the NEXT take', async () => {
     // Between the stop and the transcript landing the take is
     // already closed — the audio is on its way to the recogniser.
-    // A press in that window must not start a second take.
+    //
+    // The press in that window used to be SWALLOWED: the button sat
+    // in a `stopping` phase and did nothing, which is exactly the
+    // «повторная запись не работает» report — the user released the
+    // button, waited for the recogniser, pressed again to add a
+    // sentence and got silence. Now the press starts the next take;
+    // the orchestrator waits the drain out by itself.
     const calls = { start: 0, stop: 0 };
     __setVoiceAIHandleForTests(fakeHandle(calls) as never);
 
@@ -171,7 +177,7 @@ describe('VoiceAIMiniFAB — the press toggles the take', () => {
     expect(voiceAIFlushing()).toBe(true);
     fireEvent.click(btn);
     await settle();
-    expect(calls.start).toBe(1);
+    expect(calls.start).toBe(2);
     expect(calls.stop).toBe(1);
   });
 });
@@ -217,7 +223,7 @@ describe('VoiceAIMiniFAB — the REC state', () => {
     expect(hint?.textContent).toContain('Слушаю');
   });
 
-  it('shows «распознаю…» while the stopped take is being uploaded', async () => {
+  it('shows «Распознаю…» while the stopped take is being uploaded', async () => {
     const calls = { start: 0, stop: 0 };
     __setVoiceAIHandleForTests(fakeHandle(calls) as never);
 
@@ -231,7 +237,7 @@ describe('VoiceAIMiniFAB — the REC state', () => {
     fireEvent.click(btn);
     await settle();
     const hint = container.querySelector('.voice-mini-fab__hint');
-    expect(hint?.textContent).toContain('распознаю');
+    expect(hint?.textContent).toContain('Распознаю');
   });
 
   it('goes back to the idle look when the take ends', async () => {

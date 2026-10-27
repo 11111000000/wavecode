@@ -56,6 +56,7 @@ import {
 import type { VoiceSessionState } from '~/domain/voice/voiceSession';
 import {
   initialTranscriptState,
+  transcriptText,
   type TranscriptChunk,
   type TranscriptState,
 } from '~/domain/voice/Transcript';
@@ -120,6 +121,55 @@ export const [voiceAIRmsLevel, setVoiceAIRmsLevel] = createSignal<number | null>
  * pretending there is live text.
  */
 export const [voiceAIElapsedSec, setVoiceAIElapsedSec] = createSignal<number>(0);
+
+/**
+ * The composer's buffer — the text the user sees, edits and sends.
+ *
+ * Why the buffer lives here and not in the FSM
+ * -------------------------------------------
+ * The buffer has to be editable in EVERY state of the machine —
+ * while the mic is open, while the recogniser is thinking, while the
+ * LLM is answering, and after the edit was applied. The FSM models
+ * the machine, and a field that has to exist in five of its states is
+ * a sign the field does not belong to the machine. The reducer keeps
+ * `review.editedText` as the record of what the RECOGNISER produced;
+ * this signal is what the USER has, and it survives every transition
+ * — including the panel being hidden by the whistle mode and coming
+ * back.
+ *
+ * `voiceAIDraftDirty` is the hinge: while it is false the buffer
+ * mirrors the transcript (the recogniser owns the text), and once the
+ * user types it becomes true and the buffer is theirs — the
+ * recogniser no longer overwrites it. See `decisions/
+ * wavecode-voice-composer-ux`.
+ */
+export const [voiceAIDraft, setVoiceAIDraft] = createSignal<string>('');
+export const [voiceAIDraftDirty, setVoiceAIDraftDirty] = createSignal<boolean>(
+  false,
+);
+
+/** The user typed (or cleared) the buffer — it is theirs now. */
+export const setVoiceAIDraftText = (text: string): void => {
+  setVoiceAIDraft(text);
+  setVoiceAIDraftDirty(true);
+};
+
+/** Empty the buffer without letting the recogniser write it back. */
+export const clearVoiceAIDraft = (): void => {
+  setVoiceAIDraft('');
+  setVoiceAIDraftDirty(true);
+};
+
+/**
+ * Mirror the recogniser's text into the buffer — but only while the
+ * user has not taken the buffer over. Called from `publishState`, the
+ * single funnel where the FSM's state reaches the Solid signals.
+ */
+const syncDraftFromTranscript = (t: TranscriptState): void => {
+  if (voiceAIDraftDirty()) return;
+  const text = transcriptText(t);
+  if (text !== voiceAIDraft()) setVoiceAIDraft(text);
+};
 
 /**
  * True between "the finger came off the button" and "the transcript
@@ -468,9 +518,11 @@ const publishState = (s: VoiceSessionState): void => {
     || s.tag === 'applying'
     || s.tag === 'paused'
     || s.tag === 'review'
+    || s.tag === 'sent'
     || s.tag === 'errored'
   ) {
     setVoiceAITranscript(s.transcript);
+    syncDraftFromTranscript(s.transcript);
   }
   if (s.tag === 'errored') {
     setVoiceAIError(s.error);
@@ -483,6 +535,60 @@ const publishState = (s: VoiceSessionState): void => {
 export const __publishVoiceAIStateForTests = publishState;
 
 /* ── start / stop / commit / cancel ──────────────────────────────── */
+
+/**
+ * Does a press CONTINUE the current take, or start a fresh one?
+ *
+ * The reducer decides, and it decides by state: from `review`,
+ * `paused` and `transcribing` an `arm` keeps the transcript (the
+ * take-continuation contract, `decisions/wavecode-voice-take-
+ * continuation`); from `idle`, `errored`, `requesting`, `applying`
+ * and `sent` it starts with an empty one (the text there is either
+ * gone or already sent, and carrying it over would apply it twice).
+ *
+ * The store has to know the difference too, because it owns the
+ * composer's buffer: a fresh take means an empty buffer, a continued
+ * take means the user's text stays where it is. Getting this wrong in
+ * either direction loses text the user can hear themselves saying.
+ */
+const continuesCurrentTake = (): boolean => {
+  const tag = voiceAIState().tag;
+  return tag === 'review'
+    || tag === 'paused'
+    || tag === 'transcribing'
+    // `listening` is the FLUSH window: the button was released, the
+    // take is on its way to the recogniser, and the orchestrator
+    // waits the drain out before it arms the next take. The text
+    // that lands during the wait belongs to the same take, so the
+    // buffer must survive it.
+    || tag === 'listening';
+};
+
+/**
+ * A user-facing message for an STT failure.
+ *
+ * The engine's own messages are written for the log («ServerWhisperSTT
+ * already recording; call stop() first») and were shown to the user
+ * verbatim — an English internal string in the middle of a Russian
+ * panel is not feedback, it is noise.
+ */
+const sttFailureMessage = (err: {
+  readonly reason: string;
+  readonly message: string;
+}): string => {
+  switch (err.reason) {
+    case 'no-speech-api':
+      return 'Браузер не умеет записывать аудио';
+    case 'permission-denied':
+      return 'Браузер не дал доступ к микрофону';
+    case 'aborted':
+      return 'Предыдущая запись ещё не завершена — подождите пару секунд и нажмите ещё раз';
+    case 'network':
+      return err.message;
+    default:
+      return err.message;
+  }
+};
 
 /**
  * Start a voice-AI session.
@@ -534,10 +640,19 @@ export const startVoiceAI = (
     }
     activeSessionId = sessionId;
     langAtInit = opts.lang;
+    // A continued take keeps the buffer; a fresh one starts empty.
+    // Resetting unconditionally used to blank the transcript for the
+    // fraction of a second between the press and the FSM's own
+    // `arm` — long enough for the composer's field to visibly empty
+    // and refill under the user's cursor.
     yield* Effect.sync(() => {
       setVoiceAIError(null);
       setVoiceAIFlushing(false);
-      setVoiceAITranscript(initialTranscriptState(opts.lang));
+      if (!continuesCurrentTake()) {
+        setVoiceAIDraft('');
+        setVoiceAIDraftDirty(false);
+        setVoiceAITranscript(initialTranscriptState(opts.lang));
+      }
       startElapsedTimer();
       startRmsPoll();
     });
@@ -574,7 +689,11 @@ export const startVoiceAI = (
       // `err` is a discriminated union; `MicBusyError` has no `message`
       // field, so narrow to `SttUnsupportedError` before reading it.
       if (result.left._tag === 'SttUnsupported') {
-        setVoiceAIState({ tag: 'errored', error: result.left.message, transcript: initialTranscriptState(opts.lang) });
+        setVoiceAIState({
+          tag: 'errored',
+          error: sttFailureMessage(result.left),
+          transcript: initialTranscriptState(opts.lang),
+        });
       } else {
         setVoiceAIState({ tag: 'errored', error: 'Микрофон занят другой сессией', transcript: initialTranscriptState(opts.lang) });
       }
@@ -695,6 +814,10 @@ export const dismissVoiceAI = (): Effect.Effect<void, never, never> =>
       setVoiceAIFlushing(false);
       setVoiceAITranscript(initialTranscriptState(langAtInit));
       setVoiceAIError(null);
+      // The session is over: the buffer goes with it. A new take
+      // starts from an empty composer (see `startVoiceAI`).
+      setVoiceAIDraft('');
+      setVoiceAIDraftDirty(false);
     });
   });
 
@@ -753,6 +876,28 @@ export const cancelVoiceAIReview = (): Effect.Effect<void, never, never> => {
   });
 };
 
+/**
+ * Cancel the request that is on the wire and put the text back into
+ * the form.
+ *
+ * The user's complaint that started this: «отправим заново» was
+ * impossible — once «→ В ИИ» was pressed the text left the screen
+ * together with the panel, the round trip took seconds, and there was
+ * no way to say "no, not that one".
+ *
+ * The route fiber is interrupted, so a half-finished edit never
+ * reaches the score editor, and the FSM returns to `review` with the
+ * buffer intact. The composer keeps the text on screen either way.
+ */
+export const cancelVoiceAISend = (): Effect.Effect<void, never, never> => {
+  if (handle === null) {
+    return Effect.void;
+  }
+  return Effect.gen(function* () {
+    yield* handle!.cancelSend();
+  });
+};
+
 /** Read-only accessor for `voiceAIState.tag === 'review'` (used by
  *  VoiceAITextReview to render conditionally). */
 export const isVoiceAIInReview = (): boolean => voiceAIState().tag === 'review';
@@ -788,10 +933,16 @@ export const __setVoiceAIHandleForTests = (
  *  parked where there was no send button).
  *
  *  Delegating to the real reducer makes the seam a true mirror
- *  instead of a second implementation. */
+ *  instead of a second implementation. It also goes through
+ *  `publishState` — the SAME funnel the production stream
+ *  subscription uses — so the mirror-side rules (the composer's
+ *  buffer, the flush flag, the mic release on `review`) are
+ *  exercised here too. A seam that stops at `setVoiceAIState` would
+ *  leave the buffer sync untested, and the buffer is the whole
+ *  user-visible contract of the composer. */
 export const __dispatchVoiceAIForTests = (event: VoiceSessionEvent): void => {
   const next = voiceSessionReducer(voiceAIState(), event);
-  if (next !== voiceAIState()) setVoiceAIState(next);
+  if (next !== voiceAIState()) publishState(next);
 };
 
 /** Test-only: reset module state. */
@@ -805,6 +956,8 @@ export const __resetVoiceAIForTests = (): void => {
   setVoiceAIError(null);
   setVoiceAIFlushing(false);
   setVoiceAISupported(true);
+  setVoiceAIDraft('');
+  setVoiceAIDraftDirty(false);
 };
 
 onCleanup(() => {
