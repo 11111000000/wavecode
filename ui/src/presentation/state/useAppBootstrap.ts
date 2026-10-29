@@ -11,6 +11,7 @@ import { installTransportAudioSync } from './useTransportAudioSync';
 import { ensureAudioLoaded, getAudioContextState } from '~/infrastructure/audio/LiveAudioEngine';
 import {
   hydrateSelectedPreset, resetSelectedPreset, setSelectedPresetPersist,
+  resolveStoredActivePresetId,
 } from './selectedPreset';
 import { useGridStateAutoSave } from './useGridStateAutoSave';
 import {
@@ -18,6 +19,8 @@ import {
   setLastCommittedGrid,
   setModeDirect,
 } from './gridState';
+import { consumePendingNew } from './pendingNewComposition';
+import { createNewComposition } from './useRouteGuards';
 
 export type AudioRuntime = {
   readonly ctxState: () => { state: string; sampleRate: number | null };
@@ -54,6 +57,22 @@ const restoreFromIdbOrShare = (): void => {
       }
     }).pipe(Effect.provide(AppLayer)),
   );
+};
+
+/**
+ * Если юзер пришёл с лендинга через «Создать» — флаг уже в
+ * sessionStorage, и `restoreFromIdbOrShare` вместо восстановления
+ * прошлой композиции должен создать новую. Делаем это ДО
+ * `useAutoSave` (который через 500мс зальёт «правильный» IDB.score)
+ * иначе любая правка перезатрёт только что созданную композицию
+ * на старую.
+ */
+const consumePendingNewComposition = (): boolean => {
+  const pending = consumePendingNew();
+  if (pending === null) return false;
+  createNewComposition(pending.prompt);
+  markIdbHasScore(true);
+  return true;
 };
 
 /**
@@ -120,21 +139,27 @@ export const useAppBootstrap = (): AudioRuntime => {
           repo.loadDialogs(),
           repo.loadActivePresetId(),
         ]);
+        // IDB.activePresetId может быть устаревшим custom-id, который
+        // удалили (см. decisions/fix-new-composition-flow.yaml). Фолбэк
+        // в ОБА места (signal + appStore.activePresetId) синхронно —
+        // иначе dropdown солжёт (покажет мёртвый id, а играет 'creep').
+        const validActiveId = resolveStoredActivePresetId(activeId);
         setAppStore((prev) => ({
           ...prev,
           dialogs,
-          ...(activeId !== null ? { activePresetId: activeId } : {}),
+          activePresetId: validActiveId,
         }));
-        if (activeId !== null) {
-          // Keep the localStorage-backed signal in sync so other
-          // modules that read `getSelectedPresetId()` see the
-          // same id.
-          setSelectedPresetPersist(activeId);
-        }
+        setSelectedPresetPersist(validActiveId);
       }).pipe(Effect.provide(AppLayer)),
     );
 
-    restoreFromIdbOrShare();
+    // Если юзер пришёл с лендинга через «Создать», синхронно создаём
+// новую композицию и ПРОПУСКАЕМ IDB-восстановление — иначе
+// async load() через микросекунды перезатрёт только что созданную
+// композицию на прошлую (стартовый race до правок).
+if (!consumePendingNewComposition()) {
+  restoreFromIdbOrShare();
+}
     restoreGridState();
     useGridStateAutoSave();
     installAudioPreloadOnFirstGesture();

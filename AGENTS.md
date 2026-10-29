@@ -46,19 +46,40 @@ this section, but defer to the source of truth above.
 ---
 
 Этот репозиторий использует методологию
-[math-coding 3.3](../math-coding/AGENTS.md) для документирования решений.
+[math-coding 3.7](../math-coding/adoption/SKILL.md) для документирования
+решений.
 
 Каждое не-тривиальное решение фиксируется YAML-файлом в
 `decisions/<id>.yaml` со схемой `math-coding/3.3`. Каждый файл
 валидируется ядром (`mathc validate`) и участвует в gate-gate
 (`mathc self-check`). Перед началом работы обязательно прочитать:
 
-1. [math-coding/AGENTS.md](../math-coding/AGENTS.md) — методология 3.3
-2. [math-coding/docs/axioms.md](../math-coding/docs/axioms.md) — пять аксиом
+1. [math-coding/adoption/SKILL.md](../math-coding/adoption/SKILL.md) — протокол
+   для проектов-адоптеров (совместим с `mathc@>=3.7.4`)
+2. [math-coding/axioms/index.md](../math-coding/axioms/index.md) — пять аксиом
 3. [`decisions/decision.yaml`](decisions/decision.yaml) — active policy
    (что входит в scope, какие paths закрыты)
 4. [schemas/decision.json](schemas/decision.json) — JSON-schema,
    валидируемая ядром
+
+### Две версии — не путать
+
+| что | значение | где лежит |
+|---|---|---|
+| **версия ядра** | 3.7.4 (`mathc` — бинарь и методология) | `../math-coding/VERSION` |
+| **семейство схемы** | `math-coding/3.3` (формат файла решения) | `schema:` в каждом `decisions/*.yaml` |
+
+Ядро ушло на 3.7.x, а **формат decision-файла не менялся**: 3.7-ядро
+принимает семейства `3.0-alpha`, `3.2`, `3.3` — и только их
+(`lib/schema_embedded.ml` в math-coding). Upstream в дереве 3.7.4
+сам пишет `schema: math-coding/3.3` (118 решений) и `3.2` (127), а
+`mathc new-decision` до сих пор скеффолдит `math-coding/3.3`.
+
+**Поэтому `schema:` в `decisions/*.yaml` НЕ бампится на `3.7`.**
+Строка `math-coding/3.7` — это опечатка-ловушка: ядро её примет
+(enum не проверяется в YAML-форме), но она перестанет соответствовать
+`schemas/decision.json` и policy-решению `wavecode-bootstrap-math-coding-3.3`.
+Бампится **ядро**, не формат.
 
 ### Установка `mathc`
 
@@ -66,12 +87,17 @@ this section, but defer to the source of truth above.
 curl -fsSL https://github.com/11111000000/math-coding/releases/download/edge/install.sh \
   | sh -s --
 export PATH="$HOME/.local/bin:$PATH"
-mathc version  # должен вернуть "math-coding 3.3.0-alpha: bootstrap"
+(cd ../math-coding && mathc version)  # → "math-coding 3.7.4: bootstrap"
 ```
 
 Edge release бинарь работает на NixOS angara-1 (glibc 2.40 совместим).
 Старая заметка "CLI сломан" — устарела (относится к pre-2026-10 setup,
 когда бинарь линковался на удалённый glibc).
+
+`mathc version` читает номер из файла `VERSION` **относительно текущего
+каталога** (`bin/Mathc.ml::read_cli_version`), поэтому из корня wavecode
+он печатает fallback `math-coding math-coding: bootstrap`. Это не
+поломка — проверять версию надо из checkout'а math-coding.
 
 ### Создание нового решения
 
@@ -79,9 +105,54 @@ Edge release бинарь работает на NixOS angara-1 (glibc 2.40 со�
 mathc new-decision <id>          # печатает scaffold (id в kebab-case)
 # отредактировать decisions/<id>.yaml: intent, commitment, scope,
 # obligations[].acceptance.all[].verifier, outcomes, antithesis, counterexample
+mathc rehash decisions/<id>.yaml --write   # пересчитать body_sha/yaml_sha
 mathc validate decisions/<id>.yaml
 mathc self-check                  # exit 0 = ok, 1 = reject, 3 = unknown
 ```
+
+**`mathc rehash --write` — обязательный шаг после правки тела
+решения.** `body_sha`/`yaml_sha` — это sha256 тела файла; ядро
+сверяет их с фактическим содержимым и режет решение как
+`MC-SHA-DIGEST-STALE` (severity: block), если содержимое менялось без
+пересчёта. Именно так был красным гейт wavecode до 2026-10-26: 102
+решения с устаревшим дайджестом.
+
+Полезные команды 3.7 (ядро):
+
+| команда | что делает |
+|---|---|
+| `mathc rehash --write` | пересчитать `body_sha`/`yaml_sha` (проверяет fixed point) |
+| `mathc doctor --json` | диагностика установки/путей/решений/attestations |
+| `mathc verify FILE` | выполнить `acceptance.all[*].verifier` в песочнице |
+| `mathc attest-batch` | выпустить attestations по manifest'у |
+| `mathc decision-state <id> --state=...` | смена lifecycle-состояния решения |
+| `mathc explain-diagnostic MC-*` | расшифровка диагностики ядра |
+
+### Миграция v1.0 → 3.7
+
+```bash
+python3 scripts/migrate-math-coding-3.7.py   # хвостовой `---`, дубли ключей, verifier-схемы
+mathc rehash --write                          # дайджесты
+mathc validate decisions/*.yaml               # ожидается parse-ok по всем файлам
+```
+
+Скрипт идемпотентен. Что он чинит:
+
+* **MC-UNPARSED-TAIL** — хвостовой `---` (второй маркер документа) в
+  92 файлах: 3.7-ядро читает front-matter между первым и вторым `---`
+  и всё, что после второго, считает непрочитанным хвостом.
+* **MC-DUPLICATE-KEY** — 175 дубликатов: генератор
+  `scripts/migrate-v1-packets.py` писал пару `counterexample:`/
+  `antithesis:` дважды; ядро читает первое вхождение, второе —
+  мёртвый контент. Генератор починен в этом же коммите.
+* **MC-VERIFIER-SCHEME-UNKNOWN** — переименованы два scheme
+  (`attestation-store-has-subject` → `mathc self-check`,
+  `mathc-validate` → `mathc validate`). Остальные 217 предупреждений —
+  идентификаторные метки (`vitest-run-*`, `pnpm-ui-*`, `playwright*`),
+  реальную команду которых из строки не восстановить без угадывания.
+  Этот долг зафиксирован follow-up-обязательством в
+  `decisions/wavecode-math-coding-3.7.yaml` (upstream несёт такой же
+  долг: 35 из 251 его решений).
 
 ### Legacy `math/<name>/packet.md`
 
@@ -98,12 +169,13 @@ commits до 2026-10-14). Они отображены в `decisions/<id>.yaml`
 README.md         короткое описание
 AGENTS.md         этот файл
 .gitignore        стандартный для Node-проекта
-.gitverse/        GitVerse Actions workflows (deploy, math-coding gate)
+.gitverse/        GitVerse Actions — только math-coding gate (деплоя нет)
 math/<name>/      legacy пакеты решений math-coding v1.0 (будут удалены)
-decisions/        решения math-coding 3.3 (active source of truth)
+decisions/        решения math-coding 3.7 (active source of truth;
+                  schema family файла — `math-coding/3.3`)
 attestations/     attestation store (kernel evidence для `mathc self-check`)
-schemas/          JSON-schema reference (math-coding 3.3 kernel input)
-scripts/          утилиты (миграция v1→v3.3, проверка)
+schemas/          JSON-schema reference (kernel input 3.7, family 3.3)
+scripts/          утилиты (миграция v1→v3.7, проверка)
 ui/               браузерный SPA (TypeScript + Effect-TS + Solid.js)
 ```
 
@@ -120,7 +192,8 @@ Composer (`~/Projects/Composer/`) — **отдельный backend-проект 
 - raw `fetch` к llm.kosov.online (LiteLLM proxy, OpenAI-compatible)
 - `idb-keyval` для persistence (IndexedDB)
 - Тесты: vitest (unit), playwright (e2e)
-- CI/CD: GitVerse Actions → SSH на angara-1 → `bin/deploy.sh`
+- CI: `.github/workflows/ci.yml` (quality-gate: typecheck + lint + vitest + build) и `.gitverse/workflows/math-coding.yml` (math-coding гейт) — **обе только проверяют, ничего не деплоят**
+- Деплой: **только локально** на angara-1 через `./bin/deploy.sh` (см. ниже). Ни GitHub Actions, ни GitVerse Actions прод не разворачивают
 - Никаких Nix-выходов, никакой контейнеризации — фронтенд деплоится как SPA
 
 ## Deployment
@@ -129,86 +202,93 @@ Production: https://wavecode.kosov.online/ (Caddy на angara-1, обслужи�
 `/var/lib/wavecode/dist/`). Также доступно на Tailscale:
 https://wavecode.tail347ae6.ts.net/.
 
-### Авто-деплой (push в master)
-
-`.gitverse/workflows/deploy.yml` — push в `master` (или ручной
-`workflow_dispatch`) триггерит shared `ubuntu-latest` runner, который:
-
-1. Берёт приватный ключ из секрета `WAVECODE_DEPLOY_SSH_KEY` и по
-   нему открывает SSH-сессию на angara-1.
-2. На хосте принудительно запускается pipeline (через SSH
-   `command="..."` restriction в `~/.ssh/authorized_keys`):
-   - `git fetch --prune gitverse master`
-   - `git reset --hard gitverse/master` (origin = GitHub mirror,
-     отстаёт от gitverse — берём напрямую)
-   - `git clean -fdx -e ui/.env.local -e ui/node_modules -e ui/dist`
-   - `bin/deploy.sh`:
-     - `pnpm install` (если нет `node_modules`)
-     - `pnpm build` (vite + tsc)
-     - `sudo cp -r ui/dist/* → /var/lib/wavecode/dist/` (caddy:caddy)
-3. CI-шаг `Verify deployment` опрашивает `wavecode.kosov.online/`
-   до 60s — должен вернуть `Last-Modified` header.
-
-Caddy подхватывает новую статику без reload. Если менялся
-`ui/.env.local` (per-app LLM-ключ) — `systemctl reload caddy`
-вручную, **не** входит в auto-deploy.
-
-### Секреты для GitVerse
-
-Один раз настроить в gitverse → Settings → Secrets (`b11111000000/wavecode`):
-
-| Secret                    | Что                                                     |
-|---------------------------|---------------------------------------------------------|
-| `WAVECODE_DEPLOY_HOST`    | hostname или IP angara-1 (например `nixos`)            |
-| `WAVECODE_DEPLOY_PORT`    | SSH-порт (на angara-1 = `1984`)                        |
-| `WAVECODE_DEPLOY_USER`    | SSH-пользователь (на angara-1 = `az`)                 |
-| `WAVECODE_DEPLOY_SSH_KEY` | Приватный ed25519-ключ (public в `~/.ssh/authorized_keys` на angara-1 с `command="..."` + `no-pty,no-X11,no-agent,no-port-forwarding`) |
-
-Генерация ключей (если нужно пересоздать):
-```bash
-ssh-keygen -t ed25519 -N '' -C "wavecode-ci-deploy@gitverse" -f ~/.ssh/wavecode_ci_deploy
-# public → вставить в authorized_keys с restrict'ом (см. выше)
-# private → целиком содержимое ~/.ssh/wavecode_ci_deploy в секрет
-```
-
-### Manual deploy (обход CI)
+### Единственный путь: `./bin/deploy.sh`, локально на angara-1
 
 ```bash
 ./bin/deploy.sh
 ```
 
-Любой push в master триггерит auto-deploy, **плюс** `workflow_dispatch`
-в UI GitVerse → "Run workflow" → запускает тот же flow. Использовать
-для отладки secrets или hotfix когда CI лежит.
+Прод разворачивается **только** отсюда — с того же хоста, где ведётся
+разработка. Никакого автоматического деплоя нет и не планируется.
+
+`bin/deploy.sh` делает:
+
+1. Проверяет `ui/.env.local` (per-app LLM-ключ) и `/etc/secrets/llm-proxy/master.key`.
+2. `pnpm install` (если нет `node_modules`).
+3. `pnpm build` — `tsc --noEmit && vite build` → `ui/dist/`.
+4. `sudo cp -r ui/dist/* → /var/lib/wavecode/dist/` (владелец `caddy:caddy`).
+
+Caddy подхватывает новую статику без reload — перезаписи файлов
+достаточно. Если менялся `ui/.env.local` (per-app LLM-ключ) —
+`systemctl reload caddy` вручную, это **не** входит в `deploy.sh`.
+
+Идемпотентно: можно запускать сколько угодно раз.
+
+### Чего нет (и не будет)
+
+- **Никакого auto-deploy по push.** Ни в GitHub Actions, ни в GitVerse
+  Actions. Push в `master` меняет код в репозитории и **ничего** не
+  разворачивает.
+- **Никаких `secrets.WAVECODE_DEPLOY_*`.** SSH-деплой через CI больше
+  не существует: `.gitverse/workflows/deploy.yml` удалён 2026-10-20
+  после того, как выяснилось, что секреты для него так и не были
+  настроены — 14 последовательных run-ов упали с
+  `WAVECODE_DEPLOY_HOST not set`. Держать в репозитории мёртвый
+  workflow, который выглядит как рабочий путь развёртывания, — хуже,
+  чем не иметь его вовсе.
+- **Никакого `workflow_dispatch`-деплоя.** Раньше он оставался как
+  «ручной запуск для отладки», но требовал тех же ненастроенных
+  секретов, то есть был фикцией.
+
+Оставшиеся workflows — **только проверки, прод они не трогают**:
+
+| Файл | Триггер | Что делает |
+|---|---|---|
+| `.github/workflows/ci.yml` | push/PR в master | typecheck + lint + validate:presets + vitest + `vite build` → артефакт в GitHub |
+| `.github/workflows/stale.yml` | cron (пн 09:00 UTC) | бот для issue/PR |
+| `.gitverse/workflows/math-coding.yml` | push/PR в master | `mathc validate` + `mathc self-check` (warn-only) |
+
+Локальный эквивалент `ci.yml` — `cd ui && npm run test:precommit`
+(typecheck + vitest + lint:no-console + validate:presets). Перед
+коммитом в ветку его стоит прогнать.
+
+### Порядок выкладки
+
+```bash
+git checkout master
+git pull --ff-only gitverse master     # после merge в master
+./bin/deploy.sh                        # сборка + выкладка на прод
+```
+
+Пуш в `master` **не** деплоит — `bin/deploy.sh` запускается руками.
 
 ### Rollback
 
 ```bash
-# Найти последний зелёный коммит
+# 1. Найти последний зелёный коммит
 git log --oneline -20 master
-# Откатить master (создаёт revert-коммит, не переписывает историю)
+
+# 2. Откатить master (revert-коммит, не переписывая историю)
 git revert <bad-commit-sha>
-git push gitverse master
-# → CI задеплоит revert-коммит через ~1 минуту
+
+# 3. Передеплоить (push сам по себе не развернёт)
+./bin/deploy.sh
 ```
 
-`bin/deploy.sh` сохраняет предыдущие билды как
-`/var/lib/wavecode/dist.prev.<timestamp>/` (см. `git clean -fdx -e
-dist.prev.*` в workflow), но **не подменяет active** — это история,
-не для rollback. Rollback всегда через git revert.
+`bin/deploy.sh` сохраняет предыдущий билд как
+`/var/lib/wavecode/dist.prev.<timestamp>/`, но **не подменяет active**
+— это история, не готовая точка отката. Rollback всегда через
+`git revert` + повторный `deploy.sh`.
 
 ### Грабли
 
-- `bin/deploy.sh` использует `sudo` (нужен NOPASSWD для `cp/mkdir/chown`).
-  Текущая настройка — `az: ALL NOPASSWD: ALL` (NixOS default для
-  основного пользователя). CI работает через SSH-ключ с
-  `command="..."` restrict, поэтому compromise ключа даёт
-  злоумышленнику только запуск git+deploy pipeline, не
-  произвольный shell.
+- `bin/deploy.sh` использует `sudo` (нужен NOPASSWD для
+  `cp`/`mkdir`/`chown`). Текущая настройка — `az: ALL NOPASSWD: ALL`
+  (NixOS default для основного пользователя).
 - Caddy vhost настраивается в `~/Projects/AngaraConfig/` (другой
-  репо). Public hostname + TLS сертификаты — там. Этот репо
-  отвечает только за содержимое `/var/lib/wavecode/dist/`.
+  репо). Public hostname + TLS-сертификаты + сам факт, что этот хост
+  обслуживает `/var/lib/wavecode/dist/`, — всё там. Этот репо
+  отвечает только за содержимое `dist/`.
 - angara-1 держит **только** этот и связанные репо для build'а.
-  Production-data (IDB, messages) живёт в браузере юзера, не
-  на сервере. Поэтому redeploy = "переписать статику", без
-  миграций БД.
+  Production-data (IDB, messages) живёт в браузере юзера, не на
+  сервере. Поэтому redeploy = «переписать статику», без миграций БД.

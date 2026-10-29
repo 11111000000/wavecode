@@ -5,7 +5,7 @@
  * drives a single `requestAnimationFrame` loop, and emits the set of
  * active char-ranges to subscribed CodeMirror views.
  *
- * Design contract (see `math/wavecode-runtime-mini-highlight/packet.md`):
+ * Design contract (see decisions/wavecode-runtime-mini-highlight.yaml):
  *   - LiveAudioEngine calls `setActive({ pattern, ctx, anchor, cps,
  *     layerRanges })` after every successful evaluate / setLayerMix.
  *   - LiveAudioEngine calls `clearActive()` on stop / fatal eval error.

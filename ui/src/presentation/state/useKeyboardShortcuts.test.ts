@@ -122,4 +122,50 @@ describe('useKeyboardShortcuts — wiring + invocation', () => {
       fire(fireKeydown, { key: 'a', ctrlKey: true, shiftKey: true }, document.createElement('div')),
     ).not.toThrow();
   });
+
+  // wavecode-editor-selection-ai
+  it('routes Ctrl+Shift+L to aiExplainSelected when provided', async () => {
+    const { useKeyboardShortcuts } = await import('./useKeyboardShortcuts');
+    const handlers = {
+      focusAI: vi.fn(),
+      focusScore: vi.fn(),
+      undoScore: vi.fn(),
+      redoScore: vi.fn(),
+      aiExplainSelected: vi.fn(),
+    };
+    renderHook(() => useKeyboardShortcuts(handlers));
+    fire(fireKeydown, { key: 'l', ctrlKey: true, shiftKey: true }, document.createElement('div'));
+    expect(handlers.aiExplainSelected).toHaveBeenCalledTimes(1);
+  });
+
+  it('routes Cmd+Shift+L (Meta) to aiExplainSelected', async () => {
+    const { useKeyboardShortcuts } = await import('./useKeyboardShortcuts');
+    const handlers = {
+      focusAI: vi.fn(),
+      focusScore: vi.fn(),
+      undoScore: vi.fn(),
+      redoScore: vi.fn(),
+      aiExplainSelected: vi.fn(),
+    };
+    renderHook(() => useKeyboardShortcuts(handlers));
+    fire(fireKeydown, { key: 'L', metaKey: true, shiftKey: true }, document.createElement('div'));
+    expect(handlers.aiExplainSelected).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not throw when aiExplainSelected is omitted (back-compat with frozen App.tsx)', async () => {
+    const { useKeyboardShortcuts } = await import('./useKeyboardShortcuts');
+    const handlers = {
+      focusAI: vi.fn(),
+      focusScore: vi.fn(),
+      undoScore: vi.fn(),
+      redoScore: vi.fn(),
+    };
+    renderHook(() => useKeyboardShortcuts(handlers));
+    // The Ctrl+Shift+L handler must not crash even when no
+    // AI panel has registered a handler yet (App.tsx call site
+    // does not pass `aiExplainSelected`).
+    expect(() =>
+      fire(fireKeydown, { key: 'l', ctrlKey: true, shiftKey: true }, document.createElement('div')),
+    ).not.toThrow();
+  });
 });

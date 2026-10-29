@@ -650,6 +650,15 @@ describe('PianoKeyboard component (MIDI source attribution in status pill)', () 
       pianoSlotGlyph: (s: string): string => s,
       previewPillPayload: () => null,
       applyToScore: (): void => undefined,
+      // wavecode-piano-transcribe exports (post-feature) — the
+      // toolbar renders a `🎼 transcribe` button + preview panel,
+      // so the mock must provide no-op implementations for these.
+      transcribePreview: () => null,
+      transcribeBpm: () => 120,
+      setTranscribeBpm: (): void => undefined,
+      transcribe: (): void => undefined,
+      applyTranscription: (): void => undefined,
+      cancelTranscription: (): void => undefined,
       flashDecorations: { __placeholder: true } as never,
       setFlashDecorations: { __placeholder: true } as never,
       clearFlashDecorations: { __placeholder: true } as never,
@@ -832,7 +841,9 @@ describe('PianoKeyboard component (no MIDI status on iOS Safari)', () => {
 
   it('still renders the rec button and instrument selector', () => {
     expect(container.querySelector('.piano-rec-btn')).toBeTruthy();
-    // (wavecode-piano-sample-picker) 4 sample + 4 oscillator = 8 buttons.
-    expect(container.querySelectorAll('.piano-inst-btn')).toHaveLength(8);
+    // The instrument picker is a <select> over the sound catalogue.
+    const select = container.querySelector('.piano-inst-select');
+    expect(select).toBeTruthy();
+    expect(select?.querySelectorAll('option').length).toBeGreaterThan(0);
   });
 });

@@ -1,0 +1,257 @@
+---
+schema: math-coding/3.3
+id: wavecode-server-stt
+revision: 1
+state: active
+body_sha: "sha256:3d1672b9c6238585e0815743417a2ab98bb3c7fe1e689b624bac2cc0536f4014"
+yaml_sha: "sha256:3d1672b9c6238585e0815743417a2ab98bb3c7fe1e689b624bac2cc0536f4014"
+
+axiom_link:
+  - A0
+  - A3
+
+intent: |
+  Дать голосовой ввод браузерам без Web Speech API. Сегодня STT —
+  один `WebSpeechSTTLive`, и он работает только там, где есть
+  `window.SpeechRecognition`: Chrome и Edge дают облачные partial'ы за
+  1-2 секунды, а на iOS Safari и Firefox голосового ввода нет вообще —
+  FAB показывает «Открой в Chrome», и это не решение для
+  mobile-first приложения. Серверный whisper (`POST
+  {VITE_LLM_PROXY_URL}/audio/transcriptions`, whisper.cpp
+  `ggml-base-q5_1` на angara-1, 4 vCPU) даёт транскрипт за 5-9 секунд
+  измеренно — медленно, но на любом браузере с `getUserMedia` +
+  `MediaRecorder`.
+
+  Это fallback, а не замена облачному пути: 5-9 секунд против 1-2 —
+  разница на порядок, и Chrome мы не трогаем. `ServerWhisperSTT`
+  включается только там, где облачного пути нет, либо один раз
+  падает back на сервер, если Web Speech есть, но не работает
+  (Android Chrome без Google-сервисов отдаёт `network` на `onerror`).
+  `VITE_STT_BACKEND` (`auto` / `web` / `server`) существует, чтобы
+  это решение можно было проверить, не переделывая сборку.
+
+  Честная часть, которую обычно выкидывают из описаний подобных
+  фич: настоящего interim нет. Сервер отвечает один раз на весь
+  клип, поэтому движок копит аудио и отправляет его ровно один раз —
+  по концу фразы (1.3 с тишины, детект по RMS через AnalyserNode).
+  Пока идёт запись, панель показывает «записываю… N с» вместо
+  правдоподобного, но фальшивого превью. Whisper на цифровой тишине
+  выдаёт осмысленный мусор (проверено: 3 секунды нулей → «Редактор
+  субтитров А. Синцевская»), поэтому пустой клип мы не отправляем
+  вообще — выдуманная фраза, ушедшая в LLM, хуже пустого ответа.
+
+commitment: |
+  (1) `ServerWhisperSTT` реализует тот же `STTEngine`
+  (`~/application/voice/STTEngine.ts`), что и `WebSpeechSTT`, без
+  правок в application / domain / presentation-слоях: выбор движка
+  живёт в composition root (`selectSttLayer`), presentation о выборе
+  не знает. (2) Один POST на фразу, ошибки HTTP мапятся в
+  `SttUnsupportedError`, сырых исключений наружу не выходит.
+  (3) Web Speech остаётся путём по умолчанию везде, где он есть.
+
+counterexample: |
+  «Просто переключи всех на серверный whisper — зачем держать две
+  реализации?» Возражения: (a) 5-9 секунд против 1-2 — в
+  live-coding это разница между «слушаю, что скажу» и «жду
+  результат», а интервал между фразами в редакторе короткий;
+  (b) облачный путь бесплатный и работает без нашего 4-ядерного
+  хоста, который сейчас ещё и LLM обслуживает; (c) Chrome —
+  основная платформа проекта, ломать там проверенный путь ради
+  браузеров, где его нет, — неверный размен.
+
+  «Пользователь не заметит задержки, он же нажимает и ждёт».
+  Возражения: он нажимает в момент, когда уже начал набирать мысль;
+  interim-строка в WebSpeech — это то, что держит его в потоке, и
+  именно её нельзя воспроизвести честно. Показывать счётчик секунд
+  вместо текста — не извинение за UX, а нижняя граница того, что
+  сервер вообще может дать.
+
+antithesis: |
+  (1) «Считать конец фразы по тишине — это самодельный VAD, он
+  неправильно режет фразы на полуслове». Возражения: да, и это
+  осознанный размен: порог 1.3 с тишины длиннее паузы между
+  словами, а цена ошибки несимметрична — лишний перезапуск фразы
+  стоит одного лишнего POST'а, а обрыв на середине фразы стоит
+  потерянной команды пользователю. Более точный VAD потребовал бы
+  либо второго запроса к серверу на каждое окно (потоковый режим,
+  удвоение нагрузки на single-flight-эндпойнт), либо второй модели
+  на хосте. Обрезка по максимуму (100 с, лимит сервера 120 с)
+  остаётся страховкой от бесконечной записи.
+
+  (2) «Откат с Web Speech на сервер маскирует проблему: если
+  облако не работает, надо чинить облако, а не прятать ошибку за
+  вторым движком». Возражения: различаются две разные поломки.
+  Android Chrome без Google-сервисов не чинится — там нет ни
+  пользователя, ни аккаунта, чтобы чинить; отказ нужен именно там.
+  А вот если Web Speech падает у пользователя с работающими
+  сервисами, откат всё равно покажет ошибку — с текстом в логе
+  `[stt] primary engine failed, trying fallback`, а не тишиной.
+
+  (3) «Платить 5-9 секунд и забивать один и тот же 4-ядерный хост
+  запросами распознавания — плохая сделка; лучше оставить
+  Firefox/iOS без голоса». Возражения: запрос один на фразу, не на
+  слово, и он single-flight — 503 приходит только при совпадении, а
+  не планируется заранее. Для пользователя, у которого сейчас нет
+  голоса вообще, «медленно, но работает» — это выигрыш, а для
+  того, у кого облако работает, путь вообще не меняется.
+
+scope:
+  paths:
+    - "ui/src/infrastructure/stt/**"
+    - "ui/src/App.tsx"
+    - "ui/src/presentation/state/voiceAIStore.ts"
+    - "ui/src/presentation/components/RecordingPanel.tsx"
+    - "ui/.env.example"
+  exclusions:
+    - "ui/node_modules/**"
+    - "ui/dist/**"
+    - "ui/src/domain/**"
+    - "ui/src/application/**"
+
+outcomes:
+  - id: server-stt-voice-in-webspeechless-browsers
+    statement: |
+      На iOS Safari и Firefox (нет `window.SpeechRecognition`) голос
+      работает: FAB активен, запись идёт, финальный транскрипт
+      приходит через 5-9 секунд и уходит в `intentRouter` →
+      `applyEditStream` → `AudioEngine.eval`.
+  - id: cloud-path-untouched-in-chrome
+    statement: |
+      В Chrome/Edge выбор движка даёт Web Speech (1-2 с, interim
+      сохраняется). `VITE_STT_BACKEND=server` позволяет увидеть
+      серверный путь в том же браузере, не меняя код.
+  - id: one-post-per-utterance
+    statement: |
+      На одну произнесённую фразу приходится ровно один
+      `POST /v1/audio/transcriptions`. Тишина без речи не
+      инициирует запрос вообще; тишина после речи дольше 1.3 с —
+      инициирует один.
+  - id: honest-empty-recording-state
+    statement: |
+      Пока сервер не ответил, панель показывает «записываю… N с», а
+      не выдуманный превью-текст. Транскрипт появляется целиком,
+      одним final-чанком.
+  - id: http-failures-are-typed
+    statement: |
+      400 / 401 / 413 / 503 / 504 приходят в оркестратор как
+      `SttUnsupportedError` с внятным `message`, никогда как
+      исключение. 503 и 504 — transient ('network', можно повторить).
+  - id: stop-is-cancel
+    statement: |
+      `stop()` освобождает микрофон и ничего не отправляет: кнопка
+      ✕ в панели означает «выбросить», а не «узнать, что я сказал».
+  - id: layer-rules-hold
+    statement: |
+      `npx eslint src/infrastructure/stt` — 0 ошибок
+      `no-restricted-imports`: infrastructure не тянет `solid-js`.
+      Счётчик секунд живёт в presentation-store.
+
+obligations:
+  - id: stt-engine-shape-unchanged
+    claim: |
+      `ServerWhisperSTT.test.ts` содержит compile-time проверку
+      `Layer.Layer<STTEngine, never, never>` (как в
+      `WebSpeechSTT.test.ts`); ни один файл в
+      `ui/src/application/voice/` не меняется этим решением.
+    acceptance:
+      all:
+        - verifier: vitest-run-server-stt
+          result: pass
+        - verifier: pnpm-ui-typecheck
+          result: pass
+  - id: end-of-utterance-path-tested
+    claim: |
+      Тест `start() → speech → 1.3s silence → one POST → one final
+      chunk` с подменёнными `getUserMedia` / `MediaRecorder` /
+      `AudioContext` / `fetch` проходит: ровно один вызов `fetch`, с
+      полями `file` и `language=ru`, один final-чанк с
+      `text.trim()`.
+    acceptance:
+      all:
+        - verifier: vitest-run-server-stt
+          result: pass
+  - id: no-upload-on-silence
+    claim: |
+      Тест «keeps recording when the mic only ever hears silence»
+      подтверждает: тишина без речи не вызывает `fetch` (защита от
+      галлюцинаций whisper на цифровой тишине).
+    acceptance:
+      all:
+        - verifier: vitest-run-server-stt
+          result: pass
+  - id: http-status-mapping
+    claim: |
+      503 → «занят», 413 → «25 МБ», 400 → «отклонил аудио»; все
+      дают `reason: 'network'` и приходят через stream-ошибку, а не
+      как исключение. `getUserMedia` NotAllowedError →
+      `permission-denied`.
+    acceptance:
+      all:
+        - verifier: vitest-run-server-stt
+          result: pass
+  - id: cancel-uploads-nothing
+    claim: |
+      Тест «stop() cancels without uploading»: после `stop()` за
+      3 секунды виртуального времени `fetch` не вызывался ни разу.
+    acceptance:
+      all:
+        - verifier: vitest-run-server-stt
+          result: pass
+  - id: engine-selection-table
+    claim: |
+      `selectSttLayer.test.ts`: `auto` + Web Speech → `web`;
+      `auto` без Web Speech → `server`; явный `web`/`server` без
+      соответствующей возможности → `none` (то есть ошибка в UI, а
+      не молчаливая подмена движка).
+    acceptance:
+      all:
+        - verifier: vitest-run-select-stt-layer
+          result: pass
+  - id: fallback-retries-only-once
+    claim: |
+      `FallbackSTT.test.ts`: `network` → повтор на сервере;
+      `permission-denied` и `aborted` → без повтора; падение обоих →
+      наружу отдаётся ошибка primary; `stop()` доходит до обоих.
+    acceptance:
+      all:
+        - verifier: vitest-run-fallback-stt
+          result: pass
+  - id: panel-shows-counter-not-fake-transcript
+    claim: |
+      `RecordingPanel.test.ts`: в `listening` без транскрипта панель
+      показывает «записываю… 0 с», а при наличии interim-текста —
+      текст (счётчик уступает транскрипту).
+    acceptance:
+      all:
+        - verifier: vitest-run-recording-panel
+          result: pass
+  - id: precommit-green
+    claim: |
+      `npm run test:precommit` (typecheck + vitest + lint:no-console
+      + validate:presets) завершается exit 0.
+    acceptance:
+      all:
+        - verifier: pnpm-ui-test-precommit
+          result: pass
+  - id: mathc-validate-clean
+    claim: |
+      `mathc validate decisions/wavecode-server-stt.yaml` — exit 0.
+    acceptance:
+      all:
+        - verifier: mathc validate
+          result: pass
+
+risk:
+  declared_triggers:
+    - stt-endpoint-returns-503-because-host-is-single-flight-under-load
+    - whisper-hallucinates-on-quiet-but-not-silent-room
+    - silence-threshold-splits-one-sentence-into-two-requests
+    - fallback-masks-a-real-cloud-outage-in-chrome
+    - mic-track-leaks-when-scope-closes-during-an-upload
+  owner: human:operator
+
+relations:
+  addresses:
+    - wavecode-voice-fab@1
+    - wavecode-voice-ux-fixes@1
+    - wavecode-llm-litellm-proxy@1

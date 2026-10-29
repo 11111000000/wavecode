@@ -3,8 +3,8 @@ schema: math-coding/3.3
 id: wavecode-legacy-eat-all
 revision: 1
 state: active
-body_sha: "sha256:5f7bd0c3cfd41fc2ff5b0adae2f2707353b38c32aeb48cff35b14458c0b8b4d9"
-yaml_sha: "sha256:5f7bd0c3cfd41fc2ff5b0adae2f2707353b38c32aeb48cff35b14458c0b8b4d9"
+body_sha: "sha256:668651cd7dc61c17a7a09f426055f670874f20cd507dae89c087ad472cd01d58"
+yaml_sha: "sha256:668651cd7dc61c17a7a09f426055f670874f20cd507dae89c087ad472cd01d58"
 
 intent: |
   Финальный пакет legacy.css eating: 11 оставшихся секций за один
@@ -73,28 +73,6 @@ antithesis: |
   который ссылается на legacy-классы?». Возражение: посмотрим
   inline CSS при verification; если найдём — перенесём
   matching rules в inline.
-  Три коммита:
-counterexample: |
-  The strongest objection to this decision is captured in the `antithesis` field above: (1) «770 строк за один коммит — слишком большой diff для review».
-antithesis: |
-  (1) «770 строк за один коммит — слишком большой diff для review».
-  Возражение: это MECHANICAL move (sed extract + append), не
-  design decision. Каждая строка legacy.css переезжает в
-  components.css без модификации. Diff читается построчно.
-  Smoke test (playwright + visual diff) — главный gate.
-  (2) «Что если .piano-keyboard (dead) перенесём и он засорит
-  components.css?». Возражение: 47 строк мёртвого CSS — мелочь.
-  Удалим отдельным пакетом `wavecode-css-deadcode-eat` если
-  станет мешать. Или inline сейчас — пакет рассчитан на
-  тотальный mechanical move.
-  (3) «Удаление @import сломает cascade-layers declaration в
-  index.css?». Возражение: `@layer legacy, components, ...`
-  declaration-only (без правил внутри) — валидный CSS.
-  Cascade не меняется (legacy пуст → не влияет ни на что).
-  (4) «Что если есть critical inline CSS в dist/index.html
-  который ссылается на legacy-классы?». Возражение: посмотрим
-  inline CSS при verification; если найдём — перенесём
-  matching rules в inline.
 axiom_link:
   - A3
 scope:
@@ -116,7 +94,7 @@ obligations:
       The original v1.0 packet applied on the recorded date in its `witness` file; this migration preserves that evidence as an `attestations/<id>-evidence.json` file.
     acceptance:
       all:
-        - verifier: "attestation-store-has-subject"
+        - verifier: "mathc self-check"
           result: pass
 assumptions: []
 risk:
@@ -126,4 +104,3 @@ risk:
 relations:
   addresses:
     - wavecode-bootstrap-math-coding-3.3@1
----

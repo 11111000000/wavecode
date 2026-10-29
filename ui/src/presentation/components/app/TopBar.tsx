@@ -23,6 +23,7 @@ export type TopBarProps = {
   onRedo: () => void;
   onNew: () => void;
   onDeletePreset: () => void;
+  onRenamePreset: () => void;
   onResetAll: () => void;
   onToggleLayout: () => void;
   onOpenAdmin: () => void;
@@ -56,7 +57,11 @@ export function TopBar(props: TopBarProps): JSX.Element {
         onPointerUp={cancelPress}
         onPointerLeave={cancelPress}
         onPointerCancel={cancelPress}
-        title="Удерживайте 3 секунды для админки"
+        title={
+          import.meta.env.DEV
+            ? 'Удерживайте 3 секунды для админки'
+            : 'wavecode'
+        }
       >
         <WavecodeLogo size={22} />
       </span>
@@ -131,6 +136,7 @@ export function TopBar(props: TopBarProps): JSX.Element {
           chooseMobileMode={props.chooseMobileMode}
           onSavePreset={props.onSavePreset}
           onDeletePreset={props.onDeletePreset}
+          onRenamePreset={props.onRenamePreset}
           onResetAll={props.onResetAll}
           onOpenAdmin={props.onOpenAdmin}
         />

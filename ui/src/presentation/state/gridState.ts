@@ -30,7 +30,7 @@ import { canEditGridLayer, editGridLayer as editGridLayerUseCase } from '~/appli
  * callers still work without modification. New callers should
  * use `getMode` and `getDirtyCellCount` to render mode-aware UI.
  *
- * See `math/wavecode-step-grid-modes` packet for the design.
+ * See decisions/wavecode-step-grid-modes.yaml packet for the design.
  */
 
 // --- Mode signal -------------------------------------------------------------

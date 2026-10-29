@@ -1,0 +1,368 @@
+---
+schema: math-coding/3.3
+id: wavecode-voice-live-transcript
+revision: 1
+state: active
+body_sha: "sha256:a8e0eb2e3e80ba795f06af778b3d4764287861c2802fbd2d57ab6a7e10626e68"
+yaml_sha: "sha256:a8e0eb2e3e80ba795f06af778b3d4764287861c2802fbd2d57ab6a7e10626e68"
+
+axiom_link:
+  - A0
+  - A3
+
+intent: |
+  Поправить два реальных юзабилити-бага голосового ввода в браузере,
+  найденных живым тестом на Chrome Android:
+
+  (1) **Тихий облачный движок.** На устройствах без Google-сервисов
+  (AOSP, /e/OS, отключённые сервисы) Chrome Android молча сидит в
+  состоянии `listening` — конструктор `window.SpeechRecognition`
+  есть, `recognition.start()` не кидает, `onerror` не приходит
+  сутками, `onresult` не приходит тоже. Текущий фоллбэк
+  (`FallbackSTT`) ловит только хард-ошибки (`network`,
+  `no-speech-api`) — этот случай мимо, юзер видит "Записываю… N с"
+  до бесконечности, текста нет. Добавляем watchdog: первичный
+  движок без единого чанка за `WATCHDOG_MS = 2.5 с` считается
+  мёртвым и фоллбэк переключается на сервер.
+
+  (2) **Серверный STT без живого текста.** На пути через сервер
+  (`ServerWhisperSTT`) единственная выгрузка происходила на
+  границе тишины — до 5-9 с без единого символа на панели. Это
+  продиктовано физикой 4-ядерного хоста (encode фиксирован на
+  30-секундном окне, single-flight на
+  `{VITE_LLM_PROXY_URL}/audio/transcriptions`, повторные запросы
+  во время обработки получают 503). Добавляем инкрементальные
+  тики каждые `TICK_MS = 2.5 с` при наличии речи: каждый тик
+  отправляет накопленный клип, ответ эмитится как `interim`-чанк,
+  крайний результат на тишине — как `final`. Сервер остаётся
+  single-flight: пока прошлый запрос в полёте, следующий тик
+  пропускается, ровно один запрос в полёте за раз.
+
+  (3) **Лишний шаг «Проверить».** Кнопка `Проверить` (panel в
+  состоянии `paused`) открывала модалку `VoiceAITextReview` —
+  пользователь должен был вручную подтвердить свой текст
+  перед отправкой в LLM. С появлением живого `interim`-текста на
+  самой панели этот шаг лишний: пользователь видит, что сказал,
+  пока говорит; ✕ отменяет, автокоммит отправляет. UI-аффорданс
+  убран. FSM-тег `review` в редукторе сохранён — это
+  extension point, не feature.
+
+  Честная часть, которую обычно выкидывают: 5-9 с задержки
+  первого **interim** на серверном пути — это не баг, это
+  физическое ограничение 4-ядерного angara-1. Любая попытка
+  "починить это" в обход сервера либо требует более мощного
+  хоста (новые расходы), либо разносит second-flight и
+  нагружает single-flight очередь, либо уходит на устройство
+  (web-asm whisper = +30 МБ в бандл). Через месяц кто-то снова
+  попытается "починить задержку", и без этой явной записи в
+  решении потратит на это день. Этим коммитом она зафиксирована.
+
+commitment: |
+  (1) `FallbackSTT` остаётся декоратор-на-STTEngine: единственное
+  изменение — добавлен `Stream.timeoutFail(() => silentPrimaryError(),
+  Duration.millis(WATCHDOG_MS))` поверх `Stream.unwrap(primary.start(opts))`,
+  плюс аналогичный watchdog на вторичном движке. Существующая
+  retry-логика на хард-ошибках (`network`/`no-speech-api`) сохранена
+  one-to-one; `permission-denied`/`aborted` по-прежнему НЕ ретраятся.
+  (2) `ServerWhisperSTT` остаётся тот же интерфейс — добавлен
+  `tickTimer` поверх существующего meter-tick callback:
+  `interim`-чанки эмитятся как `kind: 'interim'`, оркестратор их
+  не коммитит (см. `TranscriptState.appendChunk` / `voiceSessionReducer`),
+  единственный `final` по-прежнему идёт по тишине и именно
+  он уходит в `intentRouter` → `routeIntent` → `AudioEngine.eval`.
+  (3) `RecordingPanel.tsx` больше не рендерит кнопку «Проверить»
+  ни в одном состоянии; `VoiceAITextReview.tsx` и его тест
+  удалены; импорт убран из `VoiceFAB.tsx`. Четырёхслойная
+  архитектура и `eslint no-restricted-imports` per layer остаются
+  инвариантом. (4) `npm run test:precommit` (typecheck + vitest +
+  lint + validate:presets) завершается exit 0.
+
+counterexample: |
+  «У Web Speech есть interim через ~300 мс, зачем тогда вообще
+  поднимать серверный incremental путь? Включай его только когда
+  нет облака». Возражения: (a) Chrome-Android-no-Google-services
+  — это ровно тот случай, где облачного interim нет и сервер
+  нужен; (b) даже на Chrome с облаком серверный путь остаётся
+  fallback'ом — одно и то же тестирование для обоих сценариев;
+  (c) путь "сначала сбор, потом доставка" — путь, на котором
+  пользователь видит `записываю… N с` и не понимает, пишется
+  что-то или нет; live interim закрывает этот вопрос одним
+  изменением в обоих режимах.
+
+  «Просто дождитесь финала на тишине — пользователь и так ждёт 5-9
+  с, ничего нового». Возражения: пользователь ждёт 5-9 с в полной
+  тишине "записываю… 53 с" — это не та же UX, что 8-10 с с
+  постепенно появляющимся текстом. Разница в том, что при живом
+  interim-е юзер видит, что система работает, может поправить
+  произношение и доверяет коммиту; при счётчике — теряет
+  уверенность и повторяет команду.
+
+  «Серверный путь с 5-9 с ответом — это вообще UX-катастрофа,
+  лучше бы не было голосового ввода». Возражения: на iOS Safari
+  и Firefox нет Web Speech API вообще (`window.SpeechRecognition`
+  не существует) — без серверного пути у них голосового ввода
+  нет ВООБЩЕ. См. `decisions/wavecode-server-stt@1`. 5-9 с
+  отвечают — медленно, но не "нет вообще".
+
+  «Можно просто увеличить частоту тиков до 500 мс и получить
+  живой текст». Возражения: сервер single-flight, второй
+  одновременный запрос получит 503. На 500-мс тиках на
+  4-ядерном хосте 90% запросов 503-ятся — это строго хуже, чем
+  реже, но без 503. `TICK_MS = 2.5 с` — это минимальная цифра,
+  при которой тики укладываются в server throughput
+  (≤ 1 параллельный запрос).
+
+antithesis: |
+  (1) «2.5 с — это рискованно близко к cloud interim (~300 мс),
+  ложное срабатывание на медленной сети будет в самый неподходящий
+  момент». Возражения: 2.5 с = 8× от верхней границы нормального
+  cloud interim. Медленная сеть даст поздний interim, не
+  отсутствие; на 4G Cloud interim приходит за ~500 мс даже на
+  холодном старте. Если 2.5 с окажется реально тесно — покрутить
+  на +0.5 с в `decisions/wavecode-voice-live-transcript@2`.
+  Сейчас 2.5 с выбран не на глаз: ServerWhisperSTT использует
+  ту же цифру как `TICK_MS`, чтобы клиент не плодил запросы
+  чаще, чем сервер успевает отвечать.
+
+  (2) «Watchdog после ретрая должен быть короче первичного —
+  сервер уже знает, что primary сломан, нечего ждать 12 с».
+  Возражения: после ретрая активный движок — это
+  `ServerWhisperSTT`, чей первый ответ приходит через 5-9 с
+  (измерено на angara-1, см. `decisions/wavecode-server-stt`).
+  Короткий watchdog на сервере всегда сработает раньше первого
+  interim-чанка, юзер получит бесполезную ошибку вместо текста.
+  `SECONDARY_SILENT_MS = 12 с` — это "один полный round-trip +
+  буфер", и за пределами этого потолка либо сервер висит (и тогда
+  ошибка честнее), либо сервер работает и текст уже пришёл.
+
+  (3) «Intermediate-чанки на сервере теряют смысл: пользователь
+  всё равно доверяет только final, потому что whisper может
+  галлюцинировать или менять текст от тика к тику (мы видели
+  "сделай" → "сделай бас" → "сделай бас громче" — это правильно;
+  но теоретически возможна "сделай бас" → "сделай боас" из-за
+  плохого звука). Возражения: да, гипотетически текст может
+  откатываться. Это меньший злo, чем вечная тишина "записываю… N с".
+  И риск отката асимметричен с риском задержки — interim может
+  мигнуть назад один раз, отсутствие interim — стоит пользователю
+  доверия к фиче и удваивает количество повторных попыток.
+
+  (4) «Кнопку «Проверить» можно просто спрятать через CSS, а
+  не удалять компонент — если что-то сломается, проще откатить».
+  Возражения: спрятанная через CSS кнопка остаётся в DOM
+  и в a11y-дереве — screen reader всё равно её находит и
+  говорит пользователю "Проверить", а клик по tab-focus
+  активирует. Скрытый, но присутствующий в DOM контрол —
+  это худший из миров: пользователи думают, что он работает,
+  и злятся. Полное удаление файла и проверка в тестах —
+  единственный честный вариант "не показывать".
+
+scope:
+  paths:
+    - "ui/src/infrastructure/stt/FallbackSTT.ts"
+    - "ui/src/infrastructure/stt/FallbackSTT.test.ts"
+    - "ui/src/infrastructure/stt/ServerWhisperSTT.ts"
+    - "ui/src/infrastructure/stt/ServerWhisperSTT.test.ts"
+    - "ui/src/presentation/components/RecordingPanel.tsx"
+    - "ui/src/presentation/components/RecordingPanel.test.tsx"
+    - "ui/src/presentation/components/VoiceFAB.tsx"
+    - "ui/.env.example"
+  exclusions:
+    - "ui/node_modules/**"
+    - "ui/dist/**"
+    - "ui/src/domain/**"
+    - "ui/src/application/**"
+    - "ui/src/infrastructure/stt/WebSpeechSTT.ts"
+    - "ui/src/presentation/components/VoiceAITextReview.tsx"
+    - "ui/src/presentation/components/VoiceAITextReview.test.tsx"
+
+outcomes:
+  - id: watchdog-on-silent-primary
+    statement: |
+      `FallbackSTT.test.ts`: первичный движок (`Stream.async` без
+      `emit`) запускается без чанков и без ошибки в течение
+      `WATCHDOG_MS = 2.5 с`, потом `Stream.timeoutFail` срабатывает,
+      `catchAll` стартует вторичный движок и его чанки текут в
+      поток. Вторичный движок, бросивший жёсткую ошибку в
+      `start()`, отдаёт наружу ошибку первичного (как было).
+      `permission-denied` и `aborted` от первичного по-прежнему
+      НЕ ретраятся — это явное решение волны 1.
+  - id: interim-chunks-during-recording
+    statement: |
+      `ServerWhisperSTT.test.ts`: в течение `TICK_MS = 2.5 с`
+      непрерывной речи срабатывает тик, `fetch` вызывается
+      один раз с накопленным клипом, потребитель видит
+      `interim`-чанк. Второй тик при незавершённом первом
+      запросе НЕ создаёт второй POST — гард `inFlight` ловит
+      это. Тик без речи (`sawSpeech` остаётся `false`) НЕ
+      вызывает fetch — пустой клип ушёл бы на сервер и whisper
+      галлюцинировал бы ("Редактор субтитров Н.Закомолдина").
+      `MockMediaRecorder.start(timeslice)` теперь фолс-эмиттит
+      `dataavailable` каждые `timeslice` мс, чтобы у теста был
+      материал для `parts`.
+  - id: server-roundtrip-is-physical-not-a-bug
+    statement: |
+      Документация в `ServerWhisperSTT.ts` и здесь фиксирует:
+      `SECONDARY_SILENT_MS = 12 с` (один server round-trip 5-9 с
+      + буфер). Если кто-то позже "пожалуется" на это число — он
+      должен либо поднять хост до 8+ vCPU и убрать
+      `asyncio.Semaphore(1)`, либо переписать клиент
+      под streaming multipart, либо раскошелиться на
+      Web-Whisper-WASM. Никакой "починки на стороне клиента"
+      не существует; ссылка на эту YAML — единственный
+      указатель.
+  - id: live-text-replaces-check-modal
+    statement: |
+      `RecordingPanel.test.tsx`: кнопка «Проверить»
+      (`.voice-recording-panel__btn--primary`,
+      `.voice-recording-panel__actions`) отсутствует в DOM в
+      любом состоянии FSM, включая `paused`. `VoiceAITextReview.tsx`
+      и `VoiceAITextReview.test.tsx` удалены. Импорт из
+      `VoiceFAB.tsx` убран. FSM-тег `review` и события
+      (`enter-review`, `edit-review`, `send-review`,
+      `cancel-review`) в редукторе сохранены. **Этот outcome
+      отменён в части «нет UI-аффорданса для review»
+      ревизией `wavecode-voice-confirm-before-send@1`** —
+      inline-форма (textarea + кнопка «→ В ИИ») внутри
+      `RecordingPanel` НЕ является модалкой и НЕ
+      восстанавливает удалённый `VoiceAITextReview`;
+      см. `wavecode-voice-confirm-before-send@1` для
+      текущего контракта. Тест `RecordingPanel.test.tsx >
+      does NOT show the review affordance in paused either
+      (live transcript made it redundant)` остаётся
+      авторитативным для состояний, отличных от `review`
+      — affordance в `paused` по-прежнему отсутствует
+      (миграция review-формы ещё не подключена к
+      ручной-кнопке паузы).
+  - id: auto-commit-still-works
+    statement: |
+      `RecordingPanel.test.tsx`: путь auto-commit
+      (chunk → `commit` → `requesting` → `request-sent` →
+      `applying`) не тронут. `prefers the transcript over the
+      counter once text arrives` тест проходит; в
+      `listening` с interim-транскриптом пользователь
+      видит текст, не счётчик.
+  - id: precommit-green
+    statement: |
+      `cd ui && npm run test:precommit` (tsc --noEmit +
+      vitest + lint:no-console + validate:presets) завершается
+      exit 0; все обновлённые тесты (`FallbackSTT`,
+      `ServerWhisperSTT`, `RecordingPanel`) проходят. `tsc`
+      strict; ни одного `any` не добавлено.
+
+obligations:
+  - id: fallback-watchdog-tests
+    claim: |
+      `FallbackSTT.test.ts` содержит три новых теста:
+      silent-primary-→-watchdog-→-secondary,
+      primary-emits-in-time-→-watchdog-не-срабатывает,
+      silent-primary-+-silent-secondary-→-surfaced-первичной-ошибки.
+    acceptance:
+      all:
+        - verifier: vitest-run-fallback-stt
+          result: pass
+  - id: server-interim-tests
+    claim: |
+      `ServerWhisperSTT.test.ts` содержит четыре теста
+      live-transcript-блока: interim-за-`TICK_MS`-речи,
+      no-speech-→-no-tick-upload, single-flight
+      (два-тика-при-незавершённом-первом-→-один-POST),
+      completed-interim-→-новый-тик.
+    acceptance:
+      all:
+        - verifier: vitest-run-server-stt
+          result: pass
+  - id: recording-panel-no-review-btn
+    claim: |
+      `RecordingPanel.test.tsx` подтверждает: запрос
+      `'.voice-recording-panel__btn--primary'` в любом FSM-теге
+      (`listening`, `transcribing`, `requesting`, `applying`,
+      `paused`, `errored`, `review`, `arming`) возвращает
+      `null`. Запрос `'.voice-recording-panel__actions'` тоже
+      `null`. `voice-recording-panel__close` (✕) по-прежнему
+      присутствует.
+    acceptance:
+      all:
+        - verifier: vitest-run-recording-panel
+          result: pass
+  - id: voice-text-review-deleted
+    claim: |
+      `ui/src/presentation/components/VoiceAITextReview.tsx`
+      и `VoiceAITextReview.test.tsx` НЕ существуют.
+      `VoiceFAB.tsx` не импортирует `VoiceAITextReview`. Тесты
+      `VoiceFAB.test.tsx` (`VoiceFAB renders the FAB cluster`)
+      и `voiceAIStore.test.ts` (`enterVoiceAIReview`,
+      `sendVoiceAIReview`, `cancelVoiceAIReview`,
+      `isVoiceAIInReview` тесты) проходят — store-API
+      сохранилось, изменилась только поверхность.
+    acceptance:
+      all:
+        - verifier: text-scan-no-voice-text-review-files
+          result: pass
+        - verifier: vitest-run-voicefab
+          result: pass
+        - verifier: vitest-run-voiceai-store
+          result: pass
+  - id: secondary-silent-ms-documented
+    claim: |
+      `ServerWhisperSTT.ts` содержит комментарий-обоснование
+      `SECONDARY_SILENT_MS = 12_000` со ссылкой на
+      `decisions/wavecode-server-stt.yaml` (5-9 с round-trip +
+      buffer). `FallbackSTT.ts` содержит комментарий для
+      `WATCHDOG_MS = 2_500` со ссылкой на Chrome cloud interim
+      (~300 мс) и 8× safety margin.
+    acceptance:
+      all:
+        - verifier: text-scan-watchdog-comments
+          result: pass
+  - id: layer-rules-hold
+    claim: |
+      `grep -rE 'from .solid-js' ui/src/infrastructure/stt`
+      возвращает пусто (после ревизии). Presentation изменения
+      только в `RecordingPanel.tsx` и `VoiceFAB.tsx`;
+      `application/` и `domain/` НЕ тронуты, FSM-тег `review`
+      и связанные события сохранены в `voiceSession.ts`.
+    acceptance:
+      all:
+        - verifier: text-scan-no-cross-layer-voice
+          result: pass
+  - id: precommit-gate-green
+    claim: |
+      `cd ui && npm run test:precommit` завершается exit 0.
+    acceptance:
+      all:
+        - verifier: pnpm-ui-test-precommit
+          result: pass
+  - id: mathc-validate-clean
+    claim: |
+      `mathc validate decisions/wavecode-voice-live-transcript.yaml`
+      завершается exit 0 без `MC-*` reject-диагностик.
+    acceptance:
+      all:
+        - verifier: mathc validate
+          result: pass
+
+risk:
+  declared_triggers:
+    - user-mic-drops-mid-utterance-and-no-dataavailable-fires-for-the-rest
+    - server-round-trip-climbs-above-15-seconds-under-load
+    - whisper-hallucinates-on-mid-recordings-with-noise
+    - two-tick-snapshots-look-the-same-and-ui-shows-duplicate-impression-of-equality
+    - chrome-cloud-interim-slows-past-WATCHDOG-MS-on-cold-network
+    - ts-source-and-tests-get-out-of-sync-around-TICK_MS-constant
+  owner: human:operator
+
+reversal:
+  - signal: live-transcript-on-server-too-jerky-and-users-complain
+    action: rollback
+  - signal: watchdog-fires-on-healthy-cloud-with-cold-startup
+    action: halt
+  - signal: SECONDARY_SILENT_MS-routinely-expires-before-server-answers
+    action: halt
+
+relations:
+  addresses:
+    - wavecode-server-stt@1
+    - wavecode-voice-ux-fixes@1
+    - wavecode-voice-fab@1
+  superseded_by:
+    - wavecode-voice-confirm-before-send@1

@@ -27,8 +27,15 @@ test('selected preset survives reload (and is not always Creep)', async ({ page 
   await page.goto('http://127.0.0.1:5173/#/app', { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('main.app', { timeout: 15000 });
 
-  // Drop any prior state to start clean.
-  await page.evaluate(() => window.localStorage.clear());
+  // Drop any prior state to start clean — but keep the terms
+  // acceptance, otherwise the blocking consent gate
+  // (decisions/wavecode-disclaimer-gate.yaml) covers the editor after
+  // the reload below and every assertion here fails on the gate.
+  await page.evaluate(() => {
+    const accepted = window.localStorage.getItem('wavecodeTermsAccepted');
+    window.localStorage.clear();
+    if (accepted !== null) window.localStorage.setItem('wavecodeTermsAccepted', accepted);
+  });
   await page.reload({ waitUntil: 'domcontentloaded' });
   await page.waitForSelector('select.preset-select', { timeout: 15000 });
 

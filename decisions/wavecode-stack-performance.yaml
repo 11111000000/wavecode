@@ -3,33 +3,14 @@ schema: math-coding/3.3
 id: wavecode-stack-performance
 revision: 1
 state: draft
-body_sha: "sha256:403320f15ec3267eeba5eb5e9ae6336cee9e4e51f04b5ed94ee94026ac2f5b67"
-yaml_sha: "sha256:403320f15ec3267eeba5eb5e9ae6336cee9e4e51f04b5ed94ee94026ac2f5b67"
+body_sha: "sha256:b60a89c673f782507fb57e391176000d94fa94c7578156c80e3cc14b2a373cf4"
+yaml_sha: "sha256:b60a89c673f782507fb57e391176000d94fa94c7578156c80e3cc14b2a373cf4"
 
 intent: |
   UI-слой wavecode использует Solid.js 1.8 вместо React для достижения
   максимальной производительности и минимального потребления ресурсов
   в сценарии live-coding с LLM-стримом.
 commitment: |
-  Live-coding с AI-агентом — это сценарий с частыми малыми обновлениями
-  UI (LLM-стрим по чанкам, live-обновление score при edit_score,
-  hot-reload паттернов из Strudel runtime). Fine-grained реактивность
-  Solid обновляет конкретные DOM-узлы без virtual-DOM diff — это
-  быстрее React на порядок в таких сценариях. Bundle ~7 KB против
-  ~40 KB у React+ReactDOM. Экосистема нам не нужна: пишем свои
-  компоненты (панели, чат, редактор — всё специфично). Если
-  понадобится — `@solidjs/testing-library` для тестов, минимум
-  усилий для миграции. State management через встроенный
-  `solid-js/store` (createStore / createSignal) — отдельная
-  зависимость не нужна.
-counterexample: |
-  The strongest objection to this decision is captured in the `antithesis` field above: React имеет крупнейшую экосистему готовых компонентов и самый
-antithesis: |
-  React имеет крупнейшую экосистему готовых компонентов и самый
-  большой пул разработчиков. Solid.js требует писать больше своего
-  кода (нет готовых resizable-panels, dropdowns, dialogs) и его
-  сигнальная модель менее привычна React-разработчикам. Если
-  бы мы делали типовой CRUD-админку, React был бы прагматичнее.
   Live-coding с AI-агентом — это сценарий с частыми малыми обновлениями
   UI (LLM-стрим по чанкам, live-обновление score при edit_score,
   hot-reload паттернов из Strudel runtime). Fine-grained реактивность
@@ -70,7 +51,7 @@ obligations:
       The original v1.0 packet applied on the recorded date in its `witness` file; this migration preserves that evidence as an `attestations/<id>-evidence.json` file.
     acceptance:
       all:
-        - verifier: "attestation-store-has-subject"
+        - verifier: "mathc self-check"
           result: pass
 assumptions:
   - id: wavecode-stack-performance-assumption-1
@@ -95,4 +76,3 @@ risk:
 relations:
   addresses:
     - wavecode-bootstrap-math-coding-3.3@1
----

@@ -1,0 +1,270 @@
+---
+schema: math-coding/3.3
+id: wavecode-sound-catalogue-propagation
+revision: 1
+state: active
+body_sha: "sha256:99dd8789b42c4d6c256f00fc222e19a95261b4413a09877fb5e2045a0d08cf63"
+yaml_sha: "sha256:99dd8789b42c4d6c256f00fc222e19a95261b4413a09877fb5e2045a0d08cf63"
+
+axiom_link:
+  - A0
+  - A3
+
+intent: |
+  Пользователь: «лучше просто Агента, чтобы он точно знал, что
+  писать, чтобы всегда правильный код выдавал; но и также все
+  алгоритмы, которые выдают код, надо чтобы они использовали
+  настоящие инструменты, и так далее, чтобы пользователь интуитивно
+  было, чтобы он не задумывался об этом; но и возможность выбрать
+  где удобно инструмент».
+
+  Требование распадается на три связанных части.
+
+  (1) АГЕНТ ДОЛЖЕН ЗНАТЬ, ЧТО ПИСАТЬ. LLM-агент wavecode получает
+      системный промпт, в котором до этого перечислялись звуки
+      вручную: `s("sawtooth")`, `s("sbd")`, `s("bd" | "sd" | …)`.
+      Ни пиано, ни синты, ни реальные имена ударных в списке не
+      было — агент не мог выбрать их, а если выбирал, то по
+      привычке из обучающей выборки. Хуже: промпт советовал имена,
+      которых в wavecode НЕТ (`s("synth")`, `s("drums")`,
+      `github:user/repo`), а каждое такое имя убивает весь паттерн
+      (`sound X not found!`).
+
+  (2) ВСЕ АЛГОРИТМЫ, ВЫДАЮЩИЕ КОД, ДОЛЖНЫ БРАТЬ РЕАЛЬНЫЕ
+      ИНСТРУМЕНТЫ. Генераторов кода в приложении несколько: запись
+      микрофона, запись пиано, транскрипция пиано, извлечение
+      мелодии из score, свист, генератор одиночной ноты. Каждый
+      держал СВОЙ литерал ('triangle' / 'piano' / 'synth' /
+      'guitar' / 'casio'), и три из них ('casio', 'guitar',
+      'synth') не были зарегистрированы нигде: выбрать такой
+      инструмент в тулбаре пиано означало записать в score сниппет,
+      который роняет весь паттерн при воспроизведении.
+
+  (3) ВЫБОР ИНСТРУМЕНТА ДОЛЖЕН БЫТЬ ТАМ, ГДЕ УДОБНО. Пикер есть
+      в панели свиста, в панели микрофона и по клику на имя звука в
+      коде. Но у AI-панели — места, где пользователь РАЗГОВАРИВАЕТ
+      о музыке — выбора не было: сказать агенту «на пиано» можно
+      было только словами в инструкции, и он мог проигнорировать.
+
+commitment: |
+  (1) Системный промпт агента ГЕНЕРИРУЕТСЯ из каталога звуков
+      (`domain/sounds.ts`): в нём перечислены все реально
+      зарегистрированные имена — 9 осцилляторов, 6 мелодических
+      сэмплов, 14 ударных — и правило «других имён нет». Запрещённые
+      имена в промпте НЕ перечисляются: модель копирует токены из
+      контекста, и упоминание `s("guitar")` в запрете повышает
+      шанс, что модель его напишет.
+
+  (2) User prompt получает блок «=== ИНСТРУМЕНТ ===» с выбранным
+      пользователем инструментом — из AI-панели. Инструмент едет
+      в запрос как явное указание, а не как пожелание.
+
+  (3) Один инструмент по умолчанию на всё приложение:
+      `DEFAULT_MELODIC_SOUND = 'piano'` (domain/sounds.ts). Его
+      читают микрофон, запись пиано, транскрипция, извлечение
+      мелодии, генератор одиночной ноты и свист. «По умолчанию» —
+      это одно решение в одном месте, а не литерал в пяти модулях.
+
+  (4) Тип `PianoInstrument` = реальные имена (`PIANO_INSTRUMENTS`):
+      6 сэмплов банка + 6 осцилляторов. Выдуманные 'casio',
+      'guitar', 'synth' убраны из кода и из типа; компилятор
+      теперь ловит их на уровне типов.
+
+  (5) Тулбар пиано предлагает каталог (нативный `<select>` — на
+      телефоне 12 кнопок не помещаются).
+
+  (6) `tsc --noEmit` + `vitest` + `lint:no-console` +
+      `validate:presets` — exit 0; `mathc validate` на этом файле —
+      exit 0.
+
+scope:
+  paths:
+    - "ui/src/domain/sounds.ts"
+    - "ui/src/domain/sounds.test.ts"
+    - "ui/src/domain/music/notes.ts"
+    - "ui/src/domain/music/notes.test.ts"
+    - "ui/src/domain/music/melodyExtract.ts"
+    - "ui/src/application/useCases/llmEdit.ts"
+    - "ui/src/application/useCases/llmEdit.test.ts"
+    - "ui/src/application/useCases/pianoTranscribe.ts"
+    - "ui/src/application/useCases/pianoTranscribe.test.ts"
+    - "ui/src/presentation/panels/AIEditPanel.tsx"
+    - "ui/src/presentation/panels/AIEditPanel.test.tsx"
+    - "ui/src/presentation/components/PianoToolbar.tsx"
+    - "ui/src/presentation/components/PianoToolbar.test.tsx"
+    - "ui/src/presentation/components/PianoKeyboard.test.ts"
+    - "ui/src/presentation/state/pianoRecStore.ts"
+    - "ui/src/presentation/state/pianoRecStore.test.ts"
+    - "ui/src/styles/components.css"
+    - "decisions/wavecode-sound-catalogue-propagation.yaml"
+  exclusions:
+    - "ui/node_modules/**"
+    - "ui/dist/**"
+    - "ui/public/**"
+    - "ui/src/infrastructure/**"
+    - "ui/src/presentation/components/RecordingPanel.tsx"
+
+counterexample: |
+  «Достаточно править промпт: сказать модели “используй только
+  piano и drums_*” — и всё, генераторы трогать не надо». Возражения:
+  (а) генераторы пишут код БЕЗ модели: микрофон, пиано и свист
+  коммитят сниппеты сами, и три из них писали имя, которого нет в
+  реестре; промпт на них не влияет вообще; (б) даже если бы
+  промпт был идеальным, у пользователя не было бы способа выбрать
+  инструмент в AI-панели — то есть просьба «сделай на пиано»
+  оставалась бы просьбой, которую модель может проигнорировать.
+
+  «Оставить промпт как есть, но чинить падение через fallback в
+  рантайме: если звук не найден — подставить ближайший». Возражения:
+  (а) это маскирует проблему: пользователь пишет «на гитаре»,
+  получает пиано и не понимает почему; (б) fallback всё равно
+  требует перехвата в superdough (чужой модуль, чужой
+  soundMap) — это ровно тот класс «фикса», который уже дважды
+  ломался в этом проекте (см. историю `applyBankAliasFallback` в
+  `wavecode-strudel-runtime-patches`); (в) правильный слой для
+  «какие звуки вообще есть» — список, а не подстановка.
+
+antithesis: |
+  «Сделать так, чтобы промпт и генераторы брали список из
+  реестра ЗВУКОВ В RUNTIME (soundMap), а не из статического
+  каталога». Возражения: (1) soundMap наполняется асинхронно
+  (SampleLoader грузит три банка при старте), и промпт собирается
+  раньше, чем реестр готов — в промпте оказался бы пустой или
+  неполный список; (2) soundMap содержит и мусор (алиасы вида
+  `a4`, `bd`, `bass-c2`), который модель начала бы копировать в
+  `.s("a4")` — а это уже другое имя, другой регистр и другая
+  семантика; (3) статический каталог проверяется тестом против
+  soundMap и против доставленных файлов — то есть «реальность»
+  фиксируется в коде, а не hoped-on на момент загрузки.
+
+  «Оставить статический список в промпте, но не трогать
+  генераторы — у них свои дефолты, и они устраивают». Возражения:
+  (1) дефолты расходились: микрофон писал 'piano', пиано —
+  'triangle', а 'piano' в момент записи был единственным именем,
+  которое вообще не существовало в реестре — то есть микрофон и
+  пиано звучали по-разному и оба не по тому, что обещали; (2)
+  три имени ('casio', 'guitar', 'synth') предлагались в UI и были
+  мертвы — это и есть тот случай, когда пользователь «не должен
+  задумываться»: он выбрал гитару и получил тишину.
+
+outcomes:
+  - id: the-agent-knows-the-real-sounds
+    statement: |
+      `SYSTEM_PROMPT` собирается из `soundCatalogForPrompt()`: в нём
+      есть каждый id каталога (9 осцилляторов + 6 мелодических
+      сэмплов + 14 ударных) и нет ни одного выдуманного имени.
+      `llmEdit.test.ts` это фиксирует.
+  - id: one-default-instrument
+    statement: |
+      `DEFAULT_MELODIC_SOUND = 'piano'` — единственный источник
+      дефолта: его читают микрофон, запись пиано, транскрипция,
+      извлечение мелодии, генератор одиночной ноты и свист.
+  - id: the-fictional-instruments-are-gone
+    statement: |
+      'casio', 'guitar' и 'synth' не встречаются в коде как
+      инструменты: тип `PianoInstrument` (= `PIANO_INSTRUMENTS`)
+      их не содержит, тулбар пиано их не предлагает, промпт их не
+      упоминает. `sounds.test.ts` сверяет `PIANO_INSTRUMENTS` с
+      каталогом.
+  - id: the-ai-panel-has-an-instrument-picker
+    statement: |
+      В AI-панели есть `<select>` инструмента (каталог, по
+      умолчанию 'piano'); выбранное имя едет в user prompt блоком
+      «=== ИНСТРУМЕНТ ===». `AIEditPanel.test.tsx` фиксирует список
+      и дефолт, `llmEdit.test.ts` — блок в промпте.
+  - id: precommit-green
+    statement: |
+      `cd ui && npm run test:precommit` (tsc strict + vitest +
+      lint:no-console + validate:presets) завершается exit 0.
+  - id: mathc-validate-clean
+    statement: |
+      `mathc validate decisions/wavecode-sound-catalogue-propagation.yaml`
+      завершается exit 0 без `MC-*` reject-диагностик.
+
+obligations:
+  - id: prompt-is-generated-from-the-catalogue
+    claim: |
+      `llmEdit.test.ts`: `SYSTEM_PROMPT` содержит каждый id из
+      `ALL_SOUNDS` и не содержит `s("guitar")`, `s("casio")`,
+      `s("synth")`, `piano_a4`, `piano_c4`.
+    acceptance:
+      all:
+        - verifier: vitest-run-llm-edit
+          result: pass
+  - id: the-piano-instruments-are-real
+    claim: |
+      `sounds.test.ts`: каждый элемент `PIANO_INSTRUMENTS` есть в
+      каталоге, и каждый мелодический сэмпл каталога есть в
+      `PIANO_INSTRUMENTS`.
+    acceptance:
+      all:
+        - verifier: vitest-run-sounds-catalogue
+          result: pass
+  - id: the-ai-panel-picker-offers-only-real-sounds
+    claim: |
+      `AIEditPanel.test.tsx`: `.ai-instrument-select` содержит
+      'piano' и 'synth_pad' и не содержит 'guitar'/'casio'; дефолт
+      — 'piano'.
+    acceptance:
+      all:
+        - verifier: vitest-run-ai-edit-panel
+          result: pass
+  - id: the-chosen-instrument-reaches-the-prompt
+    claim: |
+      `llmEdit.test.ts`: `buildUserPrompt(..., 'piano')` содержит
+      блок «=== ИНСТРУМЕНТ ===» с именем и названием инструмента;
+      без выбора блока нет.
+    acceptance:
+      all:
+        - verifier: vitest-run-llm-edit
+          result: pass
+  - id: one-default-for-the-app
+    claim: |
+      `DEFAULT_MELODIC_SOUND` — единственный дефолт: в коде нет
+      литерала `.s("triangle")`/`.s("piano")` в генераторах; все они
+      читают константу.
+    acceptance:
+      all:
+        - verifier: text-scan-single-default-instrument
+          result: pass
+  - id: typecheck-lint-green
+    claim: |
+      `npm run typecheck`, `npm run lint:no-console` и
+      `npm run validate:presets` завершаются exit 0.
+    acceptance:
+      all:
+        - verifier: pnpm-ui-typecheck
+          result: pass
+        - verifier: pnpm-ui-lint
+          result: pass
+  - id: mathc-validate-clean
+    claim: |
+      `mathc validate decisions/wavecode-sound-catalogue-propagation.yaml`
+      завершается exit 0 без `MC-*` reject-диагностик.
+    acceptance:
+      all:
+        - verifier: mathc-validate
+          result: pass
+
+risk:
+  declared_triggers:
+    - the-model-ignores-the-instrument-block-and-uses-another-real-sound
+    - the-catalogue-grows-and-the-prompt-becomes-too-long-for-the-model
+    - the-piano-timbre-changes-because-the-default-moved-from-the-triangle-oscillator-to-the-piano-sample
+    - the-piano-sample-decays-too-fast-for-a-long-held-note
+  owner: human:operator
+
+reversal:
+  - signal: the-piano-samples-sound-thin-or-clip-on-long-notes
+    action: rework
+  - signal: the-prompt-grows-past-the-model-s-attention-for-the-score
+    action: rework
+  - signal: the-user-complains-that-the-ai-ignores-the-chosen-instrument
+    action: review
+
+relations:
+  addresses:
+    - wavecode-sample-bank-sound-catalogue@1
+    - wavecode-strudel-runtime-patches@1
+    - wavecode-piano-sample-picker@1
+    - wavecode-voice-rec-and-meter@1

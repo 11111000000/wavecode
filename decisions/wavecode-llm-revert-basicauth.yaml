@@ -3,8 +3,8 @@ schema: math-coding/3.3
 id: wavecode-llm-revert-basicauth
 revision: 1
 state: active
-body_sha: "sha256:ad308247406b75133d86f0e96265b991fcfb72b9f128ed1248f0c46315475501"
-yaml_sha: "sha256:ad308247406b75133d86f0e96265b991fcfb72b9f128ed1248f0c46315475501"
+body_sha: "sha256:3c62412bab319f4602b15dcd72abf975de8c979a41eb78f656a96a161161f845"
+yaml_sha: "sha256:3c62412bab319f4602b15dcd72abf975de8c979a41eb78f656a96a161161f845"
 
 intent: |
   LLM-эндпоинт `llm.kosov.online` (LiteLLM public listener, 11436)
@@ -19,39 +19,6 @@ intent: |
   `llm` vhost как `tier="public"` и пропускает bearer-only клиентов
   (Geopulse FastAPI, Genium-clean Lab/TestBench, wavecode AIEditPanel).
 commitment: |
-  Tier=public обратно. ADR (зафиксировать в KB AngaraConfig):
-  authorization model = (CORS allowlist) × (per-app Bearer key)
-  — единственная защита. Threat model: реальная угроза — exfiltration
-  key из bundle; единственная защита от неё — короткоживущий ключ +
-  быстрая ротация (per-app key через `/key/generate` когда починим
-  Prisma/Postgres backend в `services/llm-proxy.nix`), а не
-  basic-auth поверх.
-counterexample: |
-  The strongest objection to this decision is captured in the `antithesis` field above: (1) «basic-auth = defense-in-depth от key exfiltration из JS bundle».
-antithesis: |
-  (1) «basic-auth = defense-in-depth от key exfiltration из JS bundle».
-  Возражение: если атакующий на любом `*.kosov.online` — у него
-  уже есть bundle (CORS не пустит его чужой Origin → preflight
-  fail). Если атакующий **вне** kosov-online — CORS его режет
-  до basic-auth. basic-auth ничего не добавляет, кроме трения
-  для существующих клиентов.
-
-  (2) «basic-auth прячет 11436 от любопытных сканеров портов и
-  единую точку входа». Возражение: 11436 на 127.0.0.1, фаервол
-  закрыт → сканеры не дотянутся. Caddy публичный listener
-  единственная точка входа (201.24.118.191:443), и она
-  публична by design.
-
-  (3) «тогда ограничь public listener только мы с Caddy-vhost на
-  IP allowlist». Возражение: добавляет perimeter filtering,
-  но не решает root cause — broken Genium/Geopulse need fix,
-  а не ещё один слой.
-
-  Предыдущий (2026-10-07) эксперимент tier="public-auth" сломал
-  всех bearer-only клиентов: Caddy basic_auth gate навешивается
-  через `mkTailnetHandler` даже на tailnet (100.81.163.63) и
-  localhost (127.0.0.1:443) listener, не только public. Это side
-  effect kinetic services subtree, не спец-фича.
   Tier=public обратно. ADR (зафиксировать в KB AngaraConfig):
   authorization model = (CORS allowlist) × (per-app Bearer key)
   — единственная защита. Threat model: реальная угроза — exfiltration
@@ -106,7 +73,7 @@ obligations:
       The original v1.0 packet applied on the recorded date in its `witness` file; this migration preserves that evidence as an `attestations/<id>-evidence.json` file.
     acceptance:
       all:
-        - verifier: "attestation-store-has-subject"
+        - verifier: "mathc self-check"
           result: pass
 assumptions:
   - id: wavecode-llm-revert-basicauth-assumption-1
@@ -146,4 +113,3 @@ risk:
 relations:
   addresses:
     - wavecode-bootstrap-math-coding-3.3@1
----

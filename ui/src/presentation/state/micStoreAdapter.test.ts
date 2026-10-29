@@ -132,7 +132,7 @@ describe('micStoreAdapter — micPeakTimes', () => {
 
 describe('micStoreAdapter — type exports', () => {
   it('re-exports MicSlot from micStore', () => {
-    type Slot = 'append-stack' | 'replace-score' | 'at-cursor';
+    type Slot = 'append-stack' | 'at-cursor';
     const slot: Slot = 'append-stack';
     expect(slot).toBe('append-stack');
   });

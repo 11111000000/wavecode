@@ -3,8 +3,8 @@ schema: math-coding/3.3
 id: wavecode-sample-bank-underscore
 revision: 1
 state: active
-body_sha: "sha256:4f934572b15b8ff375f8381f7269fbc627216663d0a56aa0046d87349a512510"
-yaml_sha: "sha256:4f934572b15b8ff375f8381f7269fbc627216663d0a56aa0046d87349a512510"
+body_sha: "sha256:238b4931c22fc69321db301cd0eb0ce8df996d741dfefd0c40f2765e956cc05f"
+yaml_sha: "sha256:238b4931c22fc69321db301cd0eb0ce8df996d741dfefd0c40f2765e956cc05f"
 
 intent: |
   Three independent bugs collapsed into "samples don't play":
@@ -109,46 +109,6 @@ antithesis: |
   эффекты onMount запускаются параллельно с первым evalScore,
   первый preset имеет ~5 секунд на регистрацию банков до того,
   как пользователь нажмёт Play.
-  Three-bug unified fix: (a) SampleLoader теперь дёргает настоящий
-  `samples()` через static import, (b) strudel.json ключи
-  стандартизированы под `_`-join, (c) cowbell заменён на рабочий
-  CC0-синтез. Все 14 drums / 10 piano / 12 synth теперь
-  воспроизводятся. Тесты — 25 для SampleLoader + 1 для
-  PianoSampleLoader shim; плюс guard на silent download в
-  регрессию. Build (vite + PWA precache 19 entries, 1421 KiB) —
-  OK. typecheck — clean. Vitest — 251/251 pass.
-counterexample: |
-  The strongest objection to this decision is captured in the `antithesis` field above: (1) «Проще вызвать `evalScope(core, mini, tonal, webaudio)` и
-antithesis: |
-  (1) «Проще вызвать `evalScope(core, mini, tonal, webaudio)` и
-  вернуть `samples` на globalThis». Возражение: `webaudioRepl` сам
-  вызывает `evalScope` внутри, повторный вызов сломает уже
-  настроенный scheduler. Static import чище и не зависит от
-  того, что именно `evalScope` положит на globalThis (мини-парсеры
-  Strudel через mini-notation добавляют `stack`, `note`, `s` — те
-  не нужны). (2) «Можно было поменять пресеты на
-  `s("drums/bd")` вместо JSON-ключей». Возражение: convention
-  Strudel — это `bank:sound` (`bank_sound` в soundMap); смена
-  пресетов означала бы 25 правок в `domain/presets.ts` +
-  привязку к нестандартному синтаксису. Переименование ключей —
-  36 правок в 3 файлах и стандартный формат. (3) «Скачать
-  настоящий CC0 cowbell с Freesound вместо синтеза». Возражение:
-  Freesound preview CDN требует auth-токен (HTTP 200 на HTML,
-  HTTP 404 на прямой .mp3 без токена). Прямые GitHub-копии
-  выдают 404 или HTML. Синтез из 2-х осцилляторов — детерминистичный,
-  4.6KB, явный CC0, не требует внешних зависимостей.
-  Если позже появится рабочая ссылка — тривиально заменить
-  `cb.mp3` тем же скриптом. (4) «Tests стало меньше (25 вместо
-  прежних 22)». Возражение: добавлены 3 новых теста на
-  ключи strudel.json (раньше про JSON-формат не было покрытия)
-  + 1 guard на silent-download. Итого +4 по сравнению с baseline
-  `SampleLoader.test.ts` (22 → 25) + 1 упрощённый
-  PianoSampleLoader. (5) «`samples()` — async, теперь нужен
-  await». Возражение: `App.tsx onMount` уже работает с void-promises
-  (loadAllSamples вызывается через `.then((m) => m.loadAllSamples())`),
-  эффекты onMount запускаются параллельно с первым evalScore,
-  первый preset имеет ~5 секунд на регистрацию банков до того,
-  как пользователь нажмёт Play.
 axiom_link:
   - A1
 scope:
@@ -172,7 +132,7 @@ obligations:
       The original v1.0 packet applied on the recorded date in its `witness` file; this migration preserves that evidence as an `attestations/<id>-evidence.json` file.
     acceptance:
       all:
-        - verifier: "attestation-store-has-subject"
+        - verifier: "mathc self-check"
           result: pass
 assumptions:
   - id: wavecode-sample-bank-underscore-assumption-1
@@ -217,4 +177,3 @@ risk:
 relations:
   addresses:
     - wavecode-bootstrap-math-coding-3.3@1
----

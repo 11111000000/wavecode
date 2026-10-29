@@ -15,6 +15,12 @@ declare module 'superdough' {
   export function getSuperdoughAudioController(): unknown;
   export function setSuperdoughAudioController(ctrl: unknown): void;
   export function registerSynthSounds(): void;
+  /** The registry of every registered sound. Reading it is how the
+   *  sound catalogue is verified against the library itself. */
+  export const soundMap: {
+    get(): Record<string, { onTrigger: unknown; data: unknown }>;
+    set(value: Record<string, { onTrigger: unknown; data: unknown }>): void;
+  };
   export async function initAudio(options?: Record<string, unknown>): Promise<void>;
   export async function initAudioOnFirstClick(options?: Record<string, unknown>): Promise<void>;
   export async function samples(

@@ -3,8 +3,8 @@ schema: math-coding/3.3
 id: wavecode-strudel-runtime-patches
 revision: 1
 state: active
-body_sha: "sha256:2149c1b151b3fd7db20bb4829c8f6f3641a5f0eadc199196a98197cb64202e4d"
-yaml_sha: "sha256:2149c1b151b3fd7db20bb4829c8f6f3641a5f0eadc199196a98197cb64202e4d"
+body_sha: "sha256:5de831adf08ae58e4ecd1b04ecf47a4042936022223d2dbb498c654643640510"
+yaml_sha: "sha256:5de831adf08ae58e4ecd1b04ecf47a4042936022223d2dbb498c654643640510"
 
 intent: |
   Три независимых бага в Strudel-стеке `@strudel/{core,tonal,webaudio}`
@@ -132,53 +132,6 @@ antithesis: |
   нашем коде и переживает любые обновления `@strudel/core`.
   Кроме того, в DEV-режиме DevTools-console всё равно покажет
   console.error с красной иконкой что достаточно для UX.
-  Boot-time monkey-patch + post-load mutations. Чистый inline код,
-  ноль new deps, ноль изменений в node_modules, ноль fetch-retry.
-counterexample: |
-  The strongest objection to this decision is captured in the `antithesis` field above: (1) «Submit PR в upstream Strudel» — текущая кодовая база на
-antithesis: |
-  (1) «Submit PR в upstream Strudel» — текущая кодовая база на
-  `@strudel/core@1.2.6` + `@strudel/tonal@1.2.6` от 2025;
-  апстрим может уже иметь фикс, но даже если да — минор-апдейт
-  Strudel в wavecode отдельный риск (touch sensitivity к
-  scheduler API) и не помогает с нашими конкретными use-cases
-  (важно, чтобы `min7`/`maj7` разрешались в wavecode-style
-  ii-V-I). Inline-patch дешевле и обратимо.
-
-  (2) «Patch-package на logger.mjs» — даёт persistent patch через
-  postinstall, но добавляет зависимость от patch-package в lockfile
-  + пост-инсталл хук. Boot-time monkey-patch через
-  `console.log = wrapped` не трогает ничего в node_modules, не
-  ломается на `npm ci`, и обратим удалением одного файла.
-  Минус: HMR может заэпизодически зашить дважды (защищено
-  `logWrapped` флагом).
-
-  (3) «Регистрировать bank-fallback в App.tsx через await import
-  strudel/webaudio» — добавляет ещё одну точку импорта Strudel в
-  boot-path; уже сейчас Strudel модули грузятся лениво в
-  LiveAudioEngine. Делать это в `SampleLoader.registerBank()`
-  означает callsite порядок: samples → bare-aliases → bank-fallback
-  (one bank at a time), что естественно.
-
-  (4) «Сделать `s("drums")` synthetic — а не alias на банк» —
-  superdough ожидает ЛЮБОЙ lookup-result имеет `onTrigger(t, …)`
-  в `data`. Synthetic drum воспроизводился бы, но имел бы другую
-  velocity-кривую чем 808 → score авторы удивлялись бы что их
-  `s("drums:bd")` звучит иначе чем `s("drums")`. Alias на
-  конкретный sound (`drums_bd`) даёт предсказуемый результат.
-
-  (5) «Retry при `Failed to fetch`» — соблазнительно, но КОРЕНЬ
-  проблемы сервер-side (proxy CORS allowlist). Retry замаскирует
-  реальную причину и будет спамить LLM-proxy. Лучше честное
-  сообщение с подсказкой куда смотреть. Если бы был прогресс-бар
-  retry — отдельный task; в данном пакете не делаем.
-
-  (6) «Удалить `%c` из logger.mjs через patch-package вместо
-  monkey-patch» — patch-package требует regeneration патча при
-  каждом lockfile-bump; monkey-patch `console.log` живёт в
-  нашем коде и переживает любые обновления `@strudel/core`.
-  Кроме того, в DEV-режиме DevTools-console всё равно покажет
-  console.error с красной иконкой что достаточно для UX.
 axiom_link:
   - A2
 scope:
@@ -202,7 +155,7 @@ obligations:
       The original v1.0 packet applied on the recorded date in its `witness` file; this migration preserves that evidence as an `attestations/<id>-evidence.json` file.
     acceptance:
       all:
-        - verifier: "attestation-store-has-subject"
+        - verifier: "mathc self-check"
           result: pass
 assumptions:
   - id: wavecode-strudel-runtime-patches-assumption-1
@@ -247,4 +200,3 @@ risk:
 relations:
   addresses:
     - wavecode-bootstrap-math-coding-3.3@1
----

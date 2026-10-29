@@ -182,17 +182,21 @@ export const GitHubIcon = (p: IconProps): JSX.Element => (
 // был убран: BrandLogo в master отличается от WavecodeLogo в ветке
 // feat/landing-page, и чтобы не менять существующий UI, держим
 // локальную копию).
+//
+// Иконка состоит из волны + светящейся точки; текст «wavecode»
+// намеренно НЕ зашит внутрь — TopNav/Footer/прочие места кладут
+// рядом свой <span>, иначе слово дублируется.
 export const WavecodeLogo = (p: IconProps): JSX.Element => (
   <svg
     width={p.size ?? 24}
     height={p.size ?? 24}
-    viewBox="0 0 120 32"
+    viewBox="0 0 34 32"
     fill="none"
     aria-hidden="true"
     class={p.class}
   >
     <defs>
-      <linearGradient id="wclogo-grad" x1="0" y1="0" x2="120" y2="0" gradientUnits="userSpaceOnUse">
+      <linearGradient id="wclogo-grad" x1="0" y1="0" x2="34" y2="0" gradientUnits="userSpaceOnUse">
         <stop offset="0"   stop-color="#a78bfa" />
         <stop offset="0.5" stop-color="#5eead4" />
         <stop offset="1"   stop-color="#f472b6" />
@@ -209,16 +213,5 @@ export const WavecodeLogo = (p: IconProps): JSX.Element => (
     <circle cx="32" cy="16" r="2.6" fill="#a78bfa">
       <animate attributeName="opacity" values="1;0.5;1" dur="1.6s" repeatCount="indefinite" />
     </circle>
-    <text
-      x="40"
-      y="22"
-      font-family="Geist, system-ui, sans-serif"
-      font-size="18"
-      font-weight="600"
-      letter-spacing="-0.02em"
-      fill="currentColor"
-    >
-      wavecode
-    </text>
   </svg>
 );

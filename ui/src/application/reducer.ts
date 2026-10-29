@@ -14,7 +14,7 @@ export type AppEvent =
   | { readonly type: 'replaceScore'; readonly text: string }
   | { readonly type: 'undoScore' }
   | { readonly type: 'redoScore' }
-  | { readonly type: 'commitHistoryCheckpoint' }
+  | { readonly type: 'coalesceLatestHistoryEntry' }
   | { readonly type: 'clearMessages' }
   | { readonly type: 'switchPreset'; readonly id: string }
   | { readonly type: 'agentStatusChange'; readonly status: AgentStatus; readonly error?: string }
@@ -127,7 +127,7 @@ export const reduceAppEvent = (state: AppState, event: AppEvent): AppState => {
       };
     }
 
-    case 'commitHistoryCheckpoint':
+    case 'coalesceLatestHistoryEntry':
       if (state.history.length < 2) return state;
       return {
         ...state,

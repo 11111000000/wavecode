@@ -3,8 +3,8 @@ schema: math-coding/3.3
 id: wavecode-track-mixer
 revision: 1
 state: active
-body_sha: "sha256:ad23245b2b4a798cf95f75e4d8240e393ea477c7b0f02aca36c7a50e3126331e"
-yaml_sha: "sha256:ad23245b2b4a798cf95f75e4d8240e393ea477c7b0f02aca36c7a50e3126331e"
+body_sha: "sha256:2cc37bc2e7ac1ac5cb239bc1aacd88f7724d4ed9a339a9b4b0cabcb2255a5902"
+yaml_sha: "sha256:2cc37bc2e7ac1ac5cb239bc1aacd88f7724d4ed9a339a9b4b0cabcb2255a5902"
 
 intent: |
   В Score-панели под редактором — collapsible `<details>` «🎛 Mixer»
@@ -18,36 +18,6 @@ intent: |
   muted добавляет `.mul(0)`, soloed-only-passes через
   `.set pattern value with mask`.
 commitment: |
-  Mixer side-state живёт параллельно score. На каждый `audio.eval` мы
-  (1) parse snippet AST → top-level layer count, (2) reconcile
-  `layerMix.length` (add empty entries / drop extras), (3) inject
-  per-layer `.gain()` и mute logic. Муте/соло — runtime effect,
-  не меняют score, ИИ-edit игнорируют mixer. UI рисует актуальный
-  state, с номерами слоёв 0..N. На iPhone — vertical scroll,
-  большой слайдер (44px tall), tap target M/S квадрат 36px.
-  Snapshot учится sync'ить `cps`-slider (через
-  transportState/Swing — пакет transport-panel).
-counterexample: |
-  The strongest objection to this decision is captured in the `antithesis` field above: (1) Парсинг `stack(l1, l2, ...)` через transpiler — нет гарантии
-antithesis: |
-  (1) Парсинг `stack(l1, l2, ...)` через transpiler — нет гарантии
-  что score это ровно stack. Альтернатива: regex split на `,\n`
-  наивный — ломает вложенные `stack`, вложенные скобки.
-  Решение: транспилер.parse (из `@strudel/transpiler`), затем
-  walk AST. (2) Mixer state меняет score каждый раз → tripит
-  `replaceScore`, blow up history undo. Решение: mixer state
-  ОТДЕЛЬНО от score (вне reducer), `replaceScore` срабатывает
-  только от manual edit / ИИ / preset (mixer-side-effect в
-  audio.eval wrapper). (3) `.mul(0)` vs `.gain(0)` — `gain` → amplitude
-  scalar in pattern value, `mul` — global pattern mask.
-  Для mute: правильнее `.gain(0)` чтобы не ломать downstream
-  chain (e.g. `.mul(0)` убивает envelope). (4) Solo нескольких
-  треков одновременно — должно mute'ить все остальные. Решение:
-  `gain = soloed ? gain : 0` для каждого слоя. Solo of NONE →
-  bypass. (5) Layer indexing: один stack с 6 слоями — 6 строк
-  mixer; но юзер добавляет новый layer — mixer должен
-  auto-resize. Решение: на каждый `audio.eval` парсер обновляет
-  `layerMix.length` через reducer event `setLayerCount`.
   Mixer side-state живёт параллельно score. На каждый `audio.eval` мы
   (1) parse snippet AST → top-level layer count, (2) reconcile
   `layerMix.length` (add empty entries / drop extras), (3) inject
@@ -100,7 +70,7 @@ obligations:
       The original v1.0 packet applied on the recorded date in its `witness` file; this migration preserves that evidence as an `attestations/<id>-evidence.json` file.
     acceptance:
       all:
-        - verifier: "attestation-store-has-subject"
+        - verifier: "mathc self-check"
           result: pass
 assumptions:
   - id: wavecode-track-mixer-assumption-1
@@ -150,4 +120,3 @@ risk:
 relations:
   addresses:
     - wavecode-bootstrap-math-coding-3.3@1
----

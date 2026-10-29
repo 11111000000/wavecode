@@ -3,8 +3,8 @@ schema: math-coding/3.3
 id: wavecode-fur-elise-preset-accuracy
 revision: 1
 state: draft
-body_sha: "sha256:1785f24088986a56c2451ee080c20dcb43d1e55ea7a3f54710ed2b5398bccf3f"
-yaml_sha: "sha256:1785f24088986a56c2451ee080c20dcb43d1e55ea7a3f54710ed2b5398bccf3f"
+body_sha: "sha256:7aa84a8ad3864599d93f36fca2362f3af54db098cb12f293b156c36486648920"
+yaml_sha: "sha256:7aa84a8ad3864599d93f36fca2362f3af54db098cb12f293b156c36486648920"
 
 intent: |
   Пресет Für Elise в `ui/src/domain/presets.ts` рендерит узнаваемую
@@ -13,32 +13,6 @@ intent: |
   (фирменная bass-motion пьесы), (3) простой A-moll арпеджио
   в среднем регистре, (4) без ударных — классика, не поп.
 commitment: |
-  Strudel-рендеринг классики несовершен по определению: нет семплов
-  фортепиано, нет выразительной динамики, нет педалей. Но если
-  выровнять pitch + bass + гармонию + убрать явно чужой шум (hihat),
-  первые 9 нот узнаются сразу. Исправление:
-  - bass: a2/e2 a2-e2-...-a2 (чередование, не A3-G3-F3-A3)
-  - mid arpeggio: A-moll a4 c5 e5 повторяется, не случайная сетка
-  - drum: убрать `s("white*4")` (классика без хэт-нэйл)
-  - melody: оставить без изменений (ноты e5 d#5 e5 d#5 e5 b4
-  d5 c5 a4 — корректные первые 9 нот)
-  Цикл cps=0.5 (2 сек) при 9 нотах даёт ~270 BPM note-rate —
-  быстрее оригинала (80 BPM Adagio), но в одной темповой зоне
-  с другими пресетами; чтобы не разъезжаться с rock-пресетами,
-  `.slow(N)` не добавлен. Если понадобится адажио для классики —
-  отдельный пакет.
-counterexample: |
-  The strongest objection to this decision is captured in the `antithesis` field above: (a) Продолжать рендерить как было — мелодия узнаётся только
-antithesis: |
-  (a) Продолжать рендерить как было — мелодия узнаётся только
-  по питчам, бас A3/G3/F3-A3 и hihat (white*4) делают звук
-  техно-шумовым, оператор жалуется «мелодия не узнаётся».
-  (b) Использовать сэмплы фортепиано через Dirt — Strudel-стек
-  wavecode не имеет готовых piano-сэмплов и не зависит от SuperDirt
-  (см. `wavecode-strudel-in-browser`), это отдельная инфраструктура.
-  (d) Транскрибировать всю пьесу целиком (~3 мин) — пакет
-  про пресеты как demo-content; 9-нотный snippet достаточен для
-  мгновенного recognition.
   Strudel-рендеринг классики несовершен по определению: нет семплов
   фортепиано, нет выразительной динамики, нет педалей. Но если
   выровнять pitch + bass + гармонию + убрать явно чужой шум (hihat),
@@ -86,7 +60,7 @@ obligations:
       The original v1.0 packet applied on the recorded date in its `witness` file; this migration preserves that evidence as an `attestations/<id>-evidence.json` file.
     acceptance:
       all:
-        - verifier: "attestation-store-has-subject"
+        - verifier: "mathc self-check"
           result: pass
 assumptions:
   - id: wavecode-fur-elise-preset-accuracy-assumption-1
@@ -116,4 +90,3 @@ risk:
 relations:
   addresses:
     - wavecode-bootstrap-math-coding-3.3@1
----

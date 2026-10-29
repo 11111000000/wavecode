@@ -1,0 +1,241 @@
+---
+schema: math-coding/3.3
+id: wavecode-deepseek-upstream-adaptation
+revision: 1
+state: active
+body_sha: "sha256:861a40e40624c15efe1197812567a8c0bae8907d24e2babf29e16b6fe81b4809"
+yaml_sha: "sha256:861a40e40624c15efe1197812567a8c0bae8907d24e2babf29e16b6fe81b4809"
+
+axiom_link:
+  - A0
+  - A3
+
+intent: |
+  2026-10-26 прокси llm-proxy переключили с MiniMax на DeepSeek
+  (`smart` → deepseek-v4-pro, `fast` → deepseek-flash): Token Plan
+  MiniMax-аккаунта №1 исчерпан, upstream отдавал 429 «Token Plan usage
+  limit reached (2056)», и весь трафик через прокси (wavecode,
+  genium-clean, geopulse) падал.
+
+  Клиент wavecode к этому моменту врал в трёх местах, и каждая ложь
+  стоила диагностики:
+
+  (1) Контроль reasoning не доезжал. Клиент слал `reasoning_effort`
+      top-level, но у прокси глобальный `litellm_settings.drop_params=
+      true`, и LiteLLM молча выкидывает provider-специфичные поля
+      верхнего уровня. Замер через llm.kosov.online (model=fast):
+      top-level `reasoning_effort=low` → 1221 completion-токенов, 7.9 s;
+      `extra_body.reasoning_effort=low` → 125 токенов, 1.8 s. То есть
+      «мало размышлений» не работало: модель размышляла на полный
+      бюджет, а при `max_tokens=2000` приходила с
+      `finish_reason=length` и пустым content.
+
+  (2) Ошибка 429 подменялась шаблоном «LLM HTTP 429: rate-limited by
+      proxy. Подожди и retry.» — тело ответа с настоящей причиной
+      выбрасывалось. Ровно это уводило диагностику 2026-10-26 в тупик:
+      оператору было сказано «подожди» про лимит, который не был нашим
+      и повтором не лечился.
+
+  (3) Подписи в UI обещали MiniMax («M3», «M2.1», `routesTo:
+      MiniMax-*`), хотя прокси уже отдавал DeepSeek.
+
+commitment: |
+  (1) Формат тела запроса определяется профилем upstream
+      (`VITE_LLM_UPSTREAM`: `deepseek` | `minimax`, по умолчанию
+      `deepseek`): для DeepSeek контроль reasoning едет в
+      `extra_body.reasoning_effort`, для MiniMax — в
+      `extra_body.thinking.type='disabled'` (для тира `fast`).
+
+  (2) `max_tokens` = 4000: reasoning не съедает бюджет даже на
+      `deepseek-v4-pro` с effort=high.
+
+  (3) Ошибки говорят правду: 429 с «Token Plan / Insufficient Balance /
+      quota» трактуется как исчерпанный лимит провайдера (повтор не
+      поможет) и показывает текст от провайдера; прочие 429 — как rate
+      limit провайдера; пустой ответ с `finish_reason=length`
+      диагностируется как «лимит токенов исчерпан на размышления».
+
+  (4) Подписи моделей в UI соответствуют фактической маршрутизации
+      прокси; опция размышления «off» подписана «min», потому что
+      DeepSeek не умеет выключать reasoning (`effort=off` игнорируется).
+
+counterexample: |
+  «Достаточно поменять две строки в linter-совместимых местах: убрать
+  top-level `reasoning_effort` и поправить лейблы на „DeepSeek"».
+
+  Возражения: (а) без `extra_body` контроль reasoning не работает вовсе
+  — прокси дропает поле, и «мало размышлений» продолжает означать
+  «много размышлений»; (б) подписи без диагностики ошибок оставляют
+  ровно ту ловушку, в которую попала диагностика 2026-10-26: UI
+  показывает «rate-limited by proxy», хотя провайдер исчерпал тариф;
+  (в) `max_tokens=2000` без запаса означает, что первый же длинный
+  промпт на `deepseek-v4-pro` вернёт пустой content — то есть исходный
+  баг воспроизведётся при первом же реальном запросе.
+
+  «Оставить клиент полностью провайдер-независимым и не трогать тело
+  запроса вовсе». Возражения: LiteLLM с `drop_params=true` делает
+  провайдер-независимость иллюзорной — поле, которое провайдер понимает,
+  до провайдера не дойдёт, а поле, которое не понимает, будет отброшено
+  молча. Единственная форма, которая работает для обоих, — `extra_body`.
+
+antithesis: |
+  «Оставить `reasoning_effort` top-level и считать, что рано или поздно
+  LiteLLM перестанет дропать provider-специфичные поля». Возражения:
+  `drop_params=true` — явная настройка прокси, а не баг; менять её
+  значит менять поведение всех потребителей (genium-clean, geopulse),
+  которые полагаются на то, что лишние поля молча выбрасываются.
+
+  «Убрать опцию размышления из UI совсем». Возражения: размышление
+  реально влияет на качество ответа, а «минимум» честнее, чем ложное
+  обещание полного отключения, которого провайдер не даёт.
+
+  «Не поднимать `max_tokens`, а оставить 2000 и надеяться, что при
+  effort=low хватит». Возражения: при effort=low через `extra_body`
+  reasoning занимает ~130 токенов и 2000 хватает, но это верно только
+  для коротких правок; `smart` (v4-pro) на длинном промпте при
+  effort=high съедает 4000+ токенов размышлениями. Запас нужен именно
+  потому, что модель может уйти в reasoning на любом запросе.
+
+scope:
+  paths:
+    - "ui/src/infrastructure/llm/LiveLLMClient.ts"
+    - "ui/src/infrastructure/llm/LiveLLMClient.test.ts"
+    - "ui/src/presentation/state/llmSettings.ts"
+    - "ui/src/presentation/state/llmSettings.test.ts"
+    - "ui/src/presentation/components/LLMSettingsPopover.tsx"
+    - "ui/.env.example"
+    - "decisions/wavecode-deepseek-upstream-adaptation.yaml"
+  exclusions:
+    - "ui/node_modules/**"
+    - "ui/dist/**"
+    - "ui/src/domain/**"
+
+outcomes:
+  - id: reasoning-control-reaches-the-provider
+    statement: |
+      Клиент отправляет контроль reasoning в `extra_body`
+      (`reasoning_effort` для DeepSeek, `thinking.type='disabled'` для
+      MiniMax) и никогда — в top-level: LiteLLM дропает top-level
+      provider-специфичные поля.
+  - id: token-budget-survives-reasoning
+    statement: |
+      `max_tokens` в теле запроса равен 4000, поэтому reasoning не
+      съедает бюджет до `finish_reason=length` с пустым content.
+  - id: errors-name-the-real-cause
+    statement: |
+      429 с признаками исчерпанного лимита провайдера («Token Plan /
+      Insufficient Balance / quota») даёт сообщение «исчерпан лимит/
+      баланс upstream-провайдера» с текстом провайдера и указанием,
+      что повтор не поможет; прочие 429 — «rate limit от провайдера».
+      Строка «rate-limited by proxy» в клиенте отсутствует.
+  - id: empty-answer-is-explained
+    statement: |
+      Поток, в котором провайдер не отдал ни символа текста, падает с
+      сообщением про `finish_reason=length` и израсходованный на
+      размышления бюджет, а не как безликое «пустой ответ».
+  - id: ui-labels-match-routing
+    statement: |
+      `MODEL_TIERS` в UI описывает текущую маршрутизацию прокси
+      (`smart` → deepseek-v4-pro, `fast` → deepseek-flash) и не
+      содержит устаревших MiniMax-подписей; опция размышления «off»
+      подписана «min».
+  - id: precommit-green
+    statement: |
+      `cd ui && npm run test:precommit` (tsc strict + vitest +
+      lint:no-console + validate:presets) завершается exit 0.
+  - id: mathc-validate-clean
+    statement: |
+      `mathc validate decisions/wavecode-deepseek-upstream-adaptation.yaml`
+      завершается exit 0 без `MC-*` reject-диагностик.
+
+obligations:
+  - id: reasoning-effort-in-extra-body
+    claim: |
+      `LiveLLMClient.ts` кладёт контроль reasoning в `extra_body`, а
+      не в top-level: top-level `reasoning_effort` в собранном теле
+      запроса отсутствует.
+    acceptance:
+      all:
+        - verifier: vitest-run-live-llm-client
+          result: pass
+  - id: upstream-profile-keeps-minimax-shape
+    claim: |
+      Профиль `minimax` сохраняет прежнюю форму тела
+      (`extra_body.thinking.type='disabled'` для тира `fast`) — откат
+      прокси на MiniMax не требует правок клиента, кроме смены env.
+    acceptance:
+      all:
+        - verifier: vitest-run-live-llm-client
+          result: pass
+  - id: token-budget-raised
+    claim: |
+      В теле запроса `max_tokens` = 4000.
+    acceptance:
+      all:
+        - verifier: vitest-run-live-llm-client
+          result: pass
+  - id: quota-errors-are-not-blamed-on-proxy
+    claim: |
+      Классификатор 429 различает исчерпанный лимит провайдера и
+      транзиентный rate limit и не выдаёт «rate-limited by proxy»
+      ни в одном из случаев.
+    acceptance:
+      all:
+        - verifier: vitest-run-live-llm-client
+          result: pass
+  - id: empty-answer-explains-token-budget
+    claim: |
+      Поток без текста с `finish_reason=length` завершается ошибкой
+      про израсходованный на размышления бюджет токенов.
+    acceptance:
+      all:
+        - verifier: vitest-run-live-llm-client
+          result: pass
+  - id: model-labels-match-proxy-routing
+    claim: |
+      `MODEL_TIERS` описывает DeepSeek-маршрутизацию и не содержит
+      устаревших MiniMax-подписей; `thinkingLabel('off')` = 'min'.
+    acceptance:
+      all:
+        - verifier: vitest-run-llm-settings
+          result: pass
+  - id: typecheck-lint-green
+    claim: |
+      `npm run typecheck`, `npm run lint:no-console` и
+      `npm run validate:presets` завершаются exit 0.
+    acceptance:
+      all:
+        - verifier: pnpm-ui-typecheck
+          result: pass
+        - verifier: pnpm-ui-lint
+          result: pass
+  - id: mathc-validate-clean
+    claim: |
+      `mathc validate decisions/wavecode-deepseek-upstream-adaptation.yaml`
+      завершается exit 0 без `MC-*` reject-диагностик.
+    acceptance:
+      all:
+        - verifier: mathc validate
+          result: pass
+
+risk:
+  declared_triggers:
+    - upstream-switches-back-to-minimax-without-the-env-being-updated
+    - deepseek-changes-the-reasoning-parameter-name-and-silently-ignores-it
+    - the-proxy-stops-dropping-top-level-params-and-the-client-keeps-sending-extra-body
+    - a-long-edit-on-smart-still-exhausts-4000-tokens
+    - stale-bundle-in-production-with-the-old-minimax-body-shape
+  owner: human:operator
+
+reversal:
+  - signal: the-proxy-routes-to-minimax-again-and-extra-body-thinking-is-rejected
+    action: rework
+  - signal: deepseek-stops-honouring-extra_body-reasoning_effort
+    action: rework
+  - signal: users-report-slower-answers-than-before-the-change
+    action: rework
+
+relations:
+  addresses:
+    - wavecode-llm-litellm-proxy@1
+    - wavecode-llm-public-auth-key-mismatch@1

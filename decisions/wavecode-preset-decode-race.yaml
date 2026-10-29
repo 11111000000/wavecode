@@ -3,8 +3,8 @@ schema: math-coding/3.3
 id: wavecode-preset-decode-race
 revision: 1
 state: active
-body_sha: "sha256:00d14ba56eae05cfafac1dbc6badbde0b04131080655aef5a3ed1df32b4a411b"
-yaml_sha: "sha256:00d14ba56eae05cfafac1dbc6badbde0b04131080655aef5a3ed1df32b4a411b"
+body_sha: "sha256:7a5d84fc9ff477d5ca64b38322efd9ea971c1088a8b8ebdefa4749f9927151cd"
+yaml_sha: "sha256:7a5d84fc9ff477d5ca64b38322efd9ea971c1088a8b8ebdefa4749f9927151cd"
 
 intent: |
   Two independent correctness defects collapse into "no sound" once
@@ -115,34 +115,6 @@ antithesis: |
   n("not_numeric")». Возражение: note("c4") ↔ n("c4")
   неразличимы regex-ом; AST-плагин был бы тяжёлым.
   validatePreset в boot дешевле и явно отделён от lint.
-  Three-piece surface fix:
-counterexample: |
-  The strongest objection to this decision is captured in the `antithesis` field above: (1) «Оставить `n()` и поменять numeric-conversion в Strudel
-antithesis: |
-  (1) «Оставить `n()` и поменять numeric-conversion в Strudel
-  parser». Возражение: Strudel — external, правка вендора
-  требует PR upstream, наша задача — клиентская. (2)
-  «Префикснуть строки как `n("[60] [62]")`». Возражение:
-  weird syntax; делает пресеты менее читаемыми.
-  `note("c4")` — это естественный формат score. (3)
-  «Просто удалить `n("note_name")` строки». Возражение: они
-  несут мелодию — bossa-nova и dreampop теряют свой lead.
-  Замена нужна. (4) «Concurrency limit как
-  дополнительный параметр `preloadAllBuffers({limit})`».
-  Возражение: создаёт 2 публичных API-формы; вместо этого
-  внутренний `withConcurrency` всегда под капотом, плюс
-  `onProgress` plumbed через тот же surface. (5)
-  «Concurrency-unlimited, но с backpressure через
-  AudioWorkletNode.pause()». Возражение: backpressure
-  через audio API ненадёжен между табами / фокус-потерей;
-  явный worker-pool проще. (6) «validatePreset как
-  runtime-check при старте каждого preset-load». Возражение:
-  boot-time проверка одноразовая и покрывает весь builtin
-  array за 1 вызов; runtime-проверка добавит 60 ms к
-  каждому `Change preset`. (7) «eslint rule для
-  n("not_numeric")». Возражение: note("c4") ↔ n("c4")
-  неразличимы regex-ом; AST-плагин был бы тяжёлым.
-  validatePreset в boot дешевле и явно отделён от lint.
 axiom_link:
   - A1
 scope:
@@ -167,7 +139,7 @@ obligations:
       The original v1.0 packet applied on the recorded date in its `witness` file; this migration preserves that evidence as an `attestations/<id>-evidence.json` file.
     acceptance:
       all:
-        - verifier: "attestation-store-has-subject"
+        - verifier: "mathc self-check"
           result: pass
 assumptions: []
 risk:
@@ -177,4 +149,3 @@ risk:
 relations:
   addresses:
     - wavecode-bootstrap-math-coding-3.3@1
----

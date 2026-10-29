@@ -3,30 +3,14 @@ schema: math-coding/3.3
 id: wavecode-test-strategy
 revision: 1
 state: draft
-body_sha: "sha256:48eed01eb5d4df58f1b83bf305f37631157c2bc8f2f15042fd2019d67545134f"
-yaml_sha: "sha256:48eed01eb5d4df58f1b83bf305f37631157c2bc8f2f15042fd2019d67545134f"
+body_sha: "sha256:412b413c16d8c8a38d82844ffc00a62acf1f1682a26be2c58b73a9fdf954c6d5"
+yaml_sha: "sha256:412b413c16d8c8a38d82844ffc00a62acf1f1682a26be2c58b73a9fdf954c6d5"
 
 intent: |
   Тестовая стратегия wavecode — пирамида: много unit-тестов на domain
   и application (vitest), умеренно на infrastructure (vitest с моками),
   мало e2e на критичные user-flows (playwright).
 commitment: |
-  Domain (типы, схемы, pure-функции) тестируется без моков: parse,
-  validate, applyEdit, parseToolCall — vitest, ~100 тестов, запуск
-  за <1s. Application (reducer, use-cases) тестируется с TestClock
-  и mock Layer: agentStep transitions, editScore flow — vitest, ~50
-  тестов. Infrastructure тестируется с моками @ai-sdk и Web Worker:
-  LLMClient отправляет правильный формат, AudioEngine.eval проксирует
-  в Worker — vitest, ~20 тестов. Presentation (Solid-компоненты)
-  тестируется через @solidjs/testing-library — минимально. E2E:
-  5-10 critical flows через playwright (open editor, eval snippet,
-  agent edits score, audio plays, persistence across reload).
-counterexample: |
-  The strongest objection to this decision is captured in the `antithesis` field above: Только e2e-тесты (playwright) покрывают весь stack и не требуют моков.
-antithesis: |
-  Только e2e-тесты (playwright) покрывают весь stack и не требуют моков.
-  Только unit-тесты — быстрые, но не проверяют wiring. BDD (cucumber)
-  — лучше для documentation, но overhead для разработки.
   Domain (типы, схемы, pure-функции) тестируется без моков: parse,
   validate, applyEdit, parseToolCall — vitest, ~100 тестов, запуск
   за <1s. Application (reducer, use-cases) тестируется с TestClock
@@ -66,7 +50,7 @@ obligations:
       The original v1.0 packet applied on the recorded date in its `witness` file; this migration preserves that evidence as an `attestations/<id>-evidence.json` file.
     acceptance:
       all:
-        - verifier: "attestation-store-has-subject"
+        - verifier: "mathc self-check"
           result: pass
 assumptions:
   - id: wavecode-test-strategy-assumption-1
@@ -91,4 +75,3 @@ risk:
 relations:
   addresses:
     - wavecode-bootstrap-math-coding-3.3@1
----

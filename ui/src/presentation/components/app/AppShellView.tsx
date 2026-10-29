@@ -24,6 +24,7 @@ export type AppShellViewProps = {
   readonly onRedo: () => void;
   readonly onNew: () => void;
   readonly onDeletePreset: () => void;
+  readonly onRenamePreset: () => void;
   readonly onResetAll: () => void;
   readonly onToggleLayout: () => void;
   readonly onOpenAdmin: () => void;
@@ -51,6 +52,7 @@ export const AppShellView = (props: AppShellViewProps): JSX.Element => (
       onRedo={props.onRedo}
       onNew={props.onNew}
       onDeletePreset={props.onDeletePreset}
+      onRenamePreset={props.onRenamePreset}
       onResetAll={props.onResetAll}
       onToggleLayout={props.onToggleLayout}
       onOpenAdmin={props.onOpenAdmin}

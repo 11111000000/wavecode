@@ -3,8 +3,8 @@ schema: math-coding/3.3
 id: wavecode-step-grid-autoload-and-sync
 revision: 1
 state: draft
-body_sha: "sha256:6187f6f284141977365be1818e6abf61fc524daae1c601419215d4f52bbc074b"
-yaml_sha: "sha256:6187f6f284141977365be1818e6abf61fc524daae1c601419215d4f52bbc074b"
+body_sha: "sha256:8bd6683fa8fd7cf2ac2fa880b2849899f98d0640a61699da92f515255c0984e2"
+yaml_sha: "sha256:8bd6683fa8fd7cf2ac2fa880b2849899f98d0640a61699da92f515255c0984e2"
 
 intent: |
   StepGrid открывается пустым даже когда в editor-score уже есть
@@ -91,45 +91,6 @@ antithesis: |
   `installTransportAudioSync`, и обратный dependency в нём.
   Также нужно ре-resolve после каждой eval (re-eval
   случается при каждом tap'е в Stack и ИИ-edit).
-  Три правки:
-counterexample: |
-  The strongest objection to this decision is captured in the `antithesis` field above: (1) «Grid должен быть независимым editor-таб для записи,
-antithesis: |
-  (1) «Grid должен быть независимым editor-таб для записи,
-  как в Ableton». Возражение: текущий UX-flow «пишешь score
-  → grid отражает его → tap'ы пишут в grid → load&play
-  фиксирует grid обратно» уже требует явной кнопки
-  `↓ read score` после каждого открытия. Это
-  скрытый-с-ног-головы двух-режим: «редактор vs секвенсер».
-  Пользователь, открывший sheet, ожидает увидеть то, что
-  в score — иначе зачем открывать. Auto-load когда grid
-  пуст = «открыл sheet, увидел текущий бит, теперь могу
-  поправить». Это и есть A1-feedback: то, что пользователь
-  видит, синхронизировано с тем, что он слышит.
-
-  (2) «Используй `appStore.transportState.cps` напрямую в
-  eval вместо `debugState.cps`». Возражение: связывает
-  LiveAudioEngine с reducer-store — нарушает A0-separation
-  (infrastructure не должен знать про presentation). Текущая
-  архитектура: `debugState.cps` — это «желаемая cps из
-  presentation», которое `setCps` пишет в audio engine.
-  Чиню gap: `setCps` всегда пишет в debug, даже когда
-  repl ещё не готов. После создания repl — repl.setCps
-  тоже пишет (идемпотентно). Race устранён без
-  cross-layer связи.
-
-  (3) «Сделай debug.cps мембером audio service, чтобы
-  service сам себя обновлял из slider через Effect».
-  Возражение: presentation-слой сейчас owns
-  installTransportAudioSync и не должен терять контроль.
-  Outer `setCps` — это и есть presentation-side entrypoint;
-  чиню только его.
-
-  (4) «Усложнять не надо, проще: пере-передать cps после
-  eval». Возражение: требует, чтобы eval знал про
-  `installTransportAudioSync`, и обратный dependency в нём.
-  Также нужно ре-resolve после каждой eval (re-eval
-  случается при каждом tap'е в Stack и ИИ-edit).
 axiom_link:
   - A4
 scope:
@@ -153,7 +114,7 @@ obligations:
       The original v1.0 packet applied on the recorded date in its `witness` file; this migration preserves that evidence as an `attestations/<id>-evidence.json` file.
     acceptance:
       all:
-        - verifier: "attestation-store-has-subject"
+        - verifier: "mathc self-check"
           result: pass
 assumptions:
   - id: wavecode-step-grid-autoload-and-sync-assumption-1
@@ -193,4 +154,3 @@ risk:
 relations:
   addresses:
     - wavecode-bootstrap-math-coding-3.3@1
----

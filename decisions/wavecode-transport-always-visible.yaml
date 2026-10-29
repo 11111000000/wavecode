@@ -3,8 +3,8 @@ schema: math-coding/3.3
 id: wavecode-transport-always-visible
 revision: 1
 state: active
-body_sha: "sha256:24cecae45b3a3d2b7f06108342c911a452d4620ac4851c36bb59526853861124"
-yaml_sha: "sha256:24cecae45b3a3d2b7f06108342c911a452d4620ac4851c36bb59526853861124"
+body_sha: "sha256:0d179fa395a857a9e73f3148a07dcb12f79e25f12357aa2e810a70e605cf25b9"
+yaml_sha: "sha256:0d179fa395a857a9e73f3148a07dcb12f79e25f12357aa2e810a70e605cf25b9"
 
 intent: |
   **Два связанных дефекта от недавней работы:**
@@ -60,29 +60,6 @@ antithesis: |
   panel). Фикс-стиль универсален, применяется на всех
   breakpoints. Bottom-sheet mode — mobile-first, но Play
   нужен везде.
-  Два коммита:
-counterexample: |
-  The strongest objection to this decision is captured in the `antithesis` field above: (1) «Sticky должен работать в современных браузерах даже
-antithesis: |
-  (1) «Sticky должен работать в современных браузерах даже
-  без overflow на parent». Возражение: да, но элемент
-  приклеивается к top of nearest scrollable ancestor. Если
-  ancestor не scrollable, sticky элемент остаётся в flow, не
-  pinned. Текущее поведение — ровно это.
-  (2) «Position fixed сожмёт layout — куда денется место?».
-  Возражение: добавим `padding-top: var(--controls-h)` на
-  .app-body (или main), чтобы контент не уехал под фикс.
-  Height фиксирован (~52px), content compact.
-  (3) «Лучше добавить Play в BottomToolstrip — он уже fixed,
-  всегда виден». Возражение: BottomToolstrip — для «tools»,
-  Step/Piano/Mixer. Play — это не tool, это primary
-  action. Смешение ломает mental model. Отдельный
-  transport row с правильным z-index — точнее.
-  (4) «Регрессия на desktop?». Возражение: на desktop
-  sheets не используются активно (max-height covers full
-  panel). Фикс-стиль универсален, применяется на всех
-  breakpoints. Bottom-sheet mode — mobile-first, но Play
-  нужен везде.
 axiom_link:
   - A3
 scope:
@@ -106,7 +83,7 @@ obligations:
       The original v1.0 packet applied on the recorded date in its `witness` file; this migration preserves that evidence as an `attestations/<id>-evidence.json` file.
     acceptance:
       all:
-        - verifier: "attestation-store-has-subject"
+        - verifier: "mathc self-check"
           result: pass
 assumptions: []
 risk:
@@ -116,4 +93,3 @@ risk:
 relations:
   addresses:
     - wavecode-bootstrap-math-coding-3.3@1
----

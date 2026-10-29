@@ -3,8 +3,17 @@ import { defineConfig } from 'vite';
 import solid from 'vite-plugin-solid';
 import { VitePWA } from 'vite-plugin-pwa';
 import { resolve } from 'node:path';
+import { readFileSync } from 'node:fs';
+
+const pkg = JSON.parse(
+  readFileSync(resolve(__dirname, 'package.json'), 'utf8'),
+) as { version: string };
 
 export default defineConfig({
+  define: {
+    // Landing footer prints the real package version — see src/version.ts.
+    __APP_VERSION__: JSON.stringify(pkg.version),
+  },
   plugins: [
     solid(),
     VitePWA({
@@ -39,13 +48,55 @@ export default defineConfig({
         globPatterns: ['**/*.{js,css,svg,png,ico,webmanifest,woff2}'],
         navigateFallback: '/index.html',
         navigateFallbackDenylist: [/^\/api\//],
+        // navigationFallback / html cache strategy:
+        //   Workbox precache list excludes index.html (intentional — see
+        //   comment above globPatterns). For navigations, the SW fetches
+        //   /index.html from the network on every visit, so the browser
+        //   always sees the current bundle URL. The remaining stale-html
+        //   window is the BROWSER HTTP cache (no SW involvement): when
+        //   the SW has been unregistered or hasn't installed yet, the
+        //   browser can serve yesterday's html from disk cache. Fix lives
+        //   in Caddy: `Cache-Control: no-cache, must-revalidate` on
+        //   index.html forces a conditional GET every navigation, which
+        //   always returns the current html. See decisions/fix-pwa-cache-
+        //   control and AngaraConfig/services/kosov-reverse-proxy.
         runtimeCaching: [
+          // Stable vendor chunks only — filenames match the manualChunks
+          // aliases in rollupOptions.output.manualChunks. The browser cache
+          // (with `Cache-Control: immutable` from Caddy, see AngaraConfig
+          // kosov-reverse-proxy) is the long-term store; this SW layer is
+          // purely for offline-first boot when the browser cache is cold
+          // (first install) and the user is offline.
+          //
+          // Critical: the broad pattern `/assets/.*\.js$` was REMOVED.
+          // It used CacheFirst for ALL assets, including the main
+          // `index-<hash>.js` which changes every deploy. With CacheFirst
+          // + a 30-day expiration, the SW would happily serve a stale
+          // index bundle even after the server had rotated the filename.
+          // The vite hash already makes the new bundle a brand-new URL
+          // (cache miss → network → 200), so CacheFirst offered no real
+          // benefit for hashed bundles — only the false sense of safety.
           {
-            urlPattern: /\/assets\/.*\.js$/,
+            urlPattern: /\/assets\/(strudel|vendor-solid|codemirror|effect)-[A-Za-z0-9_-]+\.js$/,
             handler: 'CacheFirst',
             options: {
-              cacheName: 'strudel-vendor',
-              expiration: { maxEntries: 32, maxAgeSeconds: 60 * 60 * 24 * 30 },
+              cacheName: 'vendor-stable',
+              expiration: { maxEntries: 16, maxAgeSeconds: 60 * 60 * 24 * 30 },
+            },
+          },
+          // Sample banks. `globPatterns` deliberately excludes mp3, so
+          // without this rule every MP3 hits the network twice per boot:
+          // once from the decode Worker and once more from superdough's
+          // own runtime fetch at first hap. CacheFirst makes the second
+          // one a cache hit. The manifest JSON is bundled alongside the
+          // samples it describes, so cache it with them.
+          {
+            urlPattern: /\/samples\/[^/]+\/(strudel\.json|[^/]+\.mp3)$/,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'sample-banks',
+              expiration: { maxEntries: 128, maxAgeSeconds: 60 * 60 * 24 * 90 },
+              cacheableResponse: { statuses: [0, 200] },
             },
           },
           {
@@ -96,7 +147,6 @@ export default defineConfig({
             '@strudel/mini',
             '@strudel/tonal',
             '@strudel/transpiler',
-            '@strudel/serial',
           ],
           // CodeMirror 6 (~386 KB raw, ~125 KB gz). Imported via
           // `lazy()` in CodeMirrorEditor.tsx — only loads when the user

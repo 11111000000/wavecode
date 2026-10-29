@@ -1,0 +1,211 @@
+---
+schema: math-coding/3.3
+id: wavecode-voice-second-take-sendable
+revision: 1
+state: active
+body_sha: "sha256:24db37e61b1d3a4fa639114d85f943070297920e61a83232208309f8c7cd9b25"
+yaml_sha: "sha256:24db37e61b1d3a4fa639114d85f943070297920e61a83232208309f8c7cd9b25"
+
+axiom_link:
+  - A0
+  - A3
+
+intent: |
+  Второй голосовой take подряд должен приводить к тому же, что и
+  первый: текст распознан — и его можно отправить. Жалоба (2026-10-24):
+  «первую композицию создал, нажимаю на голос ещё раз, текст
+  распознался, но кнопки отправки нет».
+
+  Найдено две независимые дыры, и обе заканчиваются одним и тем же —
+  «текст на экране, отправить нечем»:
+
+  (1) `arm` был no-op из `transcribing`, `requesting`, `applying`.
+      `requesting`/`applying` покрывают ВЕСЬ round-trip к LLM, потому
+      что `runRoute` диспатчит `request-sent` ДО вызова LLM. Нажатие
+      в этом окне проглатывалось целиком: микрофон не открывался,
+      записи не было, распознавания не было, ошибки не было — панель
+      просто продолжала показывать «применяю правку…».
+
+  (2) Take, у которого ФИНАЛЬНЫЙ ответ релея пришёл пустым
+      (`{"text": ""}` — whisper так отвечает на клип, который не может
+      разобрать), но ИНТЕРИМ содержал текст, парковался в `paused` —
+      состояние без review-формы. Текст был виден, отправить его было
+      нечем.
+
+commitment: |
+  Нажатие и удержание голосовой кнопки начинает take из ЛЮБОГО
+  состояния FSM, в котором микрофон не открыт, и любой take, в
+  котором есть хоть какой-то распознанный текст, заканчивается в
+  состоянии с кнопкой отправки.
+
+counterexample: |
+  «`applying` — это состояние, в котором система занята, нажатие
+  игнорировать правильно». Возражения: игнорирование нажатия не
+  сообщает пользователю ничего. Он держит кнопку, говорит, ждёт — и
+  получает ноль: ни записи, ни текста, ни ошибки. Панель при этом
+  показывает «применяю правку…», то есть actively врёт о причине.
+  Правило «нажатие всегда начинает take» совместимо с занятостью:
+  незавершённый маршрут доезжает своим ходом (см. antithesis).
+
+  «Пустой финальный ответ — это не баг, это значит, что человек
+  ничего не сказал». Возражения: человек говорил — иначе не было бы
+  интерима. Релей ответил пустотой на конкретный клип, а не на
+  «тишину пользователя». Текст, который пользователь произнёс,
+  должен доезжать до отправки; interim — это доказательство, что он
+  говорил.
+
+  «Тест-дубль редуктора в `voiceAIStore` работает — зачем
+  подменять её настоящим редуктором?». Возражения: он разошёлся с
+  `voiceSessionReducer` в обе стороны: не учитывал interim-чанки, не
+  имел ветки `arm` вне `idle`, не имел ветки `chunk` вне `listening`.
+  Тест, который гоняет копию, не проверяет ничего про FSM, на
+  котором работает приложение, — и обе дыры выше живут ровно в
+  слепых зонах этой копии.
+
+antithesis: |
+  «Прервать незавершённый маршрут, когда пользователь начинает новый
+  take». Возражения: маршрут несёт ПРЕДЫДУЩУЮ инструкцию
+  пользователя и уже в проводе; убивать его — значит выбросить
+  правку, которую пользователь уже попросил. Поэтому маршрут
+  доезжает своим ходом: `onApplied` пишет score в редактор, а
+  событие `applied` приходит в новое состояние `listening`, где у
+  редуктора нет ветки и событие просто отбрасывается. Маршрут и
+  новый take сосуществуют — именно это пользователь и выразил,
+  нажав снова.
+
+  «Вместо interim использовать последний распознанный текст из
+  предыдущего take». Возражения: это подставило бы чужой текст в
+  буфер отправки. Interim принадлежит тому же take — он и есть
+  доказательство, что take был.
+
+scope:
+  paths:
+    - "ui/src/domain/voice/voiceSession.ts"
+    - "ui/src/domain/voice/voiceSession.test.ts"
+    - "ui/src/application/voice/VoiceAISession.ts"
+    - "ui/src/application/voice/VoiceAISession.test.ts"
+    - "ui/src/presentation/state/voiceAIStore.ts"
+    - "ui/src/presentation/components/RecordingPanel.tsx"
+    - "ui/src/presentation/components/RecordingPanel.test.tsx"
+  exclusions:
+    - "ui/node_modules/**"
+    - "ui/dist/**"
+
+outcomes:
+  - id: arm-works-from-every-state
+    statement: |
+      `arm` из `idle`, `errored`, `paused`, `review`, `transcribing`,
+      `requesting`, `applying` переводит FSM в `listening`. До фикса
+      `transcribing`, `requesting` и `applying` были no-op — нажатие
+      проглатывалось целиком: микрофон не открывался.
+  - id: sent-buffer-is-not-carried-into-the-next-take
+    statement: |
+      `arm` из `requesting` / `applying` начинает take с ПУСТЫМ
+      буфером: инструкция там уже в проводе, и перенос её в новый
+      take применил бы её второй раз («сделай композицию сделай
+      бас быстрее»). `arm` из `review` / `paused` / `transcribing`
+      буфер СОХРАНЯЕТ — там текст ещё не отправлен, и это контракт
+      take-continuation. Два хелпера: `rearmFrom` и `rearmFresh`.
+  - id: any-text-is-sendable
+    statement: |
+      Take с любым распознанным текстом (final ИЛИ interim)
+      заканчивается в `review`, а не в `paused`. `editedText`
+      review-формы берётся из `final`, а при его отсутствии — из
+      `interim`, поэтому форма открывается непустой и кнопка «→ В ИИ»
+      активна.
+  - id: parked-take-does-not-eat-a-late-chunk
+    statement: |
+      Финальный чанк, пришедший в состояние `paused`, больше не
+      отбрасывается: он дописывается в расшифровку и переводит FSM в
+      `transcribing` — то самое состояние, на которое смотрит
+      auto-review подписчика.
+  - id: no-second-reducer
+    statement: |
+      `__dispatchVoiceAIForTests` в `voiceAIStore` больше не содержит
+      рукописной копии таблицы переходов: он вызывает
+      `voiceSessionReducer`. Тест-дубль был источником расхождения с
+      реальной FSM и слепой зоной для обеих дыр выше.
+
+obligations:
+  - id: arm-from-busy-states-is-tested
+    claim: |
+      `voiceSession.test.ts` проверяет, что `arm` из `transcribing`,
+      `requesting` и `applying` даёт `listening` с сохранённой
+      расшифровкой, и что при этом состояние `applying` теряет поле
+      `score` (правка, которую применял ИИ, не выдаётся за результат
+      нового take).
+    acceptance:
+      all:
+        - verifier: vitest-run-voice-session
+          result: pass
+  - id: interim-only-take-is-sendable-is-tested
+    claim: |
+      `voiceSession.test.ts` и `RecordingPanel.test.tsx` проверяют, что
+      take только с interim-текстом даёт `editedText` = текст interim
+      и активную кнопку «→ В ИИ» в DOM.
+    acceptance:
+      all:
+        - verifier: vitest-run-voice-session
+          result: pass
+        - verifier: vitest-run-recording-panel
+          result: pass
+  - id: press-during-llm-roundtrip-is-tested
+    claim: |
+      `VoiceAISession.test.ts` проверяет оба окна: подвешенный LLM
+      (FSM в `applying` на весь round-trip) и подвешенный
+      `audio.eval` — момент, когда композиция УЖЕ ЗВУЧИТ, а FSM
+      ещё в `applying`. В обоих нажатие приводит FSM в `listening`,
+      а слова нового take доезжают до review-формы.
+  - id: sent-and-unsent-buffers-are-distinguished
+    claim: |
+      `voiceSession.test.ts` проверяет, что `arm` из `requesting` /
+      `applying` даёт пустую расшифровку, а `arm` из `review` /
+      `transcribing` сохраняет её.
+    acceptance:
+      all:
+        - verifier: vitest-run-voice-ai-session
+          result: pass
+  - id: regressions-are-pinned
+    claim: |
+      Каждый новый тест падает на коде до фикса: `arm` из
+      `applying` даёт `applying` вместо `listening`; interim-only
+      take даёт `paused` вместо `review`; review-форма открывается с
+      пустым буфером. Проверено откатом файлов.
+    acceptance:
+      all:
+        - verifier: vitest-run-voice-session
+          result: pass
+        - verifier: vitest-run-voice-ai-session
+          result: pass
+        - verifier: vitest-run-recording-panel
+          result: pass
+  - id: gate-green
+    claim: |
+      `npm run test:precommit` (tsc --noEmit + vitest + eslint
+      lint:no-console + validate:presets) завершается exit 0; 115
+      test-файлов / 1873 теста зелёные.
+    acceptance:
+      all:
+        - verifier: pnpm-ui-typecheck
+          result: pass
+        - verifier: pnpm-ui-lint
+          result: pass
+
+risk:
+  declared_triggers:
+    - a-press-during-applying-now-starts-two-concurrent-routes
+    - the-interim-fallback-sends-a-hallucination-to-the-llm
+    - the-in-flight-route-lands-its-edit-after-the-new-take-was-sent
+    - the-parked-chunk-branch-resurrects-a-take-the-user-discarded
+  owner: human:operator
+
+reversal:
+  - signal: two-routes-race-and-the-older-edit-wins
+    action: halt
+  - signal: an-interim-only-take-sends-half-a-phrase
+    action: revert
+
+relations:
+  addresses:
+    - wavecode-voice-take-continuation@1
+    - wavecode-voice-confirm-before-send@1

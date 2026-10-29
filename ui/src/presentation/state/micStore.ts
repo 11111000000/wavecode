@@ -5,7 +5,6 @@ import {
   initialMicState,
   feed,
   closeOpenNote,
-  notesToSnippet,
   DEFAULT_TUNE,
   type AudioNote,
   type MicState,
@@ -18,10 +17,8 @@ import {
   type MicCaptureHandle,
   type MicCaptureState,
 } from '~/infrastructure/audio/MicCapture';
-import {
-  transientsToSnippet,
-  type Transient,
-} from '~/domain/audio/transient';
+import { type Transient } from '~/domain/audio/transient';
+import { micSnippetFromBuffers } from '~/domain/audio/micSnippet';
 import { appendToTopStack } from '~/domain/strudel';
 import { consoleStore } from '~/presentation/components/consoleStore';
 import { logger } from '~/infrastructure/log';
@@ -38,16 +35,16 @@ import { previewPillPayload as _pianoPillRef } from './pianoRecStore';
  *   2. Segmentation buffer — accumulating `AudioNote[]` that the user
  *      has produced; managed by `feed()` on every detected frame.
  *   3. Slot selector — where `applyToScore` writes the snippet:
- *      `append-stack` (splice into existing top-level `stack(...)`),
- *      `replace-score` (destructive), or `at-cursor` (CodeMirror insert).
- *      Mirror of pianoRecStore's three slots; lives here separately so
- *      the piano and mic tools evolve independently.
+ *      `append-stack` (splice into existing top-level `stack(...)`) or
+ *      `at-cursor` (CodeMirror insert). There is deliberately no
+ *      destructive `replace-score` slot — overwriting the whole score
+ *      is what the editor's manual delete is for.
  *   4. Editor API signal — `setMicEditorApi` is wired by
  *      ScorePanel.onReady (mirroring `setPianoEditorApi`); needed for
  *      the `at-cursor` slot to insert at the active selection.
  *   5. Apply pipeline — `applyToScore` commits the buffer to a Strudel
- *      snippet via `notesToSnippet` and dispatches it through the active
- *      slot. Mirrors pianoRecStore.applyToScore verbatim.
+ *      snippet via `micSnippetFromBuffers` and dispatches it through the
+ *      active slot.
  *
  * Auto-detection model
  * --------------------
@@ -67,7 +64,7 @@ import { previewPillPayload as _pianoPillRef } from './pianoRecStore';
  *     duplicate the signal so piano and mic can move independently.
  */
 
-export type MicSlot = 'append-stack' | 'replace-score' | 'at-cursor';
+export type MicSlot = 'append-stack' | 'at-cursor';
 
 export type MicDetectionKind = 'idle' | 'sustained' | 'percussive' | 'both';
 
@@ -128,10 +125,34 @@ export const [micPrunedCount, setMicPrunedCount] = createSignal<number>(0);
 let segState: MicState = initialMicState();
 let detector: MicCaptureHandle | null = null;
 
+/**
+ * Per-frame subscriber list. Lets external orchestrators (notably the
+ * whistle session's `MicCaptureLike.feed` adapter) observe every
+ * detected frame without re-routing the MicCapture pipeline or
+ * duplicating the worker / AnalyserNode. Subscribers are called in
+ * registration order, after the live `segState` is updated and the
+ * `micPreviewNotes` signal is published — so a subscriber can read
+ * `micPreviewNotes()` synchronously and see the latest state.
+ *
+ * Returning the unsubscribe from `subscribeMicFrame` makes the
+ * lifecycle explicit at the call site; if a subscriber forgets to
+ * unsubscribe, the listener leaks (no semantic damage — just memory),
+ * but the module-level `frameListeners` set is intentionally
+ * short-lived (cleared on module teardown via `onCleanup`).
+ */
+type MicFrameListener = (frame: PitchFrame) => void;
+const frameListeners = new Set<MicFrameListener>();
+
+export const subscribeMicFrame = (cb: MicFrameListener): (() => void) => {
+  frameListeners.add(cb);
+  return () => {
+    frameListeners.delete(cb);
+  };
+};
+
 export const micSlotLabel = (slot: MicSlot): string => {
   switch (slot) {
     case 'append-stack': return 'конец стека';
-    case 'replace-score': return 'заменить score';
     case 'at-cursor': return 'в курсор';
   }
 };
@@ -139,7 +160,6 @@ export const micSlotLabel = (slot: MicSlot): string => {
 export const micSlotGlyph = (slot: MicSlot): string => {
   switch (slot) {
     case 'append-stack': return '↵ stack';
-    case 'replace-score': return '⟳ replace';
     case 'at-cursor': return '⌖ cursor';
   }
 };
@@ -156,6 +176,23 @@ const resetSegState = (): void => {
   segState = initialMicState();
   setMicPreviewNotes([]);
   setMicTransients([]);
+  setMicCurrentHz(null);
+  setMicCurrentRms(0);
+  setMicPrunedCount(0);
+  setMicMeterFrame(null);
+  setMicPeakTimes([]);
+};
+
+/**
+ * Drop the segmenter's buffer but keep the live meter readings.
+ *
+ * Used when a recording is RESUMED rather than started fresh: the
+ * whistle toggle pauses a take («стоп» → the panel keeps the notes)
+ * and the next press continues it, so the notes already whistled have
+ * to survive the mic restart. A full `resetSegState()` would wipe
+ * them and the user would lose the take they had just made.
+ */
+const resetLiveReadings = (): void => {
   setMicCurrentHz(null);
   setMicCurrentRms(0);
   setMicPrunedCount(0);
@@ -184,6 +221,28 @@ const recordNotePeak = (timestampMs: number): void => {
   prunePeakTimes(timestampMs);
 };
 
+/**
+ * Public feed hook for callers outside the MicCapture pipeline (e.g.
+ * the whistle orchestrator's `MicCaptureLike.feed` adapter) that
+ * still want to drive the live `segState` / `micPreviewNotes` buffer.
+ * Mirrors `onMicFrame` byte-for-byte so callers see identical state
+ * transitions; the only difference is that this version is exposed on
+ * the module surface (no getUserMedia / RAF / Worker required).
+ *
+ * Why this exists: `whistleStore.ts` previously had
+ * `feed: () => Effect.void` in its `MicCaptureLike` adapter, which
+ * meant the whistle orchestrator's FSM never received any frames and
+ * `commit()` always bailed out of the `if (s.tag !== 'segmenting')
+ * return;` guard. By re-routing the live MicCapture's `onFrame`
+ * callback through the orchestrator's `handle.feed(frame)` (which in
+ * turn calls this function via the adapter), both the live preview
+ * pill AND the orchestrator's commit path see the same accumulated
+ * notes.
+ */
+export const feedMicFrame = (frame: PitchFrame): void => {
+  onMicFrame(frame);
+};
+
 const onMicFrame = (frame: PitchFrame): void => {
   setMicCurrentHz(frame.hz);
   setMicCurrentRms(frame.rms);
@@ -199,6 +258,12 @@ const onMicFrame = (frame: PitchFrame): void => {
   // live meter overlay so the user sees their sung notes land.
   if (segState.notes.length > beforeNotes) {
     recordNotePeak(frame.timestampMs);
+  }
+  // Fan out to per-frame subscribers (whistle orchestrator etc.).
+  // Iterating over a copy so a listener that unsubscribes itself
+  // mid-fan-out doesn't shift the iterator.
+  for (const listener of [...frameListeners]) {
+    listener(frame);
   }
 };
 
@@ -221,14 +286,29 @@ const onMicMeter = (frame: MeterFrame): void => {
   // detected musical events (notes + transients).
 };
 
-export const startMic = (): void => {
+/**
+ * Open the microphone.
+ *
+ * `opts.keepBufferedNotes` resumes a take instead of starting a new
+ * one: the segmenter's note buffer survives the restart, so a paused
+ * whistle take can be continued without losing the notes that were
+ * already whistled. Everything else (the meter readings) is reset —
+ * those belong to the live capture, not to the buffer.
+ */
+export const startMic = (
+  opts: { readonly keepBufferedNotes?: boolean } = {},
+): void => {
   if (micListening()) return;
   if (!isMicSupported()) {
     pushError(new Error('Этот браузер не поддерживает микрофон (getUserMedia недоступен).'));
     setMicStateSignal('errored');
     return;
   }
-  resetSegState();
+  if (opts.keepBufferedNotes === true) {
+    resetLiveReadings();
+  } else {
+    resetSegState();
+  }
   setMicErrorSignal(null);
   detector = startMicDetector({
     onFrame: onMicFrame,
@@ -267,7 +347,7 @@ export const clearPreview = (): void => {
 };
 
 export const toggleMicSlot = (): void => {
-  const order: ReadonlyArray<MicSlot> = ['append-stack', 'replace-score', 'at-cursor'];
+  const order: ReadonlyArray<MicSlot> = ['append-stack', 'at-cursor'];
   const cur = micSlot();
   const idx = order.indexOf(cur);
   setMicSlot(order[(idx + 1) % order.length]!);
@@ -302,32 +382,14 @@ export const micDetectionActive = (): MicDetectionKind => {
 };
 
 export const applyToScore = (): void => {
-  const notesBuf = micPreviewNotes();
-  const transBuf = micTransients();
-  const notesSnippet = notesBuf.length === 0
-    ? null
-    : notesToSnippet(notesBuf, { instrument: micInstrument() });
-  const transSnippet = transBuf.length === 0
-    ? null
-    : transientsToSnippet(transBuf);
-  if (notesSnippet === null && transSnippet === null) return;
-  let snippet: string;
-  if (notesSnippet !== null && transSnippet !== null) {
-    // Both buffers produced something → emit a stack(...) so the
-    // apply preserves the two contributions as siblings. Don't
-    // indent; small sessions stay readable this way.
-    snippet = `stack(\n  ${notesSnippet},\n  ${transSnippet}\n)`;
-  } else {
-    snippet = (notesSnippet ?? transSnippet) as string;
-  }
+  const snippet = micSnippetFromBuffers(
+    micPreviewNotes(),
+    micTransients(),
+    { instrument: micInstrument() },
+  );
+  if (snippet === null) return;
 
   const slot = micSlot();
-
-  if (slot === 'replace-score') {
-    dispatch({ type: 'replaceScore', text: snippet });
-    clearPreview();
-    return;
-  }
 
   if (slot === 'at-cursor') {
     const api = micEditorApi();

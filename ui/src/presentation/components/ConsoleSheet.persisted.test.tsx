@@ -5,7 +5,7 @@ import type * as ConsoleStoreMod from './consoleStore';
 import type * as LoggerMod from '~/infrastructure/log';
 
 /**
- * Phase 3 / Subagent 13 — persisted-errors restore.
+ * Phase 3 / persisted-errors restore (see decisions/wavecode-logger-enhancements.yaml).
  *
  * Split out from ConsoleSheet.test.tsx so the static-import tests in
  * that file can use the real logger (vi.mock would replace the
@@ -16,15 +16,13 @@ import type * as LoggerMod from '~/infrastructure/log';
  *   1. vi.mock('~/infrastructure/log', ...) replaces the logger
  *      module with a controllable mock. The factory uses
  *      `mockState.fallbackMode` to decide whether `install()` throws
- *      (simulating a failed dynamic import — the original fallback
- *      path that Subagent 11's static-import refactor removed).
+ *      (simulating a failed dynamic import).
  *   2. vi.resetModules() in beforeAll discards the cached
  *      ConsoleSheet module so the re-imported one uses the mock
  *      we just registered.
  *   3. The re-imported ConsoleSheet calls `logger.setSink(...)` at
- *      top level (Subagent 11's static-import refactor). The mock
- *      makes setSink a no-op (no throw) so the module loads
- *      successfully.
+ *      top level. The mock makes setSink a no-op (no throw) so the
+ *      module loads successfully.
  *   4. setSink's callback is stored in `mockState.sink` so the
  *      tests can manually trigger a sinkTick bump to invalidate
  *      the readBuffer memo.

@@ -1,7 +1,7 @@
 import { Show, createSignal, onMount, onCleanup, For, type JSX } from 'solid-js';
-import type { MobileMode } from '~/presentation/state/uiState';
+import { MOBILE_MODES, type MobileMode } from '~/presentation/state/uiState';
 import {
-  SaveIcon, TrashIcon, ResetIcon, PhoneIcon, WrenchIcon, DotsVIcon,
+  SaveIcon, TrashIcon, ResetIcon, PhoneIcon, WrenchIcon, DotsVIcon, PencilIcon,
 } from '~/presentation/icons';
 
 export type OverflowMenuProps = {
@@ -10,6 +10,7 @@ export type OverflowMenuProps = {
   chooseMobileMode: (m: MobileMode) => void;
   onSavePreset: () => void;
   onDeletePreset: () => void;
+  onRenamePreset: () => void;
   onResetAll: () => void;
   onOpenAdmin: () => void;
 };
@@ -80,6 +81,15 @@ export function OverflowMenu(props: OverflowMenuProps): JSX.Element {
               type="button"
               class="wc-overflow-item"
               role="menuitem"
+              onClick={() => { close(); props.onRenamePreset(); }}
+            >
+              <PencilIcon size={14} />
+              <span>Переименовать пресет</span>
+            </button>
+            <button
+              type="button"
+              class="wc-overflow-item"
+              role="menuitem"
               onClick={() => { props.onDeletePreset(); close(); }}
             >
               <TrashIcon size={14} />
@@ -92,18 +102,23 @@ export function OverflowMenu(props: OverflowMenuProps): JSX.Element {
               <PhoneIcon size={12} />
               <span>Мобильный режим</span>
             </span>
-            <For each={(['auto', 'compact', 'full'] as const)}>
-              {(mode) => (
+            <For each={MOBILE_MODES}>
+              {(opt) => (
                 <button
                   type="button"
-                  class={`wc-overflow-item wc-overflow-item--nested ${props.mobileMode === mode ? 'is-active' : ''}`}
+                  class={`wc-overflow-item wc-overflow-item--nested ${props.mobileMode === opt.value ? 'is-active' : ''}`}
                   role="menuitemradio"
-                  aria-checked={props.mobileMode === mode}
-                  onClick={() => { props.chooseMobileMode(mode); close(); }}
+                  aria-checked={props.mobileMode === opt.value}
+                  title={opt.hint}
+                  onClick={() => { props.chooseMobileMode(opt.value); close(); }}
                 >
-                  <span class="wc-overflow-item__mark">{props.mobileMode === mode ? '●' : '○'}</span>
-                  <span>
-                    {mode === 'auto' ? 'Авто' : mode === 'compact' ? 'Компактно' : 'Полно'}
+                  <span class="wc-overflow-item__mark">{props.mobileMode === opt.value ? '●' : '○'}</span>
+                  <span class="wc-overflow-mobile">
+                    <span class="wc-overflow-mobile__label">{opt.label}</span>
+                    {/* Without this the three options are indistinguishable
+                        until you pick one and navigate away to see the
+                        effect — `auto` is especially opaque. */}
+                    <span class="wc-overflow-mobile__hint">{opt.hint}</span>
                   </span>
                 </button>
               )}

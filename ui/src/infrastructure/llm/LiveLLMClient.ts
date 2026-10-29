@@ -5,20 +5,44 @@ import { LLMClient, type CompletionRequest, type CompletionChunk } from '~/domai
  * Live LLM client — raw fetch к llm.kosov.online (LiteLLM proxy, OpenAI-compatible).
  *
  * Models (через llm-proxy):
- *   - "smart" → deepseek/deepseek-v4-pro (reasoning ON, 1M ctx, quality).
- *   - "fast"  → deepseek/deepseek-flash (reasoning OFF через thinking=disabled,
- *               non-reasoning mode, ~1.2-1.5s TTFB).
+ *   - "smart" → MiniMax-M3 (reasoning ON, ~3-21s end-to-end).
+ *   - "fast"  → MiniMax-M2.1-highspeed (reasoning OFF через
+ *               thinking=disabled, non-reasoning mode, ~1.0-1.5s TTFB).
  *
- * LiteLLM может вернуть либо JSON, либо SSE. Парсим оба.
+ * Streaming: chat/completions called with `stream: true` returns
+ * Server-Sent Events. We parse each `data: {...}` line and emit a
+ * `CompletionChunk` per `delta.content` (or `delta.reasoning_content`).
+ * Chunks are pushed into the returned `ReadableStream` as soon as they
+ * arrive — no buffering until the full body is read. If the proxy
+ * ever returns a buffered JSON response (some LiteLLM builds do),
+ * we fall back to the legacy JSON path and synthesize one big chunk.
  */
 
 type Model = 'smart' | 'fast';
+
+/**
+ * Which upstream the proxy currently routes to.
+ *
+ * The client cannot stay provider-agnostic in the request body: the
+ * way reasoning is controlled differs per provider, and LiteLLM (which
+ * sits in front of both) silently drops provider-specific top-level
+ * fields — only `extra_body` is passed through to the provider.
+ *
+ *   deepseek — `extra_body.reasoning_effort` (low|high). DeepSeek has no
+ *              "off": `effort=off` is ignored and reasoning even grows
+ *              (measured 2026-10-26), so the client's `off` maps to the
+ *              smallest level the provider actually honours.
+ *   minimax  — `extra_body.thinking.type = 'disabled'` for the fast tier
+ *              (the MiniMax-native way to switch reasoning off).
+ */
+type Upstream = 'deepseek' | 'minimax';
 
 type LiveLLMClientDeps = {
   readonly apiUrl: string;
   readonly apiKey: string;
   readonly defaultModel: Model;
   readonly defaultThinking: 'low' | 'high';
+  readonly upstream: Upstream;
 };
 
 const make = (deps: LiveLLMClientDeps): Context.Tag.Service<typeof LLMClient> => ({
@@ -32,38 +56,54 @@ const make = (deps: LiveLLMClientDeps): Context.Tag.Service<typeof LLMClient> =>
 
       // Получаем thinking preference из метаданных запроса (если есть).
       const thinkingRaw = (req as { thinking?: 'low' | 'high' | 'off' }).thinking;
-      const includeReasoning = thinkingRaw !== 'off';
-      const reasoningEffort = thinkingRaw === 'high' ? 'high' : 'low';
+      const thinking: 'low' | 'high' | 'off' = thinkingRaw ?? deps.defaultThinking;
 
-      // max_tokens: 2000 хватает для типовых min-notation правок wavecode
-      // (1-2K токенов в коде + немного reasoning). Раньше стояло 16000 —
-      // это провоцировало reasoning-модели убегать в 20+ секунд пустых
-      // раздумий и приходить с finish_reason="length", content="" (см.
-      // KB: deepseek reasoning runaway на max_tokens=16000).
+      // max_tokens: 4000 (было 2000). Upstream — reasoning-модель: при
+      // effort=high (дефолт провайдера) размышление съедает весь бюджет,
+      // ответ приходит с finish_reason="length" и content="" (см. ADR
+      // wavecode-deepseek-upstream-adaptation). 4000 = запас под reasoning
+      // плюс сам ответ; при effort=low через extra_body reasoning занимает
+      // ~130 токенов, так что запас многократный.
       const requestBody: Record<string, unknown> = {
         model: modelName,
         messages,
-        stream: false,
+        stream: true,
         temperature: 0.3,
-        max_tokens: 2000,
+        max_tokens: 4000,
       };
-      if (includeReasoning) {
-        requestBody.reasoning_effort = reasoningEffort;
+
+      if (deps.upstream === 'deepseek') {
+        // reasoning_effort уходит в extra_body, а НЕ top-level: у прокси
+        // глобальный litellm_settings.drop_params=true, и LiteLLM молча
+        // выкидывает provider-специфичные поля верхнего уровня.
+        // Замер 2026-10-26 через llm.kosov.online (model=fast):
+        //   top-level reasoning_effort=low → 1221 completion-токенов, 7.9 s
+        //   extra_body.reasoning_effort=low → 125 токенов, 1.8 s
+        // extra_body проходит насквозь — это единственная форма, которая
+        // реально доезжает до провайдера.
+        //
+        // DeepSeek не умеет выключать reasoning: effort=off/minimal/none
+        // игнорируются (замер 2026-10-26 — reasoning даже растёт). Поэтому
+        // клиентский 'off' означает минимальный доступный уровень 'low'.
+        const effort = thinking === 'high' ? 'high' : 'low';
+        requestBody.extra_body = { reasoning_effort: effort };
+      } else {
+        // MiniMax-профиль: reasoning отключается полем thinking.type.
+        if (thinking !== 'off') {
+          requestBody.reasoning_effort = thinking === 'high' ? 'high' : 'low';
+        }
+        if (modelName === 'fast') {
+          requestBody.extra_body = { thinking: { type: 'disabled' } };
+        }
       }
 
-      // Для fast отключаем reasoning через DeepSeek-специфичный параметр
-      // thinking: {type: "disabled"} — LiteLLM его нативно не знает, но
-      // пробрасывает в extra_body насквозь. Без этого fast = та же reasoning
-      // модель, что и smart, просто поменьше; TTFB одинаковый (~1.4s)
-      // и ответы часто приходят пустыми.
-      if (modelName === 'fast') {
-        requestBody.extra_body = { thinking: { type: 'disabled' } };
-      }
-
-      console.log('[llm] → request', {
+      console.log('[llm] → request (stream)', {
         model: modelName,
         messages: messages.length,
-        reasoning_effort: includeReasoning ? reasoningEffort : '(off)',
+        upstream: deps.upstream,
+        thinking,
+        extra_body: requestBody.extra_body,
+        reasoning_effort: requestBody.reasoning_effort,
       });
 
       const response = yield* Effect.tryPromise({
@@ -94,91 +134,271 @@ const make = (deps: LiveLLMClientDeps): Context.Tag.Service<typeof LLMClient> =>
         return yield* Effect.fail(new Error(errMsg));
       }
 
+      // Read the first byte of the response to detect SSE-vs-JSON shape.
+      // LiteLLM with `stream: true` returns `text/event-stream`; with
+      // `stream: false` returns `application/json`. Some deployments
+      // ignore `stream` and return JSON either way — we sniff the first
+      // chunk's leading character ('{' → JSON, 'd' → SSE) and route.
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
-      let buffer = '';
-      let done = false;
-      while (!done) {
-        const chunk = yield* Effect.tryPromise(() => reader.read());
-        if (chunk.done) {
-          done = true;
-          break;
-        }
-        if (chunk.value) {
-          buffer += decoder.decode(chunk.value, { stream: true });
-        }
+      const { value: firstChunk } = yield* Effect.tryPromise(() => reader.read());
+      if (!firstChunk) {
+        return yield* Effect.fail(new Error('LLM stream produced no bytes'));
       }
-      buffer += decoder.decode();
-
-      console.log('[llm] ← response', {
-        status: response.status,
-        bodyLength: buffer.length,
-        bodyPreview: buffer.slice(0, 200),
-      });
-
-      if (!buffer.trim()) {
-        const errMsg = 'LLM returned empty body (no chunks)';
-        console.error('[llm] ✗', errMsg);
-        return yield* Effect.fail(new Error(errMsg));
+      const head = decoder.decode(firstChunk, { stream: false });
+      const trimmedHead = head.trimStart();
+      if (trimmedHead.startsWith('{')) {
+        // Buffered JSON — fall back to legacy parse path.
+        let buffer = head;
+        while (true) {
+          const next = yield* Effect.tryPromise(() => reader.read());
+          if (next.done) break;
+          if (next.value) buffer += decoder.decode(next.value, { stream: true });
+        }
+        buffer += decoder.decode();
+        const fallback = synthesizeSingleChunkStream(buffer);
+        if (fallback instanceof Error) {
+          return yield* Effect.fail(fallback);
+        }
+        return fallback;
       }
 
-      let content = '';
-      let reasoningContent = '';
-      try {
-        const parsed = JSON.parse(buffer) as {
-          choices?: { message?: { content?: string; reasoning_content?: string } }[];
-          error?: { message?: string };
-        };
-        if (parsed.error) {
-          const errMsg = `LLM API error: ${parsed.error.message ?? JSON.stringify(parsed.error)}`;
-          console.error('[llm] ✗', errMsg);
-          return yield* Effect.fail(new Error(errMsg));
-        }
-        content = parsed.choices?.[0]?.message?.content ?? '';
-        reasoningContent = parsed.choices?.[0]?.message?.reasoning_content ?? '';
-      } catch {
-        const sseContent: string[] = [];
-        for (const line of buffer.split('\n')) {
-          const trimmed = line.trim();
-          if (!trimmed.startsWith('data:')) continue;
-          const data = trimmed.slice(5).trim();
-          if (data === '[DONE]' || !data) continue;
-          try {
-            const parsed = JSON.parse(data) as {
-              choices?: { delta?: { content?: string } }[];
-            };
-            const delta = parsed.choices?.[0]?.delta?.content;
-            if (delta) sseContent.push(delta);
-          } catch {
-            // skip malformed line
-          }
-        }
-        content = sseContent.join('');
-      }
-
-      console.log('[llm] ✓ content length:', content.length, 'reasoning length:', reasoningContent.length);
-
-      if (!content) {
-        // Reasoning may have eaten the budget. Surface reasoning_content
-        // length in the error so the operator can see this is a token-budget
-        // issue, not a wrong-model issue.
-        const hint = reasoningContent
-          ? ` (reasoning used ${reasoningContent.length} chars — likely max_tokens too low)`
-          : '';
-        return yield* Effect.fail(
-          new Error(`LLM returned empty content (parsed but no message body)${hint}`),
-        );
-      }
-
+      // SSE path — first chunk may already contain one or more lines.
+      // Wrap the remaining reader + carryover into a controller-driven
+      // ReadableStream that emits CompletionChunk per `delta`.
       const stream = new ReadableStream<CompletionChunk>({
         start(controller) {
-          controller.enqueue({ type: 'text', delta: content });
-          controller.close();
+          let buffer = head;
+          let closed = false;
+          let emittedText = false;
+          let reasoningChars = 0;
+          let finishReason: string | null = null;
+          const closeOnce = (): void => {
+            if (closed) return;
+            closed = true;
+            try {
+              controller.close();
+            } catch {
+              /* already closed */
+            }
+          };
+          const failOnce = (err: Error): void => {
+            if (closed) return;
+            closed = true;
+            try {
+              controller.error(err);
+            } catch {
+              /* already errored */
+            }
+          };
+          const consume = (line: string): void => {
+            const outcome = consumeSseLine(line, controller);
+            emittedText = emittedText || outcome.textEmitted;
+            reasoningChars += outcome.reasoningChars;
+            if (outcome.finishReason) finishReason = outcome.finishReason;
+          };
+          const pump = async (): Promise<void> => {
+            try {
+              while (true) {
+                const next = await reader.read();
+                if (next.done) break;
+                if (next.value) buffer += decoder.decode(next.value, { stream: true });
+                let nlIdx = buffer.indexOf('\n');
+                while (nlIdx !== -1) {
+                  const line = buffer.slice(0, nlIdx).replace(/\r$/, '');
+                  buffer = buffer.slice(nlIdx + 1);
+                  consume(line);
+                  nlIdx = buffer.indexOf('\n');
+                }
+              }
+              buffer += decoder.decode();
+              if (buffer.trim()) {
+                consume(buffer);
+                buffer = '';
+              }
+              // Reasoning-модель может израсходовать весь лимит токенов на
+              // размышления и не отдать ни символа ответа. Раньше такой
+              // ответ доходил до UI как «пустой ответ» без причины.
+              if (!emittedText) {
+                failOnce(
+                  new Error(
+                    finishReason === 'length'
+                      ? `LLM вернул пустой ответ: лимит токенов исчерпан на размышления ` +
+                        `(finish_reason=length, reasoning ${reasoningChars} симв.). ` +
+                        'Уменьши глубину размышления или подними max_tokens.'
+                      : `LLM вернул пустой ответ (нет текста, reasoning ${reasoningChars} симв.).`,
+                  ),
+                );
+                return;
+              }
+              closeOnce();
+            } catch (err) {
+              failOnce(err instanceof Error ? err : new Error(String(err)));
+            } finally {
+              try {
+                await reader.cancel();
+              } catch {
+                /* ignore */
+              }
+            }
+          };
+          // Kick off pump; do not await — ReadableStream `start` is sync.
+          void pump();
+        },
+        cancel() {
+          // Reader is cancelled by pump()'s finally; nothing else to do.
         },
       });
+
       return stream;
     }),
 });
+
+/**
+ * Dispatch one SSE line. Empty lines and non-`data:` prefixes are
+ * skipped (SSE protocol). `[DONE]` closes the stream (we close from
+ * the outer pump; just no-op here). Each `data: {...}` JSON object
+ * may carry `choices[].delta.content` (text) or
+ * `choices[].delta.reasoning_content` (reasoning trace).
+ *
+ * We do NOT enqueue reasoning content to the chunk stream — the
+ * `cleanLLMResponse` step in `applyEdit` strips it, and exposing it
+ * would confuse the UI transcript. Reasoning content is logged to
+ * the console for debugging.
+ *
+ * The returned outcome tells the caller what the line contributed:
+ * whether visible text was emitted, how many reasoning characters it
+ * carried, and the provider's `finish_reason` (the latter arrives in
+ * the last chunk of a stream and tells us whether the model ran out
+ * of token budget).
+ */
+type SseLineOutcome = {
+  readonly textEmitted: boolean;
+  readonly reasoningChars: number;
+  readonly finishReason: string | null;
+};
+
+const consumeSseLine = (
+  line: string,
+  controller: ReadableStreamDefaultController<CompletionChunk>,
+): SseLineOutcome => {
+  const idle: SseLineOutcome = { textEmitted: false, reasoningChars: 0, finishReason: null };
+  if (!line) return idle;
+  const trimmed = line.trim();
+  if (!trimmed.startsWith('data:')) return idle;
+  const payload = trimmed.slice(5).trim();
+  if (payload === '[DONE]') return idle;
+  let parsed: {
+    choices?: {
+      delta?: { content?: string; reasoning_content?: string };
+      finish_reason?: string | null;
+    }[];
+    error?: { message?: string };
+  };
+  try {
+    parsed = JSON.parse(payload) as typeof parsed;
+  } catch {
+    return idle;
+  }
+  if (parsed.error?.message) {
+    try {
+      controller.error(new Error(`LLM stream error: ${parsed.error.message}`));
+    } catch {
+      /* already errored */
+    }
+    return idle;
+  }
+  const choice = parsed.choices?.[0];
+  const delta = choice?.delta;
+  let textEmitted = false;
+  if (delta?.content) {
+    controller.enqueue({ type: 'text', delta: delta.content });
+    textEmitted = true;
+  }
+  const reasoningChars = delta?.reasoning_content?.length ?? 0;
+  if (delta?.reasoning_content) {
+    console.log('[llm] … reasoning', delta?.reasoning_content.length, 'chars so far');
+  }
+  return {
+    textEmitted,
+    reasoningChars,
+    finishReason: choice?.finish_reason ?? null,
+  };
+};
+
+/**
+ * Fallback for non-streaming responses. Parses the buffered JSON
+ * (or stitched-together SSE) and synthesizes a single chunk stream
+ * containing the full message content. Returns an `Error` if the
+ * body cannot be parsed or the message is empty.
+ */
+const synthesizeSingleChunkStream = (
+  buffer: string,
+): ReadableStream<CompletionChunk> | Error => {
+  if (!buffer.trim()) {
+    return new Error('LLM returned empty body (no chunks)');
+  }
+  let content = '';
+  let reasoningContent = '';
+  let finishReason: string | null = null;
+  try {
+    const parsed = JSON.parse(buffer) as {
+      choices?: {
+        message?: { content?: string; reasoning_content?: string };
+        finish_reason?: string | null;
+      }[];
+      error?: { message?: string };
+    };
+    if (parsed.error) {
+      return new Error(`LLM API error: ${parsed.error.message ?? JSON.stringify(parsed.error)}`);
+    }
+    content = parsed.choices?.[0]?.message?.content ?? '';
+    reasoningContent = parsed.choices?.[0]?.message?.reasoning_content ?? '';
+    finishReason = parsed.choices?.[0]?.finish_reason ?? null;
+  } catch {
+    const sseContent: string[] = [];
+    for (const line of buffer.split('\n')) {
+      const trimmed = line.trim();
+      if (!trimmed.startsWith('data:')) continue;
+      const data = trimmed.slice(5).trim();
+      if (data === '[DONE]' || !data) continue;
+      try {
+        const parsed = JSON.parse(data) as {
+          choices?: { delta?: { content?: string }; finish_reason?: string | null }[];
+        };
+        const choice = parsed.choices?.[0];
+        const delta = choice?.delta?.content;
+        if (delta) sseContent.push(delta);
+        if (choice?.finish_reason) finishReason = choice.finish_reason;
+      } catch {
+        // skip malformed line
+      }
+    }
+    content = sseContent.join('');
+  }
+  if (!content) {
+    // Reasoning-модель может потратить весь лимит токенов на размышления и
+    // не отдать ни символа ответа. Раньше это доезжало до UI как безликое
+    // «пустой ответ» — теперь различаем «кончился бюджет» и «просто нет текста».
+    if (finishReason === 'length') {
+      return new Error(
+        `LLM вернул пустой ответ: лимит токенов исчерпан на размышления ` +
+          `(finish_reason=length, reasoning ${reasoningContent.length} симв.). ` +
+          'Уменьши глубину размышления или подними max_tokens.',
+      );
+    }
+    const hint = reasoningContent
+      ? ` (reasoning ${reasoningContent.length} симв. — ответ не сформирован)`
+      : '';
+    return new Error(`LLM вернул пустой ответ (нет текста в теле ответа)${hint}`);
+  }
+  return new ReadableStream<CompletionChunk>({
+    start(controller) {
+      controller.enqueue({ type: 'text', delta: content });
+      controller.close();
+    },
+  });
+};
 
 /**
  * Translate an HTTP error response from LiteLLM into a single actionable
@@ -190,11 +410,19 @@ const make = (deps: LiveLLMClientDeps): Context.Tag.Service<typeof LLMClient> =>
  *   (or the proxy is starting up and both master_key and DB are unset).
  *   We surface this explicitly because it is silent: the SPA builds
  *   and deploys, the request reaches the proxy, but auth fails because
- *   the key is wrong. See math/wavecode-llm-public-auth-key-mismatch
+ *   the key is wrong. See decisions/wavecode-llm-public-auth-key-mismatch.yaml
  *   for the post-mortem.
  * - 401 "Malformed API Key" → key doesn't start with "sk-" (rare; we
  *   already log a warning at boot in this case).
  * - 401 "Authentication Error" → key rejected (rotated? wrong?).
+ * - 429 → NOT our rate limit: LiteLLM relays the upstream provider's
+ *   429 verbatim. The body carries the real reason — either an exhausted
+ *   provider plan/balance ("Token Plan usage limit reached", "Insufficient
+ *   Balance"), where retrying cannot help, or a genuine transient rate
+ *   limit. We used to flatten both into "rate-limited by proxy. Подожди
+ *   и retry.", which sent the 2026-10-26 diagnosis (MiniMax Token Plan
+ *   exhausted) down a dead end: the operator was told to wait for a limit
+ *   that was never ours. The reason now travels with the error.
  * - 503 {"error":"auth_not_ready"} → our fail-closed patch on the
  *   proxy is doing its job (master_key+DB both unset). The proxy is
  *   starting up; retry.
@@ -255,7 +483,24 @@ const classifyLLMHttpError = (status: number, body: string): string => {
   }
 
   if (status === 429) {
-    return `LLM HTTP 429: rate-limited by proxy. Подожди и retry.`;
+    // Тело ответа — это ответ upstream-провайдера, проброшенный LiteLLM
+    // без изменений. Причина в нём, а не в нашем rate limit.
+    const detail = (errMsg || body).replace(/\s+/g, ' ').trim().slice(0, 300);
+    if (/token plan|insufficient balance|quota|credit|purchase|plan usage limit/i.test(detail)) {
+      return (
+        `LLM HTTP 429: исчерпан лимит/баланс upstream-провайдера — это НЕ rate limit прокси.\n` +
+        `Причина от провайдера: ${detail}\n` +
+        '\n' +
+        'Повтор не поможет: нужен другой upstream или пополнение баланса.\n' +
+        'Диагностика: sudo journalctl -u llm-proxy-public -u llm-proxy -n 100 --no-pager | ' +
+        'grep -E "RateLimitError|Token Plan|Insufficient"'
+      );
+    }
+    return (
+      `LLM HTTP 429: rate limit от провайдера: ${detail}\n` +
+      '\n' +
+      'Подожди и повтори запрос.'
+    );
   }
 
   if (status >= 500) {
@@ -314,6 +559,19 @@ export const makeLiveLLMClient = (
   const defaultModel = (config.defaultModel ?? 'smart') as Model;
   const defaultThinking = config.defaultThinking ?? 'low';
 
+  // Which provider the proxy routes to. The request body differs (see
+  // `Upstream`), so the client must know — otherwise it sends MiniMax-only
+  // fields to DeepSeek and vice versa. Env wins over the default; an
+  // unknown value is a configuration mistake, not a silent fallback.
+  const upstreamRaw: string = config.upstream ?? import.meta.env.VITE_LLM_UPSTREAM ?? 'deepseek';
+  const upstream: Upstream = upstreamRaw === 'minimax' ? 'minimax' : 'deepseek';
+  if (upstreamRaw !== upstream) {
+    console.warn(
+      `[llm] VITE_LLM_UPSTREAM='${upstreamRaw}' is unknown — expected ` +
+      `'deepseek' or 'minimax'. Falling back to 'deepseek'.`,
+    );
+  }
+
   if (!apiKey) {
     console.warn('[llm] VITE_LLM_PROXY_KEY is not set; LLM calls will fail.');
   } else if (!apiKey.startsWith('sk-')) {
@@ -325,5 +583,8 @@ export const makeLiveLLMClient = (
     );
   }
 
-  return Layer.succeed(LLMClient, make({ apiUrl, apiKey, defaultModel, defaultThinking }) as never);
+  return Layer.succeed(
+    LLMClient,
+    make({ apiUrl, apiKey, defaultModel, defaultThinking, upstream }) as never,
+  );
 };

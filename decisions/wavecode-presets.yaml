@@ -3,8 +3,8 @@ schema: math-coding/3.3
 id: wavecode-presets
 revision: 1
 state: draft
-body_sha: "sha256:65c294d055dd3e9c5ad22cfd03ceb01048af79c95b2f1a546b4cb86c922059f2"
-yaml_sha: "sha256:65c294d055dd3e9c5ad22cfd03ceb01048af79c95b2f1a546b4cb86c922059f2"
+body_sha: "sha256:1af48e1312742bb4cc16c2ba429b65c6dee08bbde80be1389d271538ace85bdc"
+yaml_sha: "sha256:1af48e1312742bb4cc16c2ba429b65c6dee08bbde80be1389d271538ace85bdc"
 
 intent: |
   В wavecode есть 8 встроенных пресетов (Creep, Seven Nation Army, Für Elise,
@@ -13,23 +13,6 @@ intent: |
   в `ui/src/domain/presets.ts`; кастомные пресеты — в localStorage через
   `ui/src/presentation/state/presetsStore.ts`.
 commitment: |
-  Built-in пресеты дают instant feedback: открыл wavecode → выбрал "Creep"
-  → через секунду звучит узнаваемая прогрессия. Это снижает порог входа
-  для live-coding и для демонстрации Strudel-стека (см. пакет
-  wavecode-strudel-in-browser). Пресеты — frozen-массив в domain/,
-  не генерируются рантаймом: это pure data, легко читать, легко ревьюить
-  diff. Кастомные пресеты — localStorage, без backend и без регистрации;
-  это та же модель, что в браузерных snippet-менеджерах.
-  Если позже понадобится preset-library с тегами/поиском/шерингом —
-  это отдельный пакет поверх этой структуры.
-counterexample: |
-  The strongest objection to this decision is captured in the `antithesis` field above: Альтернативы: (1) пустой редактор без пресетов — пользователь сам пишет
-antithesis: |
-  Альтернативы: (1) пустой редактор без пресетов — пользователь сам пишет
-  Strudel с нуля; (2) пресеты грузятся из сети/API — внешняя зависимость
-  и латентность; (3) пресеты как генерируемая фича из natural-language
-  через LLM — лишний шаг для тривиального "хочу услышать паттерн прямо
-  сейчас"; (4) пресеты как сэмплы (Dirt/SuperDirt) — вне Strudel-стека.
   Built-in пресеты дают instant feedback: открыл wavecode → выбрал "Creep"
   → через секунду звучит узнаваемая прогрессия. Это снижает порог входа
   для live-coding и для демонстрации Strudel-стека (см. пакет
@@ -71,7 +54,7 @@ obligations:
       The original v1.0 packet applied on the recorded date in its `witness` file; this migration preserves that evidence as an `attestations/<id>-evidence.json` file.
     acceptance:
       all:
-        - verifier: "attestation-store-has-subject"
+        - verifier: "mathc self-check"
           result: pass
 assumptions:
   - id: wavecode-presets-assumption-1
@@ -96,4 +79,3 @@ risk:
 relations:
   addresses:
     - wavecode-bootstrap-math-coding-3.3@1
----

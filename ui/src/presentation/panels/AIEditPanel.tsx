@@ -1,14 +1,32 @@
-import { createSignal, Show, For, createEffect, onCleanup, createMemo } from 'solid-js';
+import { createSignal, Show, For, createEffect, onCleanup, createMemo, onMount, batch } from 'solid-js';
 import { Effect } from 'effect';
 import { dispatch, appStore } from '../state/appStore';
 import { AppLayer } from '~/infrastructure/composition';
 import { AudioEngine } from '~/domain/services';
 import { unlockAudioContext } from '~/infrastructure/audio/LiveAudioEngine';
-import { applyEdit, getLastRawLLMResponse, type DialogTurn } from '~/application/useCases/llmEdit';
+import {
+  applyEditStream,
+  getLastRawLLMResponse,
+  type DialogTurn,
+  type FocusedContextLike,
+  type ApplyEditResult,
+  type ApplyEditCallbacks,
+} from '~/application/useCases/llmEdit';
 import { getLLMSettings } from '../state/llmSettings';
 import { LLMSettingsPopover } from '~/presentation/components/LLMSettingsPopover';
 import { logger } from '~/infrastructure/log';
+import {
+  selectionRange,
+  getFocusedContext,
+  registerAiExplainSelectedHandler,
+  type FocusedContext,
+} from '../state/editorSelection';
 import type { Role } from '~/domain/types';
+import {
+  MELODIC_SOUNDS,
+  DEFAULT_MELODIC_SOUND,
+  soundGlyph,
+} from '~/domain/sounds';
 
 /**
  * AI-редактор: пользователь пишет инструкцию на русском → LLM правит score → авто-eval.
@@ -23,6 +41,19 @@ import type { Role } from '~/domain/types';
  *   │  + селекты модели/think      │
  *   └──────────────────────────────┘
  * При новом сообщении auto-scroll в конец.
+ *
+ * wavecode-editor-selection-ai: AIEditPanel now reads the
+ * live CodeMirror selection (lifted to a module-level Solid
+ * signal in `editorSelection.ts`) and lifts it to an
+ * AST-structural `FocusedContext` via `getFocusedContext`. A
+ * toggle «Применить к выделенному» (default OFF) routes the
+ * next submit through `applyEditWithContext` instead of
+ * `applyEdit` — the model then sees a `=== FOCUSED CONTEXT ===`
+ * block in its user prompt and scopes its edit to that scope.
+ *
+ * Ctrl/Cmd+Shift+L (`aiExplainSelected` hotkey) sets the toggle
+ * ON, focuses the textarea, and pre-fills a friendly
+ * instruction so the user can just press Enter.
  */
 
 const roleLabel = (role: Role): string => {
@@ -35,22 +66,151 @@ const roleLabel = (role: Role): string => {
 
 type FailedRequest = { readonly text: string };
 
+type Status =
+  | { kind: 'idle'; msg: string }
+  | { kind: 'streaming' }
+  | { kind: 'applying' }
+  | { kind: 'ok'; msg: string }
+  | { kind: 'err'; msg: string };
+
+/**
+ * A draft message that accumulates streaming tokens in the active
+ * preset's dialog. Once the final cleaned score arrives we replace
+ * this with the real assistant message in `appStore.dialogs`.
+ */
+type DraftAssistantMessage = {
+  readonly role: 'assistant';
+  readonly text: string;
+};
+
+/**
+ * Map a `FocusedContext` to a short Russian label for the
+ * status line. Returns null when the context is null (no
+ * selection).
+ */
+const focusedContextLabel = (ctx: FocusedContext): string | null => {
+  if (ctx === null) return null;
+  if (ctx.kind === 'function-call') {
+    return `${ctx.name}(…)`;
+  }
+  if (ctx.kind === 'stack-row') {
+    return ctx.name
+      ? `строка ${ctx.index + 1} (${ctx.name})`
+      : `строка ${ctx.index + 1}`;
+  }
+  // text-fallback
+  return `${ctx.text.length} ${ctx.text.length === 1 ? 'символ' : 'символов'} выделено`;
+};
+
+const focusedContextToPrompt = (ctx: FocusedContext): FocusedContextLike | null => {
+  if (ctx === null) return null;
+  const base: FocusedContextLike = {
+    kind: ctx.kind,
+    text: ctx.text,
+  };
+  if (ctx.kind === 'function-call' || ctx.kind === 'stack-row') {
+    if (ctx.name !== null && ctx.name !== undefined) {
+      return { ...base, name: ctx.name };
+    }
+  }
+  return base;
+};
+
 export function AIEditPanel() {
   const [instruction, setInstruction] = createSignal('');
   const [busy, setBusy] = createSignal(false);
-  const [status, setStatus] = createSignal<{ kind: 'idle' | 'ok' | 'err'; msg: string }>({ kind: 'idle', msg: '' });
+  const [status, setStatus] = createSignal<Status>({ kind: 'idle', msg: '' });
   const [settings] = createSignal(getLLMSettings());
   // Последний запрос, упавший с ошибкой. Нужен для кнопки «Попробовать
   // исправить» — повторяет ровно тот же текст + текущие настройки модели/
   // thinking. Очищается при успехе (новом или повторном).
   const [lastFailed, setLastFailed] = createSignal<FailedRequest | null>(null);
+  // wavecode-ai-streaming: draft assistant message that accumulates
+  // streaming tokens. Replaced by the real assistantMessage on success.
+  const [draftAssistant, setDraftAssistant] = createSignal<DraftAssistantMessage | null>(null);
+  // wavecode-editor-selection-ai: «Применить к выделенному» toggle.
+  // Default OFF so the previous (non-context) behaviour is the
+  // user-visible default — toggling on is the explicit opt-in
+  // that changes how the next prompt is shaped.
+  const [applyToSelection, setApplyToSelection] = createSignal(false);
 
   let messagesRef: HTMLDivElement | undefined;
+  let textareaRef: HTMLTextAreaElement | undefined;
+
+  /**
+   * The melodic instrument the AI should use.
+   *
+   * The user picks it here (the AI panel is where the user talks
+   * about music), and the choice rides into the user prompt as an
+   * explicit instruction — so "сделай как в джазе" and "сделай на
+   * пиано" both land on a sound that really exists.
+   */
+  const [aiInstrument, setAiInstrument] = createSignal<string>(DEFAULT_MELODIC_SOUND);
 
   /** Messages of the active preset's dialog thread. */
   const activeMessages = createMemo(
     () => appStore.dialogs[appStore.activePresetId] ?? [],
   );
+
+  // wavecode-editor-selection-ai: reactively compute the
+  // focused context from the current score text + the live
+  // selection range. Re-runs on every doc change or selection
+  // change.
+  const focusedContext = createMemo<FocusedContext>(() =>
+    getFocusedContext(appStore.score, selectionRange()),
+  );
+
+  // wavecode-editor-selection-ai: when the selection becomes
+  // empty (cursor collapsed or selection cleared), force the
+  // toggle off — the user can't apply to "no selection" and the
+  // disabled-when-empty submit would be confusing if the toggle
+  // were silently ON.
+  createEffect(() => {
+    const ctx = focusedContext();
+    if (ctx === null && applyToSelection()) {
+      setApplyToSelection(false);
+    }
+  });
+
+  // wavecode-editor-selection-ai: register the Ctrl/Cmd+Shift+L
+  // handler so App.tsx (frozen by Slot 1.1) does not need to be
+  // touched. The handler sets the toggle ON, focuses the
+  // textarea, and pre-fills a friendly instruction when the
+  // selection maps to an AST node. Lazy registration: the
+  // wrapper in `useKeyboardShortcuts.ts` reads this signal at
+  // press-time, so the order of mount does not matter.
+  onMount(() => {
+    const dispose = registerAiExplainSelectedHandler((): void => {
+      const ctx = focusedContext();
+      // Only meaningful when there's actually a selection.
+      if (ctx === null) {
+        setStatus({
+          kind: 'err',
+          msg: 'Выдели фрагмент в score, прежде чем просить ИИ объяснить выделенное.',
+        });
+        return;
+      }
+      setApplyToSelection(true);
+      // Pre-fill the textarea with a friendly default so the
+      // user can just press Enter to submit. Only do this when
+      // the textarea is empty — never overwrite a draft.
+      if (instruction().trim() === '') {
+        if (ctx.kind === 'function-call') {
+          setInstruction(`Объясни и при необходимости улучши ${ctx.name}(…) — что она делает и как её можно разнообразить?`);
+        } else if (ctx.kind === 'stack-row') {
+          setInstruction(`Объясни строку ${ctx.index + 1} и предложи вариацию (не меняя остальной score).`);
+        } else {
+          setInstruction(`Объясни выделенный фрагмент и предложи, как его улучшить.`);
+        }
+      }
+      // Focus the textarea on the next tick so Solid has
+      // finished rendering the new instruction.
+      window.setTimeout(() => {
+        textareaRef?.focus();
+      }, 0);
+    });
+    onCleanup(dispose);
+  });
 
   const submit = async (overrideText?: string): Promise<void> => {
     const text = (overrideText ?? instruction()).trim();
@@ -58,26 +218,51 @@ export function AIEditPanel() {
       setStatus({ kind: 'err', msg: 'Введи инструкцию' });
       return;
     }
+    // wavecode-editor-selection-ai: when the toggle is ON,
+    // require a non-null focused context. The submit button is
+    // disabled in this case but defend at the call boundary in
+    // case someone hits Enter on a stale textarea.
+    if (applyToSelection() && focusedContext() === null) {
+      setStatus({ kind: 'err', msg: 'Выдели код, чтобы ИИ знал фокус' });
+      return;
+    }
     unlockAudioContext();
-    setBusy(true);
-    setStatus({ kind: 'idle', msg: 'Отправляю в ИИ…' });
+    batch(() => {
+      setBusy(true);
+      setStatus({ kind: 'streaming' });
+      setDraftAssistant({ role: 'assistant', text: '' });
+    });
 
     const hist = activeMessages().slice(-10).map((m): DialogTurn => ({
       role: m.role === 'user' ? 'user' : 'assistant',
       content: m.content,
     }));
     const currentSettings = settings();
+    const ctxForPrompt = applyToSelection() ? focusedContextToPrompt(focusedContext()) : null;
+    const streamCallbacks: ApplyEditCallbacks = {
+      onToken: (delta) => {
+        setDraftAssistant((prev) =>
+          prev ? { role: 'assistant', text: prev.text + delta } : prev,
+        );
+      },
+    };
 
-    let newScore: string;
+    let result: ApplyEditResult;
     try {
-      newScore = await Effect.runPromise(
+      result = await Effect.runPromise(
         Effect.gen(function* () {
-          return yield* applyEdit(
+          return yield* applyEditStream(
             appStore.score,
             text,
             hist,
             { status: appStore.audio.status, ...(appStore.audio.lastError ? { lastError: appStore.audio.lastError } : {}) },
-            { model: currentSettings.model, thinking: currentSettings.thinking },
+            {
+              model: currentSettings.model,
+              thinking: currentSettings.thinking,
+              instrument: aiInstrument(),
+            },
+            streamCallbacks,
+            ctxForPrompt,
           );
         }).pipe(Effect.provide(AppLayer)),
       );
@@ -88,13 +273,16 @@ export function AIEditPanel() {
         ['[AIEditPanel] LLM error:', msg, err],
         'AIEditPanel.submit',
       );
-      setStatus({ kind: 'err', msg: `LLM ошибка: ${msg}` });
-      setLastFailed({ text });
-      setBusy(false);
+      batch(() => {
+        setStatus({ kind: 'err', msg: `LLM ошибка: ${msg}` });
+        setLastFailed({ text });
+        setDraftAssistant(null);
+        setBusy(false);
+      });
       return;
     }
 
-    if (!newScore || !newScore.trim()) {
+    if (!result.score || !result.score.trim()) {
       const raw = getLastRawLLMResponse();
       logger.push(
         'warn',
@@ -102,35 +290,53 @@ export function AIEditPanel() {
         'AIEditPanel.submit',
       );
       const preview = raw.length > 200 ? `${raw.slice(0, 200)}…` : raw;
-      setStatus({
-        kind: 'err',
-        msg: raw
-          ? `ИИ вернул пустой ответ после очистки. Сырой: "${preview.replace(/\n/g, ' ')}"`
-          : 'ИИ вернул пустой ответ (нет данных от API)',
+      batch(() => {
+        setStatus({
+          kind: 'err',
+          msg: raw
+            ? `ИИ вернул пустой ответ после очистки. Сырой: "${preview.replace(/\n/g, ' ')}"`
+            : 'ИИ вернул пустой ответ (нет данных от API)',
+        });
+        setLastFailed({ text });
+        setDraftAssistant(null);
+        setBusy(false);
       });
-      setLastFailed({ text });
-      setBusy(false);
       return;
     }
 
-    dispatch({ type: 'replaceScore', text: newScore });
-    dispatch({ type: 'assistantMessage', text: newScore });
-    dispatch({ type: 'userMessage', text });
-    if (overrideText === undefined) {
-      // Retry: текст уже в textarea как instruction, не перезаписываем.
-      setInstruction('');
-    }
+    batch(() => {
+      dispatch({ type: 'replaceScore', text: result.score });
+      dispatch({ type: 'assistantMessage', text: result.score });
+      dispatch({ type: 'userMessage', text });
+      setDraftAssistant(null);
+      if (overrideText === undefined) {
+        // Retry: текст уже в textarea как instruction, не перезаписываем.
+        setInstruction('');
+        // wavecode-editor-selection-ai: clear the toggle after a
+        // successful submit so the next instruction starts from a
+        // clean state — the selection may have moved or the user
+        // may want to apply to the WHOLE score next time.
+        setApplyToSelection(false);
+      }
+      setStatus({ kind: 'applying' });
+    });
 
     try {
       await Effect.runPromise(
         Effect.gen(function* () {
           const audio = yield* AudioEngine;
-          yield* audio.eval(newScore);
+          yield* audio.eval(result.score);
         }).pipe(Effect.provide(AppLayer)),
       );
       dispatch({ type: 'audioStatusChange', status: 'playing' });
-      setStatus({ kind: 'ok', msg: 'Применено и играет ✓' });
-      setLastFailed(null);
+      batch(() => {
+        setStatus({
+          kind: 'ok',
+          msg: result.wasHealed ? 'Готово (сам исправил) ✓' : 'Готово ✓',
+        });
+        setLastFailed(null);
+        setBusy(false);
+      });
     } catch (audioErr) {
       const msg = audioErr instanceof Error ? audioErr.message : String(audioErr);
       logger.push(
@@ -139,10 +345,11 @@ export function AIEditPanel() {
         'AIEditPanel.submit',
       );
       dispatch({ type: 'audioStatusChange', status: 'error', error: msg });
-      setStatus({ kind: 'err', msg: `ИИ ответил, но ошибка аудио: ${msg}` });
-      setLastFailed({ text });
-    } finally {
-      setBusy(false);
+      batch(() => {
+        setStatus({ kind: 'err', msg: `ИИ ответил, но ошибка аудио: ${msg}` });
+        setLastFailed({ text });
+        setBusy(false);
+      });
     }
   };
 
@@ -152,7 +359,17 @@ export function AIEditPanel() {
     void submit(f.text);
   };
 
-  
+  // wavecode-editor-selection-ai: derive UI state from the
+  // focused context. The status line shows the AST-derived
+  // function/row name when matching succeeds; the submit
+  // button is disabled when the toggle is ON but the selection
+  // is empty.
+  const focusedLabel = createMemo(() => focusedContextLabel(focusedContext()));
+  const submitDisabled = createMemo(() => {
+    if (busy()) return true;
+    if (applyToSelection() && focusedContext() === null) return true;
+    return false;
+  });
 
   createEffect(() => {
     // Следим за длиной истории: при изменении auto-scroll в конец.
@@ -175,6 +392,8 @@ export function AIEditPanel() {
             <div class="ai-messages-empty">
               Здесь будет диалог с ИИ для выбранной композиции. Напиши инструкцию внизу — например:
               «сделай быстрее в два раза», «добавь басов», «сделай техно-бит».
+              <br />
+              <small>Подсказка: выдели фрагмент в score (например, один ряд стека) и нажми Ctrl/Cmd+Shift+L — ИИ увидит только выделенное.</small>
             </div>
           }
         >
@@ -186,12 +405,27 @@ export function AIEditPanel() {
               </div>
             )}
           </For>
+          {/* wavecode-ai-streaming: draft assistant message rendered
+              while tokens stream in. Replaced by the real
+              assistantMessage dispatched to appStore on completion. */}
+          <Show when={draftAssistant()}>
+            {(draft) => (
+              <div class="ai-message ai-message-assistant ai-message-streaming">
+                <div class="ai-message-meta">
+                  ИИ<span class="ai-streaming-cursor">▍</span>
+                </div>
+                <div class="ai-message-body">{draft().text}</div>
+              </div>
+            )}
+          </Show>
         </Show>
       </div>
 
-      <Show when={status().msg}>
+      <Show when={status().kind !== 'idle'}>
         <div class="ai-status-row">
-          <div class={`ai-status ai-status-${status().kind}`}>{status().msg}</div>
+          <div class={`ai-status ai-status-${statusKind(status())}`}>
+            {statusMessage(status())}
+          </div>
           <Show when={status().kind === 'err' && lastFailed()}>
             <button
               type="button"
@@ -206,8 +440,48 @@ export function AIEditPanel() {
         </div>
       </Show>
 
+      {/* wavecode-editor-selection-ai: selection status line.
+          Sits between the messages/status row and the textarea
+          so the user always sees what the AI will treat as the
+          "focused context" before they submit. Hides itself when
+          no selection exists (no signal noise in the default
+          state). */}
+      <Show when={focusedLabel() !== null || applyToSelection()}>
+        <div
+          class="ai-focus-row"
+          data-testid="ai-focus-row"
+          data-state={focusedContext() === null ? 'no-selection' : 'has-selection'}
+        >
+          <Show
+            when={focusedContext() !== null}
+            fallback={
+              <span class="ai-focus-empty">
+                Выдели код, чтобы ИИ знал фокус
+              </span>
+            }
+          >
+            <span class="ai-focus-glyph" aria-hidden="true">📍</span>
+            <span class="ai-focus-label">Focus: {focusedLabel()}</span>
+            <Show when={applyToSelection()}>
+              <span class="ai-focus-tag">применю к выделенному</span>
+            </Show>
+          </Show>
+          <label class="ai-focus-toggle" title="Применить правку только к выделенному фрагменту">
+            <input
+              type="checkbox"
+              data-testid="ai-focus-toggle"
+              checked={applyToSelection()}
+              disabled={focusedContext() === null}
+              onChange={(e) => setApplyToSelection(e.currentTarget.checked)}
+            />
+            <span>к выделенному</span>
+          </label>
+        </div>
+      </Show>
+
       <div class="ai-footer">
         <textarea
+          ref={textareaRef}
           aria-label="Инструкция для ИИ"
           data-ai-textarea
           placeholder='Что сделать? Например: «сделай быстрее в два раза»'
@@ -237,6 +511,23 @@ export function AIEditPanel() {
         />
         <div class="ai-controls-row1">
           <LLMSettingsPopover />
+          <label class="ai-instrument-select-wrap" aria-label="Инструмент для ИИ">
+            <span class="ai-instrument-glyph" aria-hidden="true">
+              {soundGlyph(aiInstrument())}
+            </span>
+            <select
+              class="ai-instrument-select"
+              value={aiInstrument()}
+              disabled={busy()}
+              onChange={(e) => { setAiInstrument(e.currentTarget.value); }}
+            >
+              <For each={MELODIC_SOUNDS}>
+                {(sound) => (
+                  <option value={sound.id}>{sound.label}</option>
+                )}
+              </For>
+            </select>
+          </label>
           <button
             type="button"
             class="ai-clear-btn"
@@ -254,12 +545,36 @@ export function AIEditPanel() {
             type="button"
             class="ai-apply-btn"
             onClick={() => void submit()}
-            disabled={busy()}
+            disabled={submitDisabled()}
+            data-ai-apply-btn
+            title={
+              submitDisabled() && applyToSelection() && focusedContext() === null
+                ? 'Выдели код, чтобы ИИ знал фокус'
+                : 'Применить правку'
+            }
           >
-            {busy() ? '⏳ Применяю…' : '✦ Применить'}
+            {applyButtonLabel(status(), busy())}
           </button>
         </div>
       </div>
     </div>
   );
 }
+const statusKind = (s: Status): 'idle' | 'ok' | 'err' | 'streaming' | 'applying' => s.kind;
+
+const statusMessage = (s: Status): string => {
+  switch (s.kind) {
+    case 'idle': return s.msg;
+    case 'streaming': return 'ИИ думает…';
+    case 'applying': return 'Применяю…';
+    case 'ok': return s.msg;
+    case 'err': return s.msg;
+  }
+};
+
+const applyButtonLabel = (s: Status, busy: boolean): string => {
+  if (!busy) return '✦ Применить';
+  if (s.kind === 'streaming') return '⏳ Думаю…';
+  if (s.kind === 'applying') return '⏳ Применяю…';
+  return '⏳ …';
+};

@@ -131,7 +131,7 @@ describe('appendGridToScore — hasTopLevelStack classifier', () => {
  * silently leave the Step sheet blank on open (pre-fix bug: setCell was
  * called for side effect but its immutable return was discarded, so the
  * grid stayed empty for every score). See
- * math/wavecode-step-grid-autoload-and-sync.
+ * decisions/wavecode-step-grid-autoload-and-sync.yaml.
  */
 describe('loadFromScore — populates grid from s("…") rows', () => {
   it('simple 4-row score yields 4 active cells (col 0 each)', () => {
@@ -200,7 +200,7 @@ describe('loadFromScore — populates grid from s("…") rows', () => {
 });
 
 /**
- * Mode-aware state — see `math/wavecode-step-grid-modes/packet.md`.
+ * Mode-aware state — see decisions/wavecode-step-grid-modes.yaml.
  *
  *   - enterView/enterSketch/enterEdit mutate the mode signal and
  *     re-seed draft + lastCommitted according to each mode's contract.

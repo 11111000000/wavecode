@@ -3,8 +3,8 @@ schema: math-coding/3.3
 id: wavecode-piano-modes-and-gain
 revision: 1
 state: active
-body_sha: "sha256:f965e72ff7725b0726ee8593804a5c779ac2b553ba89ae978caea2b66e0cc8be"
-yaml_sha: "sha256:f965e72ff7725b0726ee8593804a5c779ac2b553ba89ae978caea2b66e0cc8be"
+body_sha: "sha256:a6274934dd80622a94e3ed37cc3112c3ad9f98b19a7732043bd415098a890846"
+yaml_sha: "sha256:a6274934dd80622a94e3ed37cc3112c3ad9f98b19a7732043bd415098a890846"
 
 intent: |
   PianoKeyboard имеет 3 ортогональных пользовательских намерения,
@@ -95,43 +95,6 @@ antithesis: |
   Возражение: парсер уже написан (`parseStackTopLayers` в
   domain/layers/parseStack.ts) и протестирован. Reuse > rewrite.
   Inline-парсинг 15 строк vs поддержка ещё одного формата score.
-  Шесть компонентов:
-counterexample: |
-  The strongest objection to this decision is captured in the `antithesis` field above: (1) «Audition-mode это default — но зачем тогда явный
-antithesis: |
-  (1) «Audition-mode это default — но зачем тогда явный
-  toggle, если он default-off?». Возражение: FOLLOW не default-on
-  (может визуально шуметь при длинных паттернах), поэтому это
-  toggle. REC тоже не default-on (юзер может случайно нажать
-  пианино, не желая мутить score). Audition — не toggle, это
-  implicit «всё off».
-
-  (2) «Гейн-фикс сломает существующих юзеров, которые привыкли
-  к громкому пианино». Возражение: 0.3 на ноту при 4-нотном аккорде
-  clipping-distorted — это не «громкость», это артефакт. Любой
-  пользователь предпочтёт сбалансированный звук. Если кому-то
-  нужно громче — есть master gain в Mixer panel.
-
-  (3) «FOLLOW требует polling scheduler — это 20Hz CPU cost».
-  Возражение: `compileAndQuery` уже используется в StepGrid и
-  AudioRecorder; это дешёвая операция (cycles=1, ~0.1ms). Polling
-  каждые 50ms = 20Hz × 0.1ms = 2ms/sec = 0.2% CPU. Приемлемо.
-  Альтернатива: push-notification из scheduler, но Cyclist не
-  предоставляет хук — пришлось бы патчить infra.
-
-  (4) «REC + apply две кнопки — лишний UI». Возражение: apply —
-  единственный способ избежать «нажал 50 нот, REC off — и что
-  теперь?». Сейчас без apply это тупик. Commit-action обязателен.
-
-  (5) «Tap=note (не hold) теряет legato/staccato». Возражение:
-  advanced ритмика — следующая итерация. Стандартный 80% кейс
-  (набросать мелодию) — tap=note. Если юзеру нужен rhythm-control,
-  пусть использует StepGrid (он для этого и существует).
-
-  (6) «Stack-wrap через appendGridToScore-parsing — overengineering».
-  Возражение: парсер уже написан (`parseStackTopLayers` в
-  domain/layers/parseStack.ts) и протестирован. Reuse > rewrite.
-  Inline-парсинг 15 строк vs поддержка ещё одного формата score.
 axiom_link:
   - A3
 scope:
@@ -157,7 +120,7 @@ obligations:
       The original v1.0 packet applied on the recorded date in its `witness` file; this migration preserves that evidence as an `attestations/<id>-evidence.json` file.
     acceptance:
       all:
-        - verifier: "attestation-store-has-subject"
+        - verifier: "mathc self-check"
           result: pass
 assumptions: []
 risk:
@@ -167,4 +130,3 @@ risk:
 relations:
   addresses:
     - wavecode-bootstrap-math-coding-3.3@1
----

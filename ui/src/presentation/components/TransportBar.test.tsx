@@ -40,7 +40,7 @@ const setMatchMedia = (matches: boolean): void => {
   });
 };
 
-describe('TransportBar (math/wavecode-mobile-transport-bar)', () => {
+describe('TransportBar (decisions/wavecode-mobile-transport-bar.yaml)', () => {
   beforeEach(() => {
     localStorage.clear();
     setMatchMedia(true);
@@ -66,7 +66,7 @@ describe('TransportBar (math/wavecode-mobile-transport-bar)', () => {
     // truth — CSS rule
     // .app-transport-bar[data-collapsed='true'] .app-transport-bar__body
     // { display: none } applies in real browsers and is verified
-    // manually in math/wavecode-mobile-transport-bar browser test.
+    // manually in decisions/wavecode-mobile-transport-bar.yaml browser test.
     expect(bar.getAttribute('data-collapsed')).toBe('true');
 
     const toggle = container.querySelector(

@@ -3,8 +3,8 @@ schema: math-coding/3.3
 id: wavecode-mobile-split-pane
 revision: 1
 state: active
-body_sha: "sha256:fcf4f7b3e9bba5d0384577ba6b5e7630bc74ea26bcf58377abb1bb77afcf2afb"
-yaml_sha: "sha256:fcf4f7b3e9bba5d0384577ba6b5e7630bc74ea26bcf58377abb1bb77afcf2afb"
+body_sha: "sha256:0167003475edebe3582e6ed3ed12995c5cbd7e619e83c35f18480b04fe993f4a"
+yaml_sha: "sha256:0167003475edebe3582e6ed3ed12995c5cbd7e619e83c35f18480b04fe993f4a"
 
 intent: |
   На mobile (≤720px) BottomSheet (Mixer/AI/Status/Step/Piano) — это
@@ -102,49 +102,6 @@ antithesis: |
   В landscape (height ~ 400px) clamp автоматически подрежет
   до 240px (нижний bound). Можно добавить resize listener —
   но это polish для v2, не блокер.
-  Шесть компонентов:
-counterexample: |
-  The strongest objection to this decision is captured in the `antithesis` field above: (1) «In-flow sheet ломает desktop UX».
-antithesis: |
-  (1) «In-flow sheet ломает desktop UX».
-  Возражение: изменения изолированы в `@media (max-width: 720px)`.
-  На desktop (≥1024px) media query не срабатывает; transform-based
-  right-side drawer работает как сейчас. Verify:
-  `matchMedia('(min-width: 1024px)')` selectors в CSS.
-
-  (2) «ScorePanel 200px слишком тесно для редактирования».
-  Возражение: 200px — это min-height для 'full' snap (70vh sheet).
-  По дефолту sheet = 'half' (50vh), ScorePanel = ~50vh. При 412×900
-  viewport ScorePanel = ~400px, sheet = ~430px. Оба удобны для
-  чтения. Для полноэкранного редактирования юзер тапает "Score"
-  в BottomNav → sheet закрывается, ScorePanel full height.
-  Альтернатива 'full' snap существует для тех, кому нужно больше
-  sheet — но это осознанный trade-off.
-
-  (3) «Drag-handle конфликтует с touch scroll».
-  Возражение: drag-handle = `touch-action: none` на handle-area;
-  touch-action остального sheet = normal. iOS Safari чётко
-  разделяет касания по тач-таргетам.
-
-  (4) «Internal tabs дублируют BottomNav».
-  Возражение: BottomNav — primary navigation между "Score vs
-  tools". Internal tabs — secondary navigation между tools (когда
-  sheet открыт). В GarageBand такая двухуровневая навигация
-  стандарт. Когда sheet закрыт — internal tabs не видны, нет
-  визуального шума.
-
-  (5) «FAB перемещается на mobile — может перекрыть sheet».
-  Возражение: FAB смещается ВЫШЕ sheet (между sheet и tabbar).
-  Когда sheet открыт, FAB сидит в зоне между sheet и tabbar —
-  юзер видит и кликает. Когда sheet closed, FAB на своём
-  обычном месте поверх tabbar.
-
-  (6) «localStorage persisted height — может быть неправильный
-  размер для landscape».
-  Возражение: clamped 240..560px в portrait даёт разумные размеры.
-  В landscape (height ~ 400px) clamp автоматически подрежет
-  до 240px (нижний bound). Можно добавить resize listener —
-  но это polish для v2, не блокер.
 axiom_link:
   - A3
 scope:
@@ -170,7 +127,7 @@ obligations:
       The original v1.0 packet applied on the recorded date in its `witness` file; this migration preserves that evidence as an `attestations/<id>-evidence.json` file.
     acceptance:
       all:
-        - verifier: "attestation-store-has-subject"
+        - verifier: "mathc self-check"
           result: pass
 assumptions: []
 risk:
@@ -180,4 +137,3 @@ risk:
 relations:
   addresses:
     - wavecode-bootstrap-math-coding-3.3@1
----

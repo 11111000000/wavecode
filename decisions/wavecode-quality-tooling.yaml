@@ -3,8 +3,8 @@ schema: math-coding/3.3
 id: wavecode-quality-tooling
 revision: 1
 state: active
-body_sha: "sha256:ea21133afa76845cb0288139ec10fc736583ac5bb2bfba99bf2fa333cdd8941c"
-yaml_sha: "sha256:ea21133afa76845cb0288139ec10fc736583ac5bb2bfba99bf2fa333cdd8941c"
+body_sha: "sha256:18a362c69465db68efa663a284f7f7805fe41bd1318090dadbe376d50b26b77d"
+yaml_sha: "sha256:18a362c69465db68efa663a284f7f7805fe41bd1318090dadbe376d50b26b77d"
 
 intent: |
   Two invariants are now machine-enforced on every `git commit`:
@@ -33,7 +33,6 @@ intent: |
   exposed as `npm run validate:presets` (root) and
   `pnpm --dir ui run validate:presets`.
 
-  Mechanism:
   - `scripts/validate-presets.ts`: dynamic-imports
   `@strudel/transpiler` from `ui/node_modules`, runs
   `validatePreset` against every preset, exits 1 if any preset
@@ -49,47 +48,6 @@ intent: |
   into `.git/hooks/pre-commit`. ~5-7s end-to-end on a warm
   `node_modules` cache.
 commitment: |
-  Three small moves, each scoped narrowly:
-counterexample: |
-  The strongest objection to this decision is captured in the `antithesis` field above: (1) «Add Husky + lint-staged for industry-standard pre-commit».
-antithesis: |
-  (1) «Add Husky + lint-staged for industry-standard pre-commit».
-  Rejected: Husky adds a runtime dep + a `node_modules/` link to
-  git plumbing. The project already uses pnpm — Husky's
-  auto-install hook interferes with our `.worktrees/` layout
-  (subagents see a half-installed hook). lint-staged would run on
-  staged files only, but the layering invariant is a
-  cross-cutting rule (a console in `domain/presets.ts` is a problem
-  no matter which 5 files you staged). Husky also tends to silently
-  skip with `--no-verify` — the explicit `ln -s` makes the hook
-  visible in `git status` only when the symlink is missing.
-  (2) «Write a custom ESLint rule for the layering invariant».
-  Rejected as scope creep: the built-in `no-console` rule is
-  sufficient — domain and application have no legitimate use of
-  the global `console` (tests inject `opts.console` into
-  `validatePreset`, so they don't need it either). The custom-
-  rule path adds a `RuleTester` dep + a 30-line plugin + tests,
-  for zero added semantic value.
-  (3) «Use Effect Logger (LayeredLogger) instead of ESLint». Tempting
-  but wrong axis: the goal is "domain/application have no side-
-  channel access to the global `console`", not "they use Effect
-  for logging". An Effect Logger would still let developers
-  write `Effect.log(...)` anywhere — fine for application, but
-  domain should be IO-free. ESLint catches the verboten call at
-  compile time, before any effect runs.
-  (4) «Make the pre-commit run only on staged files». Rejected:
-  typecheck + unit tests are designed to run against the full
-  tree because layering issues often surface as cross-file
-  regressions (e.g. domain imports something new that happens to
-  match a console.log pattern).
-  (5) «Add a `--strict` flag to validate-presets that requires
-  the real Strudel eval». Currently the script falls back to
-  `new Function()` when the transpiler can't load. The judgment
-  call: the script is useful in CI even without a DOM (catches
-  syntax errors), and the unit tests with mock transpilers cover
-  the real-eval paths (8 cases in `presets.test.ts`). Adding a
-  strict flag would let CI opt in, but the default stays
-  permissive.
   Three small moves, each scoped narrowly:
 counterexample: |
   The strongest objection to this decision is captured in the `antithesis` field above: (1) «Add Husky + lint-staged for industry-standard pre-commit».
@@ -154,7 +112,7 @@ obligations:
       The original v1.0 packet applied on the recorded date in its `witness` file; this migration preserves that evidence as an `attestations/<id>-evidence.json` file.
     acceptance:
       all:
-        - verifier: "attestation-store-has-subject"
+        - verifier: "mathc self-check"
           result: pass
 assumptions: []
 risk:
@@ -164,4 +122,3 @@ risk:
 relations:
   addresses:
     - wavecode-bootstrap-math-coding-3.3@1
----

@@ -3,8 +3,8 @@ schema: math-coding/3.3
 id: wavecode-preset-shadow-migration
 revision: 1
 state: draft
-body_sha: "sha256:8ae9f8b66ff825f3d9ff0fb60edc4c17b62d4ea0ebde57f3a0e00de5ea9f3b06"
-yaml_sha: "sha256:8ae9f8b66ff825f3d9ff0fb60edc4c17b62d4ea0ebde57f3a0e00de5ea9f3b06"
+body_sha: "sha256:4cf1a1c1e4b458950c754680295cbb09ac3c58a0dfea02261a6ce92ebd073f3a"
+yaml_sha: "sha256:4cf1a1c1e4b458950c754680295cbb09ac3c58a0dfea02261a6ce92ebd073f3a"
 
 intent: |
   При загрузке `presetsStore` кастомные пресеты, чьё имя (lowercase,
@@ -13,28 +13,6 @@ intent: |
   сохранённого из устаревшего билт-пресета, который сбивает с толку
   оператора в дропдауне («обновил пресет — но звук старый»).
 commitment: |
-  Минимальная миграция в `presetsStore.load()`: case-insensitive
-  trim сравнение имени кастома со всеми `BUILTIN_PRESETS[*].name`.
-  Совпадение → дроп + перезапись. Срабатывает ровно один раз на
-  сессию (при module init). Без UI-уведомления: silent migration
-  соответствует best-practice (drop migration scripts в Postgres,
-  schema-version migrations в Diesel), оператору не нужно принимать
-  решение. Покрыто unit-тестом `drops custom presets whose name
-  shadows a builtin on load`.
-counterexample: |
-  The strongest objection to this decision is captured in the `antithesis` field above: (a) Ничего не делать — оператор сам разберётся (F5, clear localStorage,
-antithesis: |
-  (a) Ничего не делать — оператор сам разберётся (F5, clear localStorage,
-  удалить кастомный через UI). На практике: жалобы «обновление не
-  работает» → 4 итерации одной и той же жалобы на тот же пресет.
-  (b) Детектить конфликт по id — но id кастомных имеет префикс `custom-`,
-  встроенные — kebab-case типа `fur-elise`, коллизий по id не бывает;
-  конфликт проявляется на уровне отображаемого имени.
-  (c) Префиксовать встроенные «(built-in)» в дропдауне — визуальная
-  развязка, но не убирает shadow: кастом всё равно выигрывает, если
-  оператор кликнул на него по привычке.
-  (d) Версионировать кастом-пресеты + «Reset on schema mismatch» —
-  оркестрация migrations, overkill для текущего объёма.
   Минимальная миграция в `presetsStore.load()`: case-insensitive
   trim сравнение имени кастома со всеми `BUILTIN_PRESETS[*].name`.
   Совпадение → дроп + перезапись. Срабатывает ровно один раз на
@@ -81,7 +59,7 @@ obligations:
       The original v1.0 packet applied on the recorded date in its `witness` file; this migration preserves that evidence as an `attestations/<id>-evidence.json` file.
     acceptance:
       all:
-        - verifier: "attestation-store-has-subject"
+        - verifier: "mathc self-check"
           result: pass
 assumptions:
   - id: wavecode-preset-shadow-migration-assumption-1
@@ -106,4 +84,3 @@ risk:
 relations:
   addresses:
     - wavecode-bootstrap-math-coding-3.3@1
----

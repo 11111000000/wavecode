@@ -3,8 +3,8 @@ schema: math-coding/3.3
 id: wavecode-llm-cors-explicit-allowlist
 revision: 1
 state: active
-body_sha: "sha256:18eecfdc191026a4d62ba12d4dec9c1e16ea7c937fbea392459d9d5e842c24f7"
-yaml_sha: "sha256:18eecfdc191026a4d62ba12d4dec9c1e16ea7c937fbea392459d9d5e842c24f7"
+body_sha: "sha256:3177900ff34d51397d99d32ee5ddababd50d729c1e56cf0b72238d344e65a623"
+yaml_sha: "sha256:3177900ff34d51397d99d32ee5ddababd50d729c1e56cf0b72238d344e65a623"
 
 intent: |
   Публичный LiteLLM (`llm-proxy-public.service` на 127.0.0.1:11436,
@@ -17,34 +17,6 @@ intent: |
   случайно задвоенный `console.log('[llm] → request', ...)` блок
   в `LiveLLMClient.ts` (копипаста из соседнего коммита).
 commitment: |
-  Explicit-list allowlist. Принцип: явный реестр публичных клиентов
-  в AngaraConfig, обновляется при on-board нового приложения (тот же
-  review-gate, что для добавления tier=public vhost).
-counterexample: |
-  The strongest objection to this decision is captured in the `antithesis` field above: (1) «Поменять CORS на `*`» — FastAPI proxy закрыт API-key auth,
-antithesis: |
-  (1) «Поменять CORS на `*`» — FastAPI proxy закрыт API-key auth,
-  `corsAllowCredentials=true` ⇒ wildcard с credentials запрещён
-  спецификацией (CORS preflight ответ с `Access-Control-Allow-Credentials`
-  не должен иметь `*` в origin). Кроме того, LiteLLM по умолчанию
-  отдаёт `*` для no-auth — но Caddy `header_down` всё равно
-  перезаписывает на request Origin в публичном vhost-канале
-  (`kosov-reverse-proxy/default.nix:75-82`). Однако preflight
-  ОТВЕТ LiteLLM для non-matching origin приходит БЕЗ
-  `Access-Control-Allow-Origin` → `header_down` уже нечего
-  перезаписывать → no-op → preflight по-прежнему fail.
-  Простое смягчение allowlist до `*` ломает credentials flow.
-
-  (2) «Прибить CORS на уровне Caddy, LiteLLM оставить `*`» — Caddy
-  умеет отвечать OPTIONS preflight без backend (`header { …
-  Access-Control-Allow-Origin * }` в `respond` или named-route),
-  но это значит дублировать логику rate-limit/auth, которую
-  LiteLLM и так делает. И теряем per-origin audit-log LiteLLM.
-
-  (3) «Положить wavecode на собственный поддомен вне
-  `*.kosov.online`» — потеряем wildcard cert Let's Encrypt, нужен
-  отдельный vhost в `services.kinetic.services` + DNS-запись
-  у Reg.ru. Неоправданная цена ради одного origin.
   Explicit-list allowlist. Принцип: явный реестр публичных клиентов
   в AngaraConfig, обновляется при on-board нового приложения (тот же
   review-gate, что для добавления tier=public vhost).
@@ -94,7 +66,7 @@ obligations:
       The original v1.0 packet applied on the recorded date in its `witness` file; this migration preserves that evidence as an `attestations/<id>-evidence.json` file.
     acceptance:
       all:
-        - verifier: "attestation-store-has-subject"
+        - verifier: "mathc self-check"
           result: pass
 assumptions:
   - id: wavecode-llm-cors-explicit-allowlist-assumption-1
@@ -139,4 +111,3 @@ risk:
 relations:
   addresses:
     - wavecode-bootstrap-math-coding-3.3@1
----

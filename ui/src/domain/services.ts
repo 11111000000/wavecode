@@ -71,7 +71,7 @@ export class AudioEngine extends Context.Tag('AudioEngine')<
      * continues uninterrupted.
      *
      * Companion of `setCps` — both are runtime state pushers.
-     * See `math/wavecode-mixer-live-update` for trade-offs.
+     * See decisions/wavecode-mixer-live-update.yaml for trade-offs.
      */
     readonly setLayerMix: (
       layerMix: ReadonlyArray<LayerMix>,
@@ -90,7 +90,7 @@ export class AudioEngine extends Context.Tag('AudioEngine')<
      * idempotent.
      *
      * Companion of `setLayerMix` — both are runtime state pushers.
-     * See `math/wavecode-step-grid-modes/packet.md` synthesis (d).
+     * See decisions/wavecode-step-grid-modes.yaml synthesis (d).
      */
     readonly setScore: (
       score: string,
@@ -102,6 +102,22 @@ export class AudioEngine extends Context.Tag('AudioEngine')<
      * Returns 0 when audio has never been started.
      */
     readonly getCycleProgress: () => Effect.Effect<number, never, never>;
+    /**
+     * Absolute playback position in scheduler cycles since the
+     * scheduler started (0 at start, grows monotonically while the
+     * pattern repeats).
+     *
+     * `getCycleProgress` answers "where are we INSIDE the current
+     * cycle" (a fraction 0..1) — that is what a step sequencer needs.
+     * A playhead on a timeline needs the opposite: the position on the
+     * pattern's own timeline, so it can be mapped onto the score's
+     * bars (and wrapped at the end of one repetition).
+     *
+     * Implementation prefers the scheduler's own cycle counter (it
+     * stays correct when the tempo changes) and falls back to
+     * `elapsed × cps` measured from the last successful eval.
+     */
+    readonly getCyclePosition: () => Effect.Effect<number, never, never>;
     /**
      * Return the haps currently sounding in the live scheduler. Used by
      * PianoKeyboard FOLLOW mode to highlight piano keys whose MIDI

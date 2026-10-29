@@ -3,8 +3,8 @@ schema: math-coding/3.3
 id: wavecode-visual-polish
 revision: 1
 state: draft
-body_sha: "sha256:836744b9378e177eb8891a53d36029a761a1c16cd20ce0296b6b3ecdf437ae06"
-yaml_sha: "sha256:836744b9378e177eb8891a53d36029a761a1c16cd20ce0296b6b3ecdf437ae06"
+body_sha: "sha256:e9daa4cc3da6cfe2e93376e9bbd294ba7c782f8cfd1825d041478e94431b7dc3"
+yaml_sha: "sha256:e9daa4cc3da6cfe2e93376e9bbd294ba7c782f8cfd1825d041478e94431b7dc3"
 
 intent: |
   Visual polish pass wavecode: empty/loading states (ScorePanel
@@ -13,20 +13,6 @@ intent: |
   wc-chip, mini-toolbar-btn), micro-interactions (press-shrink
   0.95ms spring на :active), контраст-проверка через axe-core.
 commitment: |
-  5 файлов:
-counterexample: |
-  The strongest objection to this decision is captured in the `antithesis` field above: (1) «Press-shrink мешает accessibility — double-tap zoom».
-antithesis: |
-  (1) «Press-shrink мешает accessibility — double-tap zoom».
-  Возражение: shrink = scale transform, НЕ zoom. Не влияет
-  на iOS double-tap-to-zoom (который контролируется viewport
-  meta + touch-action).
-  (2) «axe-core — слишком строгий, false positives». Возражение:
-  тестируем только critical/serious (не moderate/minor).
-  Moderate можно отложить.
-  (3) «44px touch target — портит desktop look». Возражение:
-  desktop hit area может быть больше visual size; padding
-  решает без увеличения visual.
   5 файлов:
 counterexample: |
   The strongest objection to this decision is captured in the `antithesis` field above: (1) «Press-shrink мешает accessibility — double-tap zoom».
@@ -66,7 +52,7 @@ obligations:
       The original v1.0 packet applied on the recorded date in its `witness` file; this migration preserves that evidence as an `attestations/<id>-evidence.json` file.
     acceptance:
       all:
-        - verifier: "attestation-store-has-subject"
+        - verifier: "mathc self-check"
           result: pass
 assumptions: []
 risk:
@@ -76,4 +62,3 @@ risk:
 relations:
   addresses:
     - wavecode-bootstrap-math-coding-3.3@1
----

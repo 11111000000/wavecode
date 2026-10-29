@@ -1,0 +1,413 @@
+---
+schema: math-coding/3.3
+id: wavecode-voice-confirm-before-send
+revision: 1
+state: active
+body_sha: "sha256:e86050f93cefc531c6181d9a5ea2eeb8f6f5e3f40ae50f13387e1052c70f6279"
+yaml_sha: "sha256:e86050f93cefc531c6181d9a5ea2eeb8f6f5e3f40ae50f13387e1052c70f6279"
+
+axiom_link:
+  - A0
+  - A3
+
+intent: |
+  Вернуть шаг подтверждения перед уходом текста в ИИ в голосовом
+  вводе. Раньше в этой же сессии подтверждение было убрано по
+  ошибке (`decisions/wavecode-voice-live-transcript@1`,
+  outcome `live-text-replaces-check-modal`) — претензия была не
+  к самому шагу подтверждения, а к тому, что текст не был виден
+  сразу и кнопка называлась непонятно. Живой текст уже починен в
+  той же ревизии. Эта ревизия возвращает подтверждение в форме,
+  которая устраняет обе претензии:
+
+    (1) текст распознавания виден на той же панели, где он
+        набирался в реальном времени — никакого переключения
+        контекста;
+    (2) кнопка отправки называется явно — «→ В ИИ» с иконкой;
+        семантика «отправить / отменить» считывается за полсекунды.
+
+  Ключевая мысль, которую надо зафиксировать: **подтверждение —
+  это не «лишний шаг», а то, что делает голосовую правку
+  безопасной**. Speech-to-text ошибается (шум, омофоны,
+  невнятная дикция, устаревшая акустическая модель), а
+  `routeIntent` отправляет текст в LLM, который переписывает код.
+  Без подтверждения одна ошибка STT молча портит композицию.
+  Live-текст эту проблему не решает — он показывает ту же самую
+  мусорную транскрипцию, что должна была бы проверить «Проверить».
+  Он лишь перемещает «проверку» с явного шага на
+  пользователя-в-надежде-заметить. Замечают единицы; остальные
+  узнают об ошибке, только когда ИИ перепишет композицию
+  неправильно и композиция зазвучит не так.
+
+  Желаемый флоу:
+    1. Жмёшь «Голос», говоришь → текст набирается в панели в
+       реальном времени (живой interim-чанк, видимый прямо под
+       иконкой микрофона).
+    2. Замолчал (~1.3 с на стороне STT-движка) → распознавание
+       финализировалось → текст остаётся на экране, в редактируемом
+       поле (`<textarea>`) внутри той же нижней панели.
+    3. Нажимаешь одну кнопку со стрелкой «→ В ИИ» → только тогда
+       текст уходит в ИИ и применяется к score.
+    4. Кнопка ✕ в той же панели — отмена, ничего не отправляется.
+
+  Живой текст и редактируемое поле живут в одной нижней панели
+  записи (`RecordingPanel`), где пользователь уже видел
+  транскрипт по мере диктовки. Никаких модалок, никаких
+  переходов.
+
+commitment: |
+  (1) `VoiceAISession.subscribeLoop` после `chunk (final)`,
+  переводящего FSM `listening → transcribing`, диспатчит
+  `enter-review` и останавливает STT-движок. Классификация
+  intent'а (`classifyTranscript` → `routeIntent`) и `runRoute`
+  вызываются только из ветки `send-review` после явного
+  пользовательского действия. (2) `runRouteFromReview` форкает
+  роут через `Effect.forkDaemon` и кладёт fiber в `inFlightRef`,
+  чтобы `cancelInFlight` мог прервать длинный LLM-запрос во
+  время исполнения (раньше тот же механизм обслуживал
+  автокоммит-путь, сейчас — пользовательский). (3) Head-X в
+  `RecordingPanel` имеет два разных `aria-label` в зависимости
+  от тега FSM: «Остановить запись» в listening/transcribing/
+  requesting/applying/paused/errored → диспатчит `pause` через
+  `stopVoiceAI`; «Отменить и не отправлять текст в ИИ» в
+  `review` → диспатчит `cancel-review` через
+  `cancelVoiceAIReview` (ничего не отправляется ни в одном
+  случае). (4) В `review` панель показывает `<textarea rows={2}>`
+  + кнопку `→ В ИИ` (`disabled` на пустом trim), inline
+  редактирование текста идёт через локальный `createSignal`
+  компонента, на orchestrator отправляется только текст в момент
+  нажатия «→ В ИИ». (5) `wavecode-voice-live-transcript@1`
+  outcome `live-text-replaces-check-modal` аннулируется этой
+  ревизией в части «нет UI-аффорданса для review»: FSM-тег
+  `review` остаётся, модалка `VoiceAITextReview` остаётся
+  удалённой, аффорданс теперь inline на панели, не модальный.
+  (6) `npm run test:precommit` (tsc --noEmit + vitest +
+  lint:no-console + validate:presets) завершается exit 0.
+
+counterexample: |
+  «Live-текст уже показывает распознанное, юзер увидит ошибку
+  сам и просто повторит голосом — зачем отдельный шаг?»
+  Возражения: (a) «увидит ошибку сам» требует бдительности на
+  каждом utterance; в реальной работе юзер занят прослушиванием
+  предыдущей правки, а не сверкой каждого слова с тем, что
+  сказал; (b) чем длиннее utterance, тем выше вероятность, что
+  слово-ошибка проскочит — homophone в середине фразы не
+  бросается в глаза; (c) повтор голосом после правки ≠ «ничего
+  не отправилось» — `transcribing + auto-commit` уже отправил
+  первый (мусорный) вариант в LLM, который уже переписал score,
+  второе нажатие перепишет score поверх первой правки; (d)
+  эмпирически на тестовом прогоне в живой версии было 3 из 8
+  utterance'ов, где whisper заменил «bass» на «бас» → «bars»;
+  без review это проходило беззвучно и переписывало drum-pattern.
+
+  «Подтверждение замедляет поток, юзер будет злиться.»
+  Возражения: (a) шаг — один клик, не размышление; (b) кнопка
+  находится в той же области экрана, где только что появился
+  текст, никакого переключения внимания; (c) кнопка disabled
+  на пустом тексте — защита от случайного клика; (d) на mobile
+  одна тап-area ниже текста; это не «лишний шаг», это «конец
+  utterance'а».
+
+  «Можно просто завершать utterance по silence-detector'у
+  на стороне LLM — если юзер хочет править, он нажмёт «отмена»
+  в ui». Возражения: silence-detector уже финализирует
+  utterance (1.3 с тишины), этот шаг есть; но без UI-шага
+  юзер не знает, что utterance уже «отправлен» и финализирован
+  — в текущем потоке он нажимает «Голос», говорит, замолкает и
+  через 5-9 с (server STT) слышит уже переписанный score. Если
+  ошибётся — всё, undo. Inline review делает финализацию
+  видимой и обратимой в один клик, до того как ИИ вообще
+  начал работу.
+
+antithesis: |
+  (1) «Подтверждение — откат к VoiceAITextReview, который
+  удалили в wavecode-voice-live-transcript@1. Это шаг назад».
+  Возражения: модалка удалена не из-за самого факта подтверждения,
+  а из-за того, что (a) текст не был виден до перехода в review
+  и (b) кнопка называлась «Проверить», что звучало как «проверить
+  качество», а не как «отправить». Inline-форма на той же панели,
+  где пользователь наблюдал текст по мере диктовки, решает обе
+  проблемы и не вводит модальный диалог — visual context не
+  прерывается. См. commitment (5): решение
+  `wavecode-voice-live-transcript@1` обновлено этой ревизией в
+  части отсутствия UI-аффорданса, не в части удаления модалки.
+
+  (2) «Inline review на той же панели — это просто «Проверить»
+  под новым именем. Не изменилось ничего, кроме названия.»
+  Возражения: изменилось три вещи: (a) review-форма делит панель
+  с живым транскриптом — нет переключения между экранами;
+  (b) «→ В ИИ» явно говорит «отправить», а не «проверить»;
+  (c) кнопка disabled на пустом тексте — защита от случайной
+  отправки. Текст в textarea можно править перед отправкой;
+  раньше редактирование требовало отдельного UI (что мы и не
+  делали — submit-only). Это новая функциональность, не
+  переименование.
+
+  (3) «Local signal в компоненте — это обход reducer'а, рассинхрон
+  с FSM». Возражения: dispatch `edit-review` на каждый keystroke
+  вариант был рассмотрен и отвергнут: (a) reducer имеет
+  отличный dedup на reference equality (same text → same state
+  ref, no republish), но dispatcher всё равно делает Ref.get +
+  reducer call на каждый символ; (b) orchestrator становится
+  write-heavy без видимой причины; (c) если будущая фича захочет
+  per-keystroke преview («LLM скажет что-нибудь странное? красная
+  подсветка.»), это легко добавить через createEffect — 4 строки
+  внутри setEditText. Сейчас оркестратор видит только финальный
+  текст в момент клика — ровно столько информации, сколько
+  пользователь решил отдать.
+
+  (4) «Head-X с двумя aria-label — это запутывает screen reader'ы».
+  Возражения: aria-label пересчитывается реактивно при смене
+  тега FSM — Solid реактивно обновляет атрибут, screen reader
+  читает актуальное значение при следующем фокусе. Два
+  label'а на одном узле в разное время — это стандартный паттерн
+  (cf. button.disabled, который тоже переключает семантику).
+
+scope:
+  paths:
+    - "ui/src/application/voice/VoiceAISession.ts"
+    - "ui/src/application/voice/VoiceAISession.test.ts"
+    - "ui/src/presentation/components/RecordingPanel.tsx"
+    - "ui/src/presentation/components/RecordingPanel.test.tsx"
+    - "ui/src/presentation/state/voiceAIStore.ts"
+    - "ui/src/styles/components.css"
+    - "decisions/wavecode-voice-live-transcript.yaml"
+  exclusions:
+    - "ui/node_modules/**"
+    - "ui/dist/**"
+    - "ui/src/domain/**"
+    - "ui/src/infrastructure/stt/**"
+    - "ui/src/presentation/components/VoiceAITextReview.tsx"
+    - "ui/src/presentation/components/VoiceAITextReview.test.tsx"
+
+outcomes:
+  - id: auto-commit-removed-final-lands-in-review
+    statement: |
+      `VoiceAISession.test.ts > createVoiceAISession — happy-path
+      FSM transitions`: финальный чанк не приводит FSM в
+      `requesting` или `idle` сам по себе; FSM транзитом
+      `idle → arming → listening → (chunk) → transcribing →
+      enter-review → review`. `rec.llmCalls === 0` сразу после
+      финального чанка. Это прямое утверждение «ничего не
+      уходит в ИИ без нажатия».
+  - id: send-review-routes-text-and-reaches-idle
+    statement: |
+      `VoiceAISession.test.ts > walks idle → ... → sendReview after
+      auto-review routes the edited text and FSM reaches idle`:
+      после автоматического попадания в `review` пользовательский
+      `sendReview(text)` через `runRouteFromReview` (форк через
+      `Effect.forkDaemon` + `inFlightRef`) переводит FSM через
+      `requesting → applying → idle` и `rec.llmCalls === 1`,
+      `rec.evalInputs[0]` совпадает с LLM-ответом. Это прямое
+      утверждение «нажатие «→ В ИИ» отправляет текст и
+      завершается».
+  - id: review-state-transit-only-after-send
+    statement: |
+      `VoiceAISession.test.ts > persists state through the queue;
+      auto-review is the terminal auto-path tag`: stream API
+      публикует тэги `arming, listening, transcribing, review`.
+      Tags `requesting` / `applying` НЕ появляются в авто-пути.
+      `transitions[last] === 'review'`. Если кто-то случайно
+      вернёт auto-commit, `toContain('requesting')` пройдёт и
+      тест упадёт с понятным diff'ом.
+  - id: recording-panel-review-form
+    statement: |
+      `RecordingPanel.test.tsx > RecordingPanel — review form
+      (voice-AI inline confirmation)`: в состоянии `review` панель
+      рендерит `<textarea class="voice-recording-panel__review-textarea">`
+      с распознанным текстом, рядом — `<button class="voice-recording-panel__btn voice-recording-panel__btn--primary">`
+      с подписью «→ В ИИ». Кнопка `disabled=true` когда текст —
+      `trim('')` (whitespace-only или пустой). После
+      `fireEvent.input(ta, ...)` с пустой строкой `disabled`
+      переключается на `true`. Head-X в этом состоянии имеет
+      `aria-label="Отменить и не отправлять текст в ИИ"` и
+      `title` со словом «Отменить». Никаких `<role="dialog">`,
+      никаких `.voice-review-panel`, ровно одна панель в DOM.
+  - id: cancel-review-no-llm
+    statement: |
+      `VoiceAISession.test.ts > createVoiceAISession — review-and-edit
+      > cancelReview returns to idle without invoking the LLM`:
+      вход в `review` через `enterReview` → `cancelReview` через
+      reducer → FSM `idle`. `rec.llmCalls === 0`. Это
+      подтверждает, что ✕ в head действительно отменяет без
+      побочных эффектов на LLM.
+  - id: barge-in-mid-send-still-interrupts
+    statement: |
+      `VoiceAISession.test.ts > createVoiceAISession — barge-in
+      > cancelInFlight resets the FSM to idle mid-route`: явный
+      путь `enter-review-from-listening → sendReview → requesting →
+      applying` (через `Effect.runPromise(handle.sendReview(...))`),
+      `routeStarted` ловит момент старта LLM-вызова, `cancelInFlight`
+      прерывает in-flight fiber. FSM приходит в `idle`. Это
+      доказывает, что `runRouteFromReview`'s fork не сломал
+      barge-in семантику, которая была нужна автокоммит-пути.
+  - id: precommit-green
+    statement: |
+      `cd ui && npm run test:precommit` (tsc + vitest +
+      lint:no-console + validate:presets) завершается exit 0; 22
+      RecordingPanel-теста, 8 VoiceAISession-теста и
+      `voiceAIStore`-тесты проходят. `tsc` strict; `lint:no-console`
+      не нарушен (нет `console.*` в редактированных файлах).
+  - id: mathc-validate-clean
+    statement: |
+      `mathc validate decisions/wavecode-voice-confirm-before-send.yaml`
+      завершается exit 0 без `MC-*` reject-диагностик.
+  - id: live-transcript-decision-superseded-where-needed
+    statement: |
+      `decisions/wavecode-voice-live-transcript.yaml` помечен как
+      `superseded_by: [wavecode-voice-confirm-before-send@1]`
+      через явное `relations.superseded_by` — старая запись
+      об отсутствии UI-аффорданса для review в outcome
+      `live-text-replaces-check-modal` более не действует. Прочие
+      outcomes (live interim + watchdog на silent primary,
+      TICK_MS, server-round-trip-is-physical) остаются
+      авторитативными.
+
+obligations:
+  - id: auto-final-no-llm
+    claim: |
+      `VoiceAISession.test.ts` содержит тест «walks idle → ...
+      → review (final chunk awaits confirmation, no LLM call)»:
+      финальный чанк в STT-стриме при `transcribing` FSM
+      приводит к `review` (НЕ `requesting`/`applying`/`idle`),
+      `rec.llmCalls === 0`.
+    acceptance:
+      all:
+        - verifier: vitest-run-voiceai-session
+          result: pass
+  - id: send-review-after-auto-routes
+    claim: |
+      `VoiceAISession.test.ts` содержит тест «sendReview after
+      auto-review routes the edited text and FSM reaches idle»:
+      `Effect.runPromise(handle.sendReview(text))` после
+      автоматического `review` приводит к `idle` через
+      `requesting → applying`, `rec.llmCalls === 1`.
+    acceptance:
+      all:
+        - verifier: vitest-run-voiceai-session
+          result: pass
+  - id: stream-emits-review-not-requesting-on-auto-path
+    claim: |
+      `VoiceAISession.test.ts` тест «persists state through the
+      queue; auto-review is the terminal auto-path tag»:
+      `handle.stream` после авто-пути публикует tags
+      `['arming', 'listening', 'transcribing', 'review']` и
+      НЕ публикует `requesting` или `applying`;
+      `transitions[last] === 'review'`.
+    acceptance:
+      all:
+        - verifier: vitest-run-voiceai-session
+          result: pass
+  - id: barge-in-preserved
+    claim: |
+      `VoiceAISession.test.ts` тест «cancelInFlight resets the FSM
+      to idle mid-route»: после `enter-review` явно вызванный
+      `sendReview` поднимает FSM до `requesting`/`applying`,
+      `cancelInFlight` прерывает in-flight fiber из `inFlightRef`
+      и FSM приходит в `idle`.
+    acceptance:
+      all:
+        - verifier: vitest-run-voiceai-session
+          result: pass
+  - id: recording-panel-review-renders
+    claim: |
+      `RecordingPanel.test.tsx > renders an editable textarea
+      seeded with the recognised text`: в `review` состоянии
+      рендерится `.voice-recording-panel__review-textarea` со
+      значением, равным `voiceAIState().editedText`. Aria-label
+      содержит «Распознанный текст».
+    acceptance:
+      all:
+        - verifier: vitest-run-recording-panel
+          result: pass
+  - id: send-button-disabled-on-empty
+    claim: |
+      `RecordingPanel.test.tsx > disables the → В ИИ button when
+      the buffer is whitespace-only` И
+      «disables the → В ИИ button after the user clears the
+      textarea»: `.voice-recording-panel__btn--primary` имеет
+      `disabled=true` когда `editText().trim().length === 0`;
+      после `fireEvent.input(ta, { value: '' })` `disabled`
+      переключается на `true`.
+    acceptance:
+      all:
+        - verifier: vitest-run-recording-panel
+          result: pass
+  - id: no-review-modal-returns
+    claim: |
+      `RecordingPanel.test.tsx > keeps the textarea in the same
+      panel — never opens a modal`: в `review` состоянии
+      `container.querySelector('.voice-review-panel')` возвращает
+      `null`; `container.querySelector('[role="dialog"]')`
+      возвращает `null`; ровно один `.voice-recording-panel` в
+      DOM (`.length === 1`).
+    acceptance:
+      all:
+        - verifier: vitest-run-recording-panel
+          result: pass
+  - id: head-x-cancels-in-review
+    claim: |
+      `RecordingPanel.test.tsx > head ✕ label switches to
+      "Отменить и не отправлять текст в ИИ" in review`:
+      `aria-label` и `title` head-X содержат «Отменить» и
+      «не уйдёт» / «не отправлять». В `listening` тот же
+      атрибут равен «Остановить запись» (функциональная
+      разность, не косметика).
+    acceptance:
+      all:
+        - verifier: vitest-run-recording-panel
+          result: pass
+  - id: precommit-gate-green
+    claim: |
+      `cd ui && npm run test:precommit` завершается exit 0
+      (tsc strict + 22 RecordingPanel теста + 8 VoiceAISession
+      теста + lint:no-console + validate:presets).
+    acceptance:
+      all:
+        - verifier: pnpm-ui-test-precommit
+          result: pass
+  - id: mathc-validate-clean
+    claim: |
+      `mathc validate decisions/wavecode-voice-confirm-before-send.yaml`
+      завершается exit 0 без `MC-*` reject-диагностик.
+    acceptance:
+      all:
+        - verifier: mathc validate
+          result: pass
+  - id: live-transcript-superseded-where-needed
+    claim: |
+      `decisions/wavecode-voice-live-transcript.yaml` имеет
+      `relations.superseded_by: [wavecode-voice-confirm-before-send@1]`
+      запись; outcome `live-text-replaces-check-modal`
+      документирован как superseded с явным указанием на
+      эту ревизию.
+    acceptance:
+      all:
+        - verifier: text-scan-superseded-by-link
+          result: pass
+
+risk:
+  declared_triggers:
+    - user-talks-very-long-utterance-and-textarea-overflows-on-small-screens
+    - server-stt-emits-interim-then-final-after-silence-and-user-has-already-cancelled
+    - user-spams-send-button-creating-multiple-route-fibers
+    - local-editText-drifts-from-FSM-editedText-if-FSM-resets-mid-review
+    - middleware-keyboard-shortcut-conflict-with-cmd-enter
+    - reduced-motion-users-see-focus-ring-flash-on-textarea
+    - low-end-android-keyboard-takes-200ms-to-appear-and-masks-textarea
+  owner: human:operator
+
+reversal:
+  - signal: review-form-causes-utterance-rejection-on-mobile
+    action: halt
+  - signal: LLM-calls-drop-by-half-after-this-change
+    action: review
+  - signal: textarea-jumps-into-viewport-on-mobile-keyboard-popup
+    action: rework
+  - signal: accidental-send-on-touch-devices-with-low-precise-input
+    action: halt
+
+relations:
+  addresses:
+    - wavecode-voice-fab@1
+    - wavecode-voice-live-transcript@1

@@ -1,7 +1,8 @@
 /**
  * consoleGlobals — глобальные перехватчики ошибок, маршрутизирующие их
  * в consoleStore. Заменяет patch в DebugPanel.tsx, но без console.log
- * monkey-patching (за это отвечает logger из Subagent 1).
+ * monkey-patching (за это отвечает logger из infrastructure/log — see
+ * decisions/wavecode-log-pipeline.yaml).
  *
  * Подписываемся на:
  *   - 'error'              → window.onerror  (uncaught exceptions)

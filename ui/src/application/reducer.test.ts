@@ -128,26 +128,26 @@ describe('reduceAppEvent', () => {
     expect(state.history).toEqual(['a']);
   });
 
-  it('commitHistoryCheckpoint merges with top by dropping the top entry', () => {
+  it('coalesceLatestHistoryEntry merges with top by dropping the top entry', () => {
     const start: AppState = {
       ...baseState(),
       score: 'd',
       history: ['a', 'b', 'c'],
     };
-    const next = reduceAppEvent(start, { type: 'commitHistoryCheckpoint' });
+    const next = reduceAppEvent(start, { type: 'coalesceLatestHistoryEntry' });
     expect(next.history).toEqual(['a', 'b']);
     expect(next.score).toBe('d');
   });
 
-  it('commitHistoryCheckpoint is a no-op when history has fewer than two entries', () => {
+  it('coalesceLatestHistoryEntry is a no-op when history has fewer than two entries', () => {
     const start: AppState = { ...baseState(), score: 'b', history: ['a'] };
-    const next = reduceAppEvent(start, { type: 'commitHistoryCheckpoint' });
+    const next = reduceAppEvent(start, { type: 'coalesceLatestHistoryEntry' });
     expect(next).toBe(start);
   });
 
-  it('commitHistoryCheckpoint is a no-op when history is empty', () => {
+  it('coalesceLatestHistoryEntry is a no-op when history is empty', () => {
     const start: AppState = { ...baseState(), score: 'a' };
-    const next = reduceAppEvent(start, { type: 'commitHistoryCheckpoint' });
+    const next = reduceAppEvent(start, { type: 'coalesceLatestHistoryEntry' });
     expect(next).toBe(start);
   });
 

@@ -5,7 +5,7 @@ import { installTypingTracker } from './presentation/state/editorTypingTracker';
 import { evalScore, stopAudio } from './presentation/state/audioActions';
 import { isGridEmptyState } from './presentation/state/gridState';
 import { syncGridFromScore } from './presentation/components/StepGrid';
-import { getPreset, saveCustomPreset, deleteCustomPreset } from './presentation/state/presetsStore';
+import { getPreset, saveCustomPreset, deleteCustomPreset, renameCustomPreset } from './presentation/state/presetsStore';
 import { getSelectedPresetId, setSelectedPresetPersist } from './presentation/state/selectedPreset';
 import { useBootstrap } from './presentation/state/useBootstrap';
 import { useKeyboardShortcuts } from './presentation/state/useKeyboardShortcuts';
@@ -16,13 +16,32 @@ import { installConsoleGlobals } from './presentation/components/consoleGlobals'
 import { AppShellView } from './presentation/components/app/AppShellView';
 import { Admin } from './presentation/pages/Admin';
 import { Landing } from './presentation/components/landing/Landing';
+import { WelcomeTour } from './presentation/components/tour/WelcomeTour';
+import { DisclaimerGate } from './presentation/components/DisclaimerGate';
+import { useConsentGate } from './presentation/state/consentGate';
+import { VoiceFAB } from './presentation/components/VoiceFAB';
+import { initVoiceAI } from './presentation/state/voiceAIStore';
+import { initWhistle } from './presentation/state/whistleStore';
+import { selectSttLayer } from './infrastructure/stt/selectSttLayer';
+import { AppLayer } from './infrastructure/composition';
 
 export function App(): JSX.Element {
   const route = useHashRoute();
+  const gate = useConsentGate();
   return (<>
-    <Show when={route() === 'landing'}><Landing /></Show>
-    <Show when={route() === 'app'}><AppShell /></Show>
-    <Show when={route() === 'admin'}><Admin /></Show>
+    {/* `display: contents` so this wrapper adds no box of its own — it
+        exists only to carry `inert` while the legal gate is up, which is
+        what stops clicks and Tab from reaching the app behind the
+        overlay. See decisions/wavecode-disclaimer-gate.yaml. */}
+    <div class="app-root" inert={gate.visible() ? true : undefined}>
+      <Show when={route() === 'landing'}><Landing /></Show>
+      <Show when={route() === 'app'}><AppShell /></Show>
+      <Show when={route() === 'admin'}><Admin /></Show>
+    </div>
+    <DisclaimerGate gate={gate} />
+    {/* The tour must not start under the gate: you cannot be onboarded
+        into an app you are not allowed to touch yet. */}
+    <WelcomeTour blocked={gate.pending()} />
   </>);
 }
 
@@ -35,6 +54,13 @@ function AppShell(): JSX.Element {
   const [mobileMode, setMobileModeSignal] = createSignal<MobileMode>(getMobileMode());
   const presetId = getSelectedPresetId;
 
+  // Web Speech where the browser really has it (fast cloud path),
+  // server Whisper everywhere else — see infrastructure/stt/
+  // selectSttLayer.ts for the decision table and the
+  // VITE_STT_BACKEND override.
+  initVoiceAI({ sttLayer: selectSttLayer() });
+  initWhistle({ audioLayer: AppLayer });
+
   const undo = (): void => { void stopAudio(); dispatch({ type: 'undoScore' }); };
   const redo = (): void => { void stopAudio(); dispatch({ type: 'redoScore' }); };
 
@@ -42,9 +68,23 @@ function AppShell(): JSX.Element {
     const id = presetId();
     if (!id.startsWith('custom-')) return;
     deleteCustomPreset(id);
+    // appStore.activePresetId — гонка с useAutoSave (500ms debounce):
+    // если релоад случится до flush, IDB сохранит старый custom-id
+    // → после релоада dropdown показывает мёртвый id, а играет
+    // содержимое 'creep' (см. decisions/fix-new-composition-flow.yaml).
+    dispatch({ type: 'switchPreset', id: 'creep' });
     setSelectedPresetPersist('creep');
     const fallback = getPreset('creep');
     if (fallback) dispatch({ type: 'replaceScore', text: fallback.score });
+  };
+  const onRenamePreset = (): void => {
+    const id = presetId();
+    if (!id.startsWith('custom-')) return;
+    const current = getPreset(id);
+    if (!current) return;
+    const raw = window.prompt('Переименовать пресет', current.name);
+    if (raw === null) return;
+    renameCustomPreset(id, raw);
   };
   const onToggleLayout = (): void => { setLayout(getLayout() === 'ai-primary' ? 'code-primary' : 'ai-primary'); };
   const chooseMobileMode = (m: MobileMode): void => { setMobileMode(m); setMobileModeSignal(m); };
@@ -83,16 +123,18 @@ function AppShell(): JSX.Element {
     }
   });
 
-  return (
+  return (<>
     <AppShellView
       audioRunning={audio.audioRunning} audioStarting={audioStarting} ctxState={audio.ctxState}
       presetId={presetId} mobileMode={mobileMode} showSavePreset={showSavePreset} newPresetName={newPresetName}
       chooseMobileMode={chooseMobileMode} onSavePreset={() => setShowSavePreset((v) => !v)}
       onRollback={undo} onRedo={redo} onNew={onNew}
-      onDeletePreset={onDeletePreset} onResetAll={onResetAll} onToggleLayout={onToggleLayout} onOpenAdmin={openAdmin}
+      onDeletePreset={onDeletePreset} onRenamePreset={onRenamePreset} onResetAll={onResetAll}
+      onToggleLayout={onToggleLayout} onOpenAdmin={openAdmin}
       onLoadPreset={onLoadPreset} onSetShowSavePreset={setShowSavePreset} onSetNewPresetName={setNewPresetName}
       onSaveCustomPreset={onSaveCustomPreset}
       onPlay={() => { setAudioStarting(true); void evalScore(); }} onStop={() => { void stopAudio(); }}
     />
-  );
+    <VoiceFAB />
+  </>);
 }

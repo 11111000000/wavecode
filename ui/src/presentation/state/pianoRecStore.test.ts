@@ -234,7 +234,10 @@ describe('pianoRecStore — commitSnippet (wavecode-piano-modes-and-gain)', () =
 
   it('wavecode-piano-sample-picker: emits s("<sample>") for sample literals', async () => {
     const s = await importStore();
-    for (const sample of ['piano', 'casio', 'guitar', 'synth'] as const) {
+    // The names must be REAL: 'casio' / 'guitar' / 'synth' never
+    // existed in the sound map, so a snippet with them killed the
+    // whole pattern at trigger time.
+    for (const sample of ['piano', 'synth_bass', 'synth_pad', 'synth_lead'] as const) {
       const out = s.commitSnippet(
         [{ midi: 60, startMs: 0, endMs: 100 }],
         sample,

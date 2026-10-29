@@ -3,8 +3,8 @@ schema: math-coding/3.3
 id: wavecode-perf-budget-fixes
 revision: 1
 state: draft
-body_sha: "sha256:4df9c72f16b975d2046d7a03eba7637065732b97f2dc00b13912e24b2b0fe249"
-yaml_sha: "sha256:4df9c72f16b975d2046d7a03eba7637065732b97f2dc00b13912e24b2b0fe249"
+body_sha: "sha256:3b1e3bc314dab874685361de9c83d1f8de84b055b80f3744f695c8b95c109aac"
+yaml_sha: "sha256:3b1e3bc314dab874685361de9c83d1f8de84b055b80f3744f695c8b95c109aac"
 
 intent: |
   Performance budget wavecode: 1.4MB JS bundle (CM + strudel + effect)
@@ -16,20 +16,6 @@ intent: |
   preload). Плюс audit: EditorView dispose на ScorePanel unmount,
   createRoot dispose на HMR.
 commitment: |
-  4 файла модифицировать:
-counterexample: |
-  The strongest objection to this decision is captured in the `antithesis` field above: (1) «Critical CSS inline — premature без metrics». Возражение:
-antithesis: |
-  (1) «Critical CSS inline — premature без metrics». Возражение:
-  Lighthouse покажет где именно FCP стоит; если не inline —
-  fix не нужен. Решение: сначала lighthouse baseline, ПОТОМ
-  inline если метрика красная.
-  (2) «Lazy CM — UX cost (latency при первом score)». Возражение:
-  latency < 200ms на fast 3G, юзер за это время не успеет
-  заметить; alternative — show skeleton 100ms (T4 visual).
-  (3) «createRoot dispose — overengineering». Возражение:
-  HMR leak в dev, в prod — норм. Conditional `if (import.meta.hot)`
-  = 1 строка, cost = 0.
   4 файла модифицировать:
 counterexample: |
   The strongest objection to this decision is captured in the `antithesis` field above: (1) «Critical CSS inline — premature без metrics». Возражение:
@@ -65,7 +51,7 @@ obligations:
       The original v1.0 packet applied on the recorded date in its `witness` file; this migration preserves that evidence as an `attestations/<id>-evidence.json` file.
     acceptance:
       all:
-        - verifier: "attestation-store-has-subject"
+        - verifier: "mathc self-check"
           result: pass
 assumptions: []
 risk:
@@ -75,4 +61,3 @@ risk:
 relations:
   addresses:
     - wavecode-bootstrap-math-coding-3.3@1
----

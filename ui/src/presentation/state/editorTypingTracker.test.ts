@@ -28,7 +28,7 @@ describe('editorTypingTracker', () => {
         if (timer !== undefined) clearTimeout(timer);
         timer = setTimeout(() => {
           timer = undefined;
-          dispatch({ type: 'commitHistoryCheckpoint' });
+          dispatch({ type: 'coalesceLatestHistoryEntry' });
         }, DEBOUNCE);
       });
 
@@ -42,7 +42,7 @@ describe('editorTypingTracker', () => {
 
     await wait(150);
     expect(dispatch).toHaveBeenCalledTimes(1);
-    expect(dispatch).toHaveBeenCalledWith({ type: 'commitHistoryCheckpoint' });
+    expect(dispatch).toHaveBeenCalledWith({ type: 'coalesceLatestHistoryEntry' });
   });
 
   it('separate bursts separated by silence produce separate dispatches', async () => {
@@ -60,7 +60,7 @@ describe('editorTypingTracker', () => {
         if (timer !== undefined) clearTimeout(timer);
         timer = setTimeout(() => {
           timer = undefined;
-          dispatch({ type: 'commitHistoryCheckpoint' });
+          dispatch({ type: 'coalesceLatestHistoryEntry' });
         }, DEBOUNCE);
       });
 

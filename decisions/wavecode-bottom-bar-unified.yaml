@@ -3,8 +3,8 @@ schema: math-coding/3.3
 id: wavecode-bottom-bar-unified
 revision: 1
 state: active
-body_sha: "sha256:cc9986bead42bffb90c63d991b267b3d9f08f3c4f60cd4780de246cf92290971"
-yaml_sha: "sha256:cc9986bead42bffb90c63d991b267b3d9f08f3c4f60cd4780de246cf92290971"
+body_sha: "sha256:7a8a438d42550a678cbedf293a482fc226b3b5afb7eecba7ff5b77b97c291064"
+yaml_sha: "sha256:7a8a438d42550a678cbedf293a482fc226b3b5afb7eecba7ff5b77b97c291064"
 
 intent: |
   BottomToolstrip (отдельный fixed-bar над TabBar с 3 кнопками
@@ -27,32 +27,6 @@ intent: |
   overflow-scroll не вводим — юзер сказал «в бар», а не «в
   overflow-меню».
 commitment: |
-  TabBar: 6 табов (Score, Step, Piano, Mixer, AI, Status).
-  setTab расширен: step→openKindSheet('step','full'),
-  piano→openKindSheet('piano','full'). TabId:
-  'score' | 'step' | 'piano' | 'mixer' | 'chat' | 'status'.
-  BottomToolstrip.tsx удалён. App.tsx не рендерит toolstrip.
-  CSS: блок `.wc-toolstrip*` удалён из components.css. midi
-  импорт/экспорт остаётся в ScorePanel (нижняя MidiIOButtons).
-counterexample: |
-  The strongest objection to this decision is captured in the `antithesis` field above: (1) «Оставить двухрядный (tabbar + toolstrip) — починить
-antithesis: |
-  (1) «Оставить двухрядный (tabbar + toolstrip) — починить
-  z-index/safe-bottom и иконки». Возражение: даже если
-  починить видимость, иконки 16px на тёмном фоне — это
-  discoverability-провал. Двухрядный макет уже отвергнут
-  юзером («не нахожу»).
-  (2) «Вынести step/piano/mixer в overflow-меню/гамбургер».
-  Возражение: 6 функций в один ряд — нормальная плотность
-  для мобильного bottom-nav (iOS/Android Material Design
-  допускают 3-5; 6 на грани но работает). Гамбургер прячет
-  фичи, юзер их уже потерял.
-  (3) «Mixer убрать — он редкий». Возражение: Mixer критичен
-  для M/S/gain; убирать — регресс. Все 6 в баре.
-  (4) «MIDI тоже в бар (7 табов)». Возражение: 7 табов
-  не влезают в 360px без скролла; MIDI — file I/O, естественнее
-  в ScorePanel как сейчас. Юзер спросил «где midi» — нашёл
-  бы в score-табе без проблем.
   TabBar: 6 табов (Score, Step, Piano, Mixer, AI, Status).
   setTab расширен: step→openKindSheet('step','full'),
   piano→openKindSheet('piano','full'). TabId:
@@ -103,7 +77,7 @@ obligations:
       The original v1.0 packet applied on the recorded date in its `witness` file; this migration preserves that evidence as an `attestations/<id>-evidence.json` file.
     acceptance:
       all:
-        - verifier: "attestation-store-has-subject"
+        - verifier: "mathc self-check"
           result: pass
 assumptions: []
 risk:
@@ -113,4 +87,3 @@ risk:
 relations:
   addresses:
     - wavecode-bootstrap-math-coding-3.3@1
----

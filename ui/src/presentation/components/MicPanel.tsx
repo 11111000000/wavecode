@@ -18,6 +18,8 @@ import {
   type MicSlot,
 } from '../state/micStore';
 import { evalScore, stopAudio } from '../state/audioActions';
+import { micSnippetFromBuffers } from '~/domain/audio/micSnippet';
+import { MELODIC_SOUNDS, DRUMS_ONLY_ID } from '~/domain/sounds';
 import { PianoRollPreview } from './PianoRollPreview';
 import { MicMeter } from './MicMeter';
 
@@ -32,17 +34,22 @@ import { MicMeter } from './MicMeter';
  *   row 4 — RMS meter (MicMeter) — bar + onset spikes + Hz/RMS read-out
  *
  * Empty state (when nothing's been recorded AND mic isn't listening):
- * a single centered "Tap START and sing / tap / hum." block with a
- * demo button + a toggleable "Learn more" paragraph. The user can
- * audition what the feature does without first figuring out how to
- * grant mic permission.
+ * a single centered "Tap START and sing / tap / hum." hint with a
+ * toggleable "Learn more" paragraph. No demo button — wavecode already
+ * has a whole library of ready presets on the landing screen; the mic
+ * is a pure INPUT control, not a showcase.
+ *
+ * The slot selector has exactly two targets: append to the end of the
+ * current `stack(...)`, or insert at the editor cursor. "Replace all"
+ * was removed — overwriting the whole score is too destructive for a
+ * one-tap control (the user can always delete text by hand).
  *
  * What lives here vs. in the store:
  *   - The CTA handlers (start/stop, apply, clear, preview) are thin
  *     one-liners delegating to the store. No Web Audio here.
- *   - All reactive reads (`micListening`, `previewPillPayload`, ...)
- *     come from the adapter, not the underlying `micStore`. The
- *     adapter is the contract that survives the WS-A domain merge.
+ *   - The Preview toggle and "Add to score" BOTH build their snippet
+ *     through `micSnippetFromBuffers` (domain) so what you hear in
+ *     preview is byte-for-byte what lands in the editor.
  *
  * Error pill: when `getUserMedia` rejects, we surface the raw error
  * string + a per-browser link to the mic-permission page. Same logic
@@ -51,14 +58,28 @@ import { MicMeter } from './MicMeter';
  * on first try.
  */
 
+/**
+ * The instrument options of the mic panel.
+ *
+ * The list comes from the sound catalogue (`domain/sounds.ts`) — the
+ * set of names superdough REALLY has. The old hard-coded trio
+ * ('piano' / 'synth' / 'drums') was mostly fiction: `synth` and
+ * `drums` were never registered, so choosing them committed a snippet
+ * that threw `sound synth not found!` on playback. `piano` was
+ * registered only as `piano_a4` (a single sample), so it played two
+ * octaves above the written note.
+ *
+ * `drums` stays as the last entry, but it is the PSEUDO instrument
+ * "drums only": the note layer is dropped and only the tapped hits
+ * are committed.
+ */
 const INSTRUMENTS: ReadonlyArray<{
   readonly id: string;
   readonly label: string;
   readonly glyph: string;
 }> = [
-  { id: 'piano',  label: 'Piano',     glyph: '🎹' },
-  { id: 'synth',  label: 'Synth',     glyph: '🎚' },
-  { id: 'drums',  label: 'Drum kit',  glyph: '🥁' },
+  ...MELODIC_SOUNDS.map((s) => ({ id: s.id, label: s.label, glyph: s.glyph })),
+  { id: DRUMS_ONLY_ID, label: 'Только барабаны', glyph: '🥁' },
 ];
 
 const SLOTS: ReadonlyArray<{
@@ -72,22 +93,11 @@ const SLOTS: ReadonlyArray<{
     ariaLabel: 'Append the recorded snippet to the end of the existing stack',
   },
   {
-    id: 'replace-score',
-    label: 'Replace all',
-    ariaLabel: 'Replace the whole score with the recorded snippet (Ctrl+Z to undo)',
-  },
-  {
     id: 'at-cursor',
     label: 'At cursor',
     ariaLabel: 'Insert the recorded snippet at the cursor position in the editor',
   },
 ];
-
-/** Short Strudel snippet for the demo button. We pick a 4-on-the-
- *  floor kick because (a) it works without a long warm-up, (b) it's
- *  audible on the default sample bank (drums_bd), and (c) it mirrors
- *  what the user will hear when they actually tap a real mic. */
-const DEMO_SNIPPET = 's("drums_bd*4").gain(0.6)';
 
 /** Per-browser link to the mic-permission page. null = no public URL
  *  (Safari), in which case the UI shows "разрешите в настройках
@@ -129,25 +139,19 @@ export function MicPanel(): JSX.Element {
     else startMic();
   };
 
-  const onPlayDemo = (): void => {
-    void evalScore(DEMO_SNIPPET);
-  };
-
   /** Preview toggle: when ON, the recorded snippet plays through the
-   *  running audio engine; when OFF, the engine stops. The snippet
-   *  itself isn't rebuilt on buffer updates (that's a follow-up
-   *  feature) — the user clicks again to replay after a new take. */
+   *  running audio engine; when OFF, the engine stops. The snippet is
+   *  built via the same domain function `applyToScore` uses, so the
+   *  preview is exactly what would land in the editor. */
   const onTogglePreview = (): void => {
     const next = !previewing();
     setPreviewing(next);
     if (next) {
-      // Build a minimal snippet inline. We don't dispatch — this
-      // bypasses the editor entirely and only plays through the
-      // audio engine (so the user can hear what they're about to
-      // apply without committing it to the score).
-      const notes = micPreviewNotes();
-      const transients = micTransients();
-      const snippet = buildDemoSnippet(notes, transients, micInstrument());
+      const snippet = micSnippetFromBuffers(
+        micPreviewNotes(),
+        micTransients(),
+        { instrument: micInstrument() },
+      );
       if (snippet !== null) {
         void evalScore(snippet);
       }
@@ -170,6 +174,29 @@ export function MicPanel(): JSX.Element {
       data-listening={micListening()}
       data-empty={isEmpty() ? 'true' : 'false'}
     >
+      {/* Permission-denied banner — surfaced ABOVE the controls so
+          the user understands why START is a no-op. Previously lived
+          as a small inline pill at the bottom of the panel; users
+          hit it after pressing START, missed the pill, and gave up.
+          Now it's the first thing they see when getUserMedia rejects
+          the request (browser shows its own prompt only on a fresh
+          gesture; on repeat sessions with remembered-denied state
+          the panel needs to spell out the recovery path). */}
+      <Show when={micError() !== null && isMicPermissionError()}>
+        <div class="mic-permission-banner" role="alert">
+          <span class="mic-permission-banner__icon" aria-hidden="true">🎤</span>
+          <div class="mic-permission-banner__body">
+            <p class="mic-permission-banner__title">Браузер блокирует микрофон</p>
+            <p class="mic-permission-banner__msg">{micError()}</p>
+            <Show when={micPermissionUrl() === null} fallback={<PermissionHint />}>
+              <p class="mic-permission-banner__hint">
+                Откройте настройки браузера и разрешите доступ к микрофону для этого сайта.
+              </p>
+            </Show>
+          </div>
+        </div>
+      </Show>
+
       {/* Empty-state hint — a compact banner, not a full replacement.
           The controls below are ALWAYS visible so the user always has
           a way to start recording. */}
@@ -177,7 +204,6 @@ export function MicPanel(): JSX.Element {
         <EmptyState
           showHelp={showHelp()}
           onToggleHelp={() => setShowHelp(!showHelp())}
-          onPlayDemo={onPlayDemo}
         />
       </Show>
 
@@ -247,17 +273,12 @@ export function MicPanel(): JSX.Element {
 
       <MicMeter />
 
-      <Show when={micError() !== null}>
+      {/* Inline non-permission error pill — kept for non-permission
+          failures (e.g., `getUserMedia` timeout, AudioContext issues)
+          so the existing narrow feedback path stays intact. */}
+      <Show when={micError() !== null && !isMicPermissionError()}>
         <span class="mic-error-pill" role="alert">
           ✕ {micError()}
-          <Show when={isMicPermissionError()}>
-            <span class="mic-error-hint">
-              {' '}—{' '}
-              <Show when={micPermissionUrl() === null} fallback={<PermissionHint />}>
-                разрешите доступ к микрофону в настройках браузера
-              </Show>
-            </span>
-          </Show>
         </span>
       </Show>
     </div>
@@ -287,29 +308,33 @@ const PreviewPill = (): JSX.Element => {
   );
 };
 
+/**
+ * The instrument picker.
+ *
+ * A native <select> rather than a row of buttons: the catalogue has
+ * 15 melodic sounds plus the drums-only mode, and 16 buttons do not
+ * fit a 360 px phone. The OS picker sheet is the one control that
+ * behaves well on a phone.
+ */
 const InstrumentSelector = (): JSX.Element => (
-  <div class="mic-ux-inst-selector" role="group" aria-label="Instrument">
-    <For each={INSTRUMENTS}>
-      {(inst) => {
-        const isActive = (): boolean => micInstrument() === inst.id;
-        return (
-          <button
-            type="button"
-            class="mic-ux-inst-btn"
-            data-instrument={inst.id}
-            data-active={isActive() ? 'true' : 'false'}
-            aria-label={`Instrument: ${inst.label}`}
-            aria-pressed={isActive()}
-            title={`Instrument: ${inst.label}`}
-            onClick={() => setMicInstrument(inst.id)}
-          >
-            <span>{inst.glyph}</span>
-            <span class="mic-ux-inst-label">{inst.label}</span>
-          </button>
-        );
-      }}
-    </For>
-  </div>
+  <label class="mic-ux-inst-selector" aria-label="Instrument">
+    <span class="mic-ux-inst-glyph" aria-hidden="true">
+      {INSTRUMENTS.find((i) => i.id === micInstrument())?.glyph ?? '♪'}
+    </span>
+    <select
+      class="mic-ux-inst-select"
+      value={micInstrument()}
+      onChange={(e) => { setMicInstrument(e.currentTarget.value); }}
+    >
+      <For each={INSTRUMENTS}>
+        {(inst) => (
+          <option value={inst.id} data-instrument={inst.id}>
+            {inst.label}
+          </option>
+        )}
+      </For>
+    </select>
+  </label>
 );
 
 const SlotSelect = (props: {
@@ -323,11 +348,7 @@ const SlotSelect = (props: {
       title={props.slotTitle(micSlot())}
       onChange={(e): void => {
         const v = e.currentTarget.value;
-        if (
-          v === 'append-stack'
-          || v === 'replace-score'
-          || v === 'at-cursor'
-        ) {
+        if (v === 'append-stack' || v === 'at-cursor') {
           setMicSlot(v);
         }
       }}
@@ -354,7 +375,6 @@ const SlotSelect = (props: {
 const EmptyState = (props: {
   readonly showHelp: boolean;
   readonly onToggleHelp: () => void;
-  readonly onPlayDemo: () => void;
 }): JSX.Element => (
   <div class="mic-ux-empty" role="region" aria-label="Mic feature introduction">
     <div class="mic-ux-empty-title">Tap START and sing, tap, or hum.</div>
@@ -362,15 +382,6 @@ const EmptyState = (props: {
       Try a kick drum, a beatbox pattern, or a melody.
     </div>
     <div class="mic-ux-empty-actions">
-      <button
-        type="button"
-        class="mic-ux-empty-demo"
-        aria-label="Play a sample drum pattern"
-        title="Plays a sample so you can hear what the feature does"
-        onClick={(): void => { props.onPlayDemo(); }}
-      >
-        ▶ Demo: play a sample
-      </button>
       <button
         type="button"
         class="mic-ux-empty-help"
@@ -388,8 +399,7 @@ const EmptyState = (props: {
         a whistle becomes MIDI notes) and percussive onsets (a tap on the
         table or a clap becomes a drum hit). Both show up on the live timeline
         above the meter; click &ldquo;Add to score&rdquo; to splice them into
-        your pattern at the slot you choose. Demo plays a four-on-the-floor
-        kick so you can hear the sample bank without granting mic permission.
+        your pattern at the slot you choose.
       </p>
     </Show>
   </div>
@@ -413,45 +423,3 @@ const PermissionHint = (): JSX.Element => (
     </span>
   </>
 );
-
-// ── helpers ───────────────────────────────────────────────────────────
-
-/** Build a Strudel snippet from current preview buffers for the
- *  Preview-toggle button. Mirrors `applyToScore`'s branching logic
- *  but doesn't dispatch to the editor. Returns null when there's
- *  nothing to play. */
-const buildDemoSnippet = (
-  notes: ReadonlyArray<{ readonly midi: number; readonly startMs: number; readonly durationMs: number; readonly cents: number; readonly vibratoCents: number }>,
-  transients: ReadonlyArray<{ readonly type: 'kick' | 'snare' | 'hat' | 'click'; readonly startMs: number; readonly amplitude: number; readonly spectralCentroidHz: number; readonly envelopeMs: number }>,
-  instrument: string,
-): string | null => {
-  const hasNotes = notes.length > 0;
-  const hasTrans = transients.length > 0;
-  if (!hasNotes && !hasTrans) return null;
-  // Local copy of the domain helpers so we don't pull them in here
-  // (architecture rule: presentation depends on domain, but
-  // presentation/state/micStore wraps domain calls). The Preview
-  // toggle is presentation-only, so we keep it inline.
-  const notesSnippet = hasNotes
-    ? `note("${notes
-        .map((n) => {
-          const cls = ((n.midi % 12) + 12) % 12;
-          const oct = Math.floor(n.midi / 12) - 1;
-          const names = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'] as const;
-          const name = names[cls] ?? 'C';
-          const dur = Math.max(0.01, n.durationMs / 1000).toFixed(3);
-          return `${name}${oct}@${dur}`;
-        })
-        .join(' ')}").s("${instrument}")`
-    : null;
-  const transSnippet = hasTrans
-    ? (() => {
-        const map = { kick: 'drums_bd', snare: 'drums_sd', hat: 'drums_hh', click: 'drums_cp' } as const;
-        return `s("${transients.map((t) => map[t.type]).join(' ')}")`;
-      })()
-    : null;
-  if (notesSnippet !== null && transSnippet !== null) {
-    return `stack(\n  ${notesSnippet},\n  ${transSnippet}\n)`;
-  }
-  return notesSnippet ?? transSnippet;
-};

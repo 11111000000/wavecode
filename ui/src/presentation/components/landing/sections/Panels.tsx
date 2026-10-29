@@ -20,7 +20,7 @@ const PANELS: ReadonlyArray<Panel> = [
   },
   {
     name: 'Микшер',
-    body: 'Громкость каждого трека, панорама, общие эффекты — ревер и эхо.',
+    body: 'Громкость, mute и solo для каждого трека. Изменения слышно сразу, без перезапуска.',
     tone: 'cyan',
     Icon: MixerIcon,
   },
@@ -71,7 +71,7 @@ export function Panels(): JSX.Element {
   return (
     <section id="tools" class="l-section" aria-labelledby="tools-title">
       <header class="l-section__head">
-        <span class="l-section__kicker">04 · что внутри</span>
+        <span class="l-section__kicker">05 · инструменты</span>
         <h2 class="l-section__title" id="tools-title">
           Восемь инструментов в редакторе.
         </h2>

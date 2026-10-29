@@ -1,0 +1,212 @@
+---
+schema: math-coding/3.3
+id: wavecode-whistle-replace-score
+revision: 1
+state: active
+body_sha: "sha256:77215447be4ccf124ee3b6dc2d78893f9abeee64fb3ecfa85a84d3c8f3d34612"
+yaml_sha: "sha256:77215447be4ccf124ee3b6dc2d78893f9abeee64fb3ecfa85a84d3c8f3d34612"
+
+axiom_link:
+  - A0
+  - A3
+
+intent: |
+  Whistle-to-score (the whistle mini-FAB) must mutate the editor's
+  source code in addition to driving audio playback. Today it only
+  plays — Strudel REPL swaps the pattern under the user's cursor so
+  the user hears their whistle, but `appStore.score` (the field that
+  CodeMirror is bound to) stays untouched. Visible symptom: a user
+  whistles, sees the meter spike, hears the result, then opens the
+  editor and finds their score unchanged from before the press.
+
+commitment: |
+  1. `commitWhistle()` (presentation layer) reads `micPreviewNotes()`
+     synchronously, builds the same snippet the orchestrator already
+     passed to `audio.eval`, splices it into the editor's score via
+     `appendToTopStack` + `dispatch({ type: 'replaceScore' })`, and
+     surfaces a toast when the existing `stack(...)` is unbalanced.
+  2. The WhistleSession orchestrator (application layer) is NOT
+     modified: it continues to own `notesToSnippet` + `AudioEngine.eval`
+     and remains the single owner of audio playback. The
+     presentation-layer dispatch is added as a sibling, never a
+     replacement — audio is not replayed in presentation to avoid
+     double-eval in Strudel.
+  3. The pattern mirrors `micStore.applyToScore` (lines 391-401 of
+     `ui/src/presentation/state/micStore.ts`) and the
+     replace-score slot of `pianoRecStore.applyToScore`
+     (`ui/src/presentation/state/pianoRecStore.ts:275`):
+     presentation layer is the only layer that dispatches into
+     `appStore.score`.
+  4. The notes snapshot is taken at the start of `commitWhistle`,
+     BEFORE the orchestrator's `handle.commit()` even starts.
+     `WhistleMiniFAB.releaseIfReal` fires commit + stop back-to-back
+     via two `Effect.runPromise` calls; capturing the notes first
+     removes any timing dependency on which effect yields first
+     inside the orchestrator's async `audio.eval`.
+  5. The `__resetWhistleForTests` helper now also resets the mic
+     mutex (`resetMicMutexForTests`) and clears `micPreviewNotes`,
+     so test isolation no longer relies on every previous test
+     having cleaned up its `acquireMic`/`stopWhistle` pair.
+  6. New presentation-level test pins the contract: a commit with
+     a preloaded note buffer dispatches `replaceScore` whose text
+     matches the canonical `note("c4@0.5").s("piano")` shape.
+
+counterexample: |
+  «Maybe whistle was MEANT to only play audio — the editor update is
+  the job of MicPanel / PianoPanel, and the whistle mini-FAB is a
+  pure listening flow.» Counterargument: that would mean the user
+  cannot get their whistle into the editor without typing it
+  manually or switching tabs. Per `decisions/wavecode-voice-fab@1`
+  outcome `whistle-fab-press-and-hold` the contract was already
+  that release → `appStore.dispatch({ type: 'replaceScore' })`
+  (or append-stack). Today's gap is a regression from that
+  documented behaviour; the bug is that the dispatch was never
+  wired up after the commit was moved into the orchestrator.
+
+  «Audio plays and the user already sees their notes land in the
+  meter overlay — no editor change is fine, the score already
+  reflects the live strudel eval.» Counterargument: the score is
+  what CodeMirror renders. The meter is a transient visual aid.
+  The user's actual artefact (the Strudel source) stays at its
+  pre-whistle value, so reload, share, preset, undo, etc. all
+  forget the whistle happened. That's a hard regression for
+  elementary UX — the whole pitch of the FAB is that whistling
+  produces a reusable Strudel fragment.
+
+antithesis: |
+  (1) «Wire `appendToTopStack` inside `WhistleSession.commit()` —
+  let the orchestrator own the editor too, the way it already owns
+  the audio.» Rejected: violates `decisions/wavecode-strict-layering`
+  invariants (application layer must not depend on presentation-layer
+  state stores). The editor lives in `appStore` (presentation); the
+  application layer would have to import the Solid store, which the
+  ESLint layer rules (`no-restricted-imports`) reject. The
+  mic-to-strudel decision (`decisions/wavecode-mic-to-strudel@1`)
+  established the same boundary for `MicPanel`; whistle follows it.
+
+  (2) «Use a separate sheet-overlay editor write-through (custom
+  pathway that bypasses `appStore`).» Rejected: every other
+  recorder path in the app — MicPanel, PianoPanel, voice-AI review
+  — splices through `appendToTopStack` + `replaceScore`. Adding a
+  second writer creates two source-of-truths that drift. The fix
+  must be symmetric.
+
+  (3) «Snapshot notes inside the orchestrator and return them from
+  `handle.commit()`; let the presentation layer build the snippet
+  from the returned value.» Rejected: still requires a
+  presentation-layer dispatch, doesn't reduce code, and adds a
+  type-channel return to a previously pure-effect boundary for
+  one extra consumer. Reading `micPreviewNotes` directly inside
+  `commitWhistle` is one synchronous call, no orchestrator change
+  required.
+
+scope:
+  paths:
+    - "ui/src/presentation/state/whistleStore.ts"
+    - "ui/src/presentation/state/whistleStore.test.ts"
+    - "decisions/wavecode-whistle-replace-score.yaml"
+  exclusions:
+    - "ui/node_modules/**"
+    - "ui/dist/**"
+
+outcomes:
+  - id: whistle-dispatch-fires-on-commit
+    statement: |
+      Calling `commitWhistle()` after a press-and-hold whistle
+      session (i.e. `micPreviewNotes().length > 0`) updates
+      `appStore.score` so the CodeMirror editor shows the
+      snippet. The exact dispatched text for a single
+      `{ midi: 60, durationMs: 500 }` note is
+      `note("c4@0.500").s("piano")` (modulo @seconds rounding);
+      when `appStore.score` is empty the result equals the
+      snippet verbatim; when it already contains a top-level
+      `stack(...)` the snippet splices inside, otherwise it wraps
+      the existing score in `stack(...)`.
+  - id: whistle-no-dispatch-when-empty
+    statement: |
+      Calling `commitWhistle()` when `micPreviewNotes()` is empty
+      leaves `appStore.score` byte-for-byte identical to its
+      pre-call value. No spurious `replaceScore` action lands on
+      the editor's undo stack.
+  - id: whistle-unbalanced-stack-toast
+    statement: |
+      When `appendToTopStack(appStore.score, snippet)` returns
+      `ok: false` (score's first non-comment node is a `StackNode`
+      with an unbalanced span), a `consoleStore.pushToast` with
+      severity `warn` and the same title/body used by
+      `micStore.applyToScore` lands — the user is told the
+      stack is unbalanced without any score mutation.
+  - id: whistle-no-double-audio
+    statement: |
+      `commitWhistle` does NOT call `audio.eval`. The
+      orchestrator's `handle.commit()` already drives
+      `deps.audio.eval(snippet)`; adding a second eval would
+      stack the snippet in Strudel and play it twice. The
+      presentation layer's contribution is the editor dispatch
+      only.
+  - id: whistle-orchestrator-untouched
+    statement: |
+      `ui/src/application/voice/WhistleSession.ts` and
+      `ui/src/domain/audio/whistleSession.ts` are NOT changed by
+      this decision. The orchestrator continues to own
+      `notesToSnippet` + `audio.eval`; presentation adds the
+      `appStore.score` splice as a sibling path.
+
+obligations:
+  - id: whistle-dispatch-test
+    claim: |
+      `npx vitest run ui/src/presentation/state/whistleStore.test.ts`
+      has at least one passing test that pre-loads
+      `micPreviewNotes` with a note and asserts
+      `appStore.score` contains the snippet (e.g. matches
+      `/^note\(/`, contains `"c4"`, contains `s("piano")`).
+    acceptance:
+      all:
+        - verifier: vitest-run-whistle-store
+          result: pass
+  - id: whistle-no-audio-eval-in-presentation
+    claim: |
+      `grep -nE '\\b(audio|deps\\.audio)\\b' ui/src/presentation/state/whistleStore.ts`
+      does NOT match any reference to `audio.eval` /
+      `deps.audio.eval` / `AudioEngine`. The presentation layer
+      must not own audio playback.
+    acceptance:
+      all:
+        - verifier: text-scan-no-audio-eval-in-presentation
+          result: pass
+  - id: whistle-typecheck-clean
+    claim: |
+      `npm run test:precommit` (typecheck + vitest +
+      `lint:no-console` + `validate:presets`) returns exit 0.
+      No `any`, no `console.*`, no unused imports added by this
+      patch.
+    acceptance:
+      all:
+        - verifier: pnpm-ui-precommit
+          result: pass
+  - id: whistle-decision-validates-clean
+    claim: |
+      `mathc validate decisions/wavecode-whistle-replace-score.yaml`
+      returns exit 0 with zero `MC-*` reject diagnostics.
+    acceptance:
+      all:
+        - verifier: mathc validate
+          result: pass
+
+risk:
+  declared_triggers:
+    - whistle-orchestrator-refactored-and-snippet-no-longer-matches
+    - mic-preview-notes-cleared-before-commit-returns
+    - editor-dispatch-emits-audio-eval-side-effect-somewhere-upstream
+  owner: human:operator
+
+reversal:
+  - signal: whistle-dispatch-doubles-audio-on-dev-machine
+    action: halt
+  - signal: whistle-dispatch-corrupts-balanced-stack-in-an-existing-preset
+    action: halt
+
+relations:
+  addresses:
+    - wavecode-voice-fab@1
+    - wavecode-mic-to-strudel@1

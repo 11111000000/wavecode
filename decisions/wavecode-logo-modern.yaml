@@ -3,8 +3,8 @@ schema: math-coding/3.3
 id: wavecode-logo-modern
 revision: 1
 state: active
-body_sha: "sha256:a950615b0bc9eec4076cd56c6076185dd0a95a80f3b4fb153b26069604c4fab2"
-yaml_sha: "sha256:a950615b0bc9eec4076cd56c6076185dd0a95a80f3b4fb153b26069604c4fab2"
+body_sha: "sha256:9d1248bfdbe1d4ae00cd70d85856b400a9a5d91edea4b63f9dd513d102444e4f"
+yaml_sha: "sha256:9d1248bfdbe1d4ae00cd70d85856b400a9a5d91edea4b63f9dd513d102444e4f"
 
 intent: |
   Иконка сайта в трёх местах показывала «wc» вместо нового
@@ -60,32 +60,6 @@ antithesis: |
   `325: <BrandLogo size={22} />`). Удаление — отдельная
   задача дизайна; минимальное изменение — заменить BrandLogo
   на WavecodeLogo, сохранив позицию и размер.
-  Четыре правки:
-counterexample: |
-  The strongest objection to this decision is captured in the `antithesis` field above: (1) «Оставь BrandLogo как алиас, не делай новый компонент —
-antithesis: |
-  (1) «Оставь BrandLogo как алиас, не делай новый компонент —
-  просто замени BrandLogo inline». Возражение: BrandLogo
-  использовался в 1 месте (TopBar) согласно поиску; нет смысла
-  держать два имени. Делаю один WavecodeLogo + BrandLogo
-  = WavecodeLogo для back-compat (на случай если что-то ещё
-  импортирует, увидит новый логотип без сюрпризов).
-  (2) «Не трогай boot loader — он в index.html, не в bundle».
-  Возражение: index.html — это Vite template, копируется в
-  dist/index.html на каждый build. Заменить 1 раз, актуально
-  для всех будущих deploy'ов.
-  (3) «PNG-иконки (icon-192/512, apple-touch-icon-180) тоже
-  старые». Возражение: согласовано, но перегенерация PNG
-  требует rsvg-convert/inkscape (нет в PATH). В этом коммите
-  обновляю только SVG (favicon.svg, который современные
-  браузеры предпочитают), а PNG — отдельным коммитом когда
-  появится конвертер. PWA manifest пока ссылается на старые
-  PNG, но это не блокирует UX.
-  (4) «В TopBar иконка не нужна — там только текст 'wavecode'».
-  Возражение: BrandLogo был в TopBar с самого начала (commit
-  `325: <BrandLogo size={22} />`). Удаление — отдельная
-  задача дизайна; минимальное изменение — заменить BrandLogo
-  на WavecodeLogo, сохранив позицию и размер.
 axiom_link:
   - A3
 scope:
@@ -110,7 +84,7 @@ obligations:
       The original v1.0 packet applied on the recorded date in its `witness` file; this migration preserves that evidence as an `attestations/<id>-evidence.json` file.
     acceptance:
       all:
-        - verifier: "attestation-store-has-subject"
+        - verifier: "mathc self-check"
           result: pass
 assumptions: []
 risk:
@@ -120,4 +94,3 @@ risk:
 relations:
   addresses:
     - wavecode-bootstrap-math-coding-3.3@1
----

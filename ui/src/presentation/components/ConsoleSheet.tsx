@@ -12,7 +12,7 @@
  *     сохраняет колбэк); install потом его подхватит.
  *   - Polling fallback не нужен — sink даёт immediate update.
  *
- * Boot restore (Phase 3 — Subagent 13):
+ * Boot restore (Phase 3 — see decisions/wavecode-logger-enhancements.yaml):
  *   - На onMount, после того как динамический import() разрешился,
  *     вызываем logger.loadPersistedErrors() и, если возвращён
  *     непустой слайс, logger.prepend(persisted). Это восстанавливает

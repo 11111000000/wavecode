@@ -46,7 +46,7 @@ export function TechStack(): JSX.Element {
   return (
     <section class="l-section" aria-labelledby="stack-title">
       <header class="l-section__head">
-        <span class="l-section__kicker">05 · из чего сделано</span>
+        <span class="l-section__kicker">06 · из чего сделано</span>
         <h2 class="l-section__title" id="stack-title">
           Open source. Без своих серверов. Без vendor lock-in.
         </h2>

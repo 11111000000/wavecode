@@ -82,11 +82,32 @@ export const requestMidiAccess = (timeoutMs = 1000): Promise<MidiAccessLike | nu
   return Promise.race<MidiAccessLike | null>([accessPromise, timeoutPromise]).catch((err) => {
     if (err instanceof Error && err.message === 'midi-timeout') {
       console.warn('[MidiInput] requestMIDIAccess timed out after', timeoutMs, 'ms');
+      midiFailure = 'timeout';
       return null;
     }
+    // Distinguish "you said no" from "the browser said no". Chrome
+    // raises NotAllowedError when the user dismisses the permission
+    // prompt, SecurityError on an insecure origin, NotSupportedError
+    // where Web MIDI is absent. Collapsing all three into `null` left
+    // the UI showing a bare "MIDI: no device" chip with no explanation
+    // and no way to retry — a dead end the user could not act on.
+    const name = err instanceof Error ? err.name : '';
+    midiFailure = name === 'NotAllowedError' || name === 'SecurityError'
+      ? 'denied'
+      : name === 'NotSupportedError' ? 'unsupported' : 'unknown';
     console.warn('[MidiInput] requestMIDIAccess failed:', err);
     return null;
   });
+};
+
+/** Why the last `requestMidiAccess()` returned null. `null` = fine. */
+export type MidiFailure = 'denied' | 'unsupported' | 'timeout' | 'unknown';
+
+let midiFailure: MidiFailure | null = null;
+
+export const getMidiFailure = (): MidiFailure | null => midiFailure;
+export const clearMidiFailure = (): void => {
+  midiFailure = null;
 };
 
 /**

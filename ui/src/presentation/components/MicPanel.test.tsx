@@ -104,15 +104,6 @@ describe('MicPanel — empty state', () => {
     );
   });
 
-  it('Demo button calls evalScore with a sample drum snippet', () => {
-    const { container } = render(() => <MicPanel />);
-    const demoBtn = container.querySelector<HTMLButtonElement>('.mic-ux-empty-demo')!;
-    fireEvent.click(demoBtn);
-    expect(evalScoreMock).toHaveBeenCalledTimes(1);
-    const arg = evalScoreMock.mock.calls[0]?.[0] ?? '';
-    expect(arg).toContain('drums_bd');
-  });
-
   it('"Learn more" toggle reveals help text', () => {
     const { container } = render(() => <MicPanel />);
     const helpBtn = container.querySelector<HTMLButtonElement>('.mic-ux-empty-help')!;
@@ -141,52 +132,57 @@ describe('MicPanel — empty state', () => {
 // ── full layout (mic listening) ──────────────────────────────────────
 
 describe('MicPanel — row 1 (pill + instrument + slot)', () => {
-  it('renders 3 instrument buttons with the new labels', async () => {
+  it('renders a <select> with every REAL sound plus the drums-only mode', async () => {
+    // The options come from the sound catalogue — the names
+    // superdough really has. The old hard-coded trio offered
+    // 'synth' and 'drums', which were never registered and made the
+    // committed snippet throw `sound synth not found!`.
     const w = await import('../state/micStore');
     w.startMic();
     const { container } = render(() => <MicPanel />);
-    const btns = container.querySelectorAll<HTMLButtonElement>('.mic-ux-inst-btn');
-    expect(btns).toHaveLength(3);
-    expect(btns[0]?.getAttribute('data-instrument')).toBe('piano');
-    expect(btns[1]?.getAttribute('data-instrument')).toBe('synth');
-    expect(btns[2]?.getAttribute('data-instrument')).toBe('drums');
+    const select = container.querySelector<HTMLSelectElement>('.mic-ux-inst-select');
+    expect(select).not.toBeNull();
+    const values = Array.from(select?.querySelectorAll('option') ?? [])
+      .map((o) => o.getAttribute('data-instrument'));
+    expect(values).toContain('piano');
+    expect(values).toContain('synth_pad');
+    expect(values).toContain('sawtooth');
+    expect(values).toContain('drums');
+    // The fiction of the old list is gone.
+    expect(values).not.toContain('synth');
     await w.stopMic();
   });
 
-  it('default instrument "piano" is data-active', async () => {
+  it('the default instrument is piano', async () => {
     const w = await import('../state/micStore');
     w.startMic();
     const { container } = render(() => <MicPanel />);
-    const active = container.querySelectorAll<HTMLButtonElement>(
-      '.mic-ux-inst-btn[data-active="true"]',
-    );
-    expect(active).toHaveLength(1);
-    expect(active[0]?.getAttribute('data-instrument')).toBe('piano');
+    const select = container.querySelector<HTMLSelectElement>('.mic-ux-inst-select');
+    expect(select?.value).toBe('piano');
+    expect(w.micInstrument()).toBe('piano');
     await w.stopMic();
   });
 
-  it('clicking the Synth button activates synth', async () => {
+  it('choosing an option switches the instrument', async () => {
     const w = await import('../state/micStore');
     w.startMic();
     const { container } = render(() => <MicPanel />);
-    const synthBtn = container.querySelector<HTMLButtonElement>(
-      '[data-instrument="synth"]',
-    )!;
-    fireEvent.click(synthBtn);
-    expect(w.micInstrument()).toBe('synth');
+    const select = container.querySelector<HTMLSelectElement>('.mic-ux-inst-select')!;
+    fireEvent.change(select, { target: { value: 'synth_pad' } });
+    expect(w.micInstrument()).toBe('synth_pad');
     await w.stopMic();
   });
 
-  it('renders a slot <select> with 3 options (Add to end / Replace all / At cursor)', async () => {
+  it('renders a slot <select> with 2 options (Add to end / At cursor)', async () => {
     const w = await import('../state/micStore');
     w.startMic();
     const { container } = render(() => <MicPanel />);
     const select = container.querySelector<HTMLSelectElement>('.mic-ux-slot-select');
     expect(select).not.toBeNull();
     const opts = select?.querySelectorAll('option');
-    expect(opts).toHaveLength(3);
+    expect(opts).toHaveLength(2);
     const labels = Array.from(opts ?? []).map((o) => o.textContent?.trim());
-    expect(labels).toEqual(['Add to end', 'Replace all', 'At cursor']);
+    expect(labels).toEqual(['Add to end', 'At cursor']);
     await w.stopMic();
   });
 

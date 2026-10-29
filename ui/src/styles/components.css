@@ -1051,6 +1051,262 @@ textarea.wc-input {
 }
 
 /* =========================================================================
+ *  MELODY GRID — 16-step × 36-pitch piano-roll (C3..B5)
+ *  Используется компонентом <MelodyGrid />. Стили адаптированы из
+ *  .step-grid-* (см. выше); cell = pitch × step, а не drum × step.
+ *
+ *  Y-axis: B5 вверху → C3 внизу (piano-roll convention).
+ *  X-axis: 16 шагов равной ширины через CSS grid.
+ *  Black-key rows (.melody-grid-row-label--black-key) подсвечиваются
+ *  фоном, чтобы пользователь мог быстро ориентироваться.
+ * ========================================================================= */
+
+.melody-grid {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  padding: var(--space-md) var(--space-lg);
+  background: var(--surface-1);
+  font-family: var(--font-mono);
+}
+
+.melody-grid-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+  align-items: center;
+}
+.melody-grid-toolbar .melody-grid-hint {
+  flex-basis: 100%;
+  font-size: var(--fs-xs);
+  color: var(--fg-dim);
+  line-height: var(--lh-relaxed);
+  margin-top: var(--space-2xs);
+}
+.melody-grid-toolbar .melody-grid-bpm {
+  margin-left: auto;
+  font-size: var(--fs-2xs);
+  color: var(--fg-ghost);
+  letter-spacing: var(--ls-wide);
+  text-transform: uppercase;
+}
+
+/* --- mode pill (view | sketch | edit) ---- borrowed from step-grid */
+.melody-grid-mode-pill {
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  background: var(--surface-2);
+}
+.melody-grid-mode-btn {
+  height: 36px;
+  padding: 0 var(--space-sm);
+  background: transparent;
+  border: 0;
+  color: var(--fg-dim);
+  font-family: inherit;
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+  cursor: pointer;
+  text-transform: lowercase;
+  letter-spacing: var(--ls-wide);
+  border-right: 1px solid var(--border);
+  min-height: var(--touch-target);
+  transition: background-color var(--dur-xs) var(--ease), color var(--dur-xs) var(--ease);
+}
+.melody-grid-mode-btn:last-child { border-right: 0; }
+.melody-grid-mode-btn:hover:not([disabled]) { color: var(--fg); background: var(--surface-3); }
+.melody-grid-mode-btn[data-active="true"] {
+  background: var(--primary);
+  color: var(--fg-inverse);
+}
+.melody-grid-mode-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  text-decoration: line-through;
+}
+.melody-grid-mode-btn[data-disabled="true"] {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* --- grid layout ---- 16 columns + 36 rows + 1 label column ---- */
+.melody-grid-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  background: var(--border);
+  padding: 1px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  overflow-x: auto;
+}
+.melody-grid-row {
+  display: grid;
+  /* 1 label column + 16 cell columns, set by inline style */
+  gap: 1px;
+}
+.melody-grid-row-header {
+  background: var(--surface-2);
+}
+.melody-grid-row-label {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 0 var(--space-xs);
+  font-size: var(--fs-2xs);
+  color: var(--fg-dim);
+  background: var(--surface-2);
+  text-transform: lowercase;
+}
+.melody-grid-row-label-header {
+  font-weight: var(--fw-semibold);
+  color: var(--fg-ghost);
+  text-transform: uppercase;
+  letter-spacing: var(--ls-wide);
+}
+.melody-grid-row-label--black-key {
+  background: var(--surface-3);
+  color: var(--primary);
+}
+.melody-grid-row-pitch {
+  font-weight: var(--fw-semibold);
+}
+.melody-grid-col-header {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--fs-2xs);
+  color: var(--fg-ghost);
+  background: var(--surface-2);
+  height: 18px;
+  letter-spacing: var(--ls-wide);
+  transition: background-color var(--dur-xs) var(--ease);
+}
+.melody-grid-col-header.beat {
+  background: var(--cyan-tint, rgba(0, 200, 255, 0.16));
+  color: var(--cyan);
+}
+
+/* --- buttons (reset, commit, confirm dialog) ---- borrowed from step-grid */
+.melody-grid-btn {
+  height: 36px;
+  padding: 0 var(--space-sm);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--fg-dim);
+  font-family: inherit;
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all var(--dur-xs) var(--ease);
+  min-height: var(--touch-target);
+}
+.melody-grid-btn:hover { border-color: var(--primary); color: var(--primary); }
+.melody-grid-btn:active { transform: scale(0.97); }
+.melody-grid-btn-primary {
+  background: var(--primary);
+  color: var(--fg-inverse);
+  border-color: var(--primary);
+}
+.melody-grid-btn-primary:hover {
+  background: var(--primary);
+  color: var(--fg-inverse);
+  border-color: var(--primary);
+}
+
+/* --- cell ---- pitch × step cell --------------------------- */
+.melody-cell {
+  position: relative;
+  height: 16px;
+  min-height: 16px;
+  background: var(--surface-2);
+  border: 0;
+  cursor: pointer;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition:
+    background-color var(--dur-xs) var(--ease),
+    box-shadow var(--dur-xs) var(--ease);
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+.melody-cell:hover { background: var(--surface-3); }
+.melody-cell.active {
+  background: var(--primary);
+  box-shadow: 0 0 4px var(--primary-glow);
+}
+.melody-cell.dirty {
+  outline: 1px solid var(--amber);
+  outline-offset: -1px;
+  box-shadow: 0 0 4px var(--amber);
+}
+.melody-cell.beat {
+  box-shadow: inset 0 0 0 1px var(--cyan);
+}
+.melody-cell.tap-flash {
+  animation: melody-cell-flash 200ms var(--ease-out);
+}
+.melody-cell-dot {
+  display: block;
+  width: 8px;
+  height: 8px;
+  background: var(--fg-inverse);
+  border-radius: var(--radius-full);
+  pointer-events: none;
+}
+@keyframes melody-cell-flash {
+  0%   { transform: scale(1.2); box-shadow: 0 0 10px var(--primary-glow); }
+  100% { transform: scale(1);   box-shadow: none; }
+}
+
+/* --- confirm dialog (close-with-dirty-draft) ---- mirrors step-grid */
+.melody-grid-confirm-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  z-index: 999;
+}
+.melody-grid-confirm-dialog {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 1000;
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-lg);
+  min-width: 280px;
+  max-width: 90vw;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  box-shadow: var(--shadow-modal);
+}
+.melody-grid-confirm-title {
+  margin: 0;
+  font-size: var(--fs-md);
+  color: var(--fg);
+}
+.melody-grid-confirm-body {
+  margin: 0;
+  font-size: var(--fs-sm);
+  color: var(--fg-dim);
+  line-height: var(--lh-relaxed);
+}
+.melody-grid-confirm-actions {
+  display: flex;
+  gap: var(--space-xs);
+  justify-content: flex-end;
+  margin-top: var(--space-sm);
+}
+
+/* =========================================================================
  *  PIANO — 2-octave on-screen keyboard (C3..B4)
  *  Используется компонентом <PianoKeyboard />. Белая клавиша = flex child,
  *  чёрная клавиша = position:absolute поверх (overlap -11px как в legacy).
@@ -1241,6 +1497,37 @@ textarea.wc-input {
   border-color: var(--primary);
   box-shadow: var(--shadow-glow-primary);
 }
+
+/* The instrument picker of the on-screen piano. A native <select>:
+ * the catalogue has 12 melodic sounds, and 12 buttons do not fit a
+ * 360 px phone. The OS picker sheet is the one control that works
+ * there. */
+.piano-instrument-selector {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px var(--space-2xs);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+}
+.piano-inst-glyph {
+  font-size: var(--fs-xs);
+  line-height: 1;
+}
+.piano-inst-select {
+  appearance: none;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-pill);
+  color: var(--fg);
+  font-family: var(--font-sans);
+  font-size: var(--fs-2xs);
+  padding: 0 var(--space-2xs);
+  max-width: 120px;
+  cursor: pointer;
+}
+.piano-inst-select:hover { color: var(--fg); }
 
 .piano-midi-status {
   display: inline-flex;
@@ -3029,6 +3316,76 @@ textarea.ai-textarea:focus-visible {
   background: var(--warn);
   color: var(--fg-inverse);
 }
+
+/* =========================================================================
+ *  wavecode-editor-selection-ai
+ *  Selection → focused-context status row in AIEditPanel. Sits
+ *  between the messages/status row and the textarea. Always
+ *  visible whenever a selection exists OR the «Применить к
+ *  выделенному» toggle is on (so the user can see the toggle
+ *  state when there's no selection — and the row tells them
+ *  why submit is disabled in that case).
+ * ========================================================================= */
+
+.ai-focus-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  flex-shrink: 0;
+  padding: var(--space-xs) var(--space-md);
+  border-top: 1px solid var(--border);
+  background: var(--surface-0);
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  color: var(--fg-dim);
+  min-height: 30px;
+}
+.ai-focus-row[data-state='no-selection'] {
+  color: var(--warn);
+}
+.ai-focus-glyph {
+  font-size: var(--fs-sm);
+  line-height: 1;
+}
+.ai-focus-label {
+  flex: 1 1 auto;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ai-focus-tag {
+  flex-shrink: 0;
+  padding: 2px var(--space-xs);
+  font-size: var(--fs-xs);
+  border-radius: var(--radius-sm);
+  background: var(--primary-soft);
+  color: var(--primary);
+  border: 1px solid var(--primary);
+  font-family: var(--font-sans);
+}
+.ai-focus-empty {
+  flex: 1 1 auto;
+  font-style: italic;
+}
+.ai-focus-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  flex-shrink: 0;
+  cursor: pointer;
+  font-family: var(--font-sans);
+  font-size: var(--fs-xs);
+  user-select: none;
+}
+.ai-focus-toggle input[type='checkbox'] {
+  margin: 0;
+  accent-color: var(--primary);
+  cursor: pointer;
+}
+.ai-focus-toggle input[type='checkbox']:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
 .ai-status-ok { color: var(--ok); }
 .ai-status-err { color: var(--err); }
 
@@ -3622,6 +3979,12 @@ textarea.ai-textarea:focus-visible {
   align-items: center;
 }
 .mixer-summary:hover { color: var(--fg); }
+.mixer-sections-hint {
+  margin-left: auto;
+  color: var(--fg-dim);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-regular);
+}
 .mixer-empty {
   padding: var(--space-sm) var(--space-md);
   color: var(--fg-dim);
@@ -3634,6 +3997,47 @@ textarea.ai-textarea:focus-visible {
   gap: var(--space-xs);
   max-height: 360px;
   overflow-y: auto;
+}
+/* Multi-section presets: one collapsible group per stack(...) so a
+   44-layer arrangement (edm-house) stays scannable. */
+.mixer-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+.mixer-section + .mixer-section {
+  border-top: 1px solid var(--border);
+  padding-top: var(--space-xs);
+  margin-top: var(--space-xs);
+}
+.mixer-section-toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  width: 100%;
+  min-height: 44px;
+  padding: var(--space-xs) var(--space-sm);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  color: var(--fg-dim);
+  font-family: var(--font-sans);
+  font-size: var(--fs-sm);
+  text-align: left;
+  cursor: pointer;
+}
+.mixer-section-toggle:hover { color: var(--fg); background: var(--surface-2); }
+.mixer-section-caret { width: 12px; color: var(--primary); }
+.mixer-section-count {
+  margin-left: auto;
+  font-size: var(--fs-xs);
+  opacity: 0.75;
+}
+.mixer-rows {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  padding-left: var(--space-sm);
 }
 .mixer-row {
   display: flex;
@@ -3823,6 +4227,11 @@ textarea.ai-textarea:focus-visible {
   display: flex;
   align-items: center;
   justify-content: center;
+  /* Portal-mounted, so --z-modal (60) competes at the ROOT stacking
+     context and beats the transport bar (--z-sheet + 12 = 52). The
+     previous in-tree placement inherited the topbar's context
+     (z = --z-sheet + 5 = 45), so the bar painted over the modal and
+     swallowed every click on «Закрыть». */
   z-index: var(--z-modal);
   backdrop-filter: blur(4px);
 }
@@ -3832,6 +4241,8 @@ textarea.ai-textarea:focus-visible {
   border-radius: var(--radius-xl);
   padding: var(--space-lg);
   width: min(480px, 92vw);
+  max-height: 88vh;
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: var(--space-md);
@@ -3849,6 +4260,82 @@ textarea.ai-textarea:focus-visible {
   font-family: var(--font-mono);
   font-size: var(--fs-sm);
   resize: vertical;
+}
+.share-modal-title {
+  margin: 0;
+  font-size: var(--fs-lg);
+  font-weight: var(--fw-semibold);
+  color: var(--fg);
+}
+.share-modal-inner {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+.share-url {
+  width: 100%;
+  padding: var(--space-sm) var(--space-md);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  color: var(--primary);
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+}
+.share-url:focus-visible {
+  border-color: var(--primary);
+  outline: none;
+}
+.share-modal-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+.share-modal-size {
+  color: var(--fg-dim);
+  font-size: var(--fs-sm);
+}
+.share-modal-btn {
+  min-height: 44px;
+  padding: var(--space-sm) var(--space-md);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--fg);
+  font-family: var(--font-sans);
+  font-size: var(--fs-sm);
+  cursor: pointer;
+}
+.share-modal-btn:hover:not(:disabled) { border-color: var(--primary); color: var(--fg); }
+.share-modal-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.share-modal-copy,
+.share-modal-load {
+  margin-left: auto;
+  border-color: var(--primary);
+  color: var(--primary);
+}
+.share-modal-warn,
+.share-modal-err {
+  padding: var(--space-sm) var(--space-md);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+  border: 1px solid var(--warn);
+  color: var(--fg);
+  font-size: var(--fs-sm);
+}
+.share-modal-err { border-color: var(--err); }
+.share-modal-pending {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  padding: var(--space-md);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+}
+.share-modal-pending-msg {
+  color: var(--fg-dim);
+  font-size: var(--fs-sm);
 }
 .share-modal-actions {
   display: flex;
@@ -4618,6 +5105,57 @@ textarea.ai-textarea:focus-visible {
   font-size: var(--fs-3xs);
 }
 
+/* Permission-denied banner — full-row alert above the controls.
+ * Bigger than the inline mic-error-pill so the user can't miss it,
+ * with a clearly labeled "how to fix" path (browser-specific link
+ * via `micPermissionUrl`). Shows ONLY when `isMicPermissionError()`
+ * is true (i.e., the deny/timeout came from the getUserMedia path,
+ * not from AudioContext or some downstream pipeline failure). */
+.mic-permission-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-sm);
+  padding: var(--space-sm) var(--space-md);
+  margin-bottom: var(--space-sm);
+  border: 1px solid var(--err);
+  border-left-width: 4px;
+  border-radius: var(--radius-md);
+  background: color-mix(in oklab, var(--err) 8%, var(--surface-1));
+  color: var(--fg);
+  font-family: var(--font-sans);
+}
+.mic-permission-banner__icon {
+  font-size: 22px;
+  line-height: 1;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+.mic-permission-banner__body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+  min-width: 0;
+}
+.mic-permission-banner__title {
+  margin: 0;
+  font-weight: var(--fw-semibold);
+  font-size: var(--fs-sm);
+  color: var(--err);
+}
+.mic-permission-banner__msg {
+  margin: 0;
+  font-size: var(--fs-xs);
+  color: var(--fg-muted);
+  line-height: var(--lh-base);
+}
+.mic-permission-banner__hint {
+  margin: 0;
+  font-size: var(--fs-xs);
+  color: var(--fg-dim);
+  line-height: var(--lh-base);
+}
+
 /* =========================================================================
  *  MIC UX REDESIGN (feat/ux-ui)
  *  New 4-row mobile-first layout for the Mic feature.
@@ -4686,6 +5224,24 @@ textarea.ai-textarea:focus-visible {
   border: 1px solid var(--border);
   border-radius: var(--radius-pill);
 }
+.mic-ux-inst-glyph {
+  padding-left: var(--space-2xs);
+  font-size: var(--fs-xs);
+  line-height: 1;
+}
+.mic-ux-inst-select {
+  appearance: none;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-pill);
+  color: var(--fg);
+  font-family: var(--font-mono);
+  font-size: var(--fs-2xs);
+  padding: 0 var(--space-2xs);
+  max-width: 132px;
+  cursor: pointer;
+}
+.mic-ux-inst-select:hover { color: var(--fg); }
 .mic-ux-inst-btn {
   display: inline-flex;
   align-items: center;
@@ -5029,28 +5585,6 @@ textarea.ai-textarea:focus-visible {
   gap: var(--space-xs);
   margin-top: var(--space-xs);
 }
-.mic-ux-empty-demo {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2xs);
-  height: 32px;
-  padding: 0 var(--space-md);
-  background: var(--surface-2);
-  color: var(--cyan);
-  border: 1px solid var(--cyan);
-  border-radius: var(--radius-pill);
-  font-family: var(--font-mono);
-  font-size: var(--fs-xs);
-  font-weight: var(--fw-medium);
-  cursor: pointer;
-  transition: all var(--dur-xs) var(--ease);
-  min-height: var(--touch-target);
-}
-.mic-ux-empty-demo:hover {
-  background: var(--cyan);
-  color: var(--fg-inverse);
-  box-shadow: var(--shadow-glow-cyan);
-}
 .mic-ux-empty-help {
   display: inline-flex;
   align-items: center;
@@ -5152,3 +5686,1871 @@ textarea.ai-textarea:focus-visible {
   opacity: 0.7;
 }
 
+/* =========================================================================
+ *  VOCAB HOVER TOOLTIP (wavecode-inline-tooltips)
+ *  Inline glossary popover for Strudel functions / samples / notes.
+ *  Decorates the CM6 `.cm-tooltip` host element (added by
+ *  vocabTooltip() in CodeMirrorEditorImpl.tsx) with a clear
+ *  category-coded border + monospace example block.
+ *
+ *  Border colour signals the category at a glance:
+ *    -- function  → primary (violet)
+ *    -- sample    → cyan
+ *    -- note      → magenta
+ *  No emoji, no images — text-only by design (palette is already
+ *  busy enough on the score screen).
+ * ========================================================================= */
+
+.cm-vocab-tooltip {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2xs);
+  padding: var(--space-sm) var(--space-md);
+  max-width: 320px;
+  min-width: 180px;
+  font-family: var(--font-sans);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-base);
+  color: var(--fg);
+  /* The CM6 host element already gives us background + border; we
+   * override only the category-coloured accent border + a hint of
+   * depth so it stands out from the editor surface. */
+  border-left: 3px solid var(--primary);
+  background: var(--surface-2);
+}
+.cm-vocab-tooltip--sample { border-left-color: var(--cyan); }
+.cm-vocab-tooltip--note   { border-left-color: var(--magenta); }
+
+.cm-vocab-tooltip__head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-sm);
+}
+.cm-vocab-tooltip__name {
+  font-family: var(--font-mono);
+  font-size: var(--fs-md);
+  font-weight: var(--fw-semibold);
+  color: var(--fg);
+  letter-spacing: 0;
+}
+.cm-vocab-tooltip__tag {
+  margin-left: auto;
+  font-size: var(--fs-3xs);
+  text-transform: uppercase;
+  letter-spacing: var(--ls-caps);
+  color: var(--fg-dim);
+}
+.cm-vocab-tooltip--function .cm-vocab-tooltip__tag { color: var(--primary); }
+.cm-vocab-tooltip--sample   .cm-vocab-tooltip__tag { color: var(--cyan); }
+.cm-vocab-tooltip--note     .cm-vocab-tooltip__tag { color: var(--magenta); }
+
+.cm-vocab-tooltip__ru {
+  color: var(--fg-dim);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-relaxed);
+}
+
+.cm-vocab-tooltip__example {
+  display: block;
+  margin-top: var(--space-2xs);
+  padding: var(--space-2xs) var(--space-sm);
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  color: var(--fg);
+  background: var(--surface-0);
+  border-radius: var(--radius-sm);
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+/* =========================================================================
+ *  ONBOARDING TOUR — wavecode-welcome-tour
+ *  5-step first-visit overlay. Self-mounted at the App level
+ *  (see presentation/components/tour/WelcomeTour.tsx). Z-index
+ *  --z-modal + 10 = 70 — strictly above tabbar / sheet / fab,
+ *  but BELOW .wc-toast (z=80) so streaming LLM token updates or
+ *  error toasts stay visible mid-tour.
+ * ========================================================================= */
+
+.tour-overlay {
+  position: fixed;
+  inset: 0;
+  /* Higher than --z-modal (60) but lower than --z-toast (80). */
+  z-index: calc(var(--z-modal) + 10);
+  pointer-events: auto;
+  background: rgba(0, 0, 0, 0.62);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+  animation: tour-overlay-fade var(--dur-md) var(--ease);
+}
+
+@keyframes tour-overlay-fade {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.tour-spotlight {
+  position: fixed;
+  border: 2px solid var(--primary);
+  border-radius: var(--radius-md);
+  box-shadow:
+    0 0 0 4px rgba(245, 158, 11, 0.18),
+    0 0 22px var(--primary-glow);
+  pointer-events: none;
+  transition:
+    top    180ms var(--ease),
+    left   180ms var(--ease),
+    width  180ms var(--ease),
+    height 180ms var(--ease);
+}
+
+.tour-tooltip {
+  position: fixed;
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  padding: var(--space-lg);
+  box-shadow: var(--shadow-pop), 0 0 24px rgba(0, 0, 0, 0.5);
+  font-family: var(--font-sans);
+  color: var(--fg);
+  pointer-events: auto;
+  animation: tour-tooltip-in var(--dur-md) var(--ease-spring);
+}
+
+@keyframes tour-tooltip-in {
+  from { opacity: 0; transform: translateY(8px) scale(0.98); }
+  to   { opacity: 1; transform: translateY(0)   scale(1); }
+}
+
+.tour-tooltip__step {
+  font-family: var(--font-mono);
+  font-size: var(--fs-2xs);
+  text-transform: uppercase;
+  letter-spacing: var(--ls-caps);
+  color: var(--fg-dim);
+  margin-bottom: var(--space-xs);
+}
+
+.tour-tooltip__title {
+  margin: 0 0 var(--space-sm) 0;
+  font-family: var(--font-display);
+  font-size: var(--fs-lg);
+  font-weight: var(--fw-semibold);
+  color: var(--primary);
+  line-height: 1.2;
+}
+
+.tour-tooltip__body {
+  margin: 0 0 var(--space-md) 0;
+  font-size: var(--fs-sm);
+  line-height: var(--lh-relaxed);
+  color: var(--fg);
+}
+
+.tour-tooltip__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  justify-content: flex-end;
+}
+
+.tour-tooltip__btn {
+  min-height: var(--touch-target);
+  padding: 0 var(--space-md);
+  font-family: var(--font-sans);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  user-select: none;
+  transition:
+    background var(--dur-xs) var(--ease),
+    color var(--dur-xs) var(--ease),
+    transform var(--dur-2xs) var(--ease);
+  background: var(--surface-1);
+  color: var(--fg);
+  border: 1px solid var(--border);
+}
+.tour-tooltip__btn:hover { background: var(--surface-3); border-color: var(--border-strong); }
+.tour-tooltip__btn:active { transform: scale(0.96); }
+
+.tour-tooltip__btn--primary {
+  background: var(--primary);
+  color: var(--fg-inverse);
+  border-color: var(--primary);
+  box-shadow: var(--shadow-glow-primary);
+}
+.tour-tooltip__btn--primary:hover {
+  background: var(--primary);
+  filter: brightness(1.1);
+}
+
+.tour-tooltip__btn--ghost {
+  background: transparent;
+  color: var(--fg-dim);
+  border-color: transparent;
+}
+.tour-tooltip__btn--ghost:hover {
+  background: var(--surface-3);
+  color: var(--fg);
+}
+
+.tour-tooltip__hint {
+  margin-top: var(--space-sm);
+  font-family: var(--font-mono);
+  font-size: var(--fs-3xs);
+  text-transform: uppercase;
+  letter-spacing: var(--ls-caps);
+  color: var(--fg-ghost);
+  text-align: right;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tour-overlay,
+  .tour-tooltip,
+  .tour-spotlight { transition: none; animation: none; }
+}
+
+/* =========================================================================
+ *  PIANOROLL — DAW-style note editor in ScorePanel.
+ *  <Pianoroll /> renders a Canvas (HTML5) timeline + side pitch labels.
+ *  Toggle sibling: `.pianoroll-view-toggle` (text | roll) lives just
+ *  under the editor area; default = text.
+ * ========================================================================= */
+
+.pianoroll-host {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  flex: 1 1 auto;
+  min-height: 220px;
+  background: var(--surface-0, #0a0a0e);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, monospace);
+}
+
+.pianoroll-toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  padding: var(--space-2xs) var(--space-sm);
+  background: var(--surface-1, #111114);
+  border-bottom: 1px solid var(--border);
+  font-size: var(--fs-2xs, 11px);
+  color: var(--fg-dim);
+  flex-shrink: 0;
+  height: 36px;
+}
+
+.pianoroll-count {
+  margin-right: auto;
+  font-variant-numeric: tabular-nums;
+  color: var(--fg-dim);
+}
+
+.pianoroll-zoom-btn {
+  height: 26px;
+  min-width: 26px;
+  padding: 0 var(--space-xs);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--fg-dim);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: var(--fs-2xs);
+  line-height: 1;
+  transition: all var(--dur-xs) var(--ease);
+}
+.pianoroll-zoom-btn:hover {
+  border-color: var(--primary, #60a5fa);
+  color: var(--primary, #60a5fa);
+}
+.pianoroll-zoom-btn:active { transform: scale(0.95); }
+
+.pianoroll-zoom-value {
+  min-width: 44px;
+  text-align: center;
+  font-size: var(--fs-2xs);
+  color: var(--fg);
+  font-variant-numeric: tabular-nums;
+}
+
+.pianoroll-canvas-wrap {
+  position: relative;
+  /* flex-basis 0 (not auto): the canvas sets its own width/height
+     attributes on every draw, and an `auto` basis would make the
+     wrapper's size depend on the canvas — a resize feedback loop that
+     pegs the renderer. */
+  flex: 1 1 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.pianoroll-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  cursor: crosshair;
+  background: var(--surface-0, #0a0a0e);
+  touch-action: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.pianoroll-empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-xs);
+  background: rgba(10, 10, 14, 0.85);
+  color: var(--fg-ghost);
+  font-family: var(--font-mono);
+  font-size: var(--fs-2xs);
+  text-align: center;
+  pointer-events: none;
+}
+.pianoroll-empty code {
+  background: var(--surface-2);
+  padding: 1px 6px;
+  border-radius: 3px;
+  border: 1px solid var(--border);
+  color: var(--primary, #60a5fa);
+  font-size: var(--fs-2xs);
+}
+.pianoroll-empty p {
+  margin: 0;
+}
+
+/* ----- view-mode toggle (text | roll) shown under the editor  ----- */
+
+.pianoroll-view-toggle {
+  display: inline-flex;
+  margin: var(--space-sm) 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  background: var(--surface-2);
+  align-self: flex-start;
+}
+.pianoroll-view-toggle-btn {
+  height: 32px;
+  padding: 0 var(--space-md);
+  background: transparent;
+  border: 0;
+  border-right: 1px solid var(--border);
+  color: var(--fg-dim);
+  font-family: inherit;
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+  cursor: pointer;
+  text-transform: lowercase;
+  letter-spacing: var(--ls-wide);
+  transition: all var(--dur-xs) var(--ease);
+  min-height: var(--touch-target, 44px);
+}
+.pianoroll-view-toggle-btn:last-child { border-right: 0; }
+.pianoroll-view-toggle-btn:hover {
+  color: var(--fg);
+  background: var(--surface-3);
+}
+.pianoroll-view-toggle-btn[data-active='true'] {
+  background: var(--primary, #60a5fa);
+  color: var(--fg-inverse, #06060a);
+}
+
+.pianoroll-pane {
+  width: 100%;
+  min-height: 220px;
+  flex: 1 1 auto;
+  display: flex;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+/* =========================================================================
+ *  LOOP RECORDER (wavecode-loop-recorder)
+ *  Boss RC-505-style multi-track loop recorder UI.
+ *  4 color-coded slots + punch-in timeline + mix-down.
+ * ========================================================================= */
+
+.loop-recorder {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  padding: var(--space-sm) var(--space-md);
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+
+.loop-recorder-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  flex-wrap: wrap;
+}
+
+.loop-recorder-title {
+  font-weight: var(--fw-semibold);
+  color: var(--fg);
+  font-size: var(--fs-sm);
+}
+
+.loop-recounter-stats {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: var(--fs-3xs);
+  color: var(--fg-dim);
+}
+
+.loop-recounter-pill {
+  background: var(--magenta-soft);
+  color: var(--magenta);
+  padding: 2px var(--space-xs);
+  border-radius: var(--radius-sm);
+  letter-spacing: var(--ls-caps);
+  text-transform: uppercase;
+}
+
+.loop-recorder-actions {
+  display: flex;
+  gap: var(--space-xs);
+}
+
+.loop-slot-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--space-xs);
+}
+
+.loop-slot {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  min-height: var(--touch-target, 44px);
+  padding: var(--space-xs) var(--space-sm);
+  background: var(--surface-2);
+  border: 2px solid var(--border);
+  border-radius: var(--radius-md);
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  cursor: pointer;
+  transition: transform var(--dur-fast, 80ms) var(--ease, ease-out);
+}
+
+.loop-slot:hover { transform: translateY(-1px); }
+
+.loop-slot[data-color='green']    { --slot-color: var(--ok, #4ade80); }
+.loop-slot[data-color='cyan']     { --slot-color: var(--cyan, #5eead4); }
+.loop-slot[data-color='magenta']  { --slot-color: var(--magenta, #f472b6); }
+.loop-slot[data-color='violet']   { --slot-color: var(--primary, #a78bfa); }
+
+.loop-slot[data-color] {
+  border-color: var(--slot-color);
+  color: var(--slot-color);
+}
+
+.loop-slot[data-empty='true'] {
+  border-style: dashed;
+  opacity: 0.7;
+}
+
+.loop-slot[data-status='recording'] {
+  background: color-mix(in srgb, var(--slot-color) 20%, transparent);
+  animation: wc-loop-rec-pulse 1.2s ease-in-out infinite;
+}
+
+.loop-slot[data-status='has-region'] {
+  background: color-mix(in srgb, var(--slot-color) 14%, transparent);
+}
+
+.loop-slot-index {
+  font-weight: var(--fw-bold);
+  font-size: var(--fs-md);
+}
+
+.loop-slot-status {
+  font-size: var(--fs-3xs);
+  text-transform: uppercase;
+  letter-spacing: var(--ls-caps);
+  color: var(--fg-dim);
+}
+
+.loop-slot[data-status='recording'] .loop-slot-status {
+  color: var(--slot-color);
+}
+
+.loop-slot-bar {
+  display: block;
+  width: 100%;
+  height: 3px;
+  background: var(--bg);
+  border-radius: var(--radius-pill, 999px);
+  overflow: hidden;
+}
+
+.loop-slot-bar-fill {
+  display: block;
+  height: 100%;
+  width: 60%;
+  background: var(--slot-color);
+  opacity: 0.7;
+}
+
+@keyframes wc-loop-rec-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 var(--slot-color); }
+  50%      { box-shadow: 0 0 0 4px color-mix(in srgb, var(--slot-color) 30%, transparent); }
+}
+
+.loop-timeline {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  padding: var(--space-xs) var(--space-sm);
+  background: var(--surface-2);
+  border-radius: var(--radius-md);
+}
+
+.loop-timeline-label {
+  font-size: var(--fs-3xs);
+  color: var(--fg-dim);
+  text-transform: uppercase;
+  letter-spacing: var(--ls-caps);
+  font-family: var(--font-mono);
+}
+
+.loop-timeline-strip {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--space-xs);
+  flex: 1;
+}
+
+.loop-timeline-beat {
+  min-height: var(--touch-target, 44px);
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--fg-dim);
+  font-family: var(--font-mono);
+  cursor: pointer;
+  transition: background var(--dur-fast, 80ms) var(--ease, ease-out);
+}
+
+.loop-timeline-beat:hover,
+.loop-timeline-beat[data-active='true'] {
+  background: var(--primary-soft, rgba(120, 119, 198, 0.2));
+  color: var(--fg);
+  border-color: var(--primary);
+}
+
+.loop-err {
+  font-family: var(--font-mono);
+  font-size: var(--fs-3xs);
+  color: var(--err);
+  padding: var(--space-xs) var(--space-sm);
+  background: var(--err-soft);
+  border-radius: var(--radius-sm);
+}
+
+/* =========================================================================
+ *  VOICE FAB — voice-input mini-FAB stack + transcript overlay
+ *
+ *  Layout (mobile-first, bottom-right):
+ *    ┌─────────────┐
+ *    │   overlay   │  <- transcript chip (when voice-AI active)
+ *    ├─────────────┤
+ *    │ mini-AI     │  <- 56x56 (mic icon, tap-to-toggle)
+ *    ├─────────────┤
+ *    │ mini-whistle│  <- 56x56 (whistle icon, press-and-hold)
+ *    └─────────────┘
+ *  Оба мини-FAB видны всегда (без speed-dial expansion) — раньше
+ *  primary-FAB-«меню» прятал их до первого тапа, и появление
+ *  «ещё одной кнопки с микрофоном» сбивало с толку (юзер не
+ *  понимал, на что нажал и записалось ли что-то).
+ * ========================================================================= */
+
+.voice-fab-group {
+  position: fixed;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--space-sm);
+  padding: 0 var(--space-lg) calc(var(--tabbar-h) + var(--space-lg) + var(--safe-bottom)) var(--space-md);
+  z-index: calc(var(--z-sheet) + 5);
+  pointer-events: none;
+}
+.voice-fab-group > * { pointer-events: auto; }
+
+/* Overrides the existing .wc-fab fixed position if a primary FAB is
+ *  ever re-added inside the group (см. .voice-fab-group .wc-fab
+ *  ниже). Сейчас primary нет — правило no-op, оставлено на случай
+ *  будущей гибридной раскладки (e.g. overflow actions). */
+.voice-fab-group .wc-fab {
+  position: relative;
+  right: auto;
+  bottom: auto;
+}
+
+/* Stack of mini-FABs — always visible. */
+.voice-mini-fab-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  align-items: flex-end;
+}
+
+/* Mini-FAB base: 56x56 (mobile-first touch target), square corners,
+ * translucent surface, soft glow that intensifies while listening. */
+.voice-mini-fab {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  height: var(--voice-mini-fab-size);
+  min-width: var(--voice-mini-fab-size);
+  padding: 0;
+  background: var(--surface-2);
+  color: var(--fg);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-full);
+  cursor: pointer;
+  user-select: none;
+  font-family: var(--font-sans);
+  box-shadow: var(--shadow-fab);
+  transition:
+    transform var(--dur-2xs) var(--ease),
+    background var(--dur-xs) var(--ease),
+    border-color var(--dur-xs) var(--ease),
+    box-shadow var(--dur-xs) var(--ease);
+}
+.voice-mini-fab:hover:not(:disabled) {
+  transform: translateY(-1px) scale(1.04);
+  box-shadow: var(--shadow-fab), var(--shadow-glow-primary);
+}
+.voice-mini-fab:active:not(:disabled) {
+  transform: scale(0.96);
+}
+.voice-mini-fab:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.voice-mini-fab--ai {
+  color: var(--primary);
+  border-color: var(--primary);
+}
+.voice-mini-fab--ai[data-state='listening'],
+.voice-mini-fab--ai[data-state='transcribing'],
+.voice-mini-fab--ai[data-state='applying'],
+.voice-mini-fab--ai[data-state='requesting'] {
+  background: var(--primary-soft);
+  border-color: var(--primary);
+  box-shadow: var(--shadow-fab), var(--shadow-glow-primary), 0 0 20px var(--primary-glow);
+  animation: voice-mini-fab-pulse 1.8s ease-in-out infinite;
+}
+.voice-mini-fab--ai[data-state='errored'] {
+  color: var(--err);
+  border-color: var(--err);
+  background: var(--err-soft);
+}
+
+/* REC state — the mini-FAB IS the record button while a take is
+ * running. The icon is replaced by a blinking dot, the chip reads
+ * «REC» and the whole button turns red, so "the microphone is
+ * open" is readable from the button alone and not only from the
+ * panel. The rule sits AFTER the per-mode colouring above so it
+ * wins over the voice/whistle tint (both are the same specificity
+ * — one class + one attribute — and this one comes later). */
+.voice-mini-fab[data-rec-state='on'] {
+  color: var(--err);
+  border-color: var(--err);
+  background: var(--err-soft);
+  box-shadow: var(--shadow-fab), 0 0 20px var(--err-soft);
+  animation: voice-mini-fab-rec-pulse 1.4s ease-in-out infinite;
+}
+@keyframes voice-mini-fab-rec-pulse {
+  0%, 100% { box-shadow: var(--shadow-fab), 0 0 14px var(--err-soft); }
+  50%      { box-shadow: var(--shadow-fab), 0 0 28px var(--err-soft); }
+}
+.voice-mini-fab__rec-dot {
+  width: 14px;
+  height: 14px;
+  border-radius: var(--radius-full);
+  background: var(--err);
+  box-shadow: 0 0 10px var(--err-soft);
+  animation: voice-mini-fab-rec-blink 1.1s ease-in-out infinite;
+}
+@keyframes voice-mini-fab-rec-blink {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.35; }
+}
+
+.voice-mini-fab--whistle {
+  color: var(--cyan);
+  border-color: var(--cyan);
+}
+.voice-mini-fab--whistle[data-state='arming'],
+.voice-mini-fab--whistle[data-state='recording'] {
+  background: var(--cyan-soft);
+  border-color: var(--cyan);
+  box-shadow: var(--shadow-fab), var(--shadow-glow-cyan), 0 0 20px var(--cyan-glow);
+  animation: voice-mini-fab-pulse 1.8s ease-in-out infinite;
+}
+.voice-mini-fab--whistle[data-state='errored'] {
+  color: var(--err);
+  border-color: var(--err);
+  background: var(--err-soft);
+}
+
+/* Inline permission-blocked badge — a small "!" pill that surfaces
+ * on the VoiceAIMiniFAB when STT / mic access is denied by the
+ * browser. Pinpoints the cluster as the broken element (vs.
+ * silently deading buttons) without forcing another toast. */
+.voice-mini-fab__badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  width: 18px;
+  height: 18px;
+  border-radius: var(--radius-full);
+  background: var(--err);
+  color: var(--fg-inverse);
+  font-size: var(--fs-3xs);
+  font-weight: var(--fw-bold);
+  line-height: 18px;
+  text-align: center;
+  pointer-events: none;
+  animation: voice-mini-fab-badge-pulse 1.6s ease-in-out infinite;
+}
+@keyframes voice-mini-fab-badge-pulse {
+  0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 var(--err-soft); }
+  50%      { transform: scale(1.06); box-shadow: 0 0 0 4px transparent; }
+}
+.voice-mini-fab--ai[data-permission-blocked='true'] {
+  border-color: var(--err);
+  color: var(--err);
+  background: color-mix(in oklab, var(--err) 8%, var(--surface-2));
+}
+
+@keyframes voice-mini-fab-pulse {
+  0%, 100% { box-shadow: var(--shadow-fab), var(--shadow-glow-primary), 0 0 20px var(--primary-glow); }
+  50%      { box-shadow: var(--shadow-fab), var(--shadow-glow-primary), 0 0 32px var(--primary-glow); }
+}
+
+/* Inline label chip — always visible short name ("Голос" / "Свист"),
+ *  чтобы юзер сразу видел назначение кнопки, а не догадывался по
+ *  иконке. Positioned to the LEFT of the icon, smaller than the
+ *  transient `.voice-mini-fab__hint` (which shows live transcript). */
+.voice-mini-fab__label {
+  position: absolute;
+  top: 50%;
+  right: calc(100% + var(--space-xs));
+  transform: translateY(-50%);
+  white-space: nowrap;
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-medium);
+  padding: 2px var(--space-xs);
+  background: var(--surface-3);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  color: var(--fg);
+  pointer-events: none;
+  opacity: 0.85;
+}
+.voice-mini-fab--ai .voice-mini-fab__label     { color: var(--primary); border-color: var(--primary); }
+.voice-mini-fab--whistle .voice-mini-fab__label { color: var(--cyan);    border-color: var(--cyan); }
+
+/* Inline hint chip — shown while listening / recording. Positioned
+ *  to the LEFT of the icon so the waveform doesn't overlap the FAB. */
+.voice-mini-fab__hint {
+  position: absolute;
+  top: 50%;
+  right: calc(100% + var(--space-xs));
+  transform: translateY(-50%);
+  white-space: nowrap;
+  font-size: var(--fs-xs);
+  padding: 2px var(--space-xs);
+  background: var(--surface-3);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  color: var(--fg);
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
+}
+
+/* Transcript overlay — bottom-center, just above the FAB group. */
+.voice-transcript-overlay {
+  position: fixed;
+  bottom: var(--voice-fab-cluster-h);
+  left: 50%;
+  transform: translateX(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  padding: var(--space-xs) var(--space-md);
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-pill);
+  color: var(--fg);
+  font-family: var(--font-sans);
+  font-size: var(--fs-sm);
+  max-width: calc(100vw - 32px);
+  z-index: calc(var(--z-sheet) + 4);
+  box-shadow: var(--shadow-pop);
+  animation: voice-transcript-overlay-in var(--dur-xs) var(--ease-spring);
+}
+.voice-transcript-overlay[data-state='errored'] {
+  border-color: var(--err);
+  color: var(--err);
+}
+.voice-transcript-overlay__icon { font-size: 14px; }
+.voice-transcript-overlay__text {
+  max-width: 320px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.voice-transcript-overlay__error { font-weight: var(--fw-medium); }
+
+/* Inline review-action button — appears next to the transcript
+ * text while voice-AI is actively listening/applying. Tapping it
+ * dispatches `enter-review` on the orchestrator (see
+ * VoiceTranscriptOverlay.tsx) which freezes STT and opens the
+ * review-and-edit modal. Visual: ghost-button with right-arrow so
+ * it reads as "next step →" rather than a destructive action. */
+.voice-transcript-overlay__btn {
+  margin-left: var(--space-xs);
+  padding: 2px var(--space-xs);
+  background: transparent;
+  border: 1px solid var(--border-strong);
+  color: var(--primary);
+  border-radius: var(--radius-md);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-medium);
+  font-family: var(--font-sans);
+  cursor: pointer;
+  transition:
+    background var(--dur-2xs) var(--ease),
+    border-color var(--dur-2xs) var(--ease),
+    color var(--dur-2xs) var(--ease);
+}
+.voice-transcript-overlay__btn:hover {
+  background: var(--primary-soft);
+  border-color: var(--primary);
+}
+.voice-transcript-overlay[data-state='errored'] .voice-transcript-overlay__btn {
+  display: none;
+}
+
+@keyframes voice-transcript-overlay-in {
+  from { opacity: 0; transform: translate(-50%, 8px); }
+  to   { opacity: 1; transform: translate(-50%, 0); }
+}
+
+/* =========================================================================
+ *  VOICE REVIEW PANEL — modal-like prompt shown when the user pauses the
+ *  voice-AI session to edit the dictated text before sending it to the LLM.
+ *
+ *  Renders ONLY when FSM is in `review`; parents (`VoiceFAB`) toggle it
+ *  via Solid's `<Show>`. Position: bottom-center, anchored to
+ *  `--voice-fab-cluster-h` (the real measured height of the two-FAB
+ *  cluster) so it sits flush on top of the cluster and nowhere else,
+ *  and capped by `--voice-panel-max-h` so its textarea + footer can
+ *  never grow up under the fixed TopBar / transport bar.
+ * ========================================================================= */
+.voice-review-panel {
+  position: fixed;
+  left: 50%;
+  bottom: var(--voice-fab-cluster-h);
+  max-height: var(--voice-panel-max-h);
+  overflow-y: auto;
+  transform: translateX(-50%);
+  width: min(540px, calc(100vw - 32px));
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  padding: var(--space-md);
+  background: var(--surface-2);
+  border: 1px solid var(--primary);
+  border-radius: var(--radius-lg);
+  color: var(--fg);
+  font-family: var(--font-sans);
+  box-shadow: var(--shadow-pop), var(--shadow-glow-primary);
+  z-index: calc(var(--z-sheet) + 6);
+  animation: voice-review-panel-in var(--dur-xs) var(--ease-spring);
+}
+@keyframes voice-review-panel-in {
+  from { opacity: 0; transform: translate(-50%, 12px); }
+  to   { opacity: 1; transform: translate(-50%, 0); }
+}
+.voice-review-panel__head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  /* Same reasoning as .voice-recording-panel__head: the ✕ must stay
+   * reachable when the panel is squeezed against the transport bar. */
+  flex-shrink: 0;
+}
+.voice-review-panel__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: var(--radius-full);
+  background: var(--primary-soft);
+  color: var(--primary);
+}
+.voice-review-panel__title {
+  flex: 1;
+  margin: 0;
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+  color: var(--fg);
+}
+.voice-review-panel__close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  background: transparent;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  color: var(--fg-muted);
+  cursor: pointer;
+  transition:
+    background var(--dur-2xs) var(--ease),
+    color var(--dur-2xs) var(--ease);
+}
+.voice-review-panel__close:hover {
+  background: var(--surface-3);
+  color: var(--fg);
+}
+.voice-review-panel__textarea {
+  width: 100%;
+  min-height: 96px;
+  max-height: 240px;
+  /* Grows into the panel's spare height and shrinks with it, so the
+   * footer buttons stay visible on a short viewport. The 96px floor is
+   * deliberate (one and a half lines of dictated text); below that the
+   * panel's own `overflow-y: auto` takes over as the backstop. */
+  flex: 1 1 auto;
+  resize: vertical;
+  padding: var(--space-sm);
+  background: var(--surface-1);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  color: var(--fg);
+  font-family: var(--font-sans);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-base);
+}
+.voice-review-panel__textarea:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px var(--primary-soft);
+}
+.voice-review-panel__interim {
+  margin: 0;
+  font-size: var(--fs-xs);
+  color: var(--fg-muted);
+  font-style: italic;
+}
+.voice-review-panel__actions {
+  display: flex;
+  align-items: stretch;
+  gap: var(--space-xs);
+  justify-content: flex-end;
+  flex-shrink: 0;
+}
+.voice-review-panel__btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px var(--space-sm);
+  background: var(--surface-3);
+  color: var(--fg);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  font-family: var(--font-sans);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-medium);
+  cursor: pointer;
+  transition:
+    background var(--dur-2xs) var(--ease),
+    border-color var(--dur-2xs) var(--ease),
+    color var(--dur-2xs) var(--ease);
+}
+.voice-review-panel__btn:hover:not(:disabled) {
+  background: var(--surface-1);
+}
+.voice-review-panel__btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.voice-review-panel__btn--ghost {
+  background: transparent;
+  color: var(--fg-muted);
+}
+.voice-review-panel__btn--ghost:hover:not(:disabled) {
+  color: var(--err);
+  border-color: var(--err);
+}
+.voice-review-panel__btn--secondary {
+  color: var(--fg);
+}
+.voice-review-panel__btn--primary {
+  background: var(--primary);
+  color: var(--fg-inverse);
+  border-color: var(--primary);
+}
+.voice-review-panel__btn--primary:hover:not(:disabled) {
+  background: var(--primary);
+  filter: brightness(1.08);
+  border-color: var(--primary);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .voice-mini-fab--ai[data-state='listening'],
+  .voice-mini-fab--ai[data-state='transcribing'],
+  .voice-mini-fab--ai[data-state='applying'],
+  .voice-mini-fab--ai[data-state='requesting'],
+  .voice-mini-fab--whistle[data-state='arming'],
+  .voice-mini-fab--whistle[data-state='recording'] {
+    animation: none;
+  }
+}
+
+/* =========================================================================
+ *  VOICE RECORDING PANEL — bottom-anchored status card visible while
+ *  voice-AI OR whistle is active. Replaces the previous voice-AI
+ *  transcript chip (now folded into the unified panel) and adds
+ *  whistle feedback that didn't exist before (no bottom panel for
+ *  whistle = unsafe).
+ *
+ *  Layout (mobile-first, bottom-center, just above the FAB group):
+ *    ┌───────────────────────────────────────────┐
+ *    │ [icon] Title                  [✕ stop]    │  ← head
+ *    │ ────────────────────────────────────────  │
+ *    │ live transcript / notes strip             │  ← body
+ *    │ ────────────────────────────────────────  │
+ *    │ [primary btn]  [rms]  [count]             │  ← actions
+ *    └───────────────────────────────────────────┘
+ *
+ *  Width is capped via `width: min(...)` so it never overflows the
+ *  viewport on phones. The panel is `position: fixed` so it floats
+ *  above the editor / TabBar / FAB cluster without affecting them.
+ *
+ *  wavecode-voice-ux-fixes: `bottom` is `--voice-fab-cluster-h`, the
+ *  measured height of the two-FAB cluster, instead of the old literal
+ *  `calc(var(--tabbar-h) + 240px + ...)`. The literal overshot by
+ *  ~44px and, once the panel grew tall enough, slid its buttons under
+ *  `.app-transport-bar` — whose z-index (z-sheet+12) beats the panel's
+ *  (z-sheet+4), so the ✕ / «Проверить» became unclickable. The panel
+ *  now sits flush above the cluster and `--voice-panel-max-h` keeps a
+ *  long transcript scrolling inside the panel rather than pushing it
+ *  into the transport bar.
+ * ========================================================================= */
+.voice-recording-panel {
+  position: fixed;
+  left: 50%;
+  bottom: var(--voice-fab-cluster-h);
+  /* Cap the height so a long transcript scrolls inside the panel
+   * instead of growing it upward into the fixed transport bar. */
+  max-height: var(--voice-panel-max-h);
+  overflow-y: auto;
+  transform: translateX(-50%);
+  width: min(540px, calc(100vw - 32px));
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  padding: var(--space-md);
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  color: var(--fg);
+  font-family: var(--font-sans);
+  font-size: var(--fs-sm);
+  box-shadow: var(--shadow-pop);
+  z-index: calc(var(--z-sheet) + 4);
+  animation: voice-recording-panel-in var(--dur-xs) var(--ease-spring);
+}
+.voice-recording-panel[data-mode='voice-ai'] {
+  border-color: var(--primary);
+  box-shadow: var(--shadow-pop), var(--shadow-glow-primary);
+}
+.voice-recording-panel[data-mode='whistle'] {
+  border-color: var(--cyan);
+  box-shadow: var(--shadow-pop), var(--shadow-glow-cyan);
+}
+.voice-recording-panel[data-state='errored'] {
+  border-color: var(--err);
+  box-shadow: var(--shadow-pop), 0 0 16px var(--err-glow);
+}
+@keyframes voice-recording-panel-in {
+  from { opacity: 0; transform: translate(-50%, 12px); }
+  to   { opacity: 1; transform: translate(-50%, 0); }
+}
+
+.voice-recording-panel__head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  /* Pin the ✕ against the transport bar: only the transcript below
+   * scrolls, so the control that stops the session can never be
+   * pushed out of the panel by a long dictated sentence. */
+  flex-shrink: 0;
+}
+.voice-recording-panel__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-full);
+}
+.voice-recording-panel__icon--ai {
+  background: var(--primary-soft);
+  color: var(--primary);
+}
+.voice-recording-panel__icon--whistle {
+  background: var(--cyan-soft);
+  color: var(--cyan);
+}
+.voice-recording-panel__title {
+  flex: 1;
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+  color: var(--fg);
+}
+.voice-recording-panel__err-pill {
+  font-size: var(--fs-xs);
+  padding: 2px var(--space-xs);
+  background: var(--err-soft);
+  color: var(--err);
+  border: 1px solid var(--err);
+  border-radius: var(--radius-md);
+  font-weight: var(--fw-medium);
+}
+.voice-recording-panel__close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  background: transparent;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  color: var(--fg-muted);
+  cursor: pointer;
+  transition: background var(--dur-2xs) var(--ease), color var(--dur-2xs) var(--ease);
+}
+.voice-recording-panel__close:hover {
+  background: var(--surface-3);
+  color: var(--fg);
+}
+
+/* Instrument picker — the whistle's melodic sound. A native <select>
+ * so a phone opens its own picker sheet (a row of 15 buttons would be
+ * unusable on a 360 px screen). Disabled while a take runs or while
+ * notes are buffered: a take's timbre is fixed when it starts. */
+.voice-recording-panel__instrument {
+  appearance: none;
+  background: var(--surface-3);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  color: var(--fg);
+  font-family: var(--font-sans);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-medium);
+  padding: 2px var(--space-xs);
+  cursor: pointer;
+  max-width: 140px;
+}
+.voice-recording-panel__instrument:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.voice-recording-panel__instrument:hover:not(:disabled) {
+  border-color: var(--cyan);
+  color: var(--cyan);
+}
+
+/* «Удалить» — deletes the recorded AUDIO and keeps the text. Sits
+ * next to the ✕ in the panel head, one step quieter than the ✕:
+ * the ✕ closes the panel, this one keeps it open. */.voice-recording-panel__delete {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  background: transparent;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  color: var(--fg-muted);
+  cursor: pointer;
+  transition: background var(--dur-2xs) var(--ease), color var(--dur-2xs) var(--ease);
+}
+.voice-recording-panel__delete:hover {
+  background: var(--err-soft);
+  color: var(--err);
+}
+
+.voice-recording-panel__body {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-sm);
+  flex-wrap: wrap;
+  /* Flex items default to `min-height: auto`, which refuses to shrink
+   * below the content — that is what let a long transcript push the
+   * actions row under the transport bar. `min-height: 0` lets this
+   * row absorb the shrink and scroll instead. */
+  min-height: 0;
+  overflow-y: auto;
+}
+.voice-recording-panel__stage {
+  font-weight: var(--fw-medium);
+  color: var(--fg);
+}
+
+/* The composer (`decisions/wavecode-voice-composer-ux`).
+ *
+ * One editable field for the whole session + one line that says what
+ * the machine is doing right now. The field is ALWAYS there — while
+ * the mic is open, while the recogniser thinks, while the LLM
+ * answers, and after the edit was applied — because a text the user
+ * cannot reach is a text the user cannot fix.
+ *
+ * The container sets `min-height: 0` so the textarea's flex grow can
+ * shrink when the panel hits its `--voice-panel-max-h` cap, and so
+ * the ✕ in the head never gets pushed off-screen by a long edit. The
+ * textarea is small on purpose (rows=2 in JSX): the panel must not
+ * balloon into the fixed transport bar on mobile viewports. */
+.voice-recording-panel__composer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2xs);
+  min-height: 0;
+}
+.voice-recording-panel__review-textarea {
+  width: 100%;
+  /* Floor of 56px (~2 lines at fs-sm / lh-base) so the field is
+   * clearly editable; ceiling of 96px (~3 lines) so the panel
+   * stays single-screen on a 360×640 phone. The flex `1 1 auto`
+   * lets it grow in between, taking spare height off the panel
+   * cap before the panel's own overflow:auto kicks in. */
+  min-height: 56px;
+  max-height: 96px;
+  flex: 1 1 auto;
+  resize: vertical;
+  padding: var(--space-sm);
+  background: var(--surface-1);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  color: var(--fg);
+  font-family: var(--font-sans);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-base);
+}
+.voice-recording-panel__review-textarea:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px var(--primary-soft);
+}
+
+/* Status line — the answer to «ушло не ушло, крутится или нет».
+ * One phrase per machine state, always on screen while the panel is
+ * open. */
+.voice-recording-panel__status {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  min-height: 1.4em;
+  font-size: var(--fs-xs);
+  color: var(--fg-muted);
+}
+.voice-recording-panel__status-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  word-break: break-word;
+}
+/* The RMS meter lives in the status row now: it is a readout of the
+ * machine's state, not a separate widget. It keeps a fixed width so
+ * it never squeezes the phrase next to it. */
+.voice-recording-panel__status .voice-recording-panel__rms {
+  flex: 0 0 90px;
+  max-width: 90px;
+}
+/* The spinner is the ONLY motion in the panel: it appears exactly
+ * when the app is waiting for something that is not the user —
+ * the recogniser, the relay, the LLM. */
+.voice-recording-panel__spinner {
+  flex: 0 0 auto;
+  width: 10px;
+  height: 10px;
+  border-radius: var(--radius-full);
+  border: 2px solid var(--border-strong);
+  border-top-color: var(--primary);
+  animation: voice-recording-panel-spin 0.9s linear infinite;
+}
+@keyframes voice-recording-panel-spin {
+  to { transform: rotate(360deg); }
+}
+.voice-recording-panel__hz {
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  color: var(--fg-muted);
+  background: var(--surface-3);
+  padding: 2px var(--space-xs);
+  border-radius: var(--radius-md);
+}
+
+.voice-recording-panel__strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2xs);
+  align-items: center;
+}
+.voice-recording-panel__note {
+  display: inline-block;
+  padding: 2px var(--space-xs);
+  background: var(--cyan-soft);
+  border: 1px solid var(--cyan);
+  border-radius: var(--radius-md);
+  color: var(--cyan);
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-medium);
+}
+
+.voice-recording-panel__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  flex-wrap: wrap;
+  flex-shrink: 0;
+}
+.voice-recording-panel__btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2xs);
+  padding: var(--space-xs) var(--space-sm);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-strong);
+  background: transparent;
+  color: var(--fg);
+  font-family: var(--font-sans);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-medium);
+  cursor: pointer;
+  transition:
+    background var(--dur-2xs) var(--ease),
+    border-color var(--dur-2xs) var(--ease),
+    color var(--dur-2xs) var(--ease);
+}
+.voice-recording-panel__btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.voice-recording-panel__btn--primary {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+.voice-recording-panel__btn--primary:hover:not(:disabled) {
+  background: var(--primary-soft);
+}
+
+/* «Отменить отправку» — the primary button while the request is on
+ * the wire. Same slot, different meaning, so the user never has to
+ * hunt for a second button to pull the plug: the thing that sends
+ * becomes the thing that stops sending. */
+.voice-recording-panel__btn--cancel {
+  border-color: var(--err);
+  color: var(--err);
+}
+.voice-recording-panel__btn--cancel:hover {
+  background: var(--err-soft);
+}
+
+/* «Очистить текст» — the small button that empties the recognised-text
+ * field. Deliberately quiet: it is a convenience, not a primary
+ * action, and it must not compete with «→ В ИИ» for attention. */
+.voice-recording-panel__btn--clear {
+  padding: var(--space-2xs) var(--space-xs);
+  font-size: var(--fs-3xs);
+  color: var(--fg-muted);
+}
+.voice-recording-panel__btn--clear:hover:not(:disabled) {
+  background: var(--surface-3);
+  color: var(--fg);
+}
+.voice-recording-panel__hint {
+  font-size: var(--fs-xs);
+  color: var(--fg-muted);
+}
+
+/* Arm panel — the "жду ●REC" state for both voice-AI and whistle,
+ * triggered by a fast tap on the corresponding mini-FAB. Two
+ * affordances: a single REC toggle (off by default, click to start)
+ * and (whistle only) a «Применить» button that's disabled until
+ * notes have been buffered. Voice-AI doesn't get an apply here —
+ * its submit affordance lives in the review body that fires after
+ * the first final chunk. */
+.voice-recording-panel__armed {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  flex-wrap: wrap;
+  min-height: 0;
+}
+.voice-recording-panel__rec {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  padding: var(--space-2xs) var(--space-sm);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-pill);
+  background: var(--surface-3);
+  color: var(--fg);
+  font-family: var(--font-sans);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-medium);
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  transition:
+    background var(--dur-2xs) var(--ease),
+    border-color var(--dur-2xs) var(--ease),
+    color var(--dur-2xs) var(--ease);
+}
+.voice-recording-panel__rec:hover {
+  background: var(--surface-2);
+}
+.voice-recording-panel__rec-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: var(--radius-full);
+  background: var(--err);
+  transition: background var(--dur-2xs) var(--ease);
+}
+/* Highlighted (recording): tinted border + filled dot + softening
+ * background that matches the panel's active-mode tone. The
+ * data-rec-state attribute keeps both styles publishable from one
+ * JSX path without re-rendering with a separate class per state. */
+.voice-recording-panel__rec--on {
+  border-color: var(--err);
+  background: var(--err-soft);
+  color: var(--err);
+  box-shadow: 0 0 0 2px var(--err-soft);
+  animation: voice-recording-panel-pulse 1.6s ease-in-out infinite;
+}
+.voice-recording-panel__rec--off .voice-recording-panel__rec-dot {
+  background: var(--fg-muted);
+  opacity: 0.6;
+}
+.voice-recording-panel__rec--on .voice-recording-panel__rec-dot {
+  background: var(--err);
+  box-shadow: 0 0 0 3px var(--err-soft);
+}
+@keyframes voice-recording-panel-pulse {
+  0%, 100% { box-shadow: 0 0 0 2px var(--err-soft); }
+  50%      { box-shadow: 0 0 0 5px var(--err-soft); }
+}
+.voice-recording-panel__rec-label {
+  font-family: var(--font-mono);
+}
+
+/* Apply button — splices the buffered notes into score for the
+ * whistle path only. Voice-AI's analogous action («→ В ИИ») lives
+ * on the review form's primary button and is styled by the
+ * existing `.voice-recording-panel__btn--primary` block. */
+.voice-recording-panel__btn--apply {
+  border-color: var(--cyan);
+  color: var(--cyan);
+}
+.voice-recording-panel__btn--apply:hover:not(:disabled) {
+  background: var(--cyan-soft);
+}
+
+/* Inline-aligned actions row for whistle when both REC and
+ * «Применить» are visible — keeps the hint + REC + apply + count
+ * on a single row that wraps on narrow viewports. */
+.voice-recording-panel__actions--split {
+  flex-wrap: wrap;
+}
+
+.voice-recording-panel__rms {
+  flex: 1;
+  min-width: 60px;
+  max-width: 160px;
+  height: 6px;
+  border-radius: var(--radius-full);
+  background: var(--surface-3);
+  overflow: hidden;
+}
+.voice-recording-panel__rms-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--cyan), var(--primary));
+  transition: width var(--dur-2xs) var(--ease);
+}
+.voice-recording-panel__count {
+  font-size: var(--fs-xs);
+  color: var(--fg-muted);
+  font-family: var(--font-mono);
+}
+/* Live voice-AI body — transcript on the left, RMS meter on the
+ * right. The meter only renders on the server STT path (where our
+ * code owns the mic and can run an AnalyserNode); on the Web Speech
+ * path the meter is omitted and the transcript spans the row. */
+.voice-recording-panel__rms-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2xs);
+  flex-shrink: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .voice-recording-panel {
+    animation: none;
+  }
+  .voice-recording-panel__rec--on {
+    animation: none;
+  }
+  .voice-recording-panel__spinner {
+    animation: none;
+  }
+}
+
+
+/* Web MIDI permission was declined / request timed out — the pill now
+   carries an explicit cause and a retry affordance instead of a bare
+   "no device" dead end. */
+.piano-midi-retry {
+  margin-left: var(--space-xs);
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--surface-2);
+  color: var(--primary);
+  font-size: var(--fs-xs);
+  line-height: 1;
+  cursor: pointer;
+}
+.piano-midi-retry:hover { border-color: var(--primary); }
+
+/* Mobile-mode radio: name plus the effect it has, so the choice is
+   comprehensible without applying it first. */
+.wc-overflow-mobile {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  text-align: left;
+}
+.wc-overflow-mobile__hint {
+  font-size: var(--fs-xs);
+  color: var(--fg-dim);
+  opacity: 0.85;
+}
+
+/* =========================================================================
+   DisclaimerGate — the blocking legal consent gate.
+   wavecode-disclaimer-gate supersedes `wavecode-disclaimer-banner`:
+   that decision made the notice a small non-modal strip in the bottom
+   left corner with the clauses behind a «Подробнее» toggle, and it
+   failed at its own job — nothing stopped the user from ignoring it,
+   «Принять» was two clicks deep, and the onboarding tour came up
+   underneath it. This is the opposite shape: a full-viewport scrim
+   (`inset: 0`, `--z-consent-gate` = 90, above toast 80 and the tour
+   overlay 70) with the text expanded from the first frame. The app
+   underneath is `inert` while this is up (App.tsx), so there is no
+   click or Tab path out — acceptance is the only exit.
+
+   Height budget: the panel is `max-height: 100%` of a full-viewport
+   flex parent, and the body is the only scrolling part, so a 360x640
+   phone shows the title, the lead and the accept controls without the
+   clause list pushing them off-screen.
+   ========================================================================= */
+
+.disclaimer-gate {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-consent-gate);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-lg);
+  background: rgba(0, 0, 0, 0.72);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+  overscroll-behavior: contain;
+  animation: disclaimer-gate-fade var(--dur-md) var(--ease);
+}
+
+@keyframes disclaimer-gate-fade {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.disclaimer-gate__panel {
+  display: flex;
+  flex-direction: column;
+  width: min(720px, 100%);
+  max-height: 100%;
+  padding: var(--space-lg);
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-overlay);
+  font-family: var(--font-sans);
+  color: var(--fg);
+}
+
+.disclaimer-gate__panel:focus { outline: none; }
+
+@media (max-width: 720px) {
+  .disclaimer-gate { padding: var(--space-sm); }
+  .disclaimer-gate__panel { padding: var(--space-md); }
+}
+
+.disclaimer-gate__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  flex-shrink: 0;
+}
+
+.disclaimer-gate__title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--fs-md);
+  font-weight: var(--fw-semibold);
+  color: var(--primary);
+  line-height: 1.25;
+}
+
+.disclaimer-gate__close {
+  min-width: var(--touch-target);
+  min-height: var(--touch-target);
+  margin: calc(var(--touch-target) / -2 + var(--fs-sm)) 0 0 0;
+  padding: 0;
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  font-family: var(--font-sans);
+  font-size: var(--fs-md);
+  line-height: 1;
+  color: var(--fg-dim);
+  cursor: pointer;
+  user-select: none;
+}
+
+.disclaimer-gate__close:hover {
+  color: var(--fg);
+  border-color: var(--border-strong);
+}
+
+.disclaimer-gate__summary {
+  margin: var(--space-sm) 0 0 0;
+  flex-shrink: 0;
+  font-size: var(--fs-sm);
+  line-height: var(--lh-relaxed);
+  color: var(--fg-dim);
+}
+
+.disclaimer-gate__body {
+  margin-top: var(--space-md);
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: var(--space-xs);
+  -webkit-overflow-scrolling: touch;
+}
+
+.disclaimer-gate__note {
+  margin: 0;
+  font-size: var(--fs-xs);
+  line-height: var(--lh-relaxed);
+  color: var(--fg-dim);
+}
+
+.disclaimer-gate__note a {
+  color: var(--primary);
+  text-decoration: underline;
+}
+
+.disclaimer-gate__hint {
+  margin: var(--space-sm) 0 0 0;
+  flex-shrink: 0;
+  font-size: var(--fs-xs);
+  line-height: var(--lh-relaxed);
+  color: var(--fg-ghost);
+}
+
+.disclaimer-gate__actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: var(--space-sm);
+  flex-shrink: 0;
+}
+
+.disclaimer-section { margin-bottom: var(--space-md); }
+.disclaimer-section:last-of-type { margin-bottom: var(--space-sm); }
+
+.disclaimer-section__title {
+  margin: 0 0 var(--space-xs) 0;
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  text-transform: uppercase;
+  letter-spacing: var(--ls-caps);
+  color: var(--fg-dim);
+}
+
+.disclaimer-section__text {
+  margin: 0 0 var(--space-xs) 0;
+  font-size: var(--fs-sm);
+  line-height: var(--lh-relaxed);
+  color: var(--fg);
+}
+
+.disclaimer-consent {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-sm);
+  padding: var(--space-sm);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-1);
+  cursor: pointer;
+  user-select: none;
+}
+
+.disclaimer-consent__checkbox {
+  margin-top: 2px;
+  accent-color: var(--primary);
+  flex-shrink: 0;
+}
+
+.disclaimer-consent__label {
+  font-size: var(--fs-sm);
+  line-height: var(--lh-relaxed);
+  color: var(--fg);
+}
+
+.disclaimer-btn {
+  min-height: var(--touch-target);
+  padding: 0 var(--space-lg);
+  font-family: var(--font-sans);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  user-select: none;
+  transition:
+    background var(--dur-xs) var(--ease),
+    color var(--dur-xs) var(--ease),
+    transform var(--dur-2xs) var(--ease);
+  background: var(--surface-1);
+  color: var(--fg);
+  border: 1px solid var(--border);
+}
+
+.disclaimer-btn:active { transform: scale(0.97); }
+
+.disclaimer-btn--primary {
+  background: var(--primary);
+  color: var(--fg-inverse);
+  border-color: var(--primary);
+  box-shadow: var(--shadow-glow-primary);
+}
+
+.disclaimer-btn--primary:hover { filter: brightness(1.1); }
+
+.disclaimer-btn--primary:disabled {
+  background: var(--surface-3);
+  color: var(--fg-dim);
+  border-color: var(--border);
+  box-shadow: none;
+  cursor: not-allowed;
+  filter: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .disclaimer-gate { animation: none; }
+}
+
+/* Instrument picker — click a sound name in the score to swap it.
+ * The host clips its overflow, so the card is clamped inside the
+ * editor (see `pickerPosition` in CodeMirrorEditorImpl). */
+.cm-host {
+  position: relative;
+}
+.cm-instrument-picker {
+  position: absolute;
+  z-index: 40;
+  padding: var(--space-2xs);
+  background: var(--surface-3);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-fab);
+}
+.cm-instrument-picker__select {
+  appearance: none;
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  color: var(--fg);
+  font-family: var(--font-sans);
+  font-size: var(--fs-xs);
+  padding: var(--space-2xs) var(--space-xs);
+  min-width: 180px;
+  cursor: pointer;
+}
+
+/* The AI panel's instrument picker — the sound the LLM should use for
+ * the melodic parts. A native <select>: the list is long and the OS
+ * picker sheet is the one control that works on a phone. */
+.ai-instrument-select-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px var(--space-2xs);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+}
+.ai-instrument-glyph {
+  font-size: var(--fs-xs);
+  line-height: 1;
+}
+.ai-instrument-select {
+  appearance: none;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-pill);
+  color: var(--fg);
+  font-family: var(--font-sans);
+  font-size: var(--fs-2xs);
+  padding: 0 var(--space-2xs);
+  max-width: 128px;
+  cursor: pointer;
+}
+.ai-instrument-select:hover:not(:disabled) { color: var(--fg); }
+.ai-instrument-select:disabled { opacity: 0.55; cursor: not-allowed; }

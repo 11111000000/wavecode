@@ -110,4 +110,49 @@ describe('parseStackTopLayers', () => {
     expect(layers[0]?.name).toBe('myFn');
     expect(layers[1]?.name).toBe('other');
   });
+
+  // ---- multi-section scores ----
+
+  it('spans every stack of a cat(...) score, not just the first', () => {
+    const score = [
+      'cat(',
+      '  stack(note("c3").gain(1), note("e3").gain(1)),',
+      '  stack(note("g3").gain(1)),',
+      '  stack(s("bd").gain(1), note("c2").gain(1), note("g2").gain(1)),',
+      ')',
+    ].join('\n');
+    const layers = parseStackTopLayers(score);
+    expect(layers).toHaveLength(6);
+    expect(layers.map((l) => l.section)).toEqual([0, 0, 1, 2, 2, 2]);
+    expect(layers.map((l) => l.index)).toEqual([0, 1, 2, 3, 4, 5]);
+    expect(layers[3]?.name).toBe('Samples');
+    expect(layers[5]?.name).toBe('Bass (g2)');
+  });
+
+  it('spans every stack of the bracketed cat([...]) form too', () => {
+    const layers = parseStackTopLayers(
+      'cat([\n  stack(note("c3"), note("e3")),\n  stack(note("g3")),\n])',
+    );
+    expect(layers).toHaveLength(3);
+    expect(layers.map((l) => l.section)).toEqual([0, 0, 1]);
+  });
+
+  it('does not emit a row for a comment-only stack slot', () => {
+    const layers = parseStackTopLayers(
+      'cat(\n  stack(\n    // hi-hat\n    s("hh*8"),\n    // kick\n    s("bd"),\n  ),\n)',
+    );
+    expect(layers).toHaveLength(2);
+    expect(layers.map((l) => l.name)).toEqual(['Samples', 'Samples']);
+  });
+
+  it('keeps the single-layer fallback for a score with no stack at all', () => {
+    const layers = parseStackTopLayers('note("c3 e3 g3")');
+    expect(layers).toHaveLength(1);
+    expect(layers[0]).toEqual({
+      index: 0,
+      source: 'note("c3 e3 g3")',
+      name: 'Piano',
+      section: 0,
+    });
+  });
 });

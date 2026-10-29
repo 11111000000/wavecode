@@ -9,7 +9,7 @@ import { getPreset } from './presetsStore';
  * useAppBootstrap гидрировал только `appStore.score` из IDB —
  * после релоада играла одна, в дропдауне светилась другая.
  *
- * Семантика «последний загруженный» (см. math/wavecode-preset-id-
+ * Семантика «последний загруженный» (см. decisions/wavecode-preset-id-.yaml
  * hydration/packet.md):
  *  - сигнал отражает последний пресет, который юзер явно выбрал;
  *  - правки score НЕ сбрасывают сигнал (Ableton-style);
@@ -101,4 +101,24 @@ export const resetSelectedPreset = (): void => {
     /* ignore */
   }
   setSelectedPresetIdRaw(DEFAULT_PRESET_ID);
+};
+
+/**
+ * Pure валидация IDB.activePresetId → string (default = 'creep').
+ *
+ * Используется `useAppBootstrap` чтобы обеспечить синхронный
+ * fallback при reload: если IDB хранит удалённый/мёртвый id,
+ * подменяем ОБА signal и appStore.activePresetId на 'creep'
+ * сразу, без race с localStorage (см. decisions/fix-new-
+ * composition-flow.yaml — там подробно описана гонка).
+ *
+ * Семантика:
+ *   - null            → DEFAULT_PRESET_ID (первый запуск)
+ *   - builtin или
+ *     активный custom → as-is
+ *   - неизвестный id   → DEFAULT_PRESET_ID (deleted/renamed/etc.)
+ */
+export const resolveStoredActivePresetId = (activeId: string | null): string => {
+  if (activeId === null) return DEFAULT_PRESET_ID;
+  return getPreset(activeId) !== undefined ? activeId : DEFAULT_PRESET_ID;
 };

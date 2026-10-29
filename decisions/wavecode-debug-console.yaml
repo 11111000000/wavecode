@@ -3,8 +3,8 @@ schema: math-coding/3.3
 id: wavecode-debug-console
 revision: 1
 state: active
-body_sha: "sha256:2670d0c5a1053f85f7c42419b8469de4b637a8572ffe3bfe6f07e8361dd14b60"
-yaml_sha: "sha256:2670d0c5a1053f85f7c42419b8469de4b637a8572ffe3bfe6f07e8361dd14b60"
+body_sha: "sha256:21efa4085d6cf88ca4320b5a58aabf196ad8a9792be0d412a0e4e617fb8c89a7"
+yaml_sha: "sha256:21efa4085d6cf88ca4320b5a58aabf196ad8a9792be0d412a0e4e617fb8c89a7"
 
 intent: |
   Three observable UI surfaces share one log backend (`logger` from
@@ -104,39 +104,6 @@ antithesis: |
   нативный `window.confirm` ugly». Возражение: нативный
   confirm согласован со всем UX (везде одни стили confirm);
   custom modal — scope creep, отдельный пакет.
-  Console UX replaces the old DebugPanel. Three composable
-  surfaces (Toast / ConsoleButton / ConsoleSheet) backed by
-  one Solid store `consoleStore`. Source of truth:
-  ring buffer from `math/wavecode-log-pipeline`. Errors
-  route to glow + badge; criticals route to toast as well.
-counterexample: |
-  The strongest objection to this decision is captured in the `antithesis` field above: (1) «Show all errors as toasts automatically» — обсуждалось
-antithesis: |
-  (1) «Show all errors as toasts automatically» — обсуждалось
-  с автором, было отклонено: слишком навязчиво для live-coding
-  сессии, где ошибки частые. Console glow + badge = сигнал
-  без шума. Critical (unhandled rejection / необработанный
-  throw из effect-runtime) — отдельный канал, поднимается
-  даже если кнопка не видна. (2) «Use a single-tab console
-  instead of Errors / All / By source». Возражение: Errors
-  tab — дефолт, поскольку 95% запросов "что сломалось?"
-  сводятся к последней ошибке. All — для полного транскрипта;
-  By source — для дебага Strudel-канала (где каждый slap
-  Strudel пишет в `[webaudio]`). (3) «Let the user dismiss
-  the sheet but keep it open across navigation». Возражение:
-  SPA навигации нет (нет вкладок / страниц), есть только
-  bottom-sheets и modals; ConsoleButton всегда возвращает
-  к последнему состоянию через `markAllRead()`. (4) «Persist
-  the log buffer to IDB». Отклонено: см. `wavecode-log-pipeline`
-  antithesis #5. (5) «Reuse the existing DebugPanel as the
-  ConsoleSheet». Возражение: DebugPanel — это dev-tooling
-  panel с unmount-семантикой; converting его в bottom sheet
-  сломает его существующих потребителей (тесты `DebugPanel.
-  test.tsx`, в dev-режиме `STRUDEL_DEBUG=1`). Чистая
-  замена чище. (6) «Custom `confirm()` для Clear —
-  нативный `window.confirm` ugly». Возражение: нативный
-  confirm согласован со всем UX (везде одни стили confirm);
-  custom modal — scope creep, отдельный пакет.
 axiom_link:
   - A4
 scope:
@@ -161,7 +128,7 @@ obligations:
       The original v1.0 packet applied on the recorded date in its `witness` file; this migration preserves that evidence as an `attestations/<id>-evidence.json` file.
     acceptance:
       all:
-        - verifier: "attestation-store-has-subject"
+        - verifier: "mathc self-check"
           result: pass
 assumptions: []
 risk:
@@ -171,4 +138,3 @@ risk:
 relations:
   addresses:
     - wavecode-bootstrap-math-coding-3.3@1
----

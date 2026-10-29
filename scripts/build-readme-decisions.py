@@ -15,7 +15,7 @@ Filtering:
     - All decisions/*.yaml are included by default
     - Use --ids wavecode-scope,wavecode-stack-performance to restrict
       to a curated subset (used by the top-level README, where 16
-      foundational decisions are highlighted out of 88 total).
+      foundational decisions are highlighted out of 119 total).
 
 YAML handling: we do NOT pull in PyYAML on purpose — most fields in the
 math-coding 3.3 schema use `|` block-scalar, and a hand-written state
@@ -37,7 +37,7 @@ INTENT_LINES = 2
 def parse_decision(path: Path) -> dict:
     """Pull the fields we need out of a single decisions/<id>.yaml.
 
-    The schema (math-coding 3.3) puts id/state at the top level, then
+    The schema (math-coding 3.3 family, kernel 3.7) puts id/state at the top level, then
     `intent: |` followed by an indented block scalar. We grab the
     first INTENT_LINES non-empty lines of that block.
     """

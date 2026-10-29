@@ -1,0 +1,659 @@
+/**
+ * Voice-AI session state machine (pure reducer).
+ *
+ * Models the lifecycle of a single voice-AI session, from `idle`
+ * through `arming` → `listening` → `transcribing` → `requesting` →
+ * `applying`, with `paused`, `errored`, and `review` escape
+ * hatches. The reducer takes the current state plus an event and
+ * returns the next state; it performs no IO and uses no wall-clock
+ * time.
+ *
+ * Why a separate reducer (not Effect.gen orchestration in the
+ * application layer)
+ * ----------------------------------------------------------
+ * Three reasons:
+ *   1. Testability — every transition is a deterministic function
+ *      of (state, event). The transition table is exercised in
+ *      `voiceSession.test.ts` with zero mocking.
+ *   2. Replay — a buffered event log can rebuild the session
+ *      (useful for "why did it end up errored?" debugging, and
+ *      a prerequisite for future wake-word / cron-driven sessions).
+ *   3. Layer purity — domain/ cannot import from
+ *      `solid-js` / `effect/platform` / `@ai-sdk/*`. Effect's
+ *      `Ref` lives in application/, so the reducer — which lives in
+ *      domain/ — must NOT use it. The orchestrator wraps this
+ *      reducer in `Ref.update` / `Stream.fold` at the application
+ *      boundary.
+ *
+ * Barge-in is a "replace current session" signal: it returns to
+ * `idle` from `listening / requesting / applying`. Effect-fibre
+ * cancellation is the orchestrator's responsibility (this file
+ * never sees a `Fiber`). Default mode is `'replace'`; the
+ * orchestrator decides what to do after idle (re-arm in continuous,
+ * stay idle otherwise).
+ *
+ * Glossary:
+ *   - `listening`     = STT engine active, transcript growing
+ *   - `transcribing`  = final chunk landed, awaiting user commit
+ *                       (deferred commit on continuous mode)
+ *   - `requesting`    = LLM edit prompt in flight
+ *   - `applying`      = LLM returned, AudioEngine.eval in progress
+ *   - `paused`        = user explicitly paused (resumable)
+ *   - `errored`       = unrecoverable failure (stt-init / llm / eval)
+ *   - `review`        = STT stopped, transcript frozen for user
+ *                       review-and-edit before send-to-AI
+ *   - `sent`          = the instruction was sent AND applied; the
+ *                       buffer survives so the user can edit it and
+ *                       send it again (see `decisions/
+ *                       wavecode-voice-composer-ux`)
+ */
+
+import {
+  appendChunk,
+  initialTranscriptState,
+  type TranscriptChunk,
+  type TranscriptLang,
+  type TranscriptState,
+} from './Transcript';
+
+export type VoiceSessionState =
+  | { readonly tag: 'idle' }
+  | { readonly tag: 'arming' }
+  | { readonly tag: 'listening'; readonly transcript: TranscriptState; readonly continuous: boolean }
+  | { readonly tag: 'transcribing'; readonly transcript: TranscriptState }
+  | { readonly tag: 'requesting'; readonly transcript: TranscriptState; readonly continuous: boolean }
+  | { readonly tag: 'applying'; readonly transcript: TranscriptState; readonly score: string; readonly continuous: boolean }
+  | { readonly tag: 'paused'; readonly transcript: TranscriptState }
+  | { readonly tag: 'review'; readonly transcript: TranscriptState; readonly editedText: string }
+  | { readonly tag: 'sent'; readonly transcript: TranscriptState; readonly editedText: string }
+  | { readonly tag: 'errored'; readonly error: string; readonly transcript: TranscriptState };
+
+export type VoiceSessionEvent =
+  | { readonly type: 'arm' }
+  | { readonly type: 'stt-ready' }
+  | { readonly type: 'chunk'; readonly chunk: TranscriptChunk }
+  | { readonly type: 'commit' }
+  | { readonly type: 'request-sent'; readonly score: string }
+  | { readonly type: 'applied' }
+  | { readonly type: 'barge-in' }
+  | { readonly type: 'pause' }
+  | { readonly type: 'resume' }
+  | { readonly type: 'error'; readonly message: string }
+  | { readonly type: 'dismiss' }
+  | { readonly type: 'enter-review' }
+  | { readonly type: 'edit-review'; readonly text: string }
+  | { readonly type: 'send-review'; readonly text: string }
+  | { readonly type: 'cancel-review' }
+  | { readonly type: 'cancel-send' };
+
+/**
+ * Fresh session. `transcript` is allocated lazily so the
+ * `idle` variant stays cheap to construct and to compare
+ * with `===` in tests.
+ */
+export const initialVoiceSession = (): VoiceSessionState => ({ tag: 'idle' });
+
+/**
+ * Transition table. Every cell is explicit; missing combinations
+ * (chunk in `transcribing`) return the state unchanged so the
+ * reducer is total. The function is declared `const arrow` so
+ * vitest can `toHaveLength`-assert on the array of cases.
+ */
+export const voiceSessionReducer = (
+  state: VoiceSessionState,
+  event: VoiceSessionEvent,
+): VoiceSessionState => {
+  // Pause and error are wildcard transitions — handled first so
+  // the per-state branches below can assume `paused` / `errored`
+  // are sinks.
+  if (event.type === 'pause') {
+    return pauseFrom(state);
+  }
+  if (event.type === 'error') {
+    return errorFrom(state, event.message);
+  }
+  // `dismiss` is a wildcard too, and it has to be: it is the event
+  // behind the panel's ✕ («закрыть»), and a ✕ that leaves the FSM
+  // where it was is a lie — the panel would keep rendering «записываю…
+  // N с» for a session that no longer exists. Before this rule the
+  // reducer only honoured `dismiss` from `paused` and `errored`, so
+  // pressing ✕ while recording left the machine pinned in
+  // `listening` forever: the mic was released, the take was thrown
+  // away, and the only way out was the FAB (which then started a
+  // take nobody asked for). See `decisions/wavecode-voice-composer-ux`.
+  if (event.type === 'dismiss') {
+    return dismissFrom(state);
+  }
+
+  switch (state.tag) {
+    case 'idle':
+      return fromIdle(state, event);
+    case 'arming':
+      return fromArming(state, event);
+    case 'listening':
+      return fromListening(state, event);
+    case 'transcribing':
+      return fromTranscribing(state, event);
+    case 'requesting':
+      return fromRequesting(state, event);
+    case 'applying':
+      return fromApplying(state, event);
+    case 'paused':
+      return fromPaused(state, event);
+    case 'review':
+      return fromReview(state, event);
+    case 'sent':
+      return fromSent(state, event);
+    case 'errored':
+      return fromErrored(state, event);
+  }
+};
+
+const fromIdle = (
+  state: { readonly tag: 'idle' },
+  event: VoiceSessionEvent,
+): VoiceSessionState => {
+  if (event.type === 'arm') return { tag: 'arming' };
+  if (event.type === 'barge-in') return state;
+  return state;
+};
+
+const fromArming = (
+  state: { readonly tag: 'arming' },
+  event: VoiceSessionEvent,
+): VoiceSessionState => {
+  if (event.type === 'stt-ready') {
+    return {
+      tag: 'listening',
+      transcript: initialTranscriptState(),
+      continuous: false,
+    };
+  }
+  if (event.type === 'arm') return { tag: 'arming' };
+  if (event.type === 'barge-in') return { tag: 'idle' };
+  return state;
+};
+
+const fromListening = (
+  state: {
+    readonly tag: 'listening';
+    readonly transcript: TranscriptState;
+    readonly continuous: boolean;
+  },
+  event: VoiceSessionEvent,
+): VoiceSessionState => {
+  if (event.type === 'arm') {
+    // Re-arm drops the current transcript and goes back through
+    // `arming`. The orchestrator decides whether to cancel the
+    // STT stream first; the reducer just resets state.
+    return { tag: 'arming' };
+  }
+  if (event.type === 'chunk') {
+    const nextTranscript = appendChunk(state.transcript, event.chunk);
+    if (event.chunk.kind === 'final') {
+      return {
+        tag: 'transcribing',
+        transcript: nextTranscript,
+      };
+    }
+    if (nextTranscript === state.transcript) return state;
+    return {
+      tag: 'listening',
+      transcript: nextTranscript,
+      continuous: state.continuous,
+    };
+  }
+  if (event.type === 'barge-in') {
+    return { tag: 'idle' };
+  }
+  if (event.type === 'enter-review') {
+    return enterReviewFrom(state.transcript);
+  }
+  return state;
+};
+
+const fromTranscribing = (
+  state: { readonly tag: 'transcribing'; readonly transcript: TranscriptState },
+  event: VoiceSessionEvent,
+): VoiceSessionState => {
+  if (event.type === 'arm') {
+    return rearmFrom(state.transcript);
+  }
+  if (event.type === 'commit') {
+    return {
+      tag: 'requesting',
+      transcript: state.transcript,
+      continuous: false,
+    };
+  }
+  if (event.type === 'barge-in') return { tag: 'idle' };
+  if (event.type === 'chunk') {
+    // Intermediate final chunks between the first final and the
+    // user commit are still useful for the transcript log (they
+    // may carry a confidence update), so we run `appendChunk` for
+    // final but NOT change the state tag.
+    if (event.chunk.kind === 'final') {
+      const next = appendChunk(state.transcript, event.chunk);
+      if (next === state.transcript) return state;
+      return { tag: 'transcribing', transcript: next };
+    }
+    return state;
+  }
+  if (event.type === 'enter-review') {
+    return enterReviewFrom(state.transcript);
+  }
+  return state;
+};
+
+const fromRequesting = (
+  state: {
+    readonly tag: 'requesting';
+    readonly transcript: TranscriptState;
+    readonly continuous: boolean;
+  },
+  event: VoiceSessionEvent,
+): VoiceSessionState => {
+  if (event.type === 'request-sent') {
+    return {
+      tag: 'applying',
+      transcript: state.transcript,
+      score: event.score,
+      continuous: state.continuous,
+    };
+  }
+  if (event.type === 'arm') {
+    return rearmFresh(state.transcript.lang);
+  }
+  if (event.type === 'barge-in') return { tag: 'idle' };
+  if (event.type === 'cancel-send') {
+    // The request never reached the score editor — put the text back
+    // into the review form so the user can edit it and try again.
+    return enterReviewFrom(state.transcript);
+  }
+  return state;
+};
+
+const fromApplying = (
+  state: {
+    readonly tag: 'applying';
+    readonly transcript: TranscriptState;
+    readonly score: string;
+    readonly continuous: boolean;
+  },
+  event: VoiceSessionEvent,
+): VoiceSessionState => {
+  if (event.type === 'applied') {
+    if (state.continuous) {
+      return {
+        tag: 'listening',
+        transcript: initialTranscriptState(state.transcript.lang),
+        continuous: true,
+      };
+    }
+    // The edit landed. The machine stops here — in `sent`, NOT in
+    // `idle` — because the user's text is still on screen and they
+    // must be able to edit it and send it again. `idle` closed the
+    // panel the moment the score was written, which is exactly the
+    // "no feedback, no second chance" the composer UX removes.
+    return {
+      tag: 'sent',
+      transcript: state.transcript,
+      editedText: reviewBufferText(state.transcript),
+    };
+  }
+  if (event.type === 'arm') {
+    return rearmFresh(state.transcript.lang);
+  }
+  if (event.type === 'barge-in') {
+    // Cancel-and-replace: drop the in-flight eval result and the
+    // transcript; the orchestrator handles the AudioEngine revert
+    // and re-arm decision.
+    return { tag: 'idle' };
+  }
+  if (event.type === 'cancel-send') {
+    // The user pulled the plug on the in-flight request. The text
+    // goes back to the review form untouched — the whole point of
+    // the cancel affordance is "fix it and send it again".
+    return enterReviewFrom(state.transcript);
+  }
+  return state;
+};
+
+const fromPaused = (
+  state: { readonly tag: 'paused'; readonly transcript: TranscriptState },
+  event: VoiceSessionEvent,
+): VoiceSessionState => {
+  if (event.type === 'resume') {
+    return {
+      tag: 'listening',
+      transcript: state.transcript,
+      continuous: true,
+    };
+  }
+  // `arm` from `paused` re-opens the take for another utterance.
+  //
+  // This branch is load-bearing, not a nicety. `VoiceAISession.start`
+  // dispatches `arm` → `stt.start` → `stt-ready`, and before it
+  // existed every one of those three was a no-op from `paused`, so
+  // the second press-and-hold of a take recorded audio, uploaded it
+  // to the STT server, and then had every resulting chunk silently
+  // discarded: `fromPaused` had no `chunk` branch either. The user
+  // saw an unchanged panel and concluded the button was dead.
+  //
+  // It goes straight to `listening` rather than through `arming` for
+  // the same reason `fromReview` does — `fromArming + stt-ready`
+  // allocates a FRESH transcript, which would throw away the text
+  // already dictated. `stt-ready` arriving from `listening` is a
+  // no-op (`fromListening` does not handle it), so the orchestrator's
+  // start sequence still completes correctly.
+  if (event.type === 'arm') {
+    return rearmFrom(state.transcript);
+  }
+  if (event.type === 'chunk') {
+    // A chunk that lands while the FSM is parked must not be thrown
+    // away. `paused` is where a take parks when the STT stream ends
+    // without text — but the final chunk of that very take can still
+    // be in flight (the flush uploads, and the engine ends the
+    // stream, and the two land in either order). Dropping it here
+    // loses a phrase the user can hear themselves saying.
+    //
+    // A final chunk moves the FSM to `transcribing`, which is what
+    // the subscriber's auto-review looks for — so a late final still
+    // reaches the review form.
+    if (event.chunk.kind !== 'final') return state;
+    const next = appendChunk(state.transcript, event.chunk);
+    if (next === state.transcript) return state;
+    return { tag: 'transcribing', transcript: next };
+  }
+  if (event.type === 'enter-review') {
+    return enterReviewFrom(state.transcript);
+  }
+  return state;
+};
+
+/**
+ * Review is the "user-edit-then-send" sink — the STT stream is
+ * stopped (orchestrator's `enterReview` handler does that), and
+ * the editable buffer starts as the joined text of all final
+ * chunks. From here the user can:
+ *   - `edit-review(text)`     write into the buffer
+ *   - `send-review(text)`     go to requesting with the edited text
+ *                             (orchestrator runs the route without
+ *                             re-classifying — user already shaped it)
+ *   - `cancel-review`         return to idle, drop the buffer
+ *   - `arm`                   resume STT (re-runs from the
+ *                             orchestrator's start path) and append
+ *                             more transcript to the existing buffer
+ */
+const fromReview = (
+  state: {
+    readonly tag: 'review';
+    readonly transcript: TranscriptState;
+    readonly editedText: string;
+  },
+  event: VoiceSessionEvent,
+): VoiceSessionState => {
+  if (event.type === 'edit-review') {
+    if (event.text === state.editedText) return state;
+    return {
+      tag: 'review',
+      transcript: state.transcript,
+      editedText: event.text,
+    };
+  }
+  if (event.type === 'send-review') {
+    return {
+      tag: 'requesting',
+      transcript: { ...state.transcript, final: event.text },
+      continuous: false,
+    };
+  }
+  if (event.type === 'cancel-review') {
+    return { tag: 'idle' };
+  }
+  if (event.type === 'arm') {
+    // Resume listening from where we left off. The orchestrator
+    // re-runs the STT pipeline (we stop the previous one in
+    // `enterReview`); the transcript is preserved so final chunks
+    // append on top.
+    return rearmFrom(state.transcript);
+  }
+  if (event.type === 'barge-in') return { tag: 'idle' };
+  if (event.type === 'cancel-send') {
+    // Nothing is in flight from `review` — the request was either
+    // never made or already cancelled. Staying in `review` is the
+    // honest answer: the buffer is still there, still editable.
+    return state;
+  }
+  return state;
+};
+
+/**
+ * `sent` — the instruction reached the LLM and the score it produced
+ * was written into the editor. The machine is idle (no mic, no
+ * request in flight) but the BUFFER IS STILL THE USER'S: the text
+ * stays on screen, editable, and can be sent again.
+ *
+ * Why this is a state and not a toast
+ * ----------------------------------
+ * The old flow ended the session in `idle` the moment the score was
+ * written. The panel disappeared, the text disappeared with it, and
+ * the user's only feedback was a composition that changed (or, worse,
+ * did not). There was no way to see what was sent, no way to fix a
+ * misheard word, and no way to send the same instruction again with
+ * one word changed. `sent` keeps the buffer alive and says out loud
+ * that the round trip finished.
+ *
+ * Transitions:
+ *   - `arm`         → a NEW take with an EMPTY buffer. The
+ *                      instruction is already in the score; carrying
+ *                      it over would apply it twice.
+ *   - `send-review` → re-send the (possibly edited) text. This is
+ *                      the "отправить заново" affordance.
+ *   - `edit-review` → the user fixed a word; the buffer follows.
+ */
+const fromSent = (
+  state: {
+    readonly tag: 'sent';
+    readonly transcript: TranscriptState;
+    readonly editedText: string;
+  },
+  event: VoiceSessionEvent,
+): VoiceSessionState => {
+  if (event.type === 'edit-review') {
+    if (event.text === state.editedText) return state;
+    return {
+      tag: 'sent',
+      transcript: state.transcript,
+      editedText: event.text,
+    };
+  }
+  if (event.type === 'send-review') {
+    // Re-send. `continuous: false` — a re-sent instruction ends the
+    // session when it lands, exactly like the first send did.
+    return {
+      tag: 'requesting',
+      transcript: { ...state.transcript, final: event.text },
+      continuous: false,
+    };
+  }
+  if (event.type === 'arm') {
+    return rearmFresh(state.transcript.lang);
+  }
+  if (event.type === 'barge-in') return { tag: 'idle' };
+  return state;
+};
+
+const fromErrored = (
+  state: { readonly tag: 'errored'; readonly error: string; readonly transcript: TranscriptState },
+  event: VoiceSessionEvent,
+): VoiceSessionState => {
+  // `dismiss` is handled by the wildcard above, so it never reaches
+  // this branch.
+  if (event.type === 'arm') return { tag: 'arming' };
+  return state;
+};
+
+const pauseFrom = (state: VoiceSessionState): VoiceSessionState => {
+  switch (state.tag) {
+    case 'listening':
+      return { tag: 'paused', transcript: state.transcript };
+    case 'transcribing':
+      return { tag: 'paused', transcript: state.transcript };
+    case 'requesting':
+      return { tag: 'paused', transcript: state.transcript };
+    case 'applying':
+      return { tag: 'paused', transcript: state.transcript };
+    case 'paused':
+      return state;
+    case 'review':
+      return state;
+    case 'sent':
+      // Nothing is being captured, so there is nothing to pause. The
+      // buffer stays; the panel stays.
+      return state;
+    case 'errored':
+      return state;
+    case 'arming':
+      return state;
+    case 'idle':
+      return state;
+  }
+};
+
+/**
+ * `dismiss` — «the user closed this and wants it gone».
+ *
+ * Every active state collapses to `idle`. The alternative (honouring
+ * `dismiss` only from `paused` and `errored`) is what made the panel's
+ * ✕ a no-op in the states where it matters most: pressing it during a
+ * take released the mic and threw the audio away, but left the FSM
+ * pinned in `listening` — the panel went on counting seconds for a
+ * session that no longer existed.
+ */
+const dismissFrom = (state: VoiceSessionState): VoiceSessionState => {
+  switch (state.tag) {
+    case 'idle':
+      return state;
+    case 'arming':
+    case 'listening':
+    case 'transcribing':
+    case 'requesting':
+    case 'applying':
+    case 'paused':
+    case 'review':
+    case 'sent':
+    case 'errored':
+      return { tag: 'idle' };
+  }
+};
+
+const errorFrom = (state: VoiceSessionState, message: string): VoiceSessionState => {
+  if (state.tag === 'errored') {
+    if (message === state.error) return state;
+    return { tag: 'errored', error: message, transcript: state.transcript };
+  }
+  switch (state.tag) {
+    case 'idle':
+    case 'arming':
+      return { tag: 'errored', error: message, transcript: initialTranscriptState() };
+    case 'listening':
+    case 'transcribing':
+    case 'requesting':
+    case 'applying':
+    case 'paused':
+    case 'review':
+    case 'sent':
+      return { tag: 'errored', error: message, transcript: state.transcript };
+  }
+};
+
+/**
+ * Shared helper for the states a press-and-hold can re-arm from:
+ * `paused`, `review`, `transcribing`, `requesting`, `applying`.
+ *
+ * All of them mean the same thing to the user: "the microphone is not
+ * recording right now, and I am holding the button down". Every one
+ * of them MUST accept the press.
+ *
+ * Why this helper exists
+ * ----------------------
+ * `applying` and `requesting` had no `arm` branch, and the effect was
+ * that a press during the LLM round trip was swallowed whole. The
+ * window is wide: `runRoute` dispatches `request-sent` BEFORE it
+ * calls the LLM, so the FSM sits in `applying` for the whole
+ * round-trip — seconds. A user who says the next instruction while
+ * the previous edit is still landing gets no microphone, no
+ * recording, no recognition, and no error: the press simply does
+ * nothing, and the panel keeps showing «применяю правку…».
+ *
+ * The `transcribing` case had the same hole: `transcribing` is the
+ * state between "the final chunk landed" and "the user confirmed",
+ * which is exactly where a user who is impatient with the review step
+ * presses again.
+ *
+ * It goes straight to `listening` rather than through `arming` for
+ * the same reason `fromPaused` and `fromReview` do: `fromArming +
+ * stt-ready` allocates a FRESH transcript, which would throw away
+ * the text already dictated. `stt-ready` arriving from `listening` is
+ * a no-op (`fromListening` does not handle it), so the orchestrator's
+ * start sequence still completes correctly.
+ */
+const rearmFrom = (transcript: TranscriptState): VoiceSessionState => ({
+  tag: 'listening',
+  transcript,
+  continuous: true,
+});
+
+/**
+ * Re-arm for a take whose PREVIOUS instruction has already been sent.
+ *
+ * `requesting` and `applying` mean the text is on its way to the LLM
+ * (or already there). A new take must therefore start with an EMPTY
+ * buffer: carrying the sent text over would make the next review
+ * form read «сделай композицию сделай бас быстрее» and send the
+ * already-applied instruction a second time.
+ *
+ * The contrast with `rearmFrom` is the whole point of the two
+ * helpers: `review`, `paused` and `transcribing` hold an UNSENT
+ * buffer, so a press continues it (the take-continuation contract —
+ * see `decisions/wavecode-voice-take-continuation`); `requesting`
+ * and `applying` hold a SENT one, so a press starts over.
+ */
+const rearmFresh = (lang: TranscriptLang): VoiceSessionState => ({
+  tag: 'listening',
+  transcript: initialTranscriptState(lang),
+  continuous: true,
+});
+
+/**
+ * The text a review buffer should start from.
+ *
+ * A final chunk is the authoritative source. An interim is the
+ * fallback for a take whose final upload came back empty — the relay
+ * answers with an empty transcript often enough (whisper on a clip
+ * it cannot make sense of returns `""`) that dropping the whole take
+ * would be the wrong answer. The user DID say something; the interim
+ * proves it; the text is better than silence.
+ *
+ * Without this fallback the review form opened with an empty
+ * textarea and a disabled «→ В ИИ» button — the recognised text was
+ * on screen and there was no way to send it.
+ */
+const reviewBufferText = (transcript: TranscriptState): string => {
+  const final = transcript.final.trim();
+  return final.length > 0 ? final : transcript.interim.trim();
+};
+
+/**
+ * Shared helper for the listen-ing / transcribing / paused arms
+ * of `enter-review`: snapshot the current transcript and seed the
+ * editable buffer with the joined final chunks (finals already
+ * contain the polished STT output — the user can then trim /
+ * rephrase before sending).
+ */
+const enterReviewFrom = (transcript: TranscriptState): VoiceSessionState => ({
+  tag: 'review',
+  transcript,
+  editedText: reviewBufferText(transcript),
+});

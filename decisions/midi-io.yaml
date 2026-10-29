@@ -3,8 +3,8 @@ schema: math-coding/3.3
 id: midi-io
 revision: 1
 state: draft
-body_sha: "sha256:865272bdbf055a234fe9140c10dff8e351a1916168087876cf979aadd0b5e959"
-yaml_sha: "sha256:865272bdbf055a234fe9140c10dff8e351a1916168087876cf979aadd0b5e959"
+body_sha: "sha256:80c9a86a8d372ecf831d06a20ab154f2381b0422eb1cbbfd63d819b3436813de"
+yaml_sha: "sha256:80c9a86a8d372ecf831d06a20ab154f2381b0422eb1cbbfd63d819b3436813de"
 
 intent: |
   В `ScorePanel` под редактором — пара кнопок «📥 Импорт» / «📤 Экспорт»:
@@ -20,57 +20,6 @@ intent: |
   оператором в поле «циклов» (default 4). Декодер симметричен экспорту:
   ровно то, что MIDI умеет, ровно то, что мы восстанавливаем.
 commitment: |
-  Два канала экспорта покрывают разные use-case'ы:
-  текст (lossless) — шеринг, backup, gist, email;
-  MIDI (lossy) — interop с DAW/hardware.
-  Общий код — пара функций в `presentation/components/MidiIOButtons.tsx`:
-  `<input type=file>` для импорта, `URL.createObjectURL(blob)` для
-  экспорта, `<a download>` триггерит скачивание. Сами кодеки чистые
-  и живут в `domain/midi/`, оркестрация — в `application/midi/`.
-  `domain/midi/codec.ts` — pure обёртка над `@tonejs/midi` (парсер/писатель
-  SMF, без DOM, без эффектов — соответствует lint-rules для domain).
-  `domain/midi/decoder.ts` — pure эвристика: `MIDISequence → Strudel
-  snippet` через BPM detection (median inter-onset), 16th quantize,
-  per-channel split. `domain/midi/encoder.ts` — pure структура для
-  Hap-ов → MIDINote (но сама `Pattern.query()` — effect, в
-  `application/midi/exportMidi.ts` через существующий `AudioEngine`).
-  `s()`-паттерны НЕ рендерятся в MIDI-ноты (Strudel-сэмплы не имеют
-  pitch); они скипаются с warning. При импорте канал 9 (GM Drums)
-  маппится в отдельный `s("bd sd ...")` слой через маппинг GM Note→Strudel
-  sample-name (e.g. 36 → bd, 38 → sd, 42 → hh).
-  Decoder heuristic — явно lossy: `note(...)` восстанавливается точно,
-  контроллеры (modulation, expression) и pitch-bend — нет (mini-notation
-  их не выражает). Документируем как limitation в `Notes`.
-  Кнопки живут в `ScorePanel` (а не в шапке), потому что это
-  файл-операции над кодом, контекстно ближе к редактору.
-counterexample: |
-  The strongest objection to this decision is captured in the `antithesis` field above: (1) Только текст, без MIDI — MIDI мост lossy в обе стороны, оператор
-antithesis: |
-  (1) Только текст, без MIDI — MIDI мост lossy в обе стороны, оператор
-  сначала сохранил snippet, экспортнул в MIDI, потерял все комментарии,
-  каналы, контроллеры — зачем? Ответ: для interop с DAW (Logic,
-  Ableton, Reaper), для hardware-секвенсоров, для нотной записи в
-  Finale/MuseScore. Но эта ценность скрыта от оператора, который
-  не делает DAW-pipeline.
-  (2) Только MIDI, без текста — текст тривиален (4 строки кода),
-  но даёт оператору возможность хранить snippet вне браузера
-  (gist, email, backup IDB). Если выбросить — потеряем feature
-  "переслал другу snippet в Slack".
-  (3) WebMIDI API вместо файлов — WebMIDI шлёт события в реальном
-  времени на железо, не в файл. Это другой use-case (live performance),
-  и сейчас нет аппаратного контроллера в требованиях.
-  (4) MusicXML вместо MIDI — MusicXML нотация точнее, но в 5–10×
-  тяжелее по схеме и в нашем контексте (live-coding через
-  mini-notation) не нужен: MIDI для interop, текст для шеринга.
-  (5) Не квантизовать на 16th-grid — даёт верность источнику, но
-  `note("e5 d#5 e5 ...")` без квантизации выглядит как список
-  с дробями. Strudel mini-notation ожидает сетку.
-  (6) Не auto-detect BPM — ставить 120 BPM default. Auto-detect
-  ошибается на rubato/passagens (Für Elise без legato партитуры),
-  fallback на 120 обязателен.
-  (7) Не вводить UI-поле «циклов», фиксировать 4 — гибкость стоит
-  1 input, юзер может захотеть длиннее (4 цикла = 8 сек, мелодия
-  типа «Ode to Joy» длиннее).
   Два канала экспорта покрывают разные use-case'ы:
   текст (lossless) — шеринг, backup, gist, email;
   MIDI (lossy) — interop с DAW/hardware.
@@ -144,7 +93,7 @@ obligations:
       The original v1.0 packet applied on the recorded date in its `witness` file; this migration preserves that evidence as an `attestations/<id>-evidence.json` file.
     acceptance:
       all:
-        - verifier: "attestation-store-has-subject"
+        - verifier: "mathc self-check"
           result: pass
 assumptions:
   - id: midi-io-assumption-1
@@ -209,4 +158,3 @@ risk:
 relations:
   addresses:
     - wavecode-bootstrap-math-coding-3.3@1
----

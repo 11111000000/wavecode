@@ -1120,6 +1120,25 @@ body.wc-landing-active .wc-app {
   color: var(--primary);
   border-bottom-color: var(--primary);
 }
+/* The terms link has no href — it re-opens the terms gate read-only
+   (wavecode-disclaimer-gate). Same affordance as the anchors. */
+.l-footer__link-btn {
+  font-family: inherit;
+  font-size: var(--fs-md);
+  text-align: left;
+  color: var(--fg);
+  background: none;
+  border: none;
+  border-bottom: 1px solid transparent;
+  padding: 0;
+  cursor: pointer;
+  transition: color var(--dur-sm) var(--ease),
+              border-color var(--dur-sm) var(--ease);
+}
+.l-footer__link-btn:hover {
+  color: var(--primary);
+  border-bottom-color: var(--primary);
+}
 .l-footer__bottom {
   border-top: 1px solid var(--border);
   padding: var(--space-lg) var(--space-xl);
@@ -1616,4 +1635,51 @@ body.wc-landing-active .wc-app {
 @media (max-width: 1100px) {
   .l-hero { grid-template-columns: 1fr; }
   .l-hero__viz { margin: 0 auto; max-width: 480px; }
+}
+
+/* =========================================================================
+ * LANDING SAMPLE-PROGRESS CORNER PILL
+ * =========================================================================
+ *
+ * Угловой pill, который показывает прогресс загрузки семплов пока
+ * посетитель читает маркетинговую часть. Использует тот же
+ * <SampleProgressBadge /> что и BottomBar в /#/app — разница только
+ * в позиционировании: фиксирован в правом-верхнем углу лендинга,
+ * пока грузится; исчезает когда `status === 'loaded'`.
+ *
+ * Семантически это НЕ часть навигации — поэтому `pointer-events: none`
+ * чтобы не блокировать клики по TopNav CTA на узких экранах, где
+ * они могут пересекаться по координатам.
+ */
+
+.l-sample-progress-corner {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  z-index: 60;
+  pointer-events: none;
+}
+.l-sample-progress-corner .sample-progress {
+  /* Override BottomBar-specific layout properties so the pill sits
+     cleanly in the corner without inheriting flex sizing. */
+  margin-right: 0;
+  max-width: none;
+  align-self: auto;
+  flex: 0 0 auto;
+  /* Subtle visual tuning for the floating corner placement. */
+  opacity: 0.92;
+  transition: opacity var(--dur-sm) var(--ease);
+}
+.l-sample-progress-corner .sample-progress:hover {
+  opacity: 1;
+}
+@media (max-width: 720px) {
+  /* On narrow viewports the TopNav CTA owns the top-right corner —
+     tuck the pill below it so they don't visually collide. */
+  .l-sample-progress-corner { top: 56px; right: 8px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .l-sample-progress-corner .sample-progress {
+    transition: none;
+  }
 }

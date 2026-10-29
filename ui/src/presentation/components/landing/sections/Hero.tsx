@@ -1,5 +1,6 @@
 import { createSignal, type JSX, For } from 'solid-js';
 import { ArrowRight, ChevronDown } from '~/presentation/components/landing/icons';
+import { setPendingNew } from '~/presentation/state/pendingNewComposition';
 
 /**
  * Hero — первый экран лендинга.
@@ -10,12 +11,12 @@ import { ArrowRight, ChevronDown } from '~/presentation/components/landing/icons
  *   - Поле ввода с placeholder'ом, в который хочется что-то написать.
  *   - Quick-chips: 4 примера одним кликом. Клик заполняет input — это
  *     даёт мгновенный feedback, что лендинг «живой», а не статичный.
- *   - Кнопка «Создать» отправляет в редактор с ?prompt=… (App.tsx сейчас
- *     этот query не читает, но ввод текста пользователя — это и есть
- *     мотивация: «AI сгенерирует по нему»). Для рабочего цикла
- *     prompt→генерация нужен бэкенд; пока что prompt попадает в редактор
- *     как локальная «подсказка» через query-параметр.
- *   - Альтернативный CTA: «Открыть редактор» → /app.
+ *   - Кнопка «Создать» создаёт НОВУЮ композицию (см.
+ *     presentation/state/pendingNewComposition) и переходит в
+ *     редактор. Текст из инпута (если есть) передаётся как
+ *     стартовый prompt — пока просто заполняет тело пресета.
+ *   - Альтернативный CTA: «Открыть редактор» → /app без новой
+ *     композиции (откроет последнюю из IDB).
  */
 const QUICK_EXAMPLES = [
   { label: 'Грустный джаз', prompt: 'грустный джаз с пианино' },
@@ -38,10 +39,12 @@ export function Hero(): JSX.Element {
 
   const goApp = (e: Event): void => {
     e.preventDefault();
-    const q = text().trim()
-      ? `?prompt=${encodeURIComponent(text().trim())}`
-      : '';
-    goHash(`#/app${q}`);
+    // «Создать» должно именно создавать новую композицию, а не
+    // открывать прошлую из IDB. Ставим флаг в sessionStorage —
+    // useAppBootstrap подхватит при mount AppShell и запустит
+    // createNewComposition(prompt) вместо restoreFromIdbOrShare.
+    setPendingNew(text().trim() || undefined);
+    goHash('#/app');
   };
 
   const goEditor = (): void => goHash('#/app');

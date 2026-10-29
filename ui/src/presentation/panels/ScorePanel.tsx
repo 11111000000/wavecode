@@ -11,6 +11,7 @@ import { getDebug } from '~/infrastructure/audio/LiveAudioEngine';
 import { CodeMirrorEditor, type CodeMirrorEditorApi } from '../components/CodeMirrorEditor';
 import { MiniNotationToolbar } from '../components/MiniNotationToolbar';
 import { PianoKeyboard } from '../components/PianoKeyboard';
+import { Pianoroll } from '../components/Pianoroll';
 import {
   setEditorFocused,
   setPianoEditorApi,
@@ -55,7 +56,33 @@ import {
 
 const PIANO_COLLAPSE_KEY = 'wavecode-piano-collapse-v1';
 const MINI_TOOLBAR_KEY = 'wavecode-mini-toolbar-v1';
+const SCORE_VIEW_KEY = 'wavecode-score-view-mode-v1';
 const DESKTOP_QUERY = '(min-width: 1024px)';
+
+/**
+ * wavecode-pianoroll: ScorePanel can render either the CodeMirror
+ * text editor (default) OR the Pianoroll timeline view (opt-in). The
+ * choice persists via `SCORE_VIEW_KEY`. CM6 is the safe default — Code
+ * is the source of truth; the pianoroll is a visualisation companion.
+ */
+type ScoreViewMode = 'text' | 'roll';
+const readStoredView = (): ScoreViewMode => {
+  try {
+    const v = localStorage.getItem(SCORE_VIEW_KEY);
+    if (v === 'roll') return 'roll';
+    if (v === 'text') return 'text';
+  } catch {
+    /* localStorage unavailable */
+  }
+  return 'text';
+};
+const writeStoredView = (v: ScoreViewMode): void => {
+  try {
+    localStorage.setItem(SCORE_VIEW_KEY, v);
+  } catch {
+    /* localStorage unavailable — silently no-op */
+  }
+};
 
 const readStoredCollapsed = (): boolean => {
   try {
@@ -110,12 +137,20 @@ export function ScorePanel() {
   const [debug, setDebug] = createSignal(getDebug());
   const [pianoCollapsed, setPianoCollapsed] = createSignal(true);
   const [isDesktop, setIsDesktop] = createSignal(readDesktopMatch());
+  // wavecode-pianoroll: text vs roll view toggle (default = text).
+  const [viewMode, setViewMode] = createSignal<ScoreViewMode>(readStoredView());
   // wavecode-toast-overhead-and-toolbar-toggle: mobile default = closed,
   // desktop default = open. localStorage wins.
   const [miniToolbarOpen, setMiniToolbarOpen] = createSignal(
     readMiniToolbarOpen(readDesktopMatch()),
   );
   let editorApi: CodeMirrorEditorApi | undefined;
+
+  const switchView = (next: ScoreViewMode): void => {
+    if (viewMode() === next) return;
+    setViewMode(next);
+    writeStoredView(next);
+  };
 
   const pollId = window.setInterval(() => setDebug(getDebug()), 500);
   onCleanup(() => window.clearInterval(pollId));
@@ -251,14 +286,47 @@ export function ScorePanel() {
         </Show>
       </Show>
       <Suspense fallback={<div class="cm-host cm-host-fill cm-loading">загрузка редактора…</div>}>
-        <CodeMirrorEditor
-          value={appStore.score}
-          onChange={(v) => dispatch({ type: 'replaceScore', text: v })}
-          onReady={(api) => {
-            editorApi = api;
-          }}
-        />
+        <Show when={viewMode() === 'text'}>
+          <CodeMirrorEditor
+            value={appStore.score}
+            onChange={(v) => dispatch({ type: 'replaceScore', text: v })}
+            onReady={(api) => {
+              editorApi = api;
+            }}
+          />
+        </Show>
+        <Show when={viewMode() === 'roll'}>
+          <div class="pianoroll-pane">
+            <Pianoroll
+              score={appStore.score}
+              onChange={(v) => dispatch({ type: 'replaceScore', text: v })}
+            />
+          </div>
+        </Show>
       </Suspense>
+
+      <div class="pianoroll-view-toggle" role="group" aria-label="View mode">
+        <button
+          type="button"
+          class="pianoroll-view-toggle-btn"
+          data-active={viewMode() === 'text' ? 'true' : 'false'}
+          aria-pressed={viewMode() === 'text'}
+          onClick={() => switchView('text')}
+          title="Code editor (default — source of truth)"
+        >
+          text
+        </button>
+        <button
+          type="button"
+          class="pianoroll-view-toggle-btn"
+          data-active={viewMode() === 'roll' ? 'true' : 'false'}
+          aria-pressed={viewMode() === 'roll'}
+          onClick={() => switchView('roll')}
+          title="Piano roll timeline (read + edit notes visually)"
+        >
+          🎹 roll
+        </button>
+      </div>
 
       <div class="score-debug">
         <span>триггеры: <strong>{debug().triggers}</strong></span>

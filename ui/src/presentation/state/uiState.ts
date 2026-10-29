@@ -48,6 +48,24 @@ const compactState: UIState = {
   layout: defaultLayout(),
 };
 
+/**
+ * Mobile-mode options with the effect spelled out.
+ *
+ * `auto` in particular is opaque from the label alone: it follows the
+ * `matchMedia('(max-width: 720px)')` breakpoint rather than doing
+ * anything visibly different on a given device, and the old radio gave
+ * the user no way to know that before committing to a pick.
+ */
+export const MOBILE_MODES: ReadonlyArray<{
+  readonly value: MobileMode;
+  readonly label: string;
+  readonly hint: string;
+}> = [
+  { value: 'auto', label: 'Авто', hint: 'сам решит по ширине экрана' },
+  { value: 'compact', label: 'Компактно', hint: 'всё в один столбец' },
+  { value: 'full', label: 'Полно', hint: 'панели во всю ширину' },
+];
+
 const isMobileViewport = (): boolean => {
   if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
     return false;
@@ -400,6 +418,7 @@ export const closeStatusOverlay = (): void => {
 //   Ctrl+Shift+R  → toggle AI
 //   Ctrl+Shift+S  → toggle Status
 //   Ctrl+Shift+E  → toggle Score
+//   Ctrl+Shift+L  → AI focus on selection (wavecode-editor-selection-ai)
 //   Ctrl+Enter    → submit AI instruction
 //   Ctrl+Z        → undo score (when focus outside text input — see refs.undoScore)
 //   Ctrl+Y        → redo score
@@ -410,6 +429,7 @@ export const installKeyboardShortcuts = (refs: {
   undoScore: () => void;
   redoScore: () => void;
   openAdmin?: () => void;
+  aiExplainSelected?: () => void;
 }): void => {
   const handler = (e: KeyboardEvent) => {
     const mod = e.ctrlKey || e.metaKey;
@@ -447,6 +467,15 @@ export const installKeyboardShortcuts = (refs: {
     } else if (e.shiftKey && e.key.toLowerCase() === 'a') {
       e.preventDefault();
       refs.openAdmin?.();
+    } else if (e.shiftKey && e.key.toLowerCase() === 'l') {
+      // wavecode-editor-selection-ai: Ctrl/Cmd+Shift+L —
+      // hand off the current selection to the AI panel. The
+      // handler is registered by AIEditPanel via a module-level
+      // signal in editorSelection.ts because App.tsx is frozen
+      // by Slot 1.1 and the centralized keyboard handler
+      // cannot accept a new required prop without touching it.
+      e.preventDefault();
+      refs.aiExplainSelected?.();
     }
   };
   window.addEventListener('keydown', handler);

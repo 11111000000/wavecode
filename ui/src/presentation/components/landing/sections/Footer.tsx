@@ -1,21 +1,25 @@
-import { For, type JSX } from 'solid-js';
+import { For, Show, type JSX } from 'solid-js';
 import { WavecodeLogo } from '~/presentation/components/landing/icons';
+import { openTerms } from '~/presentation/state/consentGate';
+import { APP_VERSION } from '~/version';
 
 type Link = {
   readonly label: string;
   readonly href: string;
   readonly external?: boolean;
-  readonly route?: boolean;     // true → /app (SPA-навигация), false → #anchor или ext
+  readonly route?: boolean;     // true → #/app (SPA-навигация), false → #anchor или ext
+  readonly onClick?: () => void; // no href — opens the terms gate read-only
 };
 
 const SECTIONS: ReadonlyArray<{ title: string; links: ReadonlyArray<Link> }> = [
   {
     title: 'Продукт',
     links: [
-      { label: 'Открыть редактор',  href: '/app',         route: true },
+      { label: 'Открыть редактор',  href: '#/app',        route: true },
       { label: 'Пресеты',            href: '#snippet' },
       { label: 'Архитектура',        href: '#architecture' },
       { label: 'Quick start',        href: '#start' },
+      { label: 'Условия использования', href: '#terms', onClick: openTerms },
     ],
   },
   {
@@ -61,14 +65,28 @@ export function Footer(): JSX.Element {
                 <For each={col.links}>
                   {(l) => (
                     <li>
-                      <a
-                        href={l.href}
-                        {...(l.external
-                          ? { target: '_blank', rel: 'noopener noreferrer' }
-                          : {})}
+                      <Show
+                        when={!l.onClick}
+                        fallback={
+                          <button
+                            type="button"
+                            class="l-footer__link-btn"
+                            data-testid="footer-terms"
+                            onClick={() => l.onClick?.()}
+                          >
+                            {l.label}
+                          </button>
+                        }
                       >
-                        {l.label}
-                      </a>
+                        <a
+                          href={l.href}
+                          {...(l.external
+                            ? { target: '_blank', rel: 'noopener noreferrer' }
+                            : {})}
+                        >
+                          {l.label}
+                        </a>
+                      </Show>
                     </li>
                   )}
                 </For>
@@ -79,7 +97,7 @@ export function Footer(): JSX.Element {
       </div>
 
       <div class="l-footer__bottom">
-        <span>© 2026 wavecode · pure-frontend SPA · v0.1</span>
+        <span>© 2026 wavecode · pure-frontend SPA · {`v${APP_VERSION}`}</span>
         <span class="l-footer__bottom-links">
           <span>Geist Sans + Geist Mono</span>
           <span>Webkit · Chrome · Firefox · Safari 16+</span>

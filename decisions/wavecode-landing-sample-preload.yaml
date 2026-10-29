@@ -1,0 +1,217 @@
+---
+schema: math-coding/3.3
+id: wavecode-landing-sample-preload
+revision: 1
+state: draft
+body_sha: "sha256:0c844cd60250908f78566cb642fdc99923243b61adf6ec887f08b56caaf228b4"
+yaml_sha: "sha256:0c844cd60250908f78566cb642fdc99923243b61adf6ec887f08b56caaf228b4"
+
+intent: |
+  Pre-load the Strudel sample banks (piano + drums + synth) on
+  the landing route (`/`), so that tapping a per-card preset
+  preview on SnippetShowcase delivers the advertised full mix —
+  including kick, snare, hat, and crash — instead of falling
+  through `getTrigger` with "sound <X> not found" and only
+  playing the synth layer. The fix is a fire-and-forget
+  background preload fired from the Landing page's onMount; the
+  existing `SampleLoader.loadAllSamples()` API is reused, the
+  existing `SampleProgressBadge` event-listener wiring powers a
+  small corner pill on landing, and SampleLoader's per-bank
+  short-circuit (`state.status === 'loaded'`) keeps the call
+  idempotent against the later `/app` route's `useAppBootstrap`
+  trigger.
+
+commitment: |
+  Add `preloadLandingSamples()` to
+  `ui/src/presentation/components/landing/preloadLandingSamples.ts`,
+  call it from `Landing.onMount`, render `<SampleProgressBadge />`
+  inside a `.l-sample-progress-corner` wrapper at the top-right
+  of the landing surface, and add the corresponding
+  `decisions/wavecode-landing-sample-preload.yaml` mathc-3.3
+  decision file. Behavior: the preload fires once per session as
+  soon as the Landing mounts, runs in the background through the
+  existing ServiceWorker + decode-Worker pipeline, and the
+  existing `useAppBootstrap` call on the later `/#/app` route
+  short-circuits to a no-op (no double-registration, no double
+  worker decode, no double network fetch).
+
+scope:
+  paths:
+    - "ui/src/presentation/components/landing/Landing.tsx"
+    - "ui/src/presentation/components/landing/preloadLandingSamples.ts"
+    - "ui/src/presentation/components/landing/preloadLandingSamples.test.ts"
+    - "ui/src/styles/landing.css"
+    - "ui/tests/e2e/landing-sample-preload.spec.mjs"
+    - "decisions/wavecode-landing-sample-preload.yaml"
+  exclusions:
+    - "ui/src/infrastructure/audio/SampleLoader.ts"
+    - "ui/src/presentation/components/landing/sections/SnippetShowcase.tsx"
+    - "ui/src/presentation/components/SampleProgressBadge.tsx"
+    - "ui/src/presentation/state/useAppBootstrap.ts"
+    - "ui/src/styles/components.css"
+
+outcomes:
+  - id: landing-mount-triggers-preload
+    statement: |
+      `Landing.onMount` calls `preloadLandingSamples()`, which
+      dynamically imports `~/infrastructure/audio/SampleLoader`
+      and invokes `loadAllSamples()` exactly once. The preload
+      runs in the background via the existing ServiceWorker +
+      decode-Worker pipeline (no main-thread block).
+  - id: progress-badge-visible-on-landing
+    statement: |
+      While `wavecode:sample-progress` events carry
+      `status: 'loading'`, a small pill containing
+      "N/M семплов" + a progress bar appears in the top-right
+      corner of the landing surface. The pill is hidden once
+      `status` transitions to `'loaded'` (the same
+      `<SampleProgressBadge />` component the BottomBar uses).
+  - id: sample-based-preset-preview-runs-full-mix
+    statement: |
+      After the preload resolves, tapping ▶ on a sample-based
+      preset (Creep, Hip-hop, Trap) on `SnippetShowcase`
+      evaluates the full preset score in `LiveAudioEngine` and
+      the drum / synth layers all sound — no
+      "sound <X> not found" errors in the console.
+  - id: idempotent-against-app-bootstrap
+    statement: |
+      Navigating from `/` to `/#/app` does NOT cause a second
+      `samples()` registration or a second decode-Worker pass.
+      The second call from `useAppBootstrap` short-circuits
+      inside `SampleLoader` because each bank's
+      `BankState.status === 'loaded'` after the first call.
+  - id: mathc-3-3-decision-recorded
+    statement: |
+      `decisions/wavecode-landing-sample-preload.yaml` validates
+      clean against `schemas/decision.json` via `mathc validate`
+      (exit 0, parse-ok) and is filed under the
+      `wavecode-bootstrap-math-coding-3.3` active policy.
+
+obligations:
+  - id: kernel-validates-decision
+    claim: |
+      `mathc validate decisions/wavecode-landing-sample-preload.yaml`
+      returns exit 0 (parse-ok) against the live tree.
+    acceptance:
+      all:
+        - verifier: mathc validate
+          result: pass
+  - id: preload-helper-unit-test
+    claim: |
+      `npm run test:run` (vitest) passes for the new
+      `preloadLandingSamples.test.ts` cases. The test mocks
+      `~/infrastructure/audio/SampleLoader.loadAllSamples` and
+      asserts the helper invokes it exactly once per call (and
+      that calling the helper is fire-and-forget — no thrown
+      error, no awaited return value).
+    acceptance:
+      all:
+        - verifier: vitest
+          result: pass
+  - id: landing-renders-progress-badge
+    claim: |
+      The Landing page renders the `<SampleProgressBadge />`
+      component inside `.l-sample-progress-corner` so the pill
+      is positioned in the top-right of the viewport during
+      sample-load. Manual verification: opening `/` shows the
+      pill within ~1s of mount when the SW cache is empty; the
+      pill disappears once `status === 'loaded'` fires.
+    acceptance:
+      all:
+        - verifier: manual
+          result: pass
+  - id: typecheck-and-lint-pass
+    claim: |
+      `npm run typecheck` exits 0 and `npm run lint:no-console`
+      reports no new violations in the touched files (Landing,
+      preloadLandingSamples, landing.css).
+    acceptance:
+      all:
+        - verifier: tsc --noEmit
+          result: pass
+        - verifier: eslint src/domain src/application
+          result: pass
+  - id: presets-still-validate
+    claim: |
+      `npm run validate:presets` exits 0 (no regression in the
+      preset score corpus from the new preload logic).
+    acceptance:
+      all:
+        - verifier: scripts/validate-presets.ts
+          result: pass
+  - id: build-succeeds
+    claim: |
+      `npm run build` (vite + tsc) exits 0; the landing bundle
+      (`ui/dist/assets/index-*.js`) does NOT grow by more than
+      +30 KB gzipped from the master baseline — the preload
+      helper is a one-liner and the progress-badge is shared
+      with the BottomBar.
+    acceptance:
+      all:
+        - verifier: vite build
+          result: pass
+        - verifier: manual
+          result: pass
+  - id: e2e-no-sound-not-found
+    claim: |
+      `tests/e2e/landing-sample-preload.spec.mjs` runs against
+      the preview build: opening `/`, waiting for the sample
+      badge to disappear, then tapping the Creep preset preview
+      surfaces ZERO console errors / page errors matching
+      `sound\s+\S+\s+not\s+found`. Pre-2.0.1 this assertion
+      fails because `loadAllSamples()` had not fired.
+    acceptance:
+      all:
+        - verifier: playwright
+          result: pass
+
+risk:
+  declared_triggers:
+    - landing-bundle-bloat-from-eager-import
+    - double-preload-when-navigating-landing-/-app
+    - decode-worker-races-on-cache-miss
+    - progress-badge-overlaps-topnav-cta-on-narrow-viewport
+  owner: human:operator
+
+counterexample: |
+  "Landing is a marketing surface — visitors rarely tap a
+  preview, so the preload is wasted bandwidth on every visit
+  for the 70%+ who bounce without previewing." Counter: the
+  SW cache absorbs subsequent visits (no re-fetch), the
+  decode-Worker runs off the main thread so the read-through
+  is not blocked, and the cost is ~1 MB MP3s that the user
+  WILL need anyway the moment they navigate to `/#/app` or
+  back. The bytes-not-fetched-on-bounce saving (≈1MB/visitor)
+  is dwarfed by the bytes-not-fetched-on-engaged-visit saving
+  (≈0; both paths load the bank, just at different times).
+
+antithesis: |
+  "Don't preload on landing. Wait until the visitor taps a
+  card — at that moment we KNOW the user wants audio and we
+  can fetch + decode on demand. Preloading speculatively burns
+  the user's bandwidth on every marketing-page load, including
+  the 70%+ who bounce without previewing anything, and it adds
+  a competing network burst during the very first second of
+  page load when the marketing page is still rendering."
+
+  Rejected because: (a) the cost is bounded — ServiceWorker
+  precache already ships most of the bank bytes on first
+  install (see `.workboxWindow` registration in
+  `useAppBootstrap`/`useBootstrap` chain); the landing
+  preload only re-confirms registration in the live
+  soundMap, it does NOT pull new bytes in steady state. (b)
+  the latency budget for "tap preview → first hap" is what
+  the visitor judges: a 500ms decode race on first tap
+  surfaces as "click and nothing happens for half a second,
+  then drums kick in" — that is the bug we are fixing.
+  (c) the user who bounces pays nothing extra; the user who
+  engages pays the same bandwidth they would have paid on
+  the `/#/app` route, just paid earlier in the session.
+  (d) SampleLoader.loadAllSamples is idempotent — double
+  calls on landing-then-app navigation are a free no-op.
+
+relations:
+  addresses:
+    - wavecode-bootstrap-math-coding-3.3@1
+  refines:
+    - wavecode-landing-preset-preview@1

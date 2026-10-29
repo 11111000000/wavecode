@@ -61,12 +61,12 @@ describe('micStore — initial state', () => {
 });
 
 describe('micStore — setters', () => {
-  it('setMicSlot cycles correctly', async () => {
+  it('setMicSlot sets append-stack and at-cursor', async () => {
     const w = await importStore();
-    w.setMicSlot('replace-score');
-    expect(w.micSlot()).toBe('replace-score');
     w.setMicSlot('at-cursor');
     expect(w.micSlot()).toBe('at-cursor');
+    w.setMicSlot('append-stack');
+    expect(w.micSlot()).toBe('append-stack');
   });
 
   it('setMicInstrument updates and the change is reflected in previewPillPayload', async () => {
@@ -86,11 +86,9 @@ describe('micStore — setters', () => {
 });
 
 describe('micStore — toggleMicSlot', () => {
-  it('cycles append-stack → replace-score → at-cursor → append-stack', async () => {
+  it('cycles append-stack → at-cursor → append-stack', async () => {
     const w = await importStore();
     expect(w.micSlot()).toBe('append-stack');
-    w.toggleMicSlot();
-    expect(w.micSlot()).toBe('replace-score');
     w.toggleMicSlot();
     expect(w.micSlot()).toBe('at-cursor');
     w.toggleMicSlot();
@@ -101,13 +99,11 @@ describe('micStore — toggleMicSlot', () => {
 describe('micStore — slot labels and glyphs', () => {
   it('slot labels are user-readable Russian', async () => {
     expect((await importStore()).micSlotLabel('append-stack')).toBe('конец стека');
-    expect((await importStore()).micSlotLabel('replace-score')).toBe('заменить score');
     expect((await importStore()).micSlotLabel('at-cursor')).toBe('в курсор');
   });
 
   it('slot glyphs are compact bullets', async () => {
     expect((await importStore()).micSlotGlyph('append-stack')).toBe('↵ stack');
-    expect((await importStore()).micSlotGlyph('replace-score')).toBe('⟳ replace');
     expect((await importStore()).micSlotGlyph('at-cursor')).toBe('⌖ cursor');
   });
 });
@@ -139,64 +135,79 @@ describe('micStore — clearPreview', () => {
   });
 });
 
+describe('micStore — startMic keepBufferedNotes', () => {
+  /**
+   * Drive the segmenter into "one closed note" state: a pitched frame
+   * opens a note, a silent frame after it closes the note (the
+   * segmenter's `minNoteMs` is 80 ms).
+   */
+  const playOneNote = (w: typeof import('../state/micStore')): void => {
+    w.feedMicFrame({ hz: 440, clarity: 0.95, rms: 0.05, timestampMs: 0 });
+    w.feedMicFrame({ hz: null, clarity: 0, rms: 0.001, timestampMs: 200 });
+  };
+
+  it('a RESUMED recording keeps the notes that were already played', async () => {
+    // The whistle toggle pauses a take and the next press continues
+    // it. If the mic restart wiped the segmenter's buffer, the pause
+    // would silently mean "start over" and the notes the user had
+    // just whistled would be lost.
+    const w = await importStore();
+    playOneNote(w);
+    expect(w.micPreviewNotes()).toHaveLength(1);
+
+    w.startMic({ keepBufferedNotes: true });
+    expect(w.micPreviewNotes()).toHaveLength(1);
+    w.stopMic();
+  });
+
+  it('a FRESH recording starts with an empty buffer', async () => {
+    const w = await importStore();
+    playOneNote(w);
+    expect(w.micPreviewNotes()).toHaveLength(1);
+
+    w.startMic();
+    expect(w.micPreviewNotes()).toHaveLength(0);
+    w.stopMic();
+  });
+});
+
 describe('micStore — applyToScore (slot dispatching)', () => {
-  it('replace-score slot is a no-op when both buffers are empty', async () => {
+  it('is a no-op when both buffers are empty', async () => {
     const w = await importStore();
     const { appStore } = await import('../state/appStore');
-    w.setMicSlot('replace-score');
     const before = appStore.score;
     w.applyToScore();
     const after = appStore.score;
     expect(after).toBe(before);
-    // And the slot signal still points at our choice (no leak).
-    expect(w.micSlot()).toBe('replace-score');
   });
 
-  it('emits a stack(...) snippet when both notes and transients are present', async () => {
+  it('append-stack slot splices the snippet into the score', async () => {
     const w = await importStore();
-    const { appStore } = await import('../state/appStore');
-    // We can't trivially seed preview notes / transients without the
-    // detector (feed() is exported but not normally called from the
-    // store directly). Instead, reach into the module's setter
-    // closures to stage mixed content.
-    // Notes: a single MIDI 60 (C4) note.
+    const { appStore, dispatch } = await import('../state/appStore');
+    dispatch({ type: 'replaceScore', text: '' });
+    w.setMicSlot('append-stack');
     w.setMicPreviewNotes([
       { midi: 60, cents: 0, startMs: 0, durationMs: 200, vibratoCents: 0 },
     ]);
-    w.setMicTransients([
-      { type: 'kick', startMs: 200, amplitude: 0.5, spectralCentroidHz: 100, envelopeMs: 80 },
-    ]);
-    w.setMicSlot('replace-score');
     w.applyToScore();
-    expect(appStore.score).toMatch(/^stack\(\n/);
-    expect(appStore.score).toContain('note(');
-    expect(appStore.score).toContain('s("');
-    expect(appStore.score).toContain(',');
-    expect(appStore.score).toContain(')\n)');
-  });
-
-  it('emits a bare note(...) snippet when only notes are present', async () => {
-    const w = await importStore();
-    const { appStore } = await import('../state/appStore');
-    w.setMicPreviewNotes([
-      { midi: 60, cents: 0, startMs: 0, durationMs: 200, vibratoCents: 0 },
-    ]);
-    w.setMicSlot('replace-score');
-    w.applyToScore();
+    // Empty score → appendToTopStack returns the snippet verbatim.
     expect(appStore.score).toMatch(/^note\(/);
-    expect(appStore.score).not.toMatch(/^stack\(/);
+    expect(appStore.score).toContain('c4');
+    expect(appStore.score).toContain('s("piano")');
   });
 
-  it('emits a bare s(...) snippet when only transients are present', async () => {
+  it('append-stack slot wraps a bare note(...) score in a stack', async () => {
     const w = await importStore();
-    const { appStore } = await import('../state/appStore');
-    w.setMicTransients([
-      { type: 'kick', startMs: 0, amplitude: 0.5, spectralCentroidHz: 100, envelopeMs: 80 },
+    const { appStore, dispatch } = await import('../state/appStore');
+    dispatch({ type: 'replaceScore', text: 'note("e4 g4")' });
+    w.setMicSlot('append-stack');
+    w.setMicPreviewNotes([
+      { midi: 60, cents: 0, startMs: 0, durationMs: 200, vibratoCents: 0 },
     ]);
-    w.setMicSlot('replace-score');
     w.applyToScore();
-    expect(appStore.score).toMatch(/^s\(/);
-    expect(appStore.score).not.toMatch(/^stack\(/);
+    expect(appStore.score).toMatch(/^stack\(/);
+    expect(appStore.score).toContain('note("e4 g4")');
+    expect(appStore.score).toContain('c4');
   });
 });
 
@@ -333,5 +344,53 @@ describe('micStore — startMic / stopMic lifecycle (no mode selector)', () => {
     expect(w.micPrunedCount()).toBe(0);
     w.clearPreview();
     expect(w.micPrunedCount()).toBe(0);
+  });
+});
+
+describe('micStore — subscribeMicFrame hook', () => {
+  it('forwards every detected frame to subscribers', async () => {
+    // Mocked MicCapture exposes a detector whose `getState` returns
+    // 'streaming', but it does NOT call our onFrame. We exercise the
+    // subscription path by driving the live pipeline manually through
+    // `startMic` and a synthetic frame. Since the MicCapture mock
+    // doesn't actually deliver frames, we use the exported
+    // `feedMicFrame` shim to drive `onMicFrame` directly.
+    const w = await importStore();
+    const frames: number[] = [];
+    const unsub = w.subscribeMicFrame((f) => {
+      frames.push(f.hz ?? -1);
+    });
+    w.feedMicFrame({ hz: 261.6, clarity: 0.95, rms: 0.5, timestampMs: 100 });
+    w.feedMicFrame({ hz: 349.2, clarity: 0.95, rms: 0.5, timestampMs: 200 });
+    expect(frames).toEqual([261.6, 349.2]);
+    unsub();
+    w.feedMicFrame({ hz: 440, clarity: 0.95, rms: 0.5, timestampMs: 300 });
+    expect(frames).toEqual([261.6, 349.2]);
+  });
+
+  it('multiple subscribers each receive every frame', async () => {
+    const w = await importStore();
+    const a: number[] = [];
+    const b: number[] = [];
+    w.subscribeMicFrame((f) => { a.push(f.timestampMs); });
+    w.subscribeMicFrame((f) => { b.push(f.timestampMs); });
+    w.feedMicFrame({ hz: 440, clarity: 0.9, rms: 0.4, timestampMs: 42 });
+    expect(a).toEqual([42]);
+    expect(b).toEqual([42]);
+  });
+
+  it('subscribeMicFrame returns an unsubscribe that detaches only that listener', async () => {
+    const w = await importStore();
+    const a: number[] = [];
+    const b: number[] = [];
+    const unsubA = w.subscribeMicFrame((f) => { a.push(f.timestampMs); });
+    w.subscribeMicFrame((f) => { b.push(f.timestampMs); });
+    w.feedMicFrame({ hz: 440, clarity: 0.9, rms: 0.4, timestampMs: 1 });
+    expect(a).toEqual([1]);
+    expect(b).toEqual([1]);
+    unsubA();
+    w.feedMicFrame({ hz: 440, clarity: 0.9, rms: 0.4, timestampMs: 2 });
+    expect(a).toEqual([1]);
+    expect(b).toEqual([1, 2]);
   });
 });

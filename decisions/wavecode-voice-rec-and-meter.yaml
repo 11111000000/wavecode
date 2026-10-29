@@ -1,0 +1,510 @@
+---
+schema: math-coding/3.3
+id: wavecode-voice-rec-and-meter
+revision: 1
+state: active
+body_sha: "sha256:8d5d422604debaad21ed3f284df77f4965f0bb85d55822934f916c2a6bff5da3"
+yaml_sha: "sha256:8d5d422604debaad21ed3f284df77f4965f0bb85d55822934f916c2a6bff5da3"
+
+axiom_link:
+  - A0
+  - A3
+
+intent: |
+  Третий follow-up по голосовому вводу: пользователь хочет (a)
+  видеть, что приложение слышит микрофон во время записи, и
+  (b) разделить жест «открыть панель» и жест «начать писать» —
+  так, чтобы случайный одиночный тап по мини-FAB не запускал
+  STT-сессию. В этой же ревизии закрываются два UX-разрыва,
+  обнаруженные живым тестом: кнопка «Применить» для свиста
+  переехала из автоматического поведения release-коммита в
+  явный affordance на панели, а кнопка ●REC на обеих панелях
+  работает как toggle (подсветка при записи, повторное нажатие
+  останавливает, подпись «REC» не меняется).
+
+  Дополнительно фиксируем долго жившее непонимание: на
+  серверном STT-пути метра громкости живёт в панели, потому что
+  наш код владеет `AnalyserNode`. На облачном (Web Speech)
+  пути Chrome держит микрофон сам и `getUserMedia` мы не
+  вызываем — `AnalyserNode` некуда подключить, и обратной
+  связи по уровню сигнала у нас нет. Это не баг и не повод
+  строить фейковую метру: на облачном пути панель рендерит
+  живой транскрипт, и этого достаточно.
+
+commitment: |
+  (1) `VoiceAIMiniFAB` и `WhistleMiniFAB`: быстрый тап
+  (< 50 мс для голоса, < 80 мс для свиста — это уже
+  существующий `MIN_HOLD_BEFORE_RELEASE_OK_MS` для защиты от
+  мобильного фейкового `pointerleave`) больше НЕ запускает
+  сессию. Тап открывает `RecordingPanel` в «вооруженном»
+  состоянии через новый сигнал `voiceAIPanelArmed` /
+  `whistlePanelArmed` в соответствующих store'ах. Hold-жест
+  (> 50 / > 80 мс) сохраняется как быстрый старт записи.
+  (2) `RecordingPanel`: добавлены два режима отрисовки —
+  `voice-ai-armed` (одна кнопка ●REC, без вторичной
+  affordance — текста для отправки ещё нет) и `whistle-armed`
+  (кнопка ●REC + кнопка «Применить», disabled пока
+  `micPreviewNotes().length === 0`). Внутри `voice-ai` режима
+  при `voiceAIRmsLevel() !== null` рендерится горизонтальная
+  метра с тем же `* 400` калибром, что и в свисте:
+  SPEECH_RMS_THRESHOLD = 0.02 → 8% ширины; тихая речь на
+  30 см попадает в 20-40%; шкала ограничена 100%.
+  (3) `commitWhistle()` убран из `WhistleMiniFAB.releaseIfReal()`
+  и из `onSpuriousLeave` — это и есть «не дублировать вставку».
+  Когда `hold ≥ 80 мс` и пользователь отпускает кнопку,
+  `releaseIfReal` вызывает только `stopWhistle()`; ноты
+  остаются в `micPreviewNotes`. Когда `hold < 80 мс`,
+  `releaseIfReal` останавливает кратко-запущенную сессию и
+  открывает панель как «вооружена, ждём ●REC» (release =
+  sub-threshold tap). В обоих случаях `dispatch replaceScore`
+  происходит ТОЛЬКО из «Применить» в панели.
+  (4) Кнопка «Применить» в `WhistleBody`: зовёт `commitWhistle()`,
+  потом очищает `whistlePanelArmed`. Кнопка `disabled` пока
+  `micPreviewNotes().length === 0` — пользователь физически
+  не может «применить» пустой буфер.
+  (5) «Применить» внутри `RecordingPanel.onApply` и Fast-Tap
+  внутри `VoiceAIMiniFAB.onPointerUp` (после `pending`)
+  являются дубликатами affordance для запуска/применения —
+  их поведение согласовано: ни одна из них не отправляет
+  ничего в LLM/score без явного клика.
+  (6) На серверном STT-пути `ServerWhisperSTT` теперь
+  экспортирует `getServerWhisperRmsLevel()`; `voiceAIStore`
+  поллит его в 100 мс и публикует в `voiceAIRmsLevel` —
+  presentation-only, никакого нового требования к `STTEngine`
+  интерфейсу не добавляется.
+  (7) Состояние «вооружена, ждём ●REC» живёт как Solid
+  signal в presentation layer (`voiceAIPanelArmed`,
+  `whistlePanelArmed`), а НЕ как дополнительный тег в
+  `voiceSessionReducer`. Это не доменная семантика, а UX —
+  пользователь открыл панель до старта записи. Редуктор
+  остаётся чистой функцией от `(state, event)` →
+  `nextState`.
+  (8) `RecordingPanel` остаётся единой панелью без
+  модалок/оверлеев; единственный путь к affordance — тап
+  по соответствующему мини-FAB и/или удержание.
+  (9) `npm run test:precommit` (tsc strict + 113 vitest-файлов +
+  lint:no-console + validate:presets) завершается exit 0.
+  (10) Тесты на новые affordance: armed-тело для голоса и
+  свиста, фиксация label ●REC в подсвеченном и не-подсвеченном
+  состояниях, «Применить» disabled без нот, метра на серверном
+  пути рендерится и НЕ рендерится на облачном, релиз
+  «Применить» при пустом буфере — no-op, а не «вставить
+  пустую ноту».
+
+counterexample: |
+  «Метру можно показывать всегда: на облачном пути просто
+  рисовать рандомный или растущий ритм». Возражения: (a)
+  обещание метра — что приложение «слышит голос» —
+  ложно, если Web Speech API не отдаёт нам уровень;
+  пользователь видит анимацию и думает, что его голос
+  распознаётся, а это противоречит реальной обратной
+  связи через живой текст (который появляется позже или
+  не появляется, если Chrome висит); (b) даже если
+  сделать «правдоподобный» фейк — это будет обман
+  пользователя, и его потом будет труднее разоблачить
+  в багах; (c) молча не рисовать метру — это та же
+  реакция, что и у свиста: пока `micCurrentRms` is 0,
+  полоса пустая, и пользователь понимает это правильно;
+  такой же жест для облачного голоса — `voiceAIRmsLevel
+  null` → нет полосы.
+
+  «Можно вынести «вооружена, ждём ●REC» в доменный FSM —
+  один лишний тег не сломает архитектуру». Возражения:
+  (a) в редукторе появляются переходы, которые не
+  задействуют ни STT, ни LLM, ни mic-mutex — это
+  презентационная концепция, и доменный редуксер не
+  должен о ней знать; (b) для toggle-семантики «REC»
+  пришлось бы заводить `armed-oneshot`, `armed-
+  continuous` и т.д., на каждый mode активной
+  voice-session — взрыв состояний ради одной кнопки;
+  (c) эффект-стоимость: диспатч в reducer'е идёт в Ref +
+  Queue, и любой лишний тег нагружает FSM-сторону,
+  которая нам не нужна; (d) тестовая стоимость:
+  domain-тесты на каждой ревизии расширяются, чтобы
+  покрыть не-доменное поведение; сигнал в store
+  тестируется проще и ровно там, где он нужен — в
+  presentation-тесте.
+
+  ««Применить» необязательно делать disabled, можно
+  просто реагировать no-op'ом». Возражения: (a)
+  disabled — это affordance; кнопка визуально
+  говорит «нажму — ничего не будет», и пользователь не
+  тратит внимание на разглядывание; (b) toast «нет
+  нот — применить нечего» после нажатия — это
+  лишнее уведомление, когда пользователь явно ничего
+  не записал; (c) `disabled=true` рендерится однозначно
+  в семантике a11y — screen-reader пропускает элемент;
+  это лучше, чем «кнопка есть, но без эффекта».
+
+  «Удержание на свисте должно работать так же, как раньше,
+  включая вставку замет при отпускании». Возражения:
+  (a) пользователь просил «либо долго жмём кнопку… пишет
+  сразу, и когда отпускаем палец — запись прекращается»
+  — отпускание СТОП, не ВСТАВИТЬ; (b) с новой
+  toggle-семантикой «Применить» вставка при отпускании
+  даст двойной dispatch: один от release, второй от явного
+  «Применить», если пользователь решит добавить что-то ещё.
+
+antithesis: |
+  (1) «Метра на облачном пути всё-таки нужна —
+  воспользуйтесь `recognition.onaudiostart` или
+  `onsoundstart`». Возражения: Web Speech API не
+  отдаёт AnalyserNode-эквивалент — это fire-and-forget
+  событийный API, у которого нет канала аудиоданных;
+  если бы Chrome хотел, мы бы могли подписаться на
+  любой промежуточный этап. Пока этого нет, обещание
+  метры на облачном пути — ложь.
+
+  (2) «Голосовой review (textarea + «→ В ИИ») можно
+  использовать для подтверждения старта записи — тогда
+  вся запись идёт в режиме auto-review, а «Применить»
+  становится «Отправить»». Возражения: авто-commit
+  семантика уже отменена решением
+  `wavecode-voice-confirm-before-send`: одна ошибка STT
+  молча портит score. Если сейчас перенести старт
+  записи в review-форму, мы получим «нажал ●REC →
+  без явного «Начать» STT-сессия уже идёт». Пользователь
+  должен иметь возможность открыть панель, посмотреть
+  на неё, и только потом подтвердить старт.
+
+  (3) «Whistle armed-state можно выразить через
+  `whistleSessionReducer` одним тегом `armed-pending`
+  рядом с текущими `arming`/`recording`». Возражения:
+  (a) `armed` не имеет собственного набора активных
+  аудио-состояний — он живёт параллельно FSM; (b)
+  переходы из armed в реальную сессию становятся
+  «выбором по двум FSM-тегам» (armed или arming → что
+  делать?), что горячее, чем текущая
+  presentation-логика; (c) `recording` уже
+  используется — пришлось бы переименовывать в
+  `recording-active` или жить с перегрузкой
+  семантики FSM-тега.
+
+  (4) «Кнопку «Применить» можно скрыть через CSS,
+  когда нот нет, а не disabled=true — стилистически
+  так красивее». Возражения: (a) скрытая, но
+  присутствующая в DOM кнопка всё ещё попадает в a11y
+  tree и читается screen-reader'ом (см.
+  `wavecode-voice-live-transcript@1` antithesis (4) про
+  «Проверить»); (b) JS-сторона должна поддерживать
+  два способа рендера, что проще сломать; (c)
+  `disabled=true` — это явное утверждение «не
+  кликается до тех пор, пока…», и любая визуальная
+  стилизация может отличаться от a11y.
+
+scope:
+  paths:
+    - "ui/src/presentation/components/RecordingPanel.tsx"
+    - "ui/src/presentation/components/RecordingPanel.test.tsx"
+    - "ui/src/presentation/components/VoiceAIMiniFAB.tsx"
+    - "ui/src/presentation/components/VoiceAIMiniFAB.test.tsx"
+    - "ui/src/presentation/components/WhistleMiniFAB.tsx"
+    - "ui/src/presentation/components/WhistleMiniFAB.test.tsx"
+    - "ui/src/presentation/components/consoleStore.ts"
+    - "ui/src/presentation/state/voiceAIStore.ts"
+    - "ui/src/presentation/state/whistleStore.ts"
+    - "ui/src/infrastructure/stt/ServerWhisperSTT.ts"
+    - "ui/src/styles/components.css"
+  exclusions:
+    - "ui/node_modules/**"
+    - "ui/dist/**"
+    - "ui/src/domain/**"
+    - "ui/src/application/**"
+    - "ui/src/infrastructure/stt/WebSpeechSTT.ts"
+    - "ui/src/infrastructure/stt/FallbackSTT.ts"
+    - "ui/src/infrastructure/stt/selectSttLayer.ts"
+
+outcomes:
+  - id: armed-state-lives-in-presentation-not-domain-fsm
+    statement: |
+      `RecordingPanel.test.tsx > RecordingPanel — voice-AI armed body`
+      и `WhistleMiniFAB.test.tsx > WhistleMiniFAB — pointerdown /
+      pointerup`: сигналы `voiceAIPanelArmed` и `whistlePanelArmed`
+      хранятся в `voiceAIStore` / `whistleStore` соответственно,
+      и НЕ в `voiceSessionReducer.tag` / `whistleSessionReducer.tag`.
+      Доменный редуктор остаётся чистой функцией `(state, event) →
+      nextState`; «пользователь открыл панель до старта» — это
+      presentation concern, и его место в presentation-слое.
+  - id: meter-availability-is-server-only
+    statement: |
+      `RecordingPanel.test.tsx > RecordingPanel — voice-AI live
+      RMS meter — does not render the meter when voiceAIRmsLevel
+      is null (cloud / off path)`: на облачном (Web Speech)
+      пути `voiceAIRmsLevel()` остаётся `null`, и метра в DOM
+      не рендерится. На серверном пути
+      `getServerWhisperRmsLevel()` возвращает число, и
+      `RecordingPanel` рендерит горизонтальную полосу
+      с тем же `* 400` калибром, что и свист.
+  - id: hold-vs-tap-keeps-existing-fast-tap-semantics
+    statement: |
+      `VoiceAIMiniFAB.test.tsx > VoiceAIMiniFAB — pointer handlers
+      drive the FSM > fast pointerdown+pointerup (tap) opens the
+      armed panel without starting a session`: быстрый тап на
+      «Голос» не запускает сессию (`voiceAIState().tag === 'idle'`),
+      а поднимает `voiceAIPanelArmed === true`. Hold-старт (>=
+      50 мс) сохраняется без изменений.
+  - id: whistle-fast-tap-opens-armed
+    statement: |
+      `WhistleMiniFAB.test.tsx`: быстрый тап на «Свист»
+      (< 80 мс) НЕ вставляет нот; `whistlePanelArmed === true`;
+      релиз на ≥ 80 мс останавливает orchestrator, но не
+      вставляет ничего в score. Тест «pointerdown starts a
+      session» сохранён — `fireEvent.pointerDown` + `await 120мс`
+      всё ещё запускает orchestrator. «pointerup stops the
+      session» обновлён, чтобы опираться на новое поведение.
+  - id: apply-button-disabled-without-notes
+    statement: |
+      `RecordingPanel.test.tsx > RecordingPanel — whistle armed
+      body — «Применить» stays disabled even with the panel armed
+      but no notes`: при `micPreviewNotes().length === 0` кнопка
+      «Применить» имеет `disabled === true`. После
+      `setMicPreviewNotes([...])` и активной записи
+      `disabled` снимается.
+  - id: commit-on-release-removed-from-fab
+    statement: |
+      В `WhistleMiniFAB.releaseIfReal` и `onSpuriousLeave`
+      вызов `commitWhistle()` убран — теперь они вызывают только
+      `stopWhistle()` (или короткий эквивалент для sub-threshold
+      pointer-up). Ручная вставка через «Применить» протестирована
+      отдельным контрактом (см. `recording-panel-apply-splices` в
+      obligations), и существующий тест `whistleStore.test.ts >
+      commit splices the buffered notes into appStore.score via
+      replaceScore` остаётся авторитативным для поведения
+      `commitWhistle`.
+  - id: precommit-green
+    statement: |
+      `cd ui && npm run test:precommit` (tsc strict + vitest +
+      lint:no-console + validate:presets) завершается exit 0;
+      все новые тесты (armed body для голоса и свиста, метра,
+      behavior fast tap, apply disabled) проходят; старые
+      тесты для review-формы, видимости панели, потока
+      `WaveAIMiniFAB` продолжают проходить.
+  - id: mathc-validate-clean
+    statement: |
+      `~/.local/bin/mathc validate decisions/wavecode-voice-rec-and-meter.yaml`
+      завершается exit 0 без `MC-*` reject-диагностик.
+
+obligations:
+  - id: voice-ai-fast-tap-no-session
+    claim: |
+      `VoiceAIMiniFAB.test.tsx` содержит тест «fast
+      pointerdown+pointerup (tap) opens the armed panel
+      without starting a session»: после fireEvent.pointerDown
+      + fireEvent.pointerUp с задержкой 30 мс
+      `voiceAIState().tag === 'idle'` и
+      `voiceAIPanelArmed() === true`.
+    acceptance:
+      all:
+        - verifier: vitest-run-voice-mini-fab
+          result: pass
+  - id: voice-ai-hold-still-starts
+    claim: |
+      `VoiceAIMiniFAB.test.tsx` содержит тест «hold (>= 50ms)
+      eventually starts a session via the FSM fallback»: после
+      100 мс удержания `data-state` не равен `'idle'`.
+    acceptance:
+      all:
+        - verifier: vitest-run-voice-mini-fab
+          result: pass
+  - id: voice-ai-armed-renders-rec
+    claim: |
+      `RecordingPanel.test.tsx > RecordingPanel — voice-AI armed
+      body — renders the armed body when the panel is armed but
+      no session is running`: `data-mode="voice-ai-armed"`,
+      `data-state="armed"`, присутствует
+      `.voice-recording-panel__rec` с `data-rec-state="off"`,
+      нет `.voice-recording-panel__transcript`,
+      `.voice-recording-panel__review-textarea`,
+      `.voice-recording-panel__btn--primary`.
+    acceptance:
+      all:
+        - verifier: vitest-run-recording-panel
+          result: pass
+  - id: voice-ai-armed-x-clears
+    claim: |
+      `RecordingPanel.test.tsx > RecordingPanel — voice-AI armed
+      body — head ✕ in armed state clears the panel without ever
+      running a session`: aria-label содержит «Закрыть без
+      записи»; fireEvent.click устанавливает
+      `voiceAIPanelArmed() === false` и удаляет панель из DOM.
+    acceptance:
+      all:
+        - verifier: vitest-run-recording-panel
+          result: pass
+  - id: whistle-armed-renders-rec-and-apply
+    claim: |
+      `RecordingPanel.test.tsx > RecordingPanel — whistle armed
+      body — renders ●REC (off) and «Применить» (disabled)
+      when armed with no notes`: `data-mode="whistle-armed"`,
+      `.voice-recording-panel__rec` с `data-rec-state="off"`,
+      `.voice-recording-panel__btn--apply` с `disabled=true`.
+    acceptance:
+      all:
+        - verifier: vitest-run-recording-panel
+          result: pass
+  - id: whistle-apply-disabled-without-notes
+    claim: |
+      `RecordingPanel.test.tsx > RecordingPanel — whistle armed
+      body — «Применить» stays disabled even with the panel armed
+      but no notes`: нажатие на disabled-кнопку оставляет
+      `disabled=true` и не диспатчит `replaceScore` (appStore.score
+      в тестовом сетапе не меняется).
+    acceptance:
+      all:
+        - verifier: vitest-run-recording-panel
+          result: pass
+  - id: whistle-rec-highlight-on
+    claim: |
+      `RecordingPanel.test.tsx > RecordingPanel — whistle armed
+      body — whistle panel shows the ●REC + «Применить» pair
+      even after recording stops`: при `whistleState().tag ===
+      'recording'` и non-empty `micPreviewNotes`,
+      `data-rec-state="on"`, `.voice-recording-panel__note`-элементы
+      отрендерены (по одному на ноту).
+    acceptance:
+      all:
+        - verifier: vitest-run-recording-panel
+          result: pass
+  - id: whistle-armed-x-clears
+    claim: |
+      `RecordingPanel.test.tsx > RecordingPanel — whistle armed
+      body — head ✕ in armed state clears the panel without sending
+      notes`: aria-label «Закрыть без записи», fireEvent.click
+      устанавливает `whistlePanelArmed() === false`, ноты в
+      `micPreviewNotes` остаются (чтобы пользователь мог
+      переоткрыть панель и применить их позже).
+    acceptance:
+      all:
+        - verifier: vitest-run-recording-panel
+          result: pass
+  - id: voice-ai-meter-renders-on-server-path
+    claim: |
+      `RecordingPanel.test.tsx > RecordingPanel — voice-AI live
+      RMS meter — renders the meter with the calibrated width
+      when RMS is non-null`: при `setVoiceAIRmsLevel(0.1)` ширина
+      `.voice-recording-panel__rms-fill` = `40%`.
+    acceptance:
+      all:
+        - verifier: vitest-run-recording-panel
+          result: pass
+  - id: voice-ai-meter-not-rendered-on-cloud
+    claim: |
+      `RecordingPanel.test.tsx > RecordingPanel — voice-AI live
+      RMS meter — does not render the meter when voiceAIRmsLevel
+      is null`: при `setVoiceAIRmsLevel(null)` ни одного
+      `.voice-recording-panel__rms` в DOM.
+    acceptance:
+      all:
+        - verifier: vitest-run-recording-panel
+          result: pass
+  - id: voice-ai-meter-calibration
+    claim: |
+      `RecordingPanel.test.tsx > RecordingPanel — voice-AI live
+      RMS meter — caps at 100% / loud-enough crosses the speech
+      threshold`: `0.5 → 100%` и `0.05 → 20%` — совпадает с
+      порогом `SPEECH_RMS_THRESHOLD = 0.02` →
+      8% (видимая «речь началась»).
+    acceptance:
+      all:
+        - verifier: vitest-run-recording-panel
+          result: pass
+  - id: whistle-meter-renders-while-recording
+    claim: |
+      `RecordingPanel.test.tsx > RecordingPanel — whistle live
+      meter visibility — renders the whistle RMS row when actively
+      recording`: при `whistleState().tag === 'recording'` и
+      `setMicCurrentRms(0.07)` ширина `.voice-recording-panel
+      __rms-fill` = `28%` (тот же калибр `* 400`).
+    acceptance:
+      all:
+        - verifier: vitest-run-recording-panel
+          result: pass
+  - id: whistle-fast-tap-no-commit
+    claim: |
+      `WhistleMiniFAB` integration: подтверждено
+      `RecordingPanel.test.tsx > RecordingPanel — whistle armed
+      body` (через store-уровень): при быстром тапе и
+      немедленном release `whistleState().tag === 'idle'` после
+      `__resetWhistleForTests` (потому что orchestrator'у
+      сделали start и stop в течение одной Effects-цепочки).
+    acceptance:
+      all:
+        - verifier: vitest-run-whistle-mini-fab
+          result: pass
+  - id: commit-still-splices-on-apply
+    claim: |
+      Существующий тест `whistleStore.test.ts > commit splices
+      the buffered notes into appStore.score via replaceScore`
+      продолжает проходить: ручной вызов `commitWhistle()`
+      остаётся единственным путём для `dispatch replaceScore`
+      со стороны whistle.
+    acceptance:
+      all:
+        - verifier: vitest-run-whistle-store
+          result: pass
+  - id: reset-clears-armed-flags
+    claim: |
+      `RecordingPanel.test.tsx > RecordingPanel — clean state
+      between tests`: после `__resetVoiceAIForTests()`
+      `voiceAIPanelArmed() === false`; после
+      `__resetWhistleForTests()` `whistlePanelArmed() === false`.
+      Это защищает от утечки armed-флага через тест-suite
+      boundaries.
+    acceptance:
+      all:
+        - verifier: vitest-run-recording-panel
+          result: pass
+  - id: layered-boundaries-held
+    claim: |
+      `grep -rE 'from .effect|from .~/infrastructure' ui/src/presentation/components/{RecordingPanel,VoiceAIMiniFAB,WhistleMiniFAB}.tsx` и
+      аналогично для domain/ показывает только допустимые
+      импорты из domain-presentation. Новые presentation-only
+      сигналы (`voiceAIPanelArmed`, `whistlePanelArmed`,
+      `voiceAIRmsLevel`) НЕ тянутся в domain/.
+    acceptance:
+      all:
+        - verifier: text-scan-no-cross-layer
+          result: pass
+  - id: precommit-gate-green
+    claim: |
+      `cd ui && npm run test:precommit` завершается exit 0
+      (tsc strict + 113 vitest-файлов + lint:no-console +
+      validate:presets).
+    acceptance:
+      all:
+        - verifier: pnpm-ui-test-precommit
+          result: pass
+  - id: mathc-validate-clean
+    claim: |
+      `mathc validate decisions/wavecode-voice-rec-and-meter.yaml`
+      завершается exit 0 без `MC-*` reject-диагностик.
+    acceptance:
+      all:
+        - verifier: mathc validate
+          result: pass
+
+risk:
+  declared_triggers:
+    - long-held-FAST-tap-on-voice-AI-leaves-armed-state-on-screen-when-session-was-NEVER-started
+    - panel-armed-state-remains-on-screen-after-window-resize-on-mobile
+    - apply-button-races-with-recording-stop-when-user-spams-clicks
+    - meter-polls-server-stt-100ms-timer-still-active-after-stop-due-to-delayed-microtask
+    - cloud-speex-stuck-without-onresult-shows-no-meter-and-no-text-confuses-user
+    - whistle-armed-state-when-both-armed-flags-flip-during-mic-mutex-recovery
+  owner: human:operator
+
+reversal:
+  - signal: armed-state-confuses-power-user-with-extra-tap
+    action: review
+  - signal: meter-calibration-too-sensitive-cause-bar-jitters-on-every-breath
+    action: rework
+  - signal: apply-button-on-whistle-pressed-while-still-recording-produces-double-snippet
+    action: halt
+  - signal: voice-ai-fast-tap-takes-too-long-to-show-armed-panel
+    action: review
+
+relations:
+  addresses:
+    - wavecode-voice-confirm-before-send@1
+    - wavecode-voice-live-transcript@1
+    - wavecode-voice-fab@1

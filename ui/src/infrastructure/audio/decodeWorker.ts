@@ -11,7 +11,7 @@
  * decode cost that `SampleLoader.preloadAllBuffers` previously paid
  * for 36 simultaneous MP3 / OGG / WAV files at app boot. The main
  * thread blocked for ~500 ms during preload, racing the first haps
- * of every preset (see math/wavecode-preset-decode-race + this packet
+ * of every preset (see decisions/wavecode-preset-decode-race.yaml + this packet
  * for the sequencing math).
  *
  * Protocol (inbound / outbound)
