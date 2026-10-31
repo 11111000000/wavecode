@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import { APP_URL } from './support/appUrl';
 
 /**
  * Piano modes e2e — `wavecode-piano-modes-and-gain` packet.
@@ -23,10 +24,9 @@ import { test, expect, type Page } from '@playwright/test';
  *      poll cycles at 50ms, so we wait up to ~1s for the highlight.
  */
 
-const BASE_URL = 'http://127.0.0.1:4173';
 
 async function bootApp(page: Page): Promise<void> {
-  await page.goto(BASE_URL, { waitUntil: 'domcontentloaded' });
+  await page.goto(APP_URL, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('main.app', { timeout: 15_000 });
   await page.waitForTimeout(1500);
 }

@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { APP_URL } from './support/appUrl';
 
 /**
  * Mini-notation toolbar — mobile-only sticky strip of snippet buttons
@@ -10,7 +11,7 @@ import { test, expect } from '@playwright/test';
 test('mobile (375×667): mini-toolbar is visible and tapping `note(` inserts the snippet into the editor', async ({ page }) => {
   await page.setViewportSize({ width: 375, height: 667 });
 
-  await page.goto('/', { waitUntil: 'domcontentloaded' });
+  await page.goto(APP_URL, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('main.app', { timeout: 15000 });
   // CodeMirror mounts async; give it a moment to render and for onReady to fire.
   await page.waitForSelector('.cm-content', { timeout: 15000 });
@@ -37,7 +38,7 @@ test('mobile (375×667): mini-toolbar is visible and tapping `note(` inserts the
 test('desktop (1280): mini-toolbar is hidden', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
 
-  await page.goto('/', { waitUntil: 'domcontentloaded' });
+  await page.goto(APP_URL, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('main.app', { timeout: 15000 });
   await page.waitForSelector('.cm-content', { timeout: 15000 });
 

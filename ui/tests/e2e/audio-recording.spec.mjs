@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { APP_URL } from './support/appUrl';
 
 /**
  * Audio recording — UI smoke test.
@@ -16,7 +17,7 @@ import { test, expect } from '@playwright/test';
  */
 
 test('Record button + Render modal UI present', async ({ page }) => {
-  await page.goto('/', { waitUntil: 'domcontentloaded' });
+  await page.goto(APP_URL, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('main.app', { timeout: 15000 });
 
   const recordBtn = page.locator('button:has-text("⏺ Запись")');
@@ -41,7 +42,7 @@ test('Record button + Render modal UI present', async ({ page }) => {
 });
 
 test('Record button toggles state when clicked (headless: no MediaRecorder → error state)', async ({ page }) => {
-  await page.goto('/', { waitUntil: 'domcontentloaded' });
+  await page.goto(APP_URL, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('main.app', { timeout: 15000 });
 
   const recordBtn = page.locator('button:has-text("⏺ Запись")');

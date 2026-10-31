@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import { APP_URL } from './support/appUrl';
 
 /**
  * Console e2e — verifies the Toast + ConsoleButton + ConsoleSheet
@@ -53,10 +54,9 @@ import { test, expect, type Page } from '@playwright/test';
  *   than once within a test, use unique error messages (a counter).
  */
 
-const BASE_URL = 'http://127.0.0.1:4173';
 
 async function bootApp(page: Page): Promise<void> {
-  await page.goto(BASE_URL, { waitUntil: 'domcontentloaded' });
+  await page.goto(APP_URL, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('main.app', { timeout: 15_000 });
   // Give onMount a beat to call installConsoleGlobals + load persisted errors.
   await page.waitForTimeout(1500);
@@ -198,7 +198,7 @@ test('opening the console clears the badge (markAllRead side-effect of setConsol
   await expect(sheet).not.toBeVisible({ timeout: 2000 });
 });
 
-test('Cmd/Ctrl+` hotkey toggles the console sheet', async ({ page }) => {
+test('Cmd/Ctrl+` hotkey toggles the console sheet', { tag: '@smoke' }, async ({ page }) => {
   await bootApp(page);
 
   // Ensure focus is NOT on an input — consoleGlobals suppresses the

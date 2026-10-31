@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { APP_URL } from './support/appUrl';
 
 /**
  * e2e for math/wavecode-preset-id-hydration.
@@ -24,7 +25,7 @@ test('selected preset survives reload (and is not always Creep)', async ({ page 
     if (m.type() === 'error') errors.push(`[console.error] ${m.text()}`);
   });
 
-  await page.goto('http://127.0.0.1:5173/#/app', { waitUntil: 'domcontentloaded' });
+  await page.goto(APP_URL, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('main.app', { timeout: 15000 });
 
   // Drop any prior state to start clean — but keep the terms
@@ -63,8 +64,8 @@ test('selected preset survives reload (and is not always Creep)', async ({ page 
   expect(errors).toHaveLength(0);
 });
 
-test('deleted custom preset falls back to Creep on next reload', async ({ page }) => {
-  await page.goto('http://127.0.0.1:5173/#/app', { waitUntil: 'domcontentloaded' });
+test('deleted custom preset falls back to Creep on next reload', { tag: '@smoke' }, async ({ page }) => {
+  await page.goto(APP_URL, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('main.app', { timeout: 15000 });
 
   // Pretend a custom preset used to exist and was selected, but has been

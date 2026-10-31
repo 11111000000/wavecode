@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { APP_URL } from './support/appUrl';
 
 /**
  * Play-control e2e — verifies the FAB-→TransportPanel move from
@@ -33,10 +34,9 @@ import { test, expect } from '@playwright/test';
  *     flips to Stop, we still verify the layout invariants.
  */
 
-const BASE_URL = 'http://127.0.0.1:4173';
 
 test.beforeEach(async ({ page }) => {
-  await page.goto(BASE_URL, { waitUntil: 'domcontentloaded' });
+  await page.goto(APP_URL, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('main.app', { timeout: 15000 });
   // Give onMount a beat for first eval + IDB restore.
   await page.waitForTimeout(1500);

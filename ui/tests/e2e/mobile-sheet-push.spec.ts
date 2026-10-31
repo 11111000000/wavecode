@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import { APP_URL } from './support/appUrl';
 
 /**
  * Mobile split-pane e2e — `math/wavecode-mobile-split-pane` packet.
@@ -31,10 +32,9 @@ import { test, expect, type Page } from '@playwright/test';
  * — the right-side drawer behavior is unchanged.
  */
 
-const BASE_URL = 'http://127.0.0.1:4173';
 
 async function bootApp(page: Page): Promise<void> {
-  await page.goto(BASE_URL, { waitUntil: 'domcontentloaded' });
+  await page.goto(APP_URL, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('main.app', { timeout: 15_000 });
   await page.waitForTimeout(1500);
 }
@@ -77,7 +77,7 @@ test.describe('mobile split-pane (412×900)', () => {
     await expect(page.locator('.wc-sheet__tab').first()).toBeVisible();
   });
 
-  test('Editor remains interactive while sheet is open', async ({ page }) => {
+  test('Editor remains interactive while sheet is open', { tag: '@smoke' }, async ({ page }) => {
     await bootApp(page);
 
     // Open Mixer sheet.
@@ -201,7 +201,7 @@ test.describe('mobile split-pane (412×900)', () => {
     expect(closedExists).toBeGreaterThanOrEqual(1);
   });
 
-  test('Snap-points indicator: 3 dots visible inside top-handle', async ({ page }) => {
+  test('Snap-points indicator: 3 dots visible inside top-handle', { tag: '@smoke' }, async ({ page }) => {
     await bootApp(page);
     await page.locator('.wc-tab[aria-label="Mixer"]').click();
     await page.waitForTimeout(300);
@@ -236,7 +236,7 @@ test.describe('mobile split-pane (412×900)', () => {
     expect(await sheet.getAttribute('data-snap-target')).toBe('');
   });
 
-  test('Snap-feedback pill: shown during drag, hidden at rest', async ({ page }) => {
+  test('Snap-feedback pill: shown during drag, hidden at rest', { tag: '@smoke' }, async ({ page }) => {
     await bootApp(page);
     await page.locator('.wc-tab[aria-label="Mixer"]').click();
     await page.waitForTimeout(300);
@@ -265,7 +265,7 @@ test.describe('mobile split-pane (412×900)', () => {
     await expect(page.locator('.wc-sheet__snap-feedback')).toHaveCount(0);
   });
 
-  test('Score tab in BottomNav pulses (data-has-open-sheet) when sheet is open', async ({ page }) => {
+  test('Score tab in BottomNav pulses (data-has-open-sheet) when sheet is open', { tag: '@smoke' }, async ({ page }) => {
     await bootApp(page);
 
     // No sheet open → no pulse.

@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { APP_URL } from './support/appUrl';
 
 /**
  * wavecode-step-grid-modes — e2e regression suite (supersedes
@@ -45,7 +46,7 @@ test('view mode: tapping a cell does NOT clobber the loaded preset', async ({ pa
   page.on('console', (m) => consoleLogs.push(`[${m.type()}] ${m.text()}`));
 
   await page.setViewportSize({ width: 1280, height: 800 });
-  await page.goto('http://127.0.0.1:4173/', { waitUntil: 'domcontentloaded' });
+  await page.goto(APP_URL, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('main.app', { timeout: 15_000 });
   await page.waitForSelector('.cm-content', { timeout: 15_000 });
 
@@ -82,7 +83,7 @@ test('view mode: tapping a cell does NOT clobber the loaded preset', async ({ pa
 
 test('sketch mode + ↑ commit with a loaded preset wraps grid layers into the existing stack', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
-  await page.goto('http://127.0.0.1:4173/', { waitUntil: 'domcontentloaded' });
+  await page.goto(APP_URL, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('main.app', { timeout: 15_000 });
   await page.waitForSelector('.cm-content', { timeout: 15_000 });
 
@@ -116,7 +117,7 @@ test('sketch mode + ↑ commit with a loaded preset wraps grid layers into the e
 
 test('empty editor + sketch + ↑ commit equals standalone grid snippet', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
-  await page.goto('http://127.0.0.1:4173/', { waitUntil: 'domcontentloaded' });
+  await page.goto(APP_URL, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('main.app', { timeout: 15_000 });
   await page.waitForSelector('.cm-content', { timeout: 15_000 });
 
@@ -141,7 +142,7 @@ test('empty editor + sketch + ↑ commit equals standalone grid snippet', async 
 
 test('edit mode per-tap splices the s("…") row in place (no double-wrap)', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
-  await page.goto('http://127.0.0.1:4173/', { waitUntil: 'domcontentloaded' });
+  await page.goto(APP_URL, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('main.app', { timeout: 15_000 });
   await page.waitForSelector('.cm-content', { timeout: 15_000 });
 

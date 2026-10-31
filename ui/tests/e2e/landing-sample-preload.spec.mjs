@@ -21,7 +21,7 @@ import { test, expect } from '@playwright/test';
 
 const HOST = process.env.WAVECODE_E2E_HOST ?? 'http://127.0.0.1:4173';
 
-test('Landing mounts SampleProgressBadge in the top-right corner', async ({ page }) => {
+test('Landing mounts SampleProgressBadge in the top-right corner', { tag: '@smoke' }, async ({ page }) => {
   await page.goto(`${HOST}/`, { waitUntil: 'domcontentloaded', timeout: 30000 });
   await page.waitForSelector('#presets', { timeout: 15000 });
 
@@ -34,7 +34,7 @@ test('Landing mounts SampleProgressBadge in the top-right corner', async ({ page
   await expect(corner).toBeAttached();
 });
 
-test('Landing preloads sample banks (badge appears during cold load)', async ({ page }) => {
+test('Landing preloads sample banks (badge appears during cold load)', { tag: '@smoke' }, async ({ page }) => {
   await page.goto(`${HOST}/`, { waitUntil: 'domcontentloaded', timeout: 30000 });
   await page.waitForSelector('#presets', { timeout: 15000 });
 
@@ -54,7 +54,7 @@ test('Landing preloads sample banks (badge appears during cold load)', async ({ 
   }
 });
 
-test('Creep preset preview on landing does not throw "sound X not found"', async ({ page }) => {
+test('Creep preset preview on landing does not throw "sound X not found"', { tag: '@smoke' }, async ({ page }) => {
   const errors = [];
   page.on('pageerror', (e) => errors.push(`[pageerror] ${e.message}`));
   page.on('console', (msg) => {

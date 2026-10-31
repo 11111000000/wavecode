@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import { APP_URL } from './support/appUrl';
 
 /**
  * Mobile sheet → TabBar overlap regression (2026-10-15 bug).
@@ -28,10 +29,9 @@ import { test, expect, type Page } from '@playwright/test';
  *      (no click registers) or throw "intercepts pointer events".
  */
 
-const BASE_URL = 'http://127.0.0.1:4173';
 
 async function bootApp(page: Page): Promise<void> {
-  await page.goto(BASE_URL, { waitUntil: 'domcontentloaded' });
+  await page.goto(APP_URL, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('main.app', { timeout: 15_000 });
   await page.waitForTimeout(1500);
 }
@@ -39,7 +39,7 @@ async function bootApp(page: Page): Promise<void> {
 test.describe('AI submit button above TabBar (412×900)', () => {
   test.use({ viewport: { width: 412, height: 900 } });
 
-  test('Apply button bottom edge is above the TabBar top edge', async ({ page }) => {
+  test('Apply button bottom edge is above the TabBar top edge', { tag: '@smoke' }, async ({ page }) => {
     await bootApp(page);
 
     // Open AI sheet (chat tab in BottomNav).
@@ -82,7 +82,7 @@ test.describe('AI submit button above TabBar (412×900)', () => {
     expect(bottomInsideSheet).toBe(true);
   });
 
-  test('Apply button is clickable (not covered by TabBar)', async ({ page }) => {
+  test('Apply button is clickable (not covered by TabBar)', { tag: '@smoke' }, async ({ page }) => {
     await bootApp(page);
 
     await page.locator('.wc-tab[aria-label="AI"]').click();

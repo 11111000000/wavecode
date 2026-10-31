@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { APP_URL } from './support/appUrl';
 
 test('Score is autosaved to IndexedDB and restored after page reload', async ({ page }) => {
   const consoleLogs = [];
@@ -6,7 +7,7 @@ test('Score is autosaved to IndexedDB and restored after page reload', async ({ 
   page.on('console', (m) => consoleLogs.push(`[${m.type()}] ${m.text()}`));
   page.on('pageerror', (e) => errors.push(`[pageerror] ${e.message}`));
 
-  await page.goto('http://127.0.0.1:4173/', { waitUntil: 'domcontentloaded' });
+  await page.goto(APP_URL, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('main.app', { timeout: 15000 });
   await page.waitForTimeout(2000);
 
