@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import { APP_URL } from './support/appUrl';
 
 /**
  * Piano e2e — verifies the polyphonic + Web Audio PianoKeyboard
@@ -45,7 +46,6 @@ import { test, expect, type Page } from '@playwright/test';
  *   still null).
  */
 
-const BASE_URL = 'http://127.0.0.1:4173';
 
 /** Mock navigator.requestMIDIAccess with a single fake input. */
 const FAKE_MIDI_INIT = `
@@ -80,7 +80,7 @@ async function bootApp(page: Page, opts: { mockMidi?: boolean } = {}): Promise<v
   if (opts.mockMidi) {
     await page.addInitScript(FAKE_MIDI_INIT);
   }
-  await page.goto(BASE_URL, { waitUntil: 'domcontentloaded' });
+  await page.goto(APP_URL, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('main.app', { timeout: 15_000 });
   // Give onMount a beat to call installConsoleGlobals + load persisted errors
   // + (if mocked) bind the fake MIDI input.

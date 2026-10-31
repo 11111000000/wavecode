@@ -18,7 +18,10 @@
     "test:precommit": "npm run typecheck && npx vitest run && npm run lint:no-console && npm run validate:presets",
     "test": "vitest",
     "test:run": "vitest run",
-    "test:e2e": "playwright test",
+    "build:bundle": "vite build",
+    "test:e2e": "npm run build:bundle && playwright test",
+    "test:e2e:smoke": "npm run build:bundle && playwright test --grep @smoke",
+    "test:e2e:deployed": "playwright test --config playwright.deployed.config.ts",
     "test:e2e:ui": "playwright test --ui"
   },
   "dependencies": {

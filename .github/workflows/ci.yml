@@ -96,3 +96,81 @@ jobs:
         with:
           src: scripts
           args: 'check'
+
+  e2e-smoke:
+    name: e2e smoke (playwright)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: build
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: ui/package-lock.json
+
+      - name: Install dependencies
+        working-directory: ui
+        run: npm ci
+
+      # CI has no NixOS system Chromium, so Playwright downloads its own
+      # build here. Locally the suite reuses /run/current-system/sw/bin/
+      # chromium instead — see decisions/wavecode-e2e-system-browser.yaml.
+      - name: Install Playwright browser
+        working-directory: ui
+        run: npx playwright install --with-deps chromium
+
+      # The e2e webServer is `vite preview`, which serves the built
+      # bundle — the specs assert on artefacts (chunk split, PWA
+      # manifest, precache) that a dev server does not produce.
+      - name: Build bundle
+        working-directory: ui
+        env:
+          VITE_LLM_PROXY_URL: https://llm.kosov.online/v1
+          VITE_LLM_PROXY_KEY: ci-placeholder-not-used-at-runtime
+        run: npx vite build
+
+      - name: E2E smoke
+        working-directory: ui
+        run: npx playwright test --grep @smoke
+
+  e2e-full:
+    name: e2e full (playwright, non-blocking)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    needs: build
+    # The full suite still carries specs pinned to the pre-transport-bar
+    # DOM. It runs as observability so the drift stays visible without
+    # turning master red; the smoke tag above is the hard gate.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: ui/package-lock.json
+
+      - name: Install dependencies
+        working-directory: ui
+        run: npm ci
+
+      - name: Install Playwright browser
+        working-directory: ui
+        run: npx playwright install --with-deps chromium
+
+      - name: Build bundle
+        working-directory: ui
+        env:
+          VITE_LLM_PROXY_URL: https://llm.kosov.online/v1
+          VITE_LLM_PROXY_KEY: ci-placeholder-not-used-at-runtime
+        run: npx vite build
+
+      - name: E2E full suite
+        working-directory: ui
+        run: npx playwright test

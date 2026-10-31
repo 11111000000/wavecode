@@ -123,6 +123,12 @@ export default defineConfig({
   },
 
   server: {
+    // Bind IPv4 explicitly. The default (`localhost`) resolves to `::1`
+    // on NixOS, so an IPv4 client — a test runner probing 127.0.0.1, a
+    // browser tool, `curl http://127.0.0.1:5173` — gets connection
+    // refused while the server is plainly running.
+    // Override per-run with `pnpm dev --host` for LAN access.
+    host: '127.0.0.1',
     port: 5173,
     strictPort: false,
   },

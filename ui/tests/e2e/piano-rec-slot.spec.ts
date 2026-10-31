@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import { APP_URL } from './support/appUrl';
 
 /**
  * Piano REC slot e2e — `math/wavecode-piano-rec-clarity` + polish.
@@ -36,10 +37,9 @@ import { test, expect, type Page } from '@playwright/test';
  *   - Mobile variant 412×900 → BottomSheet-piano path.
  */
 
-const BASE_URL = 'http://127.0.0.1:4173';
 
 async function bootApp(page: Page): Promise<void> {
-  await page.goto(BASE_URL, { waitUntil: 'domcontentloaded' });
+  await page.goto(APP_URL, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('main.app', { timeout: 15_000 });
   await page.waitForTimeout(1500);
 }
@@ -264,7 +264,7 @@ test('inline-piano on desktop ≥1024px: piano-toggle visible; mobile: hidden', 
 test.describe('mobile BottomSheet-piano', () => {
   test.use({ viewport: { width: 412, height: 900 } });
 
-  test('mobile: inline-piano toggle absent; TabBar Piano opens BottomSheet', async ({ page }) => {
+  test('mobile: inline-piano toggle absent; TabBar Piano opens BottomSheet', { tag: '@smoke' }, async ({ page }) => {
     await bootApp(page);
 
     // On mobile (<1024px), the inline toggle should NOT render.

@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import { APP_URL } from './support/appUrl';
 
 /**
  * Piano e2e — wavecode-piano-parallel-rec-instrument.
@@ -33,7 +34,6 @@ import { test, expect, type Page } from '@playwright/test';
  *   Strudel pipeline.
  */
 
-const BASE_URL = 'http://127.0.0.1:4173';
 
 // Filter regex shared by every test in this file. Anything matching
 // is treated as environmental noise (sample preload, Strudel init,
@@ -52,7 +52,7 @@ test('piano tap preserves main score (no Strudel re-eval from keyboard)', async 
     if (m.type() === 'error') errors.push(`[console] ${m.text()}`);
   });
 
-  await page.goto(BASE_URL, { waitUntil: 'domcontentloaded' });
+  await page.goto(APP_URL, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('main.app', { timeout: 15_000 });
   await page.waitForTimeout(1500);
 
@@ -92,7 +92,7 @@ test('piano REC toggle + tap does not write to main score until committed', asyn
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(`[pageerror] ${e.message}`));
 
-  await page.goto(BASE_URL, { waitUntil: 'domcontentloaded' });
+  await page.goto(APP_URL, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('main.app', { timeout: 15_000 });
   await page.waitForTimeout(1500);
 
@@ -142,7 +142,7 @@ test('instrument selector changes oscType for next tap (no errors)', async ({ pa
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(`[pageerror] ${e.message}`));
 
-  await page.goto(BASE_URL, { waitUntil: 'domcontentloaded' });
+  await page.goto(APP_URL, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('main.app', { timeout: 15_000 });
   await page.waitForTimeout(1500);
 

@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { APP_URL } from './support/appUrl';
 
 /**
  * Sample loader e2e — verifies that CC0 Freesound drum samples
@@ -17,7 +18,7 @@ const SAMPLE_FILES = [
   'crash.mp3', 'ride.mp3', 'sh.mp3', 'cb.mp3',
 ];
 
-test('all 14 CC0 drum samples are served by Vite (HTTP 200)', async ({ page }) => {
+test('all 14 CC0 drum samples are served by Vite (HTTP 200)', { tag: '@smoke' }, async ({ page }) => {
   const responses = [];
   for (const f of SAMPLE_FILES) {
     const r = await page.request.get(`/samples/drums/${f}`);
@@ -30,7 +31,7 @@ test('all 14 CC0 drum samples are served by Vite (HTTP 200)', async ({ page }) =
   }
 });
 
-test('LICENSE.txt is served and mentions CC0', async ({ page }) => {
+test('LICENSE.txt is served and mentions CC0', { tag: '@smoke' }, async ({ page }) => {
   const r = await page.request.get('/samples/drums/LICENSE.txt');
   expect(r.status()).toBe(200);
   const body = await r.text();
@@ -44,7 +45,7 @@ test('808-king preset loads, eval plays, no console errors', async ({ page }) =>
     if (m.type() === 'error') errors.push(`[console] ${m.text()}`);
   });
 
-  await page.goto('/', { waitUntil: 'domcontentloaded' });
+  await page.goto(APP_URL, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('main.app', { timeout: 15000 });
   // Give the onMount a beat to call loadAllSamples() (samples are registered
   // lazily — only on first eval). 1s is enough for the dynamic import.

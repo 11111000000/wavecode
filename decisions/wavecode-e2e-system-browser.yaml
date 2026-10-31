@@ -1,0 +1,147 @@
+---
+schema: math-coding/3.3
+id: wavecode-e2e-system-browser
+revision: 1
+state: draft
+body_sha: "sha256:721cd24c50c6422f709ef8a121e4f2a64ea536d24ab18e8159c56f53fdb69522"
+yaml_sha: "sha256:721cd24c50c6422f709ef8a121e4f2a64ea536d24ab18e8159c56f53fdb69522"
+
+intent: |
+  Вернуть e2e-сьюит wavecode в рабочее состояние. До 2026-10-31
+  ни один из 20 спеков не выполнялся: Playwright не имел браузера на
+  диске, `vite dev` слушал только `::1` при пробе Playwright по
+  `127.0.0.1`, а конфиг поднимал dev-сервер на 5173 при захардкоженных
+  в спеках `4173`. CI не содержал ни одного e2e-джоба — поломка
+  оставалась незамеченной. Отдельная задача этого решения — переиспользовать
+  системный Chromium вместо второго скачивания.
+commitment: |
+  1. `ui/playwright.config.ts`:
+     - `baseURL` и origin `storageState` — `http://127.0.0.1:4173`
+       (единый источник; спеки используют относительные маршруты из
+       `tests/e2e/support/appUrl.ts`);
+     - `webServer` — `vite preview --host 127.0.0.1 --port 4173
+       --strictPort` (сборка, а не dev-сервер: спеки проверяют
+       артефакты сборки — chunk split, PWA-манифест, precache);
+     - `launchOptions.executablePath` — `/run/current-system/sw/bin/chromium`,
+       если бинарник существует; иначе (CI) Playwright использует свой
+       собственный браузер. `executablePath` задаётся ТОЛЬКО для проекта
+       `chromium` — в проекте `firefox` он указывал бы на Chromium;
+     - Firefox — только по `WAVECODE_E2E_FIREFOX=1`: системного Firefox
+       в NixOS нет, и он требует отдельного скачивания;
+     - `workers` — 1 в CI, 2 локально. Четыре воркера на 4-ядерном хосте
+       с ~8 ГБ, разделяемыми с другими сервисами, доводили
+       `browserType.launch` до таймаута в 180 с;
+     - `testIgnore` — `mic-phase3.spec.mjs` (бьёт по проду, живёт под
+       `playwright.deployed.config.ts`).
+  2. `ui/tests/e2e/support/storageState.ts` (бывший `consent.ts`) сеет
+     ДВА флага: согласие с условиями (`wavecodeTermsAccepted`) и
+     завершённый онбординг-тур (`wavecode-onboarding-complete-v1`).
+     Тур перехватывает pointer events и блокировал любой клик под ним.
+  3. `ui/vite.config.ts` — `server.host: '127.0.0.1'`: по умолчанию
+     `localhost` резолвится в `::1`, и IPv4-клиент получал connection
+     refused при живом сервере.
+  4. CI (`.github/workflows/ci.yml`): джоб `e2e-smoke` — жёсткий гейт
+     по тегу `@smoke` (18 тестов, 38.6 с); джоб `e2e-full` —
+     `continue-on-error: true`, observability.
+  5. 18 работающих тестов помечены тегом `@smoke`.
+antithesis: |
+  (1) «Системный Chromium старше того, который Playwright пиннит
+  (149 против 156) — протухший браузер, доверять нельзя». Возражение:
+  Playwright управляет браузером по CDP, а не по приватному API, и
+  протокол обратно совместим. Замерено: 18/18 smoke-тестов зелёные,
+  консоль браузера чистая, расхождений не всплыло. Риск остаётся —
+  если системный Chromium откатится на специфику, которую Playwright
+  1.64 не поддерживает, это проявится как `browserType.launch` timeout
+  в CI на машине без системного браузера; потому в CI Playwright
+  ставит свой Chromium, а не переиспользует системный.
+  (2) «Тег `@smoke` — это выборочное тестирование, притворяющееся, что
+  сьют зелёный». Возражение: 40 из 58 тестов падают не из-за
+  инфраструктуры, а из-за селекторов, привязанных к DOM до
+  консолидации транспорт-бара (`wavecode-mobile-transport-bar`).
+  Замаскировать это «зелёным» гейтом можно было бы только удалив
+  тесты. `@smoke` — честная фиксация границы: 18 тестов, чей контракт
+  соответствует текущему DOM, гейтят master; остальные — observability
+  в `e2e-full`, где их падения видны, но не роняют ветку.
+  (3) «Проще поставить `npx playwright install` и не мудрить с
+  системным браузером». Возражение: это второй Chromium (~500 МБ) на
+  машине, где уже есть системный, и он ломает общее состояние
+  профиля. Решение фиксирует переиспользование; CI — единственное
+  место, где установка оправдана.
+counterexample: |
+  Если системный Chromium исчезнет из `/run/current-system` (смена
+  поколения NixOS без симлинка) — `existsSync` вернёт false, и
+  Playwright упадёт с «Executable doesn't exist», а не с тихим
+  пропуском. Это осознанный fail-loud: гейт, который молча вырождается
+  в «ничего не проверял», хуже упавшего.
+  Если на хосте окажется запущен другой Chromium на 4173 — `vite
+  preview --strictPort` упадёт с ошибкой порта вместо тихого
+  авто-инкремента, который оставил бы Playwright опрашивать мёртвый
+  URL.
+  Если в будущем NixOS поднимет системный Chromium выше 156 — падение
+  версии исчезнет, но останется зависимость от пути
+  `/run/current-system/sw/bin/chromium`; альтернатива
+  (`nix run nixpkgs#chromium`) не используется, потому что она
+  скачивает пакет в отдельный store-путь и теряет преимущество
+  «уже установлено».
+axiom_link:
+  - A1
+scope:
+  paths:
+    - ui/playwright.config.ts
+    - ui/playwright.deployed.config.ts
+    - ui/playwright.sysbrowser.config.ts
+    - ui/vite.config.ts
+    - ui/tests/e2e/
+    - ui/package.json
+    - .github/workflows/ci.yml
+outcomes:
+  - id: wavecode-e2e-system-browser-outcome-smoke-gate
+    statement: |
+      `npx playwright test --grep @smoke` проходит 18/18 на системном
+      Chromium без единого скачивания браузера, за ~39 с.
+  - id: wavecode-e2e-system-browser-outcome-config-coherence
+    statement: |
+      Хост, порт и origin `storageState` заданы в одном месте
+      (`playwright.config.ts`); спеки используют относительные
+      маршруты из `tests/e2e/support/appUrl.ts` и не содержат
+      захардкоженных URL.
+  - id: wavecode-e2e-system-browser-outcome-first-run-overlays
+    statement: |
+      Ни один first-run оверлей (consent gate, онбординг-тур) не
+      перехватывает события в e2e — оба гасятся через
+      `storageState`.
+obligations:
+  - id: wavecode-e2e-system-browser-kernel-validates
+    claim: |
+      The decision file is structurally valid under the math-coding 3.3
+      schema; `mathc validate` exits 0 for `decisions/<id>.yaml` at HEAD.
+    acceptance:
+      all:
+        - verifier: "mathc validate"
+          result: pass
+  - id: wavecode-e2e-system-browser-smoke-suite-green
+    claim: |
+      `npm run test:e2e:smoke` exits 0 — all 18 `@smoke` tests pass
+      against the built bundle served by `vite preview`.
+    acceptance:
+      all:
+        - verifier: "npm --prefix ui run test:e2e:smoke"
+          result: pass
+  - id: wavecode-e2e-system-browser-no-browser-install
+    claim: |
+      The local e2e run uses the system Chromium and downloads no
+      browser: `~/.cache/ms-playwright` is not required.
+    acceptance:
+      all:
+        - verifier: "npm --prefix ui run test:e2e:smoke"
+          result: pass
+assumptions: []
+risk:
+  declared_triggers:
+    - system-chromium-removed-from-nix-path
+    - playwright-pins-newer-chromium-than-system
+    - e2e-suite-rot-silently-again
+  owner: human:operator
+relations:
+  addresses:
+    - wavecode-ui-e2e-baseline@1

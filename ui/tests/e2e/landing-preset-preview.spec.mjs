@@ -10,7 +10,7 @@ import { test, expect } from '@playwright/test';
  * e2e is the visual / interaction contract for the landing surface.
  */
 
-test('Tapping the play button does not navigate away from the landing page', async ({ page }) => {
+test('Tapping the play button does not navigate away from the landing page', { tag: '@smoke' }, async ({ page }) => {
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));
 
@@ -36,7 +36,7 @@ test('Tapping the play button does not navigate away from the landing page', asy
   expect(errors).toHaveLength(0);
 });
 
-test('Tapping the play button flips data-playing to true', async ({ page }) => {
+test('Tapping the play button flips data-playing to true', { tag: '@smoke' }, async ({ page }) => {
   await page.goto('http://127.0.0.1:4173/', { waitUntil: 'domcontentloaded', timeout: 30000 });
   await page.waitForSelector('#presets', { timeout: 15000 });
 
@@ -49,7 +49,7 @@ test('Tapping the play button flips data-playing to true', async ({ page }) => {
   await expect(firstPlay).toHaveAttribute('data-playing', 'true');
 });
 
-test('Tapping a second card stops the first and starts the second', async ({ page }) => {
+test('Tapping a second card stops the first and starts the second', { tag: '@smoke' }, async ({ page }) => {
   await page.goto('http://127.0.0.1:4173/', { waitUntil: 'domcontentloaded', timeout: 30000 });
   await page.waitForSelector('#presets', { timeout: 15000 });
 

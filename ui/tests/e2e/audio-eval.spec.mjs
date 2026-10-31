@@ -1,12 +1,13 @@
 import { test, expect } from '@playwright/test';
+import { APP_URL } from './support/appUrl';
 
-test('Eval button plays audio without errors', async ({ page }) => {
+test('Eval button plays audio without errors', { tag: '@smoke' }, async ({ page }) => {
   const errors = [];
   const consoleMsgs = [];
   page.on('console', (m) => consoleMsgs.push({ type: m.type(), text: m.text() }));
   page.on('pageerror', (e) => errors.push(e.message));
 
-  await page.goto('/', { waitUntil: 'domcontentloaded', timeout: 30000 });
+  await page.goto(APP_URL, { waitUntil: 'domcontentloaded', timeout: 30000 });
 
   // Solid mount.
   await page.waitForSelector('main.app', { timeout: 15000 });

@@ -1,5 +1,5 @@
 import { defineConfig, devices } from '@playwright/test';
-import { acceptedTermsStorageState } from './tests/e2e/support/consent';
+import { appStorageState } from './tests/e2e/support/storageState';
 
 /**
  * Playwright config for tests targeting the deployed production bundle
@@ -15,7 +15,7 @@ export default defineConfig({
   workers: 1,
   use: {
     baseURL: 'https://wavecode.kosov.online',
-    storageState: acceptedTermsStorageState('https://wavecode.kosov.online'),
+    storageState: appStorageState('https://wavecode.kosov.online'),
     trace: 'on-first-retry' as const,
     screenshot: 'only-on-failure' as const,
     launchOptions: {
