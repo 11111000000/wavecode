@@ -65,8 +65,12 @@ async function readEditorText(page: Page): Promise<string> {
 async function clearEditor(page: Page): Promise<void> {
   // Click into the editor, select-all, delete — leaves an empty doc
   // so subsequent apply behavior isn't masked by the default score.
-  const cmContent = page.locator('.cm-content').first();
-  await cmContent.click();
+  // Click the CodeMirror scroller, not .cm-content: the content
+  // element is taller than its clipped viewport, so Playwright would
+  // aim at the centre of its bounding box — which lands on the
+  // mini-toolbar below the editor — and the click never lands.
+  const cmScroller = page.locator('.cm-scroller').first();
+  await cmScroller.click();
   await page.keyboard.press('Control+a');
   await page.keyboard.press('Delete');
   await page.waitForTimeout(150);

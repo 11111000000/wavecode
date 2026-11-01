@@ -85,7 +85,10 @@ test.describe('mobile split-pane (412×900)', () => {
     await page.waitForTimeout(300);
 
     // Click into the editor and type a character.
-    const cmContent = page.locator('.cm-content').first();
+    // .cm-scroller is the visible editor surface; .cm-content is
+    // taller than its clipped viewport, so clicking the latter aims at
+    // the wrong point.
+    const cmContent = page.locator('.cm-scroller').first();
     await cmContent.click();
     await page.keyboard.press('Control+a');
     await page.keyboard.press('Delete');

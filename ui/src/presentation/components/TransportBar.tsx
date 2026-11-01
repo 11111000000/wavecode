@@ -117,11 +117,9 @@ export function TransportBar(props: TransportBarProps): JSX.Element {
   };
 
   // Reflect collapsed state on .app-body so its padding-top can switch
-  // via the data-transport-collapsed CSS rules (mobile @media only).
-  // On desktop the attribute is also set, but desktop CSS uses the
-  // legacy calc(--preset-row-h + --controls-h) formula (96px) which
-  // matches the rendered bar height, so the attribute is a no-op
-  // there.
+  // via the data-transport-collapsed CSS rules. Desktop and mobile
+  // both read the same two tokens now: expanded = 108px (the rendered
+  // height of this bar), collapsed = 48px (strip only).
   createEffect(() => {
     const appBody = document.querySelector<HTMLElement>('.app-body');
     if (!appBody) return;

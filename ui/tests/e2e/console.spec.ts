@@ -164,8 +164,14 @@ test('unhandled rejection pushes error toast and bumps the badge', async ({ page
   const newBadgeCount = parseInt(newBadgeText.trim(), 10);
   expect(newBadgeCount, `badge should be > previous count after extra rejections (was ${badgeCount}, now ${newBadgeCount})`).toBeGreaterThan(badgeCount);
 
+  // This test DELIBERATELY triggers three unhandled rejections
+  // (E2E-REJECT-MARKER / -A / -B) — they are the subject under test,
+  // so they must be filtered out before asserting that nothing else
+  // went wrong.
   const realErrors = errors.filter(
-    (e) => !/favicon|DevTools|preload|werkzeug|404|net::ERR_ABORTED|webaudio|\[sampler\]|\[cyclist\]|\[wavecode\]/i.test(e),
+    (e) =>
+      !/E2E-REJECT-/i.test(e) &&
+      !/favicon|DevTools|preload|werkzeug|404|net::ERR_ABORTED|webaudio|\[sampler\]|\[cyclist\]|\[wavecode\]/i.test(e),
   );
   expect(realErrors, `unexpected pageerrors: ${JSON.stringify(realErrors)}`).toHaveLength(0);
 });

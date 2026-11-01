@@ -32,7 +32,7 @@ async function bootApp(page: Page): Promise<void> {
 }
 
 async function openPiano(page: Page): Promise<void> {
-  await page.locator('.app-preset-row button.wc-chip:has-text("Piano")').click();
+  await page.locator('.piano-toggle').first().click();
   await page.waitForSelector('.piano-keys', { timeout: 5000 });
   await page.waitForSelector('.piano-toolbar', { timeout: 5000 });
 }

@@ -1831,6 +1831,13 @@ textarea.wc-input {
    * (still usable for reading; vertical scroll handles overflow). */
   max-height: 220px;
   overflow-y: auto;
+  /* Do not let the flex column squeeze this away. Without it the
+   * container collapsed to its 1px border while the toolbar and the
+   * keys kept rendering outside it — the piano looked fine but every
+   * click inside it hit the container instead of the control, because
+   * the hit test clipped to a 1px box. Same rule as .score-debug
+   * below. */
+  flex-shrink: 0;
 }
 
 /* =========================================================================
@@ -2181,7 +2188,13 @@ button:not([disabled]):not(.no-shrink):active {
 .console-sheet {
   position: fixed;
   inset: 0;
-  z-index: var(--z-sheet);
+  /* Above the transport bar (z-sheet + 12). The console is a drawer
+   * whose header holds the close button, and the bar is a fixed
+   * full-width strip pinned to the top — at z-sheet the bar covered
+   * the drawer header, so the X button could not be clicked. Same
+   * class of bug the voice panels hit (their z-sheet + 4 was
+   * swallowed by the bar's + 12). */
+  z-index: calc(var(--z-sheet) + 20);
   display: block;
 }
 
@@ -2995,19 +3008,22 @@ button:not([disabled]):not(.no-shrink):active {
   position: relative;
   z-index: 0;
   /* wavecode-transport-always-visible: leave room for fixed
-   * .app-controls-row (Play/Stop + cps/swing) so content doesn't
+   * .app-transport-bar (Play/Stop + cps/swing) so content doesn't
    * slide under the transport.
    *
-   * wavecode-preset-row-and-toast-z: добавлен --preset-row-h —
-   * теперь оба fixed-ряда (preset + transport) занимают суммарно
-   * --preset-row-h + --controls-h пикселей сверху.
-   *
    * wavecode-mobile-transport-bar: TransportBar sets
-   * [data-transport-collapsed] on .app-body; this rule (default
-   * expanded) keeps the legacy 96px on desktop. Mobile @media below
-   * raises to 108px (--app-top-fixed-h-mobile) and adds the collapsed
-   * override (48px). */
-  padding-top: calc(var(--preset-row-h) + var(--controls-h));
+   * [data-transport-collapsed] on .app-body. The bar is ONE fixed row
+   * now, so the legacy two-row formula
+   * calc(--preset-row-h + --controls-h) = 44 + 52 = 96px no longer
+   * describes it: the rendered bar is strip 48px + body 60px = 108px.
+   * The 12px shortfall put the top of the score panel — including the
+   * `▼ Piano` disclosure — permanently under the bar, so on desktop the
+   * piano toggle could not be clicked at all. Desktop now uses the
+   * same two tokens as the mobile @media block below.
+   *
+   * wavecode-preset-row-and-toast-z: --preset-row-h and --controls-h
+   * remain defined for the legacy .app-controls-row offset. */
+  padding-top: var(--app-transport-h-expanded);
   padding-bottom: var(--tabbar-h);
 }
 .app-body[data-transport-collapsed='true'] {
@@ -3041,7 +3057,7 @@ button:not([disabled]):not(.no-shrink):active {
   min-height: 0;
   overflow: hidden;
 }
-.score-panel-inner > .cm-host { flex: 1 1 auto; min-height: 0; height: auto; }
+.score-panel-inner > .cm-host { flex: 1 1 auto; min-height: 140px; height: auto; }
 .score-panel-inner > .score-debug {
   flex-shrink: 0;
   padding: var(--space-sm) var(--space-md);

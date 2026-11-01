@@ -41,7 +41,7 @@ import { APP_URL } from './support/appUrl';
 const NOISE_RE = /favicon|DevTools|preload|werkzeug|404|net::ERR_ABORTED|webaudio|\[sampler\]|\[cyclist\]|\[wavecode\]/i;
 
 async function unlockAudio(page: Page): Promise<void> {
-  await page.locator('.app-preset-row button:has-text("Piano")').click();
+  await page.locator('.piano-toggle').first().click();
   await page.waitForSelector('.piano-keys', { timeout: 5000 });
 }
 
@@ -148,15 +148,13 @@ test('instrument selector changes oscType for next tap (no errors)', async ({ pa
 
   await unlockAudio(page);
 
-  // Click "sine" instrument button. After clicking, its data-active flips.
-  const sineBtn = page.locator('.piano-inst-btn[title="sine"]');
-  await expect(sineBtn).toBeVisible();
-  await sineBtn.click();
-  await expect(sineBtn).toHaveAttribute('data-active', 'true');
-
-  // The previously-active triangle button should now be inactive.
-  const triangleBtn = page.locator('.piano-inst-btn[title="triangle"]');
-  await expect(triangleBtn).toHaveAttribute('data-active', 'false');
+  // Pick the "sine" instrument. The picker is a <select> over the
+  // melodic-sound catalogue, not a row of buttons.
+  const select = page.locator('.piano-inst-select');
+  await expect(select).toBeVisible();
+  await expect(select).toHaveValue('piano');
+  await select.selectOption('sine');
+  await expect(select).toHaveValue('sine');
 
   // Tap C4 — without `__wavecodeActiveOsc` (never implemented) we
   // can only verify the tap doesn't throw. The PianoSynth

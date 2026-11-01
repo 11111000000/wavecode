@@ -1,0 +1,137 @@
+---
+schema: math-coding/3.3
+id: wavecode-e2e-layout-regressions
+revision: 1
+state: draft
+body_sha: "sha256:1f9dece47b22ee676771945dccae6041a0114ef6dedb74902fca2ba3ddd4faf5"
+yaml_sha: "sha256:1f9dece47b22ee676771945dccae6041a0114ef6dedb74902fca2ba3ddd4faf5"
+
+intent: |
+  Вернуть e2e-сьюиту wavecode зелёный статус и попутно устранить
+  продуктовые дефекты раскладки, которые сьют вскрыл. До этого
+  изменения 23 из 58 тестов падали, и каждый падал по своей причине —
+  часть по устаревшим селекторам, часть по реальным багам в DOM.
+  Три бага были живы на проде (wavecode.kosov.online) и воспроизводятся
+  на 1280×800.
+commitment: |
+  1. `ui/src/styles/components.css` — `.app-body` резервирует
+     `var(--app-transport-h-expanded)` (108px) вместо legacy-формулы
+     `calc(var(--preset-row-h) + var(--controls-h))` (96px).
+     После консолидации транспорт-бара в один ряд его реальная высота
+     108px; нехватка 12px прятала верх score-панели, а значит и
+     disclosure «▼ Пианино». Desktop и mobile теперь используют одни
+     и те же два токена.
+  2. `ui/src/styles/components.css` — `.score-piano-inline` получает
+     `flex-shrink: 0` (как `.score-debug`), а `.cm-host` —
+     `min-height: 140px`. Без первого контейнер схлопывался до
+     своей 1px-границы, дети вылезали наружу, и hit-test попадал в
+     контейнер вместо кнопки; без второго редактор вырождался в 0px
+     при раскрытом пиано.
+  3. `ui/src/styles/components.css` — `.console-sheet` получает
+     `z-index: calc(var(--z-sheet) + 20)` вместо `var(--z-sheet)`:
+     транспорт-бар (`z-sheet + 12`) перекрывал заголовок консольной
+     панели, и кнопка «×» не нажималась.
+  4. `ui/src/presentation/components/TransportBar.tsx` — комментарий
+     про «96px, совпадающие с высотой бара», который был неверным.
+  5. Спеки приведены к текущему DOM: точка входа в пиано
+     (`.piano-toggle` на desktop, таб TabBar на mobile), селектор
+     инструмента (`<select class="piano-inst-select">` из 12 позиций
+     вместо четырёх кнопок `.piano-inst-btn`), транспорт-бар вместо
+     `.app-controls-row`, мини-тулбар за disclosure `.snippet-toggle`
+     на mobile и видимый на desktop, клик по редактору через
+     `.cm-scroller` вместо `.cm-content`, ожидание записи пресета в
+     IDB вместо гонки с дебаунсом 500ms.
+antithesis: |
+  (1) «Три бага нашлись только потому, что спеки чинили —
+  можно было просто обновить селекторы и закрыть глаза на
+  раскладку». Возражение: селекторы без правды не работают. Тумблер
+  пиано, кнопка REC и кнопка «×» консоли были **недоступны мыши и
+  касанию** — это не «тест зелёный», а «продукт сломан», и тест это
+  зафиксировал. Обновление селекторов без правки раскладки дало бы
+  зелёный CI на сломанной функции.
+  (2) «`min-height: 140px` у редактора — это костыль под тест».
+  Возражение: редактор без единого пикселя высоты — не редактор.
+  Панель AI (240px) и панель состояния (249px) занимают 489px
+  фиксированно; редактор — единственная упругая часть, и без пола
+  он исчезал целиком. 140px — минимум, при котором редактор
+  остаётся пригодным для чтения, а недостающая высота уходит в
+  вертикальный скролл `.app-body`.
+  (3) «Поднять консоль над транспорт-баром — а слой BottomSheet
+  на mobile не поедет?». Возражение: на mobile консоль — нижний
+  лист, транспорт-бар — верхняя полоса; они не пересекаются по
+  вертикали, а порядок слоёв для них безразличен. Toaster (80) и
+  consent-gate (90) остаются выше консоли (+20 → 60).
+counterexample: |
+  Если у консоли и транспорт-бара появится общий горизонтальный
+  перекрывающийся участок (например, topbar опустится ниже 164px),
+  поднятие консоли на +20 снова окажется недостаточным — порог
+  придётся поднимать дальше. Правильнее было бы ввести токен
+  «z-overlay-above-transport», но сейчас оба числа живут в CSS
+  вразнобой с остальными.
+  Если решение окажется в браузере, который не поддерживает
+  `position: fixed` на элементе внутри `position: relative`
+  (IE11 и старые WebView), консоль перестанет перекрывать страницу
+  целиком — но эти браузеры вне поддержки wavecode.
+axiom_link:
+  - A1
+scope:
+  paths:
+    - ui/src/styles/components.css
+    - ui/src/presentation/components/TransportBar.tsx
+    - ui/tests/e2e/
+outcomes:
+  - id: wavecode-e2e-layout-regressions-outcome-piano-reachable
+    statement: |
+      На desktop (1280×800) disclosure «▼ Пианино» и кнопка REC
+      панели пиано кликабельны: `elementFromPoint` в центре кнопки
+      возвращает саму кнопку, а не перекрывающий её транспорт-бар.
+  - id: wavecode-e2e-layout-regressions-outcome-console-close
+    statement: |
+      Кнопка «×» консольной панели кликабельна на desktop — консоль
+      лежит выше транспорт-бара по z-index.
+  - id: wavecode-e2e-layout-regressions-outcome-editor-floor
+    statement: |
+      Редактор счёта не схлопывается в 0px при раскрытом пиано:
+      `.cm-host` получает не менее 140px.
+obligations:
+  - id: wavecode-e2e-layout-regressions-kernel-validates
+    claim: |
+      The decision file is structurally valid under the math-coding 3.3
+      schema; `mathc validate` exits 0 for `decisions/<id>.yaml` at HEAD.
+    acceptance:
+      all:
+        - verifier: "mathc validate"
+          result: pass
+  - id: wavecode-e2e-layout-regressions-piano-clickable
+    claim: |
+      `npx playwright test tests/e2e/piano.spec.ts` passes — the piano
+      disclosure and the REC control are reachable on desktop.
+    acceptance:
+      all:
+        - verifier: "npm --prefix ui exec playwright test tests/e2e/piano.spec.ts"
+          result: pass
+  - id: wavecode-e2e-layout-regressions-console-close-clickable
+    claim: |
+      `npx playwright test tests/e2e/console.spec.ts` passes — the
+      console close button is reachable on desktop.
+    acceptance:
+      all:
+        - verifier: "npm --prefix ui exec playwright test tests/e2e/console.spec.ts"
+          result: pass
+  - id: wavecode-e2e-layout-regressions-typecheck-clean
+    claim: |
+      `tsc --noEmit` reports no errors after the spec changes.
+    acceptance:
+      all:
+        - verifier: "npm --prefix ui run typecheck"
+          result: pass
+assumptions: []
+risk:
+  declared_triggers:
+    - transport-bar-height-changes-without-token-update
+    - ai-and-status-panels-grow-past-viewport
+    - new-overlay-below-transport-bar
+  owner: human:operator
+relations:
+  addresses:
+    - wavecode-e2e-system-browser@1

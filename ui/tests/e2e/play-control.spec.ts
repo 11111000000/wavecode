@@ -58,14 +58,19 @@ test('play button lives in PresetRow, click toggles to Stop, and AI-textarea sta
   await expect(playBtn).toHaveAttribute('data-tone', 'primary');
   await expect(playBtn).toHaveAttribute('aria-pressed', 'false');
 
-  const insideControlsRow = await playBtn.evaluate((el) => Boolean(el.closest('.app-controls-row')));
-  expect(insideControlsRow, 'play button must live inside .app-controls-row').toBe(true);
+  // The play button lives in the single fixed transport strip at the
+  // top (`.app-transport-bar`) — the old two-row
+  // `.app-preset-row` + `.app-controls-row` layout was consolidated.
+  // What this spec still guards is the original regression: a
+  // bottom-right FAB that covered the AI-textarea.
+  const insideTransportBar = await playBtn.evaluate((el) => Boolean(el.closest('.app-transport-bar')));
+  expect(insideTransportBar, 'play button must live inside the transport bar').toBe(true);
 
-  const isFixed = await playBtn.evaluate((el) => {
-    const cs = window.getComputedStyle(el);
-    return cs.position === 'fixed';
+  const inBottomRight = await playBtn.evaluate((el) => {
+    const r = el.getBoundingClientRect();
+    return r.bottom > window.innerHeight - 120 && r.left > window.innerWidth / 2;
   });
-  expect(isFixed, 'play button must NOT be position:fixed (FAB was fixed)').toBe(false);
+  expect(inBottomRight, 'play button must NOT sit in the bottom-right corner (the old FAB position)').toBe(false);
 
   // 2. There must be NO .wc-fab in the DOM anywhere (the FAB was removed).
   const fabCount = await page.locator('.wc-fab').count();
