@@ -88,9 +88,11 @@ async function bootApp(page: Page, opts: { mockMidi?: boolean } = {}): Promise<v
 }
 
 async function openPiano(page: Page): Promise<void> {
-  // Piano toggle chip — same selector as piano-parallel.spec.ts.
-  // Opens the "piano" bottom sheet and renders <PianoKeyboard/>.
-  await page.locator('.app-preset-row button.wc-chip:has-text("Piano")').click();
+  // The `▼ Piano` disclosure inside the score panel. On desktop
+  // (>=1024px) the inline <PianoKeyboard variant="inline" /> renders
+  // here; below that breakpoint the piano is a BottomSheet opened
+  // from the TabBar instead (see piano-rec-slot.spec.ts).
+  await page.locator('.piano-toggle').first().click();
   await page.waitForSelector('.piano-keys', { timeout: 5000 });
   // Wait for the toolbar (and any MIDI status pill) to render.
   await page.waitForSelector('.piano-toolbar', { timeout: 5000 });
@@ -200,26 +202,30 @@ test('rec button is clickable and toggles aria-pressed', async ({ page }) => {
   await expect(recBtn).toHaveAttribute('data-active', 'false');
 });
 
-test('instrument selector has 4 buttons (triangle/sine/sawtooth/square)', async ({ page }) => {
+test('instrument selector offers the whole melodic-sound catalogue', async ({ page }) => {
   await bootApp(page);
   await openPiano(page);
 
   const selector = page.locator('.piano-instrument-selector');
   await expect(selector).toBeVisible();
 
-  const buttons = selector.locator('.piano-inst-btn');
-  await expect(buttons).toHaveCount(4);
+  // The picker used to be four oscillator buttons. It is now a
+  // <select> over the full melodic-sound catalogue (piano, synth_*,
+  // triangle, sawtooth, square, sine, supersaw, sbd, …).
+  const select = selector.locator('select.piano-inst-select');
+  await expect(select).toBeVisible();
 
-  // The title attribute holds the lowercase instrument name; verify
-  // each of the four is present.
+  const values = await select
+    .locator('option')
+    .evaluateAll((els) => els.map((e) => (e as HTMLOptionElement).value));
+
   for (const inst of ['triangle', 'sine', 'sawtooth', 'square']) {
-    const btn = selector.locator(`.piano-inst-btn[title="${inst}"]`);
-    await expect(btn).toBeVisible();
+    expect(values, `instrument catalogue lost "${inst}"`).toContain(inst);
   }
+  expect(values.length, 'catalogue should cover every PIANO_INSTRUMENTS entry').toBeGreaterThanOrEqual(12);
 
-  // Default is 'triangle' — its data-active is 'true' on first render.
-  const triangleBtn = selector.locator('.piano-inst-btn[title="triangle"]');
-  await expect(triangleBtn).toHaveAttribute('data-active', 'true');
+  // Default is DEFAULT_MELODIC_SOUND ('piano').
+  await expect(select).toHaveValue('piano');
 });
 
 test('piano status pill shows MIDI device count with no source attribution before any MIDI activity', async ({ page }) => {

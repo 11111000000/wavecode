@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { APP_URL } from './support/appUrl';
+import { waitForPresetPersisted } from './support/persistence';
 
 /**
  * e2e for math/wavecode-preset-id-hydration.
@@ -29,13 +30,17 @@ test('selected preset survives reload (and is not always Creep)', async ({ page 
   await page.waitForSelector('main.app', { timeout: 15000 });
 
   // Drop any prior state to start clean — but keep the terms
-  // acceptance, otherwise the blocking consent gate
-  // (decisions/wavecode-disclaimer-gate.yaml) covers the editor after
-  // the reload below and every assertion here fails on the gate.
+  // acceptance and the completed onboarding tour, otherwise the
+  // blocking consent gate (decisions/wavecode-disclaimer-gate.yaml)
+  // or the pointer-capturing tour overlay covers the editor after the
+  // reload below and every assertion here fails on the overlay.
   await page.evaluate(() => {
-    const accepted = window.localStorage.getItem('wavecodeTermsAccepted');
+    const keep = ['wavecodeTermsAccepted', 'wavecode-onboarding-complete-v1'];
+    const saved = keep
+      .map((k) => [k, window.localStorage.getItem(k)])
+      .filter((pair) => pair[1] !== null);
     window.localStorage.clear();
-    if (accepted !== null) window.localStorage.setItem('wavecodeTermsAccepted', accepted);
+    for (const [k, v] of saved) window.localStorage.setItem(k, v);
   });
   await page.reload({ waitUntil: 'domcontentloaded' });
   await page.waitForSelector('select.preset-select', { timeout: 15000 });
@@ -49,6 +54,11 @@ test('selected preset survives reload (and is not always Creep)', async ({ page 
   const stored = await page.evaluate(() =>
     window.localStorage.getItem('wavecode-selected-preset-v1'));
   expect(stored).toBe('ambient-drone');
+
+  // The IDB write is debounced by 500 ms — wait for it, otherwise the
+  // reload below restores the OLD id and the test measures the
+  // debounce window instead of the hydration contract.
+  await waitForPresetPersisted(page, 'ambient-drone');
 
   // Reload — score restores from IDB, presetId from localStorage.
   await page.reload({ waitUntil: 'domcontentloaded' });
