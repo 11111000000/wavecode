@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, cleanup, fireEvent } from '@solidjs/testing-library';
 import { Effect, Stream } from 'effect';
 import { VoiceAIMiniFAB } from './VoiceAIMiniFAB';
@@ -12,6 +12,16 @@ import {
 import { __resetWhistleForTests } from '../state/whistleStore';
 import { resetMicMutexForTests } from '../state/micMutexStore';
 import { initialTranscriptState } from '~/domain/voice/Transcript';
+
+// Only the prime is faked — the rest of the module (the real
+// context factory) has to keep working for the level meter.
+vi.mock('~/infrastructure/audio/micAudioContext', async (importOriginal) => {
+  const actual = await importOriginal<typeof MicAudioContextModule>();
+  return { ...actual, primeMicAudioContext: vi.fn() };
+});
+
+import type * as MicAudioContextModule from '~/infrastructure/audio/micAudioContext';
+import { primeMicAudioContext } from '~/infrastructure/audio/micAudioContext';
 
 /**
  * VoiceAIMiniFAB render tests.
@@ -30,6 +40,7 @@ beforeEach(() => {
   __resetVoiceAIForTests();
   __resetWhistleForTests();
   resetMicMutexForTests();
+  vi.clearAllMocks();
 });
 
 afterEach(() => {
@@ -179,6 +190,43 @@ describe('VoiceAIMiniFAB — the press toggles the take', () => {
     await settle();
     expect(calls.start).toBe(2);
     expect(calls.stop).toBe(1);
+  });
+});
+
+describe('VoiceAIMiniFAB — the mic context is primed inside the gesture', () => {
+  it('REGRESSION (iOS): the starting press primes the AudioContext', async () => {
+    // The level meter runs on an AudioContext, and on WebKit (iOS
+    // Safari, Chrome for iOS) a context created outside a user
+    // gesture stays suspended — the meter reads zeroes forever, the
+    // silence boundary never fires and the take never ends by
+    // itself. The context has to be created AND started inside the
+    // tap that opens the take.
+    const calls = { start: 0, stop: 0 };
+    __setVoiceAIHandleForTests(fakeHandle(calls) as never);
+
+    const { container } = render(() => <VoiceAIMiniFAB lang="ru-RU" />);
+    const btn = container.querySelector<HTMLButtonElement>(
+      '.voice-mini-fab--ai',
+    )!;
+    fireEvent.click(btn);
+    await settle();
+    expect(primeMicAudioContext).toHaveBeenCalledTimes(1);
+  });
+
+  it('the stopping press does not prime another context', async () => {
+    const calls = { start: 0, stop: 0 };
+    __setVoiceAIHandleForTests(fakeHandle(calls) as never);
+
+    const { container } = render(() => <VoiceAIMiniFAB lang="ru-RU" />);
+    const btn = container.querySelector<HTMLButtonElement>(
+      '.voice-mini-fab--ai',
+    )!;
+    fireEvent.click(btn);
+    await settle();
+    __publishVoiceAIStateForTests(listeningState());
+    fireEvent.click(btn);
+    await settle();
+    expect(primeMicAudioContext).toHaveBeenCalledTimes(1);
   });
 });
 

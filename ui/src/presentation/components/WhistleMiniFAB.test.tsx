@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, cleanup, fireEvent } from '@solidjs/testing-library';
 import { WhistleMiniFAB } from './WhistleMiniFAB';
 import {
@@ -10,6 +10,16 @@ import {
 } from '../state/whistleStore';
 import { __resetVoiceAIForTests } from '../state/voiceAIStore';
 import { resetMicMutexForTests } from '../state/micMutexStore';
+
+// Only the prime is faked — the rest of the module (the real
+// context factory) has to keep working for the capture path.
+vi.mock('~/infrastructure/audio/micAudioContext', async (importOriginal) => {
+  const actual = await importOriginal<typeof MicAudioContextModule>();
+  return { ...actual, primeMicAudioContext: vi.fn() };
+});
+
+import type * as MicAudioContextModule from '~/infrastructure/audio/micAudioContext';
+import { primeMicAudioContext } from '~/infrastructure/audio/micAudioContext';
 
 /**
  * WhistleMiniFAB render tests.
@@ -28,6 +38,7 @@ beforeEach(() => {
   __resetVoiceAIForTests();
   __resetWhistleForTests();
   resetMicMutexForTests();
+  vi.clearAllMocks();
 });
 
 afterEach(() => {
@@ -135,6 +146,35 @@ describe('WhistleMiniFAB — the press toggles the take', () => {
     fireEvent.click(btn);
     await settle();
     expect(whistleState().tag).not.toBe('idle');
+  });
+});
+
+describe('WhistleMiniFAB — the mic context is primed inside the gesture', () => {
+  it('REGRESSION (iOS): the starting press primes the AudioContext', async () => {
+    // On WebKit (iOS Safari, Chrome for iOS) an AudioContext created
+    // outside a user gesture stays suspended for good, and the
+    // analyser then reads zeroes — the whistle looked alive and heard
+    // nothing. The context has to be created AND started inside the
+    // tap that opens the take.
+    const { container } = render(() => <WhistleMiniFAB />);
+    const btn = container.querySelector<HTMLButtonElement>(
+      '.voice-mini-fab--whistle',
+    )!;
+    fireEvent.click(btn);
+    await settle();
+    expect(primeMicAudioContext).toHaveBeenCalledTimes(1);
+  });
+
+  it('the stopping press does not prime another context', async () => {
+    const { container } = render(() => <WhistleMiniFAB />);
+    const btn = container.querySelector<HTMLButtonElement>(
+      '.voice-mini-fab--whistle',
+    )!;
+    fireEvent.click(btn);
+    await settle();
+    fireEvent.click(btn);
+    await settle();
+    expect(primeMicAudioContext).toHaveBeenCalledTimes(1);
   });
 });
 

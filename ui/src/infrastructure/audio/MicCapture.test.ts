@@ -131,6 +131,10 @@ import {
   type MeterFrame,
   type MicCaptureState,
 } from './MicCapture';
+import {
+  primeMicAudioContext,
+  __resetMicAudioContextForTests,
+} from './micAudioContext';
 
 const waitFor = async <T>(fn: () => T, tries: number = 20): Promise<T> => {
   for (let i = 0; i < tries; i += 1) {
@@ -164,6 +168,7 @@ describe('MicCapture', () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
+    __resetMicAudioContextForTests();
   });
 
   it('isMicSupported returns true when AudioContext + getUserMedia exist', () => {
@@ -311,6 +316,76 @@ describe('MicCapture', () => {
     });
     await waitFor(() => stubWorker.postMessage.mock.calls.length > 0);
     expect(stubAnalyser.fftSize).toBe(4096);
+    await handle.stop();
+  });
+
+  it('uses the context that was primed inside the user gesture', async () => {
+    // The iOS contract: the context the capture runs on is the one
+    // the click handler created AND started. A context created after
+    // the microphone prompt stays suspended on WebKit and the whole
+    // capture is deaf.
+    const made: StubAudioContext[] = [];
+    const factory = vi.fn(() => {
+      const analyser = {
+        fftSize: 0,
+        getFloatTimeDomainData: vi.fn(),
+        getByteFrequencyData: vi.fn(),
+        frequencyBinCount: 1024,
+        context: undefined as unknown as StubAudioContext,
+      };
+      const ctx: StubAudioContext = {
+        sampleRate: 48000,
+        state: 'running',
+        currentTime: 0,
+        createMediaStreamSource: vi.fn(() => ({ connect: vi.fn() })),
+        createAnalyser: vi.fn(() => analyser),
+        close: vi.fn().mockResolvedValue(undefined),
+        resume: vi.fn().mockResolvedValue(undefined),
+      };
+      analyser.context = ctx;
+      made.push(ctx);
+      return ctx;
+    });
+    (globalThis as unknown as { AudioContext: typeof AudioContext }).AudioContext = factory as unknown as typeof AudioContext;
+    primeMicAudioContext();
+    const primed = made[0]!;
+    const handle = startMicDetector({
+      onFrame: () => {},
+    });
+    await waitFor(() => stubWorker.postMessage.mock.calls.length > 0);
+    expect(primed.createMediaStreamSource).toHaveBeenCalled();
+    // The capture owns the context it took: it closes it on stop.
+    await handle.stop();
+    expect(primed.close).toHaveBeenCalled();
+  });
+
+  it('reports a context that never starts instead of listening to silence', async () => {
+    // A suspended context hands the analyser zeroes — the whistle
+    // would look alive and hear nothing. The capture must say so
+    // and release the microphone.
+    const ctx: StubAudioContext = {
+      sampleRate: 48000,
+      state: 'suspended',
+      currentTime: 0,
+      createMediaStreamSource: vi.fn(() => ({ connect: vi.fn() })),
+      createAnalyser: vi.fn(() => stubAnalyser),
+      close: vi.fn().mockResolvedValue(undefined),
+      resume: vi.fn().mockRejectedValue(new Error('NotAllowedError')),
+    };
+    (globalThis as unknown as { AudioContext: typeof AudioContext }).AudioContext = vi
+      .fn(() => ctx) as unknown as typeof AudioContext;
+    const errors: Error[] = [];
+    const states: MicCaptureState[] = [];
+    const handle = startMicDetector({
+      onFrame: () => {},
+      onStateChange: (s) => states.push(s),
+      onError: (e) => errors.push(e),
+    });
+    await waitFor(() => errors.length > 0);
+    expect(errors[0]?.message).toMatch(/аудио-контекст/i);
+    expect(states).toContain('errored');
+    // The microphone must not stay open behind a failed capture.
+    expect(stubMediaStreamTrack.stop).toHaveBeenCalled();
     await handle.stop();
   });
 
