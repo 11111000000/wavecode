@@ -1,6 +1,7 @@
 import { type JSX } from 'solid-js';
 import { VoiceAIMiniFAB } from './VoiceAIMiniFAB';
 import { WhistleMiniFAB } from './WhistleMiniFAB';
+import { RhythmMiniFAB } from './RhythmMiniFAB';
 import { RecordingPanel } from './RecordingPanel';
 
 /**
@@ -14,17 +15,24 @@ import { RecordingPanel } from './RecordingPanel';
  * микрофона (primary + мини-AI) + отсутствие явной обратной связи
  * по записи сбивали с толку.
  *
- * Сейчас: оба мини-FAB всегда на экране, у каждого свой
+ * Сейчас: все мини-FAB всегда на экране, у каждого свой
  * aria-label и подпись-чип рядом.
  *   - VoiceAIMiniFAB  → «Голос»: тап = старт/стоп распознавания,
  *                       удержание = одна фраза.
- *   - WhistleMiniFAB  → «Свист»:  press-and-hold = запись свиста →
+ *   - WhistleMiniFAB  → «Свист»: тап = старт/стоп записи свиста →
  *                       нота → вставка в score.
+ *   - RhythmMiniFAB   → «Ритм»: тап = старт/стоп записи ударов →
+ *                       сетка → вставка в score.
+ *
+ * Свист и Ритм — две половины одного микрофона: свист пишет
+ * МЕЛОДИЮ (ноты), ритм — ПЕРКУССИЮ (удары на сетке). Смешивать их
+ * было нельзя: детектор ударов срабатывает и на атаке самого свиста,
+ * и каждая фраза прорастала лишним хлопком.
  *
  * Состояние записи транслируется через
  *   - data-state на самой кнопке (glow + pulse animation),
  *   - RecordingPanel (панель внизу: 🎙️ + transcript + заметки;
- *     единая для voice-AI и whistle — раньше для whistle
+ *     единая для voice-AI, whistle и rhythm — раньше для whistle
  *     панели не было вовсе).
  *   - inline-hint «слушаю…» / расшифровка прямо в кнопке.
  *
@@ -43,6 +51,7 @@ export function VoiceFAB(): JSX.Element {
         <div class="voice-mini-fab-stack">
           <VoiceAIMiniFAB />
           <WhistleMiniFAB />
+          <RhythmMiniFAB />
         </div>
       </div>
       <RecordingPanel />

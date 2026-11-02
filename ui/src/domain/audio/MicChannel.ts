@@ -17,6 +17,7 @@
  * entry points declared in `decisions/wavecode-voice-fab.yaml`:
  *   - `voice-ai`      → VoiceAIMiniFAB (mp3 path: STTEngine)
  *   - `whistle`       → WhistleMiniFAB (existing micSnippet flow)
+ *   - `rhythm`        → RhythmMiniFAB (tapped rhythm → step grid)
  *   - `loop-recorder` → LoopRecorder panel (mic to loop)
  *   - `midi-learn`    → MIDI learn-assign (mic-triggered mapping)
  *
@@ -39,6 +40,7 @@ export type MicChannelKind = 'mic-direct' | 'speech-api-internal' | 'midi';
 export type MicChannelOwner =
   | { readonly kind: 'voice-ai'; readonly sessionId: string }
   | { readonly kind: 'whistle'; readonly sessionId: string }
+  | { readonly kind: 'rhythm'; readonly sessionId: string }
   | { readonly kind: 'loop-recorder'; readonly sessionId: string }
   | { readonly kind: 'midi-learn'; readonly sessionId: string };
 

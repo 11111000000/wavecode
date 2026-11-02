@@ -22,6 +22,7 @@ import { useConsentGate } from './presentation/state/consentGate';
 import { VoiceFAB } from './presentation/components/VoiceFAB';
 import { initVoiceAI } from './presentation/state/voiceAIStore';
 import { initWhistle } from './presentation/state/whistleStore';
+import { initRhythm } from './presentation/state/rhythmStore';
 import { selectSttLayer } from './infrastructure/stt/selectSttLayer';
 import { AppLayer } from './infrastructure/composition';
 
@@ -60,6 +61,7 @@ function AppShell(): JSX.Element {
   // VITE_STT_BACKEND override.
   initVoiceAI({ sttLayer: selectSttLayer() });
   initWhistle({ audioLayer: AppLayer });
+  initRhythm({ audioLayer: AppLayer });
 
   const undo = (): void => { void stopAudio(); dispatch({ type: 'undoScore' }); };
   const redo = (): void => { void stopAudio(); dispatch({ type: 'redoScore' }); };

@@ -1,4 +1,4 @@
-import { Show, For, createMemo, type JSX } from 'solid-js';
+import { Show, For, createMemo, createEffect, untrack, type JSX } from 'solid-js';
 import {
   voiceAIState,
   voiceAIElapsedSec,
@@ -34,7 +34,23 @@ import {
   micCurrentRms,
   clearPreview,
 } from '../state/micStore';
-import { MicIcon, WhistleIcon, CloseIcon, SendIcon, TrashIcon } from '../icons';
+import {
+  rhythmPhase,
+  rhythmError,
+  rhythmPanelArmed,
+  rhythmHits,
+  rhythmGrid,
+  rhythmTapBpm,
+  gridBpm,
+  startRhythm,
+  stopRhythm,
+  commitRhythm,
+  discardRhythm,
+  ensureRhythmSessionId,
+  refreshRhythmPreview,
+} from '../state/rhythmStore';
+import { RHYTHM_ROWS, type RhythmRow } from '~/domain/audio/rhythmGrid';
+import { MicIcon, WhistleIcon, RhythmIcon, CloseIcon, SendIcon, TrashIcon } from '../icons';
 import { Effect } from 'effect';
 import type { AudioNote } from '~/domain/audio/micCapture';
 import type { MicBusyError } from '~/domain/audio/MicChannel';
@@ -54,10 +70,17 @@ import { consoleStore } from './consoleStore';
  *                   controls that matter — ●REC, «→ В ИИ» and ✕.
  *   - `whistle`   — an active whistle session OR buffered notes
  *                   awaiting apply.
+ *   - `rhythm`    — an active rhythm session OR buffered hits
+ *                   awaiting apply.
  *   - `hidden`    — no panel.
  *
  * The whistle wins over voice-AI (the mic mutex should prevent them
  * running simultaneously; this is a tiebreaker for transient state).
+ * The rhythm sits next to the whistle: the two recorders share one
+ * microphone, so only one of them can be LIVE at a time — but a
+ * whistle take that is paused with its notes in the buffer stays
+ * pending while the user records a rhythm, and the panel falls back
+ * to the whistle when the rhythm is committed.
  *
  * The voice-AI body used to have two faces: a read-only live
  * transcript while recording, and an editable form that only existed
@@ -90,15 +113,19 @@ import { consoleStore } from './consoleStore';
  * IS the REC control — so a second way to start the same take would
  * have been a duplicate affordance reachable by nobody.
  */
-type Mode = 'voice-ai' | 'whistle' | 'hidden';
+type Mode = 'voice-ai' | 'whistle' | 'rhythm' | 'hidden';
 
 export function RecordingPanel(): JSX.Element {
   const mode = createMemo<Mode>(() => {
+    // A LIVE recorder wins: the rhythm and the whistle share one
+    // microphone, so only one of them can be running.
+    if (rhythmPhase() === 'recording') return 'rhythm';
     const w = whistleState().tag;
     if (w === 'arming' || w === 'recording' || w === 'segmenting') {
       return 'whistle';
     }
     if (whistlePanelArmed()) return 'whistle';
+    if (rhythmPanelArmed()) return 'rhythm';
     const v = voiceAIState().tag;
     if (
       v === 'arming'
@@ -123,7 +150,9 @@ export function RecordingPanel(): JSX.Element {
         data-mode={mode()}
         data-state={mode() === 'voice-ai'
           ? voiceAIState().tag
-          : whistleState().tag}
+          : mode() === 'rhythm'
+            ? rhythmPhase()
+            : whistleState().tag}
         role="status"
         aria-live="polite"
       >
@@ -132,6 +161,9 @@ export function RecordingPanel(): JSX.Element {
         </Show>
         <Show when={mode() === 'whistle'}>
           <WhistleBody />
+        </Show>
+        <Show when={mode() === 'rhythm'}>
+          <RhythmBody />
         </Show>
       </div>
     </Show>
@@ -700,6 +732,227 @@ const WhistleBody = (): JSX.Element => {
           </div>
         </div>
       </Show>
+    </>
+  );
+};
+
+/* ── rhythm body ───────────────────────────────────────────────────── */
+
+/**
+ * The four drum voices, as the grid labels them. The same four rows
+ * the step grid uses — a recorded rhythm and a hand-tapped one speak
+ * the same vocabulary.
+ */
+const RHYTHM_ROW_LABELS: Readonly<Record<RhythmRow, string>> = {
+  bd: 'бочка',
+  sd: 'малый',
+  hh: 'хай',
+  cp: 'хлопок',
+};
+
+/**
+ * RhythmBody — the rhythm recorder's face.
+ *
+ * The panel shows the take as it is being recorded: every hit lands
+ * on a step of the app's grid, and the grid preview tells the user
+ * exactly what «Применить» will write into the score — the bars, the
+ * number of steps and the tempo the pattern is anchored to.
+ *
+ * The tempo line carries both numbers on purpose: the tempo the user
+ * TAPPED at (an estimate) and the tempo of the GRID the hits were
+ * placed on (the transport's). When they differ the user can hear
+ * that the take was pulled onto the app's grid instead of being
+ * taken at face value.
+ */
+const RhythmBody = (): JSX.Element => {
+  const isRecording = createMemo(() => rhythmPhase() === 'recording');
+  const grid = createMemo(() => rhythmGrid());
+  const hasHits = createMemo(() => rhythmHits().length > 0);
+
+  // The hits are placed on the TRANSPORT's tempo, so a tempo change
+  // moves them to other steps — re-quantise when it does. The hit
+  // stream itself is handled by the store's own subscription; this
+  // effect only tracks the tempo.
+  createEffect(() => {
+    gridBpm();
+    untrack(() => refreshRhythmPreview());
+  });
+
+  const stageLabel = (): string => {
+    if (isRecording()) return 'Слушаю удары — стукните в ритм';
+    return hasHits() ? 'Ритм записан — можно применить' : 'Запись на паузе';
+  };
+
+  const gridInfo = (): string => {
+    const bpm = Math.round(gridBpm());
+    const tap = rhythmTapBpm();
+    const tapText = tap === null
+      ? ''
+      : ` · вы стучали ~${Math.round(tap)} BPM`;
+    const g = grid();
+    if (g === null) return `сетка ${bpm} BPM${tapText}`;
+    const bars = `${g.bars} ${g.bars === 1 ? 'такт' : 'такта'}`;
+    return `сетка ${bpm} BPM · ${bars} · ${g.steps} долей${tapText}`;
+  };
+
+  const onRec = async (): Promise<void> => {
+    try {
+      if (isRecording()) {
+        await Effect.runPromise(stopRhythm());
+        return;
+      }
+      await Effect.runPromise(
+        startRhythm({ sessionId: ensureRhythmSessionId() }).pipe(
+          Effect.catchAll((err: MicBusyError) => Effect.sync(() => {
+            consoleStore.pushToast({
+              severity: 'warn',
+              title: 'Ритм',
+              body: 'Микрофон занят другим режимом ('
+                + err.conflictingChannel.owner.kind + ')',
+            });
+          })),
+        ),
+      );
+    } catch {
+      /* the toast above is the report */
+    }
+  };
+
+  const onApply = async (): Promise<void> => {
+    if (!hasHits()) return;
+    try {
+      await Effect.runPromise(commitRhythm());
+    } catch {
+      /* the toast in the store is the report */
+    }
+  };
+
+  const onDelete = async (): Promise<void> => {
+    try {
+      await Effect.runPromise(discardRhythm());
+    } catch {
+      /* ditto */
+    }
+  };
+
+  const onCancel = async (): Promise<void> => {
+    try {
+      await Effect.runPromise(discardRhythm());
+    } catch {
+      /* ditto */
+    }
+  };
+
+  return (
+    <>
+      <div class="voice-recording-panel__head">
+        <span
+          class="voice-recording-panel__icon voice-recording-panel__icon--rhythm"
+          aria-hidden="true"
+        >
+          <RhythmIcon size={16} />
+        </span>
+        <span class="voice-recording-panel__title">Ритм</span>
+        <Show when={rhythmError() !== null}>
+          <span class="voice-recording-panel__err-pill">⚠ {rhythmError()}</span>
+        </Show>
+        <Show when={hasHits() || isRecording()}>
+          <button
+            type="button"
+            class="voice-recording-panel__delete"
+            aria-label="Удалить записанный ритм"
+            title="Удалить записанные удары"
+            onClick={() => { void onDelete(); }}
+          >
+            <TrashIcon size={13} />
+          </button>
+        </Show>
+        <button
+          type="button"
+          class="voice-recording-panel__close"
+          aria-label="Отменить запись ритма"
+          title="Отменить запись и не вставлять ничего в score"
+          onClick={() => { void onCancel(); }}
+        >
+          <CloseIcon size={14} />
+        </button>
+      </div>
+      <div class="voice-recording-panel__body voice-recording-panel__body--rhythm">
+        <span class="voice-recording-panel__stage">{stageLabel()}</span>
+        <span class="voice-recording-panel__hz">{gridInfo()}</span>
+      </div>
+      <Show when={grid() !== null}>
+        <div class="voice-recording-panel__rhythm-grid" aria-label="Ритм на сетке">
+          <For each={RHYTHM_ROWS}>
+            {(row) => (
+              <div class="voice-recording-panel__rhythm-row">
+                <span class="voice-recording-panel__rhythm-rowname">
+                  {RHYTHM_ROW_LABELS[row]}
+                </span>
+                <div
+                  class="voice-recording-panel__rhythm-cells"
+                  style={{ '--rhythm-cols': String(grid()!.steps) }}
+                >
+                  <For each={grid()!.rows[RHYTHM_ROWS.indexOf(row)]!}>
+                    {(on, i) => (
+                      <span
+                        class="voice-recording-panel__rhythm-cell"
+                        data-on={on ? 'true' : 'false'}
+                        data-downbeat={i() % grid()!.stepsPerBar === 0 ? 'true' : 'false'}
+                      />
+                    )}
+                  </For>
+                </div>
+              </div>
+            )}
+          </For>
+        </div>
+      </Show>
+      <div class="voice-recording-panel__actions voice-recording-panel__actions--split">
+        <span class="voice-recording-panel__hint" aria-hidden="true">
+          {hasHits()
+            ? 'Можно записать ещё или применить'
+            : 'Стучите в микрофон — ритм появится здесь'}
+        </span>
+        <button
+          type="button"
+          class={
+            isRecording()
+              ? 'voice-recording-panel__rec voice-recording-panel__rec--on'
+              : 'voice-recording-panel__rec voice-recording-panel__rec--off'
+          }
+          aria-label={
+            isRecording() ? 'Остановить запись ритма' : 'Начать запись ритма'
+          }
+          aria-pressed={isRecording() ? 'true' : 'false'}
+          title={
+            isRecording() ? 'Остановить запись ритма' : 'Начать запись ритма'
+          }
+          data-rec-state={isRecording() ? 'on' : 'off'}
+          onClick={() => { void onRec(); }}
+        >
+          <span class="voice-recording-panel__rec-dot" aria-hidden="true" />
+          <span class="voice-recording-panel__rec-label">REC</span>
+        </button>
+        <button
+          type="button"
+          class="voice-recording-panel__btn voice-recording-panel__btn--apply"
+          aria-label="Вставить ритм в score"
+          title={
+            hasHits()
+              ? 'Добавить ритм в стек композиции'
+              : 'Сначала запишите ритм'
+          }
+          disabled={!hasHits()}
+          onClick={() => { void onApply(); }}
+        >
+          <SendIcon size={12} />
+          <span>Применить</span>
+        </button>
+        <span class="voice-recording-panel__count" aria-hidden="true">
+          {rhythmHits().length} ударов
+        </span>
+      </div>
     </>
   );
 };

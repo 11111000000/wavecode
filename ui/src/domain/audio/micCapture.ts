@@ -35,6 +35,7 @@ export type PitchFrame = {
   readonly hz: number | null;
   readonly clarity: number;
   readonly rms: number;
+  /** Wall-clock timestamp of the read (ms, `performance.now()`). */
   readonly timestampMs: number;
 };
 
@@ -66,9 +67,17 @@ export type MicTune = {
    * chopped into fragments by brief amplitude dips. Default 100 ms.
    */
   readonly noteMergeWindowMs: number;
-  /** Sliding window for stored notes (ms). Notes older than
-   *  `nowMs - windowMs` are pruned on each feed call so long sessions
-   *  don't OOM. Default 30_000. */
+  /**
+   * Sliding window for stored notes (ms). Notes older than
+   * `nowMs - windowMs` are pruned on each feed call so long sessions
+   * don't OOM. Default 300_000 (5 minutes).
+   *
+   * The window is measured against the NEWEST frame, so it bounds the
+   * buffer without truncating the take being recorded: with a 30 s
+   * window a 40-second whistle take silently lost its first 10
+   * seconds. Five minutes is far longer than any take a phone user
+   * records, and the memory it bounds (~3000 notes) is trivial.
+   */
   readonly windowMs: number;
 };
 
@@ -82,8 +91,10 @@ export type MicTune = {
  *  - noteVarianceCents 80 (was 50) — natural vocal vibrato is wider
  *    than 50 cents; the tighter window was splitting single notes.
  *  - noteMergeWindowMs 100 — see field comment.
- *  - windowMs 30000 — 30-second sliding buffer for stored notes; a
- *    5-minute violin performance doesn't accumulate notes indefinitely.
+ *  - windowMs 300000 — 5-minute sliding buffer for stored notes. The
+ *    window is measured from the NEWEST frame, so it bounds the memory
+ *    without cutting the take short: a 30 s window silently dropped the
+ *    first 30 s of a longer recording.
  */
 export const DEFAULT_TUNE: MicTune = {
   silenceGate: 0.012,
@@ -93,7 +104,7 @@ export const DEFAULT_TUNE: MicTune = {
   minNoteMs: 80,
   noteVarianceCents: 80,
   noteMergeWindowMs: 100,
-  windowMs: 30_000,
+  windowMs: 300_000,
 };
 
 export type OpenNote = {

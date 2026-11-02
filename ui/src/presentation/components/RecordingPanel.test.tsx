@@ -20,12 +20,20 @@ import {
 } from '../state/voiceAIStore';
 import { resetMicMutexForTests } from '../state/micMutexStore';
 import {
+  __resetRhythmForTests,
+  startRhythm,
+  stopRhythm,
+} from '../state/rhythmStore';
+import { appStore, dispatch } from '../state/appStore';
+import {
   setMicPreviewNotes,
   setMicCurrentHz,
   setMicCurrentRms,
   micPreviewNotes,
   micCurrentHz,
+  __feedMicTransientForTests,
 } from '../state/micStore';
+import { Effect } from 'effect';
 import { initialVoiceSession } from '~/domain/voice/voiceSession';
 import { initialWhistleSession } from '~/domain/audio/whistleSession';
 
@@ -81,14 +89,17 @@ const resetMicStore = (): void => {
 beforeEach(() => {
   __resetVoiceAIForTests();
   __resetWhistleForTests();
+  __resetRhythmForTests();
   resetMicMutexForTests();
   resetMicStore();
+  dispatch({ type: 'replaceScore', text: '' });
 });
 
 afterEach(() => {
   cleanup();
   __resetVoiceAIForTests();
   __resetWhistleForTests();
+  __resetRhythmForTests();
   resetMicMutexForTests();
   resetMicStore();
 });
@@ -888,5 +899,72 @@ describe('RecordingPanel — clean state between tests', () => {
     setWhistlePanelArmed(true);
     __resetWhistleForTests();
     expect(whistlePanelArmed()).toBe(false);
+  });
+});
+
+describe('RecordingPanel — the rhythm body', () => {
+  const hit = (type: 'kick' | 'snare' | 'hat' | 'click', startMs: number) => ({
+    type,
+    startMs,
+    amplitude: 0.4,
+    spectralCentroidHz: 1000,
+    envelopeMs: 30,
+  });
+
+  it('renders the rhythm body while a rhythm take is running', async () => {
+    await Effect.runPromise(startRhythm({ sessionId: 'panel-1' }));
+    const { container } = render(() => <RecordingPanel />);
+    const panel = container.querySelector('.voice-recording-panel');
+    expect(panel?.getAttribute('data-mode')).toBe('rhythm');
+    expect(panel?.querySelector('.voice-recording-panel__title')?.textContent)
+      .toBe('Ритм');
+  });
+
+  it('shows the hits on the grid — the preview IS the committed pattern', async () => {
+    await Effect.runPromise(startRhythm({ sessionId: 'panel-2' }));
+    __feedMicTransientForTests(hit('kick', 0));
+    __feedMicTransientForTests(hit('snare', 125));
+    const { container } = render(() => <RecordingPanel />);
+    const cells = container.querySelectorAll(
+      '.voice-recording-panel__rhythm-cell[data-on="true"]',
+    );
+    expect(cells).toHaveLength(2);
+    // Four voices × 16 steps of a bar.
+    expect(container.querySelectorAll('.voice-recording-panel__rhythm-cell'))
+      .toHaveLength(64);
+  });
+
+  it('names the tempo of the grid the hits were placed on', async () => {
+    await Effect.runPromise(startRhythm({ sessionId: 'panel-3' }));
+    const { container } = render(() => <RecordingPanel />);
+    const info = container.querySelector('.voice-recording-panel__hz');
+    // The default transport runs at 0.5 cps → 120 BPM.
+    expect(info?.textContent).toContain('120 BPM');
+  });
+
+  it('keeps the panel open for a paused take so «Применить» stays reachable', async () => {
+    await Effect.runPromise(startRhythm({ sessionId: 'panel-4' }));
+    __feedMicTransientForTests(hit('kick', 0));
+    await Effect.runPromise(stopRhythm());
+    const { container } = render(() => <RecordingPanel />);
+    const panel = container.querySelector('.voice-recording-panel');
+    expect(panel?.getAttribute('data-mode')).toBe('rhythm');
+    const apply = container.querySelector<HTMLButtonElement>(
+      '.voice-recording-panel__btn--apply',
+    );
+    expect(apply?.disabled).toBe(false);
+  });
+
+  it('«Применить» writes the pattern into the score', async () => {
+    await Effect.runPromise(startRhythm({ sessionId: 'panel-5' }));
+    __feedMicTransientForTests(hit('kick', 0));
+    await Effect.runPromise(stopRhythm());
+    const { container } = render(() => <RecordingPanel />);
+    const apply = container.querySelector<HTMLButtonElement>(
+      '.voice-recording-panel__btn--apply',
+    )!;
+    fireEvent.click(apply);
+    await new Promise<void>((resolve) => setTimeout(resolve, 30));
+    expect(appStore.score).toContain('drums_bd');
   });
 });

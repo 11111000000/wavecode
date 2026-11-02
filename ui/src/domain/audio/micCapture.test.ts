@@ -711,7 +711,10 @@ describe('feed() — long-form buffer cap (sliding window)', () => {
     expect(s.lastClosedMs).toBeNull();
   });
 
-  it('default windowMs is 30_000ms', () => {
-    expect(DEFAULT_TUNE.windowMs).toBe(30_000);
+  it('default windowMs is 300_000ms — long enough to keep a whole take', () => {
+    // The window is measured from the NEWEST frame, so it bounds the
+    // buffer without cutting the take short. A 30 s window silently
+    // dropped the first 30 s of a longer recording.
+    expect(DEFAULT_TUNE.windowMs).toBe(300_000);
   });
 });

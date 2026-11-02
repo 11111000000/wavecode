@@ -40,13 +40,14 @@ export type TransientFrame = {
   readonly freqDomain: ArrayLike<number>;
   /** AudioContext.sampleRate at capture time. */
   readonly sampleRate: number;
-  /** AudioContext.currentTime in ms (used for the snippet's time-stamps). */
+  /** Wall-clock timestamp of the read (ms, `performance.now()`) — the
+   *  clock every other stage of the mic pipeline speaks. */
   readonly timestampMs: number;
 };
 
 export type Transient = {
   readonly type: OnsetType;
-  /** AudioContext.currentTime in ms when the onset fired. */
+  /** Timestamp of the onset (ms, `performance.now()` epoch). */
   readonly startMs: number;
   /** Peak RMS amplitude at the onset frame (0..1). */
   readonly amplitude: number;
@@ -335,22 +336,38 @@ export const closeOpenTransient = (state: TransientState): TransientState => sta
  * so a finger tap leaves no note at all).
  *
  * The note buffer is therefore what tells the two apart: a transient
- * that lands inside — or within `toleranceMs` before — a sustained
- * note is that note's onset and is dropped; a transient with no note
- * anywhere near it is a percussive hit and is kept.
+ * that lands inside — or shortly before — a sustained note is that
+ * note's onset and is dropped; a transient with no note anywhere near
+ * it is a percussive hit and is kept.
  *
- * The tolerance covers the detection lag: the transient fires on the
- * RMS jump, the note only opens once the pitch has been stable for a
- * few frames, so the transient lands a few ms BEFORE the note.
+ * Two windows, because the two directions are not symmetric:
+ *
+ *   - `preRollMs` (before the note opens) — the DETECTION LAG. The
+ *     transient fires on the RMS jump, the note only opens once the
+ *     pitch has been stable for a few frames, and the analyser
+ *     window alone is 2048 samples (≈43 ms at 48 kHz). The transient
+ *     therefore lands BEFORE the note, tens of milliseconds early.
+ *     150 ms covers the window plus the worker round trip plus the
+ *     frames the pitch needs to settle.
+ *   - `toleranceMs` (after the note ends) — a hit inside a held note
+ *     is that note's onset too; 60 ms is enough for the boundary.
  */
 export const filterPercussionHits = (
   transients: ReadonlyArray<Transient>,
   notes: ReadonlyArray<AudioNote>,
-  opts: { readonly toleranceMs?: number } = {},
+  opts: {
+    /** How far BEFORE a note a transient may sit and still belong to
+     *  it. Default 150 ms. */
+    readonly preRollMs?: number;
+    /** How far AFTER a note a transient may sit and still belong to
+     *  it. Default 60 ms. */
+    readonly toleranceMs?: number;
+  } = {},
 ): ReadonlyArray<Transient> => {
+  const preRoll = opts.preRollMs ?? 150;
   const tolerance = opts.toleranceMs ?? 60;
   return transients.filter((t) => !notes.some((n) => {
-    const from = n.startMs - tolerance;
+    const from = n.startMs - preRoll;
     const to = n.startMs + n.durationMs + tolerance;
     return t.startMs >= from && t.startMs <= to;
   }));

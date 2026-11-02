@@ -345,6 +345,18 @@ export const WhistleIcon = (p: Props): JSX.Element => (
   </svg>
 );
 
+/** Rhythm / drum glyph for the RhythmMiniFAB: a snare drum seen from
+ *  the side with two sticks above it. The percussion counterpart of
+ *  the whistle's note glyph — the button records TAPS, not pitches. */
+export const RhythmIcon = (p: Props): JSX.Element => (
+  <svg {...base(p.size ?? 18)} class={`wc-icon ${p.class ?? ''}`}>
+    <ellipse cx="8" cy="9.5" rx="5" ry="2" />
+    <path d="M3 9.5 v2.5 a5 2 0 0 0 10 0 v-2.5" />
+    <line x1="6.5" y1="5.5" x2="10" y2="2.5" />
+    <line x1="9.5" y1="5.5" x2="6" y2="2.5" />
+  </svg>
+);
+
 export const DragHandleIcon = (p: Props): JSX.Element => (
   <svg {...base(p.size ?? 24)} class={`wc-icon ${p.class ?? ''}`}>
     <line x1="8" y1="5" x2="8" y2="5.01" />

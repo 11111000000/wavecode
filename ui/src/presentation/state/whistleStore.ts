@@ -16,8 +16,8 @@
  * so we `runSync` it on init (Refs are `never` requirements).
  * `startWhistle` acquires `mic-direct` for the `whistle` owner,
  * starts the live `micStore` pipeline, and runs the orchestrator.
- * `commitWhistle` builds the take's snippet (the whistled NOTES plus
- * the TAPPED transients) through `micSnippetFromBuffers`, auditions it
+ * `commitWhistle` builds the take's snippet (the whistled NOTES) through
+ * `micSnippetFromBuffers`, auditions it
  * via the orchestrator AND splices the same snippet into
  * `appStore.score` via a presentation-layer dispatch — the
  * orchestrator (application layer) does not touch the editor,
@@ -34,7 +34,6 @@ import type { WhistleSessionState } from '~/domain/audio/whistleSession';
 import { initialWhistleSession } from '~/domain/audio/whistleSession';
 import type { AudioNote } from '~/domain/audio/micCapture';
 import { micSnippetFromBuffers } from '~/domain/audio/micSnippet';
-import { filterPercussionHits } from '~/domain/audio/transient';
 import { soundLabel, isMelodicSound } from '~/domain/sounds';
 import { appendToTopStack } from '~/domain/strudel';
 import { AudioEngine } from '~/domain/services';
@@ -48,7 +47,6 @@ import {
   startMic,
   stopMic,
   micPreviewNotes,
-  micTransients,
   setMicPreviewNotes,
   subscribeMicFrame,
   clearPreview,
@@ -252,11 +250,6 @@ export const initWhistle = (deps: {
         notesRef.current = captureLiveNotes();
         return notesRef.current;
       }),
-    // The percussive hits of the same take: a tapped rhythm. The
-    // transient detector classifies them (kick / snare / hat / click)
-    // and the snippet builder maps them onto the drum bank — this is
-    // what makes "щёлкнуть ритм" audible instead of dropped.
-    getTransients: () => Effect.sync(() => micTransients()),
   };
 
   const sessionProgram = createWhistleSession({
@@ -383,15 +376,17 @@ export const commitWhistle = (): Effect.Effect<void, never, never> => {
     // dependency — even if `stopMic` clears the live buffer first,
     // we still have the notes we observed at the start of commit.
     const notes = micPreviewNotes();
-    // Same filter as the orchestrator: a transient that belongs to a
-    // sustained note is that note's onset (and used to become a stray
-    // clap); a transient with no note behind it is a tapped hit.
-    const transients = filterPercussionHits(micTransients(), notes);
+    // A whistle take is a MELODY. The percussive hits the detector
+    // saw in the same take are the whistle's OWN onsets — feeding
+    // them into the snippet sprouted a clap on every phrase (the
+    // "a beat appears out of nowhere" complaint). Percussion has its
+    // own recorder now (the «Ритм» button), which places the hits on
+    // the grid instead of guessing where they belong.
     yield* handle!.commit();
     // The instrument of the TAKE (captured when it started), not the
     // live picker value: the notes are committed as one snippet, so
     // the timbre must not change under the user's feet.
-    const snippet = micSnippetFromBuffers(notes, transients, {
+    const snippet = micSnippetFromBuffers(notes, [], {
       instrument: activeInstrument,
     });
     if (snippet === null) return;

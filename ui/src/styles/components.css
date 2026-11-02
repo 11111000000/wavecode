@@ -6432,6 +6432,20 @@ textarea.ai-textarea:focus-visible {
   background: var(--err-soft);
 }
 
+/* Rhythm — the third button of the voice cluster (tapped percussion
+ * → step grid). Warm gold: the whistle is cyan, the voice is violet,
+ * the rhythm is the gold one. */
+.voice-mini-fab--rhythm {
+  color: var(--warm);
+  border-color: var(--warm);
+}
+.voice-mini-fab--rhythm[data-state='recording'] {
+  background: var(--warm-soft);
+  border-color: var(--warm);
+  box-shadow: var(--shadow-fab), 0 0 20px var(--warm-glow);
+  animation: voice-mini-fab-pulse 1.8s ease-in-out infinite;
+}
+
 /* Inline permission-blocked badge — a small "!" pill that surfaces
  * on the VoiceAIMiniFAB when STT / mic access is denied by the
  * browser. Pinpoints the cluster as the broken element (vs.
@@ -6489,6 +6503,7 @@ textarea.ai-textarea:focus-visible {
 }
 .voice-mini-fab--ai .voice-mini-fab__label     { color: var(--primary); border-color: var(--primary); }
 .voice-mini-fab--whistle .voice-mini-fab__label { color: var(--cyan);    border-color: var(--cyan); }
+.voice-mini-fab--rhythm .voice-mini-fab__label  { color: var(--warm);    border-color: var(--warm); }
 
 /* Inline hint chip — shown while listening / recording. Positioned
  *  to the LEFT of the icon so the waveform doesn't overlap the FAB. */
@@ -6850,6 +6865,10 @@ textarea.ai-textarea:focus-visible {
   background: var(--cyan-soft);
   color: var(--cyan);
 }
+.voice-recording-panel__icon--rhythm {
+  background: var(--warm-soft);
+  color: var(--warm);
+}
 .voice-recording-panel__title {
   flex: 1;
   font-size: var(--fs-sm);
@@ -7054,6 +7073,55 @@ textarea.ai-textarea:focus-visible {
   font-family: var(--font-mono);
   font-size: var(--fs-xs);
   font-weight: var(--fw-medium);
+}
+
+/* Rhythm grid preview — the recorded pattern as it will land on the
+ * step grid: the four drum voices × the steps of the pattern. The
+ * preview IS the grid the user is about to commit, so what they see
+ * is what the score will contain. */
+.voice-recording-panel__rhythm-grid {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3xs);
+  padding: var(--space-xs);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+.voice-recording-panel__rhythm-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2xs);
+}
+.voice-recording-panel__rhythm-rowname {
+  flex: 0 0 44px;
+  font-size: var(--fs-2xs);
+  color: var(--fg-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.voice-recording-panel__rhythm-cells {
+  display: grid;
+  grid-template-columns: repeat(var(--rhythm-cols, 16), minmax(0, 1fr));
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+.voice-recording-panel__rhythm-cell {
+  min-height: 9px;
+  border-radius: 2px;
+  background: var(--surface-3);
+  border: 1px solid var(--border);
+}
+.voice-recording-panel__rhythm-cell[data-on='true'] {
+  background: var(--warm);
+  border-color: var(--warm);
+}
+/* The downbeat of every bar gets a brighter border — the eye needs
+ * to see where the bars are, not only where the hits are. */
+.voice-recording-panel__rhythm-cell[data-downbeat='true'] {
+  border-color: var(--border-strong);
 }
 
 .voice-recording-panel__actions {

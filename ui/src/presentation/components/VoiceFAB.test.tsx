@@ -37,27 +37,31 @@ describe('VoiceFAB — cluster renders without expansion', () => {
     expect(group).toBeTruthy();
   });
 
-  it('renders both mini-FABs immediately on first render (no expand needed)', () => {
+  it('renders every mini-FAB immediately on first render (no expand needed)', () => {
     const { container } = render(() => <VoiceFAB />);
     const minis = container.querySelectorAll('.voice-mini-fab');
-    expect(minis.length).toBe(2);
+    expect(minis.length).toBe(3);
   });
 
-  it('shows both always-visible labels "Голос" and "Свист"', () => {
+  it('shows every always-visible label "Голос", "Свист" and "Ритм"', () => {
     const { container } = render(() => <VoiceFAB />);
     const labels = container.querySelectorAll('.voice-mini-fab__label');
     const texts = Array.from(labels).map((el) => el.textContent?.trim());
     expect(texts).toContain('Голос');
     expect(texts).toContain('Свист');
+    expect(texts).toContain('Ритм');
   });
 
-  it('renders one voice-AI and one whistle mini-FAB', () => {
+  it('renders one voice-AI, one whistle and one rhythm mini-FAB', () => {
     const { container } = render(() => <VoiceFAB />);
     expect(
       container.querySelector('.voice-mini-fab--ai'),
     ).toBeTruthy();
     expect(
       container.querySelector('.voice-mini-fab--whistle'),
+    ).toBeTruthy();
+    expect(
+      container.querySelector('.voice-mini-fab--rhythm'),
     ).toBeTruthy();
   });
 });

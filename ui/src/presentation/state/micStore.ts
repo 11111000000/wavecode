@@ -17,7 +17,7 @@ import {
   type MicCaptureHandle,
   type MicCaptureState,
 } from '~/infrastructure/audio/MicCapture';
-import { type Transient } from '~/domain/audio/transient';
+import { filterPercussionHits, type Transient } from '~/domain/audio/transient';
 import { micSnippetFromBuffers } from '~/domain/audio/micSnippet';
 import { appendToTopStack } from '~/domain/strudel';
 import { consoleStore } from '~/presentation/components/consoleStore';
@@ -150,6 +150,23 @@ export const subscribeMicFrame = (cb: MicFrameListener): (() => void) => {
   };
 };
 
+/**
+ * Per-transient subscriber list. The rhythm recorder uses it to keep
+ * its grid preview in step with the hits as they arrive — the panel
+ * shows the quantised pattern while the take is still running.
+ */
+type MicTransientListener = (transient: Transient) => void;
+const transientListeners = new Set<MicTransientListener>();
+
+export const subscribeMicTransient = (
+  cb: MicTransientListener,
+): (() => void) => {
+  transientListeners.add(cb);
+  return () => {
+    transientListeners.delete(cb);
+  };
+};
+
 export const micSlotLabel = (slot: MicSlot): string => {
   switch (slot) {
     case 'append-stack': return 'конец стека';
@@ -278,6 +295,10 @@ const onMicTransient = (transient: Transient): void => {
   const next: MicPeakMark = { ms: transient.startMs, type: 'transient' };
   setMicPeakTimes([...micPeakTimes(), next]);
   prunePeakTimes(transient.startMs);
+  // Fan out to the per-transient subscribers (the rhythm recorder).
+  for (const listener of [...transientListeners]) {
+    listener(transient);
+  }
 };
 
 const onMicMeter = (frame: MeterFrame): void => {
@@ -328,6 +349,10 @@ export const stopMic = (): void => {
   if (!micListening() && detector === null) return;
   if (detector !== null) {
     // Force-close any open note so the last leg stays in preview.
+    // `performance.now()` is the same clock the frames carry (see
+    // `MicCapture.ts`), so the closing note's duration is the real
+    // length of the sound and the segmenter's sliding window does
+    // not prune the take.
     segState = closeOpenNote(segState, performance.now());
     setMicPreviewNotes(segState.notes);
     void detector.stop();
@@ -344,6 +369,20 @@ export const freezePreview = (): void => {
 
 export const clearPreview = (): void => {
   resetSegState();
+};
+
+/**
+ * Drop the percussive hits but KEEP the notes.
+ *
+ * The two buffers belong to different flows: the notes are the
+ * whistle's melody, the hits are the rhythm recorder's taps. The
+ * rhythm recorder starts a take by clearing the hits only — a
+ * whistle that is paused with its notes in the buffer must not lose
+ * them because the user went to record a rhythm.
+ */
+export const clearMicTransients = (): void => {
+  setMicTransients([]);
+  setMicPeakTimes([]);
 };
 
 export const toggleMicSlot = (): void => {
@@ -382,9 +421,13 @@ export const micDetectionActive = (): MicDetectionKind => {
 };
 
 export const applyToScore = (): void => {
+  // A hit that belongs to a sustained note is that note's ONSET — the
+  // transient detector fires on the attack, so without this filter
+  // every sung phrase sprouted a stray clap. A hit with no note
+  // behind it is a real tap and stays.
   const snippet = micSnippetFromBuffers(
     micPreviewNotes(),
-    micTransients(),
+    filterPercussionHits(micTransients(), micPreviewNotes()),
     { instrument: micInstrument() },
   );
   if (snippet === null) return;
@@ -481,6 +524,15 @@ export const previewPillPayload = (): {
     slotLabel: micSlotLabel(micSlot()),
     kind: micDetectionActive(),
   };
+};
+
+/**
+ * Test-only: push a transient through the same path the live capture
+ * uses — the buffer, the peak marker and the subscribers (the rhythm
+ * recorder's live grid preview listens on the last one).
+ */
+export const __feedMicTransientForTests = (transient: Transient): void => {
+  onMicTransient(transient);
 };
 
 onCleanup(() => {

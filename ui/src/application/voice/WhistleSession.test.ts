@@ -19,7 +19,6 @@ import {
   type MicPermissionError,
 } from './WhistleSession';
 import type { AudioNote, PitchFrame } from '~/domain/audio/micCapture';
-import type { Transient } from '~/domain/audio/transient';
 import type { AudioEngine } from '~/domain/services';
 import type { Context } from 'effect';
 
@@ -38,8 +37,6 @@ type Capture = {
   stops: number;
   frames: Array<PitchFrame>;
   lastGetNotesValue: ReadonlyArray<AudioNote>;
-  /** The percussive hits the fake mic reports on `getTransients()`. */
-  transients: ReadonlyArray<Transient>;
 };
 
 const buildMic = (capture: Capture): MicCaptureLike => ({
@@ -60,7 +57,6 @@ const buildMic = (capture: Capture): MicCaptureLike => ({
       capture.lastGetNotesValue = [];
       return capture.lastGetNotesValue;
     }),
-  getTransients: () => Effect.sync(() => capture.transients),
 });
 
 const buildAudio = (): AudioService => ({
@@ -82,7 +78,7 @@ const buildDeps = async (): Promise<{
   capture: Capture;
   scoreRef: Ref.Ref<string>;
 }> => {
-  const capture: Capture = { starts: 0, stops: 0, frames: [], lastGetNotesValue: [], transients: [] };
+  const capture: Capture = { starts: 0, stops: 0, frames: [], lastGetNotesValue: [] };
   const scoreRef = await Effect.runPromise(Ref.make<string>('note("c4")'));
   const audio = buildAudio();
   const mic = buildMic(capture);
@@ -126,29 +122,31 @@ describe('createWhistleSession — happy-path lifecycle', () => {
     // subscriber, but its existence in the reducer is sufficient.
   });
 
-  it('REGRESSION (2026-10-19 + 2026-10-26): a whistle sprouts no drums, a TAPPED hit does', async () => {
-    // 2026-10-19: the user reported "при свисте вставляют в барабаны
-    // какие-то" — every whistled phrase grew a clap, because the
+  it('REGRESSION (2026-10-19 + 2026-11-02): a whistle take is a MELODY — no drums, ever', async () => {
+    // 2026-10-19: the user reported «при свисте вставляют в барабаны
+    // какие-то» — every whistled phrase grew a clap, because the
     // transient detector fires on the whistle's own ONSET.
     //
     // 2026-10-26: the same user asked for the opposite — tap a rhythm
-    // and hear a hi-hat. The two are told apart by the NOTE buffer:
-    // a transient that belongs to a sustained note is that note's
-    // onset (dropped), a transient with no note behind it is a tap
-    // (kept).
+    // and hear a hi-hat. Both were served by the same buffer, and the
+    // two cases could not be told apart reliably: the detector fires
+    // on the attack, the note opens a few frames LATER, so the filter
+    // that was supposed to tell them apart needed a timing guess.
     //
-    // This test pins both halves on the orchestrator's commit path:
-    // the snippet the audio engine receives.
-    const runCommit = async (
-      transients: ReadonlyArray<Transient>,
-    ): Promise<string> => {
+    // 2026-11-02: the flows were split. The whistle take carries
+    // NOTES only; the taps have their own recorder (the «Ритм» button),
+    // which places them on the step grid instead of guessing.
+    //
+    // This test pins the contract on the orchestrator's commit path:
+    // the snippet the audio engine receives NEVER contains a drum
+    // layer — neither the whistle's own onset nor a deliberate tap.
+    const runCommit = async (): Promise<string> => {
       let capturedSnippet = '';
       const mic: MicCaptureLike = {
         start: () => Effect.void,
         stop: () => Effect.void,
         feed: () => Effect.void,
         getNotes: () => Effect.succeed([]),
-        getTransients: () => Effect.succeed(transients),
       };
       const audio: AudioService = {
         ...buildAudio(),
@@ -174,36 +172,11 @@ describe('createWhistleSession — happy-path lifecycle', () => {
       return capturedSnippet;
     };
 
-    // (a) The whistle's own onset transient — same millisecond as the
-    // note — is NOT a drum hit.
-    const whistleSnippet = await runCommit([
-      {
-        type: 'click',
-        startMs: 0,
-        amplitude: 0.4,
-        spectralCentroidHz: 3000,
-        envelopeMs: 30,
-      },
-    ]);
-    expect(whistleSnippet).toContain('c4');
-    expect(whistleSnippet).not.toContain('drums_');
-    expect(whistleSnippet).not.toContain('cp');
-
-    // (b) A tap 2 seconds later — no note anywhere near it — IS a
-    // drum hit, and lands in the snippet as a hi-hat / clap layer.
-    const tappedSnippet = await runCommit([
-      {
-        type: 'hat',
-        startMs: 2000,
-        amplitude: 0.4,
-        spectralCentroidHz: 6000,
-        envelopeMs: 30,
-      },
-    ]);
-    expect(tappedSnippet).toContain('c4');
-    expect(tappedSnippet).toContain('drums_hh');
-    // Both layers in one snippet — the melody and the tapped rhythm.
-    expect(tappedSnippet).toContain('stack(');
+    const snippet = await runCommit();
+    expect(snippet).toContain('c4');
+    expect(snippet).not.toContain('drums_');
+    expect(snippet).not.toContain('cp');
+    expect(snippet).not.toContain('stack(');
   });
 
   it('stop sends the FSM back to idle and tears down the mic', async () => {
@@ -224,7 +197,7 @@ describe('createWhistleSession — happy-path lifecycle', () => {
 describe('createWhistleSession — error propagation', () => {
   it('start fails with a MicPermissionError when the adapter rejects', async () => {
     const scoreRef = await Effect.runPromise(Ref.make<string>('note("c4")'));
-    const capture: Capture = { starts: 0, stops: 0, frames: [], lastGetNotesValue: [], transients: [] };
+    const capture: Capture = { starts: 0, stops: 0, frames: [], lastGetNotesValue: [] };
     const micFailing: MicCaptureLike = {
       start: () =>
         Effect.fail({
@@ -235,7 +208,6 @@ describe('createWhistleSession — error propagation', () => {
       stop: () => Effect.void,
       feed: () => Effect.void,
       getNotes: () => Effect.succeed([]),
-      getTransients: () => Effect.succeed([]),
     };
     const deps: WhistleSessionDeps = {
       mic: micFailing,

@@ -35,20 +35,21 @@
  * Snippet generation
  * ------------------
  * On `commit` the reducer hands the buffered `AudioNote[]` to this
- * orchestrator; the percussive `Transient[]` come from the same mic
- * adapter. Both buffers go through `micSnippetFromBuffers` (the ONE
- * function that turns the mic's two buffers into a Strudel snippet) and
+ * orchestrator. The snippet is built with `micSnippetFromBuffers` (the
+ * ONE function that turns the mic's buffers into a Strudel snippet) and
  * the result is passed to `audio.eval`. No segmenter heuristics here —
  * the `notes` array IS the segmenter output.
  *
- * Why the transients matter
- * -------------------------
- * A whistle take is not only a melody: the user also TAPS a rhythm
- * with their fingers, and the transient detector already classifies
- * those hits as kick / snare / hat / click. The old path threw the
- * transients away (`notesToSnippet` only), so a tapped rhythm was
- * invisible — the take sounded like a thin melody with no drums. With
- * both buffers the same take becomes `stack(note(...), s("~ ~ hh"))`.
+ * Why there are no drums here
+ * ----------------------------
+ * A whistle take used to carry the percussive hits the transient
+ * detector saw in it, on the theory that "the user also taps a rhythm
+ * with their fingers". In practice the detector fires on the whistle's
+ * own ATTACK, so every phrase grew a stray clap — the complaint that
+ * produced this split. Percussion now has its own recorder (the
+ * «Ритм» button), which places the hits on the step grid instead of
+ * guessing where they belong. The whistle's capture contract therefore
+ * carries NOTES only.
  *
  * The very same builder is used by the presentation layer to splice
  * the snippet into the score, so what the user hears on commit and
@@ -64,7 +65,6 @@ import {
   type WhistleSessionEvent,
 } from '~/domain/audio/whistleSession';
 import { micSnippetFromBuffers } from '~/domain/audio/micSnippet';
-import { filterPercussionHits, type Transient } from '~/domain/audio/transient';
 import type { AudioEngine } from '~/domain/services';
 
 /** Error from `mic.start`. Carries the underlying DOM exception name
@@ -89,14 +89,6 @@ export type MicCaptureLike = {
   readonly feed: (frame: PitchFrame) => Effect.Effect<void, never, never>;
   /** Read every accumulated AudioNote. Called once on `commit`. */
   readonly getNotes: () => Effect.Effect<ReadonlyArray<AudioNote>, never, never>;
-  /**
-   * Read the percussive hits (kick / snare / hat / click) the
-   * transient detector saw in the same take. Called once on `commit`.
-   *
-   * Empty when the take had no percussive content — a pure whistle
-   * has no transients, and the snippet is then notes-only.
-   */
-  readonly getTransients: () => Effect.Effect<ReadonlyArray<Transient>, never, never>;
 };
 
 export type WhistleSessionDeps = {
@@ -182,17 +174,13 @@ export const createWhistleSession = (
           const s = yield* Ref.get(stateRef);
           if (s.tag !== 'segmenting') return;
           const instrument = yield* Ref.get(instrumentRef);
-          // The same builder the presentation layer uses to splice the
-          // snippet into the score — one function, one string, so the
-          // audition and the commit cannot drift apart.
-          // The raw transients include the ONSET of every whistled
-          // note — that is the 2026-10-19 bug (a whistle sprouted a
-          // clap). `filterPercussionHits` drops the onsets that belong
-          // to a sustained note and keeps the ones that are real
-          // taps, so a tapped rhythm survives and a whistle stays clean.
-          const raw = yield* deps.mic.getTransients();
-          const transients = filterPercussionHits(raw, s.notes);
-          const snippet = micSnippetFromBuffers(s.notes, transients, { instrument });
+          // A whistle take is a MELODY. The percussive hits the
+          // detector saw in the same take are the whistle's OWN
+          // onsets — including them made every phrase sprout a clap
+          // ("a beat appears out of nowhere"). Percussion has its own
+          // recorder now (the «Ритм» button), which places the hits
+          // on the grid instead of guessing where they belong.
+          const snippet = micSnippetFromBuffers(s.notes, [], { instrument });
           if (snippet !== null) {
             // Synth errors are best-effort — the user already has
             // the buffered `notes`, the orchestrator shouldn't

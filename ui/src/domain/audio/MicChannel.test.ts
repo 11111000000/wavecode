@@ -22,13 +22,14 @@ const makeOwner = (kind: MicChannelOwner['kind'], sessionId: string): MicChannel
   switch (kind) {
     case 'voice-ai':      return { kind: 'voice-ai', sessionId };
     case 'whistle':       return { kind: 'whistle', sessionId };
+    case 'rhythm':        return { kind: 'rhythm', sessionId };
     case 'loop-recorder': return { kind: 'loop-recorder', sessionId };
     case 'midi-learn':    return { kind: 'midi-learn', sessionId };
   }
 };
 
 describe('MicChannel value', () => {
-  it('builds a MicChannel value with all four owner kinds discriminated by `kind`', () => {
+  it('builds a MicChannel value with every owner kind discriminated by `kind`', () => {
     const owner = makeOwner('whistle', 'sess-42');
     const channel: MicChannel = {
       kind: 'mic-direct',
@@ -62,15 +63,18 @@ describe('MicChannel value', () => {
     expect(isMicBusyError('string')).toBe(false);
   });
 
-  it('owner discriminated union narrows correctly across all four kinds', () => {
+  it('owner discriminated union narrows correctly across every kind', () => {
     const owners: ReadonlyArray<MicChannelOwner> = [
       { kind: 'voice-ai',      sessionId: 'a' },
       { kind: 'whistle',       sessionId: 'b' },
-      { kind: 'loop-recorder', sessionId: 'c' },
-      { kind: 'midi-learn',    sessionId: 'd' },
+      { kind: 'rhythm',        sessionId: 'c' },
+      { kind: 'loop-recorder', sessionId: 'd' },
+      { kind: 'midi-learn',    sessionId: 'e' },
     ];
     const kinds = owners.map((o) => o.kind);
-    expect(kinds).toEqual(['voice-ai', 'whistle', 'loop-recorder', 'midi-learn']);
+    expect(kinds).toEqual([
+      'voice-ai', 'whistle', 'rhythm', 'loop-recorder', 'midi-learn',
+    ]);
     // Each owner carries sessionId — sanity-check the invariant.
     for (const o of owners) {
       expect(o.sessionId.length).toBeGreaterThan(0);

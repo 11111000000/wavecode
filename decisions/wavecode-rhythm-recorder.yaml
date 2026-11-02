@@ -1,0 +1,266 @@
+---
+schema: math-coding/3.3
+id: wavecode-rhythm-recorder
+revision: 1
+state: active
+mode: light
+body_sha: "sha256:ae33988c068fecc633db13e18091348309339159230d1290174594a12302e230"
+yaml_sha: "sha256:ae33988c068fecc633db13e18091348309339159230d1290174594a12302e230"
+
+axiom_link:
+  - A0
+  - A3
+
+intent: |
+  The microphone cluster records TWO different things and must stop
+  conflating them. Today the «Свист» (whistle) button commits the
+  whistled melody AND the percussive hits the transient detector saw
+  in the same take — and the detector fires on the whistle's own
+  ATTACK, so every phrase grew a stray drum hit ("при свисте
+  вставляют в барабаны какие-то"). At the same time there is no way
+  to record a RHYTHM: the hits are committed as they were heard,
+  with no relation to the app's grid, no bars, no step positions —
+  the pattern lands wherever the millisecond timestamps happened to
+  fall.
+
+  After this decision the cluster has a third button. «Свист» writes
+  a melody and nothing else; «Ритм» writes a groove whose hits sit
+  on the app's own step grid (16 sixteenths per bar, the transport's
+  tempo, whole bars) and can be previewed before it is committed.
+
+commitment: |
+  1. The whistle take is a MELODY. `WhistleSession.commit` and
+     `whistleStore.commitWhistle` build the snippet from the NOTE
+     buffer alone — the percussive hits are not read, not filtered
+     and not committed. The whistle's capture contract
+     (`MicCaptureLike`) loses its `getTransients` member, so the
+     drums cannot creep back in unnoticed.
+  2. A third mini-FAB «Ритм» (`RhythmMiniFAB`) joins the voice
+     cluster next to «Голос» and «Свист». It is a TOGGLE like the
+     other two: tap to start, tap to pause; a paused take keeps the
+     panel open so «Применить» stays reachable.
+  3. The rhythm recorder owns the HIT buffer. `startRhythm` clears
+     the transient buffer and leaves the NOTE buffer alone, so a
+     whistle that is paused with its notes in the buffer does not
+     lose them. The two recorders share one microphone through the
+     `mic-direct` mutex, so only one of them can be live at a time;
+     the new owner kind is `rhythm`.
+  4. The hits are placed on the app's grid by pure arithmetic in
+     `domain/audio/rhythmGrid.ts`: the first hit is the downbeat of
+     the first bar, every other hit is snapped to the NEAREST step
+     (the error is at most half a step), and the pattern spans a
+     whole number of bars. The step duration comes from the
+     transport's tempo (`cps` → 16 steps per bar), so the pattern
+     plays in the score's own time.
+  5. The committed pattern is a drum grid in the app's vocabulary:
+     one `s("…")` layer per voice that has hits (bd / sd / hh / cp),
+     16 tokens per bar. No `setCpm` is emitted — the pattern must
+     not drift against the score it was spliced into.
+  6. The panel shows the take as a GRID PREVIEW before it is
+     committed: four voices × the steps of the pattern, plus the
+     tempo of the grid and an estimate of the tempo the user tapped
+     at. What the user sees is what the score will contain.
+  7. The mic pipeline speaks ONE clock. The frames the capture
+     produces are stamped with `performance.now()` instead of
+     `audioCtx.currentTime` — the two were mixed, which made a take
+     that was stopped after the page had been open for more than
+     30 s lose every note (the segmenter pruned the audio-clock
+     timestamps against the page clock) and piled the live meter's
+     peak markers at one edge.
+  8. The segmenter's sliding window grows from 30 s to 5 minutes.
+     The window is measured from the NEWEST frame, so a 30 s window
+     silently dropped the first 30 s of a longer recording.
+
+counterexample: |
+  «One button can do both — the whistle already detects the taps,
+  so a separate rhythm button only adds a third thing to learn.» The
+  objection is fair as far as the ergonomics go, and the user
+  explicitly weighed it ("возможно это должна быть третья кнопка
+  возможно надо в ту же кнопку где есть свист это поместить но
+  наверное лучше всё-таки отдельно"). It fails on the substance:
+  the two flows cannot be told apart reliably, because the transient
+  detector fires on the whistle's attack BEFORE the note segmenter
+  opens the note (the analyser window alone is ≈43 ms, plus the
+  worker round trip, plus the frames the pitch needs to settle).
+  Telling the two apart therefore required a timing guess — a
+  60 ms tolerance in `filterPercussionHits` that was too small for
+  the real lag and produced exactly the reported symptom. A separate
+  button removes the guess entirely: the whistle path never looks at
+  the hits, the rhythm path never looks at the notes.
+
+  «The rhythm should be placed on the grid of the tempo the USER
+  tapped at, not of the transport.» Counterargument: the pattern is
+  spliced into a score that has its own tempo, and a pattern with
+  its own `setCpm` would fight it. The tapped tempo is therefore
+  reported in the panel (an estimate from the median inter-onset
+  interval) but the placement uses the transport's grid — the only
+  grid that means something to the rest of the composition.
+
+antithesis: |
+  (1) «Keep one button and let the whistle commit both the notes and
+  the taps, but fix the filter so the taps are recognised correctly
+  (widen the tolerance, keep the taps that are far from any note).»
+  Rejected: the filter is a heuristic over two detectors that fire
+  at different times; the "no note anywhere near it" rule drops
+  legitimate taps that happen to fall inside a sung note, and the
+  "near a note" rule drops the taps the user made on purpose right
+  next to the melody. Both errors are silent — the user hears a
+  groove that is not the one they played. Splitting the flows turns
+  the ambiguity into two well-defined contracts.
+
+  (2) «Let the rhythm recorder quantise onto the step grid the user
+  has already drawn in the StepGrid panel (the 4×8 hand-tapped
+  grid).» Rejected: that grid is 8 steps and a sketch buffer, and it
+  lives in a different panel with its own commit semantics. The
+  recorded rhythm needs the SCORE's grid (16 sixteenths per bar, the
+  transport's tempo), otherwise the pattern and the composition are
+  in two different time systems.
+
+  (3) «Reuse the existing `transientsToSnippet` (16 steps, tail
+  200 ms) instead of writing a new grid module.» Rejected: that
+  function normalises the hits against the FIRST hit and the LAST
+  hit, so the pattern's length depends on where the user happened to
+  stop tapping; it also emits `.decay()` from the measured envelope.
+  The grid needs the transport's tempo and whole bars, and it needs
+  to show the user the cells it produced.
+
+scope:
+  paths:
+    - "ui/src/domain/audio/rhythmGrid.ts"
+    - "ui/src/domain/audio/rhythmGrid.test.ts"
+    - "ui/src/domain/audio/transient.ts"
+    - "ui/src/domain/audio/micCapture.ts"
+    - "ui/src/domain/audio/MicChannel.ts"
+    - "ui/src/infrastructure/audio/MicCapture.ts"
+    - "ui/src/application/voice/WhistleSession.ts"
+    - "ui/src/presentation/state/whistleStore.ts"
+    - "ui/src/presentation/state/micStore.ts"
+    - "ui/src/presentation/state/rhythmStore.ts"
+    - "ui/src/presentation/state/rhythmStore.test.ts"
+    - "ui/src/presentation/components/RhythmMiniFAB.tsx"
+    - "ui/src/presentation/components/RhythmMiniFAB.test.tsx"
+    - "ui/src/presentation/components/RecordingPanel.tsx"
+    - "ui/src/presentation/components/VoiceFAB.tsx"
+    - "ui/src/presentation/icons/index.tsx"
+    - "ui/src/styles/components.css"
+    - "ui/src/App.tsx"
+    - "decisions/wavecode-rhythm-recorder.yaml"
+  exclusions:
+    - "ui/node_modules/**"
+    - "ui/dist/**"
+
+outcomes:
+  - id: whistle-take-has-no-drums
+    statement: |
+      A whistle take committed into the score contains the notes and
+      NO drum layer: neither the whistle's own onset nor a
+      deliberate tap reaches the snippet. The orchestrator's
+      `MicCaptureLike` no longer exposes the hit buffer at all.
+  - id: rhythm-button-exists
+    statement: |
+      The voice cluster renders THREE mini-FABs — «Голос»,
+      «Свист» and «Ритм» — and the third one is a toggle that starts
+      and pauses a rhythm take.
+  - id: rhythm-hits-land-on-the-grid
+    statement: |
+      A take of two hits 125 ms apart (one 16th note at the default
+      120 BPM) commits as a drum grid whose two hits sit on step 0
+      and step 1 of the first bar — 16 tokens per bar, the pattern
+      spanning a whole number of bars.
+  - id: rhythm-preview-matches-the-commit
+    statement: |
+      The panel draws the pattern as a grid of four voice rows × the
+      steps of the pattern, and the number of lit cells equals the
+      number of hits the commit writes into the score.
+  - id: rhythm-never-carries-a-tempo-override
+    statement: |
+      The committed rhythm pattern contains no `setCpm` — it plays
+      at the transport's tempo, in the score's own time.
+  - id: one-clock-in-the-mic-pipeline
+    statement: |
+      Every timestamp the mic pipeline produces (pitch frames,
+      onsets, meter frames) is on the `performance.now()` clock, the
+      same clock `stopMic` closes the open note with and the meter
+      positions its peak markers with.
+  - id: long-takes-are-not-truncated
+    statement: |
+      The segmenter's sliding window is 5 minutes wide and measured
+      from the newest frame, so a take longer than 30 s keeps its
+      beginning.
+
+obligations:
+  - id: rhythm-grid-arithmetic-tested
+    claim: |
+      `ui/src/domain/audio/rhythmGrid.test.ts` passes and covers the
+      placement rules: the nearest-step snap, the whole-bar span, the
+      merging of two hits on the same voice and step, and the absence
+      of `setCpm` in the emitted snippet.
+    acceptance:
+      all:
+        - verifier: tests/domain/audio/rhythmGrid.test.ts
+  - id: rhythm-store-tested
+    claim: |
+      `ui/src/presentation/state/rhythmStore.test.ts` passes and
+      covers: the mic-direct channel is claimed on start and
+      released on stop, a second start fails with MicBusyError, the
+      grid preview follows the hits as they arrive, and the commit
+      writes the quantised pattern into the score.
+    acceptance:
+      all:
+        - verifier: tests/presentation/state/rhythmStore.test.ts
+  - id: whistle-stays-drumless
+    claim: |
+      The whistle's two test files pass, and both assert that the
+      committed snippet of a whistle take contains no `drums_` layer.
+    acceptance:
+      all:
+        - verifier: tests/application/voice/WhistleSession.test.ts
+        - verifier: tests/presentation/state/whistleStore.test.ts
+  - id: rhythm-button-tested
+    claim: |
+      The cluster renders three mini-FABs, the third one toggles the
+      take, and a paused take keeps the panel armed.
+    acceptance:
+      all:
+        - verifier: tests/presentation/components/RhythmMiniFAB.test.tsx
+        - verifier: tests/presentation/components/VoiceFAB.test.tsx
+  - id: precommit-green
+    claim: |
+      `npm run test:precommit` (typecheck + vitest +
+      `lint:no-console` + `validate:presets`) returns exit 0 in
+      `ui/`. No `any`, no `console.*`, no unused imports added by
+      this patch.
+    acceptance:
+      all:
+        - verifier: bash npm --dir ui run test:precommit
+  - id: decision-validates-clean
+    claim: |
+      `mathc validate decisions/wavecode-rhythm-recorder.yaml`
+      returns exit 0 with zero `MC-*` reject diagnostics.
+    acceptance:
+      all:
+        - verifier: mathc validate
+
+risk:
+  declared_triggers:
+    - rhythm-pattern-plays-at-the-wrong-tempo-after-a-transport-change
+    - a-tap-that-the-detector-misses-leaves-a-hole-in-the-grid
+    - the-rhythm-take-and-a-paused-whistle-take-interfere
+    - the-segmenter-window-growth-makes-a-long-session-heavy
+  owner: human:operator
+
+reversal:
+  - signal: the-committed-rhythm-does-not-line-up-with-the-score
+    action: rework
+  - signal: the-third-button-crowds-the-cluster-on-small-screens
+    action: review
+  - signal: the-one-clock-change-breaks-the-meter-overlay
+    action: revert
+
+relations:
+  addresses:
+    - wavecode-whistle-replace-score@1
+    - wavecode-mic-to-strudel@1
+    - wavecode-voice-fab-toggle-rec@1
+  depends_on:
+    - wavecode-bootstrap-math-coding-3.3@1

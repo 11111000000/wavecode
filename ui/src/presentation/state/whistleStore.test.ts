@@ -170,8 +170,8 @@ describe('whistleStore — the instrument', () => {
   });
 });
 
-describe('whistleStore — the commit keeps the tapped rhythm', () => {
-  it('the committed snippet carries the notes AND the drums', async () => {
+describe('whistleStore — the commit carries the melody only', () => {
+  it('a tapped hit does NOT leak into the whistle take', async () => {
     const { setMicPreviewNotes, setMicTransients } = await import('./micStore');
     const { appStore, dispatch } = await import('./appStore');
     installFake();
@@ -195,8 +195,9 @@ describe('whistleStore — the commit keeps the tapped rhythm', () => {
     await Effect.runPromise(commitWhistle());
     // The melody…
     expect(appStore.score).toContain('c4');
-    // …AND the tapped hi-hat.
-    expect(appStore.score).toContain('drums_hh');
+    // …and NOTHING else. The taps belong to the rhythm recorder,
+    // which places them on the step grid.
+    expect(appStore.score).not.toContain('drums_');
   });
 
   it('the whistle\'s own onset does NOT become a drum hit', async () => {

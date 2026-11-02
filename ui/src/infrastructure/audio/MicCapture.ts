@@ -351,7 +351,25 @@ export const startMicDetector = (
       const tick = (): void => {
         if (stopped || analyser === null || audioCtx === null) return;
         analyser.getFloatTimeDomainData(sendBuf);
-        const sampleTs = audioCtx.currentTime * 1000;
+        // ONE clock for the whole mic pipeline.
+        //
+        // The frames used to be stamped with `audioCtx.currentTime * 1000`
+        // — the audio clock, which starts at 0 every time the context is
+        // created. The rest of the app works in `performance.now()` time:
+        // `micStore.stopMic` force-closes the open note with it, the
+        // segmenter prunes its sliding window against it, and `MicMeter`
+        // positions its peak markers with it. Mixing the two meant:
+        //
+        //   - a take that was stopped after the page had been open for
+        //     more than 30 s lost EVERY note (the segmenter pruned the
+        //     audio-clock timestamps as if they were ancient), and
+        //   - the live peak markers all piled up at the right edge of
+        //     the meter.
+        //
+        // `performance.now()` is monotonic, never freezes (unlike
+        // `currentTime`, which stops when the context is suspended) and
+        // is the clock every consumer already speaks.
+        const sampleTs = performance.now();
 
         // MPM worker — post the same time-domain buffer the
         // transient pipeline reads. The worker replies asynchronously

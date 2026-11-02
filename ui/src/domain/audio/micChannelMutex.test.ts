@@ -24,6 +24,7 @@ const owner = (kind: MicChannelOwner['kind'], sessionId: string): MicChannelOwne
   switch (kind) {
     case 'voice-ai':      return { kind: 'voice-ai', sessionId };
     case 'whistle':       return { kind: 'whistle', sessionId };
+    case 'rhythm':        return { kind: 'rhythm', sessionId };
     case 'loop-recorder': return { kind: 'loop-recorder', sessionId };
     case 'midi-learn':    return { kind: 'midi-learn', sessionId };
   }
