@@ -14,6 +14,7 @@ import { micPreviewNotes } from '../state/micStore';
 import { WhistleIcon } from '../icons';
 import { consoleStore } from './consoleStore';
 import type { MicBusyError } from '~/domain/audio/MicChannel';
+import { primeMicAudioContext } from '~/infrastructure/audio/micAudioContext';
 
 /**
  * WhistleMiniFAB — whistle-to-score control.
@@ -59,6 +60,11 @@ export function WhistleMiniFAB(): JSX.Element {
       requestWhistlePanelArmed();
       return;
     }
+    // The mic AudioContext has to be created AND started inside this
+    // click — on iOS a context created later (after the permission
+    // prompt) stays suspended and hears nothing. See
+    // `micAudioContext.ts`.
+    primeMicAudioContext();
     void runEffectSafely(
       startWhistle({ sessionId: ensureWhistleSessionId() }),
     );

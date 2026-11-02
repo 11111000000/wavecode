@@ -2,6 +2,11 @@ import type { PitchFrame } from '~/domain/audio/micCapture';
 import type { Transient, TransientFrame, TransientState } from '~/domain/audio/transient';
 import { feedTransient, initialTransientState } from '~/domain/audio/transient';
 import YinWorker from './yinDetector.worker?worker';
+import {
+  createMicAudioContext,
+  ensureAudioContextRunning,
+  takeMicAudioContext,
+} from './micAudioContext';
 
 /**
  * MicCapture — main-thread orchestrator.
@@ -65,6 +70,15 @@ import YinWorker from './yinDetector.worker?worker';
  *     about a second context starting after a user gesture, but in
  *     practice a `MediaStreamSource` on context #2 starts reliably
  *     because the gesture is the mic permission prompt (not Play).
+ *
+ * That last bullet was WRONG, and the iPhone proved it: on WebKit
+ * (iOS Safari AND Chrome for iOS) a context created outside a user
+ * gesture comes up `suspended`, and `resume()` is refused once the
+ * transient activation is gone. `getUserMedia()` resolves in a later
+ * task, so a context created after it never leaves `suspended` — the
+ * analyser reads zeroes and the capture is deaf without a single
+ * error. See `micAudioContext.ts` for the fix: the click handler
+ * primes the context, and this module takes it.
  *
  * Returned handle is single-use: start() once, stop() once.
  *
@@ -230,10 +244,16 @@ export const startMicDetector = (
     video: false,
   };
 
-  const stop = async (): Promise<void> => {
-    if (stopped) return;
-    stopped = true;
-    setState('stopping');
+  /**
+   * Release every resource the capture holds: the RAF loop, the
+   * worker, the graph nodes, the mic tracks and our AudioContext.
+   *
+   * Split out of `stop()` because the error path needs the same
+   * teardown — a failed capture that leaves the mic track running
+   * shows the user a live microphone indicator with nothing behind
+   * it.
+   */
+  const teardown = async (): Promise<void> => {
     if (rafId !== null) {
       cancelAnimationFrame(rafId);
       rafId = null;
@@ -272,6 +292,13 @@ export const startMicDetector = (
     }
     recentRms.length = 0;
     latestHz = null;
+  };
+
+  const stop = async (): Promise<void> => {
+    if (stopped) return;
+    stopped = true;
+    setState('stopping');
+    await teardown();
     setState('idle');
   };
 
@@ -281,6 +308,26 @@ export const startMicDetector = (
   setState('requesting-mic');
   void (async (): Promise<void> => {
     try {
+      // The AudioContext is created BEFORE the first `await`, while
+      // the user gesture that opened this surface is still alive.
+      // On WebKit (iOS Safari, Chrome for iOS) a context created
+      // outside a gesture stays `suspended` forever, and a
+      // suspended context hands the analyser nothing but zeroes —
+      // the capture would look alive and hear nothing.
+      //
+      // `takeMicAudioContext()` returns the context the click
+      // handler primed (`primeMicAudioContext()`); the fallback
+      // creates one here, which is still inside the gesture as long
+      // as the caller reached us synchronously.
+      const ctx = takeMicAudioContext() ?? createMicAudioContext();
+      if (ctx === null) {
+        throw new Error(
+          'Браузер не дал создать аудио-контекст — микрофон недоступен.',
+        );
+      }
+      audioCtx = ctx;
+      ownsAudioCtx = true;
+
       const micStream = await requestMic(audioConstraints);
       if (stopped) {
         for (const track of micStream.getTracks()) track.stop();
@@ -289,23 +336,23 @@ export const startMicDetector = (
       stream = micStream;
       setState('starting-audio');
 
-      // Always create our own AudioContext. Do NOT stash to
-      // `window.__wavecodeAudioCtx` (that's LiveAudioEngine's
-      // output context — see header comment for why we don't share).
-      const Ctor: typeof AudioContext =
-        typeof AudioContext !== 'undefined'
-          ? AudioContext
-          : (window as unknown as { webkitAudioContext: typeof AudioContext })
-              .webkitAudioContext;
-      const ctx = new Ctor({ latencyHint: 'interactive' });
-      audioCtx = ctx;
-      ownsAudioCtx = true;
       const src = ctx.createMediaStreamSource(micStream);
       const node = ctx.createAnalyser();
       node.fftSize = fftSize;
       analyser = node;
       mediaSource = src;
       src.connect(node);
+
+      // Last chance to make the context run. If it still does not,
+      // every frame we read from the analyser will be zero and the
+      // user would watch a live meter that never moves — so say so
+      // instead of pretending to listen.
+      if (!(await ensureAudioContextRunning(ctx))) {
+        throw new Error(
+          'Браузер не запустил аудио-контекст (iOS требует запуска из касания) '
+            + '— микрофон не слышно.',
+        );
+      }
 
       // Always spawn the MPM worker — pitch detection is cheap
       // (~5-10ms/frame in a worker, off the main thread) and the
@@ -419,6 +466,10 @@ export const startMicDetector = (
       };
       rafId = requestAnimationFrame(tick);
     } catch (err) {
+      // Release the mic before reporting: a failed capture that
+      // keeps the track open leaves the user with a live microphone
+      // indicator and no explanation.
+      await teardown();
       setState('errored');
       opts.onError?.(err instanceof Error ? err : new Error(String(err)));
     }

@@ -12,6 +12,7 @@ import {
 } from '../state/voiceAIStore';
 import { MicIcon } from '../icons';
 import { consoleStore } from './consoleStore';
+import { primeMicAudioContext } from '~/infrastructure/audio/micAudioContext';
 import type { MicBusyError } from '~/domain/audio/MicChannel';
 import type { SttUnsupportedError } from '~/application/voice/STTEngine';
 
@@ -169,6 +170,11 @@ export function VoiceAIMiniFAB(props: Props): JSX.Element {
     // button, waited for the recogniser, pressed again to add a
     // sentence and got silence. Now the press starts the next take
     // and the orchestrator waits the drain out by itself.
+    // The level meter needs an AudioContext, and on iOS it only runs if
+    // it was created AND started inside this click — a context
+    // created after the microphone prompt stays suspended and the
+    // meter reads zeroes forever. See `micAudioContext.ts`.
+    primeMicAudioContext();
     void runEffectSafely(
       startVoiceAI({ mode: 'continuous', lang: props.lang ?? 'ru-RU' }),
     );

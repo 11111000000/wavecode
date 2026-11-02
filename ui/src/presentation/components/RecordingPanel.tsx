@@ -42,6 +42,7 @@ import type { SttUnsupportedError } from '~/application/voice/STTEngine';
 import { noteNumberToName } from '~/domain/music/notes';
 import { MELODIC_SOUNDS } from '~/domain/sounds';
 import { consoleStore } from './consoleStore';
+import { primeMicAudioContext } from '~/infrastructure/audio/micAudioContext';
 
 /**
  * RecordingPanel — bottom-anchored status panel that surfaces the
@@ -231,6 +232,11 @@ const VoiceAIBody = (): JSX.Element => {
       // then opens the mic. The old mini-FAB ignored that press
       // entirely, which is exactly the «повторная запись не
       // работает» report.
+      //
+      // The prime must happen HERE, synchronously inside the tap:
+      // on iOS the level meter's AudioContext only runs if it was
+      // created inside a user gesture.
+      primeMicAudioContext();
       await Effect.runPromise(
         startVoiceAI({ mode: 'continuous', lang: 'ru-RU' }).pipe(
           Effect.catchAll((err: MicBusyError | SttUnsupportedError) => Effect.sync(() => {
@@ -534,6 +540,11 @@ const WhistleBody = (): JSX.Element => {
       // the chip; we use the store's shared session id so the take
       // started by the FAB and the take stopped by the panel speak
       // the same id (the mic mutex releases by id).
+      //
+      // The prime must happen HERE, synchronously inside the tap:
+      // on iOS the pitch analyser's AudioContext only runs if it was
+      // created inside a user gesture.
+      primeMicAudioContext();
       const sid = ensureWhistleSessionId();
       await Effect.runPromise(
         startWhistle({ sessionId: sid }).pipe(

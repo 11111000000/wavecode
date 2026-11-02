@@ -95,6 +95,7 @@ import {
 } from '~/application/voice/STTEngine';
 import type { TranscriptChunk } from '~/domain/voice/Transcript';
 import { logger } from '~/infrastructure/log/logger';
+import { ensureMicAudioContext, isAudioContextRunning } from '~/infrastructure/audio/micAudioContext';
 
 /* ── configuration ──────────────────────────────────────────────────── */
 
@@ -176,6 +177,23 @@ const TICK_MS = 10_000;
  * guarantee — see `decisions/wavecode-server-stt`.
  */
 const MAX_UTTERANCE_MS = 100_000;
+
+/**
+ * What a DEAD level meter (an AudioContext that never started) means
+ * for the take.
+ *
+ * The take is NOT ended on a timer: without a level we cannot tell
+ * speech from silence, and uploading a silent clip makes whisper
+ * invent sentences ("Редактор субтитров А. Синцевская") — an
+ * invented instruction that then edits the user's score. The take
+ * ends when the user stops it, and the audio itself is intact: the
+ * recorder does not need an AudioContext.
+ *
+ * What IS lost: the silence boundary. The take will not close itself
+ * after 1.3 s of quiet, so it waits for the explicit stop (or the
+ * 100 s hard cap).
+ */
+const DEAD_METER_NOTE = 'уровень недоступен — тишина не определяется, take закрывается вручную';
 
 /** RMS polling cadence — 10 Hz is plenty for a boundary test and
  *  costs ~0.1 ms per tick. The incremental-upload gate piggybacks on
@@ -422,6 +440,17 @@ const computeRms = (buf: Float32Array): number => {
 
 type Meter = {
   readonly level: () => number;
+  /**
+   * Is the meter actually hearing anything?
+   *
+   * `false` means the AudioContext behind it never started (iOS
+   * refuses to run a context that was created outside a user
+   * gesture) — the level then reads zero forever, and the silence
+   * detector can never fire. The caller uses this to fall back to a
+   * duration-based flush instead of waiting for a silence that will
+   * never come.
+   */
+  readonly alive: () => boolean;
   readonly dispose: () => void;
 };
 
@@ -459,22 +488,18 @@ export const getServerWhisperRmsLevel = (): number | null =>
  * mic routed to the speakers is a feedback loop). Returns `null` when
  * this browser refuses to give us an `AudioContext`; the caller then
  * falls back to duration-only flushing.
+ *
+ * The context comes from `ensureMicAudioContext()`, which hands over
+ * the one the click handler primed. That matters on iOS: this meter
+ * starts AFTER `getUserMedia()` resolved, i.e. long after the user
+ * gesture is gone, so a context created here would come up suspended
+ * and read zeroes — the panel would show a dead level bar and the
+ * silence detector would never fire.
  */
 const startMeter = (stream: MediaStream): Meter | null => {
-  const Ctor: typeof AudioContext | undefined =
-    typeof AudioContext !== 'undefined'
-      ? AudioContext
-      : (globalThis as unknown as {
-          readonly webkitAudioContext?: typeof AudioContext;
-        }).webkitAudioContext;
-  if (Ctor === undefined) return null;
+  const ctx = ensureMicAudioContext();
+  if (ctx === null) return null;
 
-  let ctx: AudioContext;
-  try {
-    ctx = new Ctor({ latencyHint: 'interactive' });
-  } catch {
-    return null;
-  }
   let source: MediaStreamAudioSourceNode | null = null;
   let analyser: AnalyserNode | null = null;
   try {
@@ -493,9 +518,10 @@ const startMeter = (stream: MediaStream): Meter | null => {
   }
 
   // Safari keeps a freshly constructed context suspended until a
-  // gesture resumes it. We are inside the FAB's pointerdown, so this
-  // normally succeeds; when it doesn't, the RMS stays at zero and we
-  // simply never see the silence boundary.
+  // gesture resumes it. The gesture that primed this context already
+  // did that; this resume is the safety net for the paths that did
+  // not prime (a context created outside a gesture can only be
+  // resumed while an activation is alive).
   void ctx.resume().catch(() => {});
 
   const buf = new Float32Array(analyser.fftSize);
@@ -505,6 +531,7 @@ const startMeter = (stream: MediaStream): Meter | null => {
       node.getFloatTimeDomainData(buf);
       return computeRms(buf);
     },
+    alive: () => isAudioContextRunning(ctx),
     dispose: () => {
       try {
         source?.disconnect();
@@ -865,10 +892,19 @@ const makeService = (
             const startedAtMs = Date.now();
             let lastVoiceAtMs = startedAtMs;
             let sawSpeech = false;
+            let meterDeadWarned = false;
             meterTimer = window.setInterval(() => {
               if (released || flushing) return;
               const now = Date.now();
               const rms = meter?.level() ?? 0;
+              const meterAlive = meter?.alive() ?? false;
+              if (!meterAlive && !meterDeadWarned) {
+                meterDeadWarned = true;
+                logger.push('warn', [
+                  '[stt-server] the level meter is not running',
+                  DEAD_METER_NOTE,
+                ]);
+              }
               if (rms > peakRms) peakRms = rms;
               if (rms >= SPEECH_RMS_THRESHOLD) {
                 if (!sawSpeech) {

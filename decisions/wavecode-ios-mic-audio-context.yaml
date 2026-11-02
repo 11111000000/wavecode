@@ -1,0 +1,241 @@
+---
+schema: math-coding/3.3
+id: wavecode-ios-mic-audio-context
+revision: 1
+state: active
+mode: light
+body_sha: "sha256:08bc2303c14b137b73b70180bbe60a9131d09db8f049f1629835ec8e272c1ce9"
+yaml_sha: "sha256:08bc2303c14b137b73b70180bbe60a9131d09db8f049f1629835ec8e272c1ce9"
+
+axiom_link:
+  - A0
+  - A3
+
+intent: |
+  На iPhone не работали ни запись голоса, ни свист. Разбор
+  показал: микрофон на самом деле захватывал звук — сервер
+  распознал шесть записей с iPhone (лог `stt-web`, 2026-11-02
+  03:32–03:34, все POST → 200 с непустым транскриптом), — но
+  локальный конвейер микрофона был глухим.
+
+  Причина: `AudioContext` микрофонного пути создавался ПОСЛЕ
+  `await getUserMedia(...)`. WebKit (iOS Safari и Chrome для
+  iOS — это один и тот же движок) не стартует контекст,
+  созданный вне пользовательского жеста, и `resume()` там
+  отказано — транзиентная активация умирает вместе с задачей,
+  в которой ждали разрешение микрофона. Suspended-контекст
+  отдаёт анализатору нули: индикатор уровня стоит на нуле,
+  свист не даёт ни одной ноты, ошибок нет нигде.
+
+  Решение: микрофонный `AudioContext` создаётся и запускается
+  синхронно внутри жеста, который открывает запись
+  (`primeMicAudioContext()` из обработчика нажатия), а захват
+  забирает именно этот контекст. Контекст, который так и не
+  стартовал, больше не остаётся безгласным: захват сообщает
+  об этом ошибкой и отпускает микрофон.
+
+commitment: |
+  (1) Микрофонный `AudioContext` создаётся и запускается
+  синхронно внутри пользовательского жеста — до любого
+  `await`; обработчики нажатия (мини-FAB голоса, мини-FAB
+  свиста, ●REC на панели, тумблер микрофона) вызывают
+  `primeMicAudioContext()` до старта сессии.
+  (2) `MicCapture` берёт именно этот контекст; если контекст
+  всё же не стартовал, захват завершается ошибкой с
+  понятным текстом и ОТПУСКАЕТ микрофон (треки остановлены),
+  а не продолжает «слушать» тишину.
+  (3) Микрофонный контекст не делится с выходным
+  (`window.__wavecodeAudioCtx`) — регрессия с сэмпл-банками,
+  зафиксированная в `MicCapture.ts`, не возвращается.
+  (4) Метра уровня серверного STT живёт на том же контексте и
+  сообщает, живой ли он (`alive()`); take без живой метры
+  закрывается вручную, а не «виснет» до 100-секундного
+  потолка — и при этом НЕ грузит тишину на сервер (whisper
+  на тишине выдумывает фразы).
+
+counterexample: |
+  «Запись голоса на iPhone работала — сервер получил и
+  распознал шесть записей, значит микрофон жив, и чинить
+  надо не микрофон, а показ текста в композере». Возражения:
+  (a) лог сервера доказывает только транспорт (микрофон →
+  кодек → POST → whisper); локальный конвейер — отдельный
+  путь, и он на iOS не работал: без живого `AudioContext` у
+  приложения нет ни уровня, ни нот, ни авто-фиксации take по
+  тишине; (b) распознанный текст на iPhone всё равно доезжал
+  только потому, что пользователь вручную нажимал «стоп» —
+  авто-фиксации по тишине не было вообще; (c) «показ текста» —
+  это отдельная гипотеза без улик: сервер отдал 200 с
+  непустым текстом, а клиент его показывал (иначе жалоба
+  была бы про пустое поле, а не про «не работает ни запись,
+  ни свист»).
+
+  «Создать `AudioContext` в обработчике `pointerdown`, а не
+  `click` — так надёжнее». Возражения: (a) на iOS
+  `pointerdown` не всегда доходит до обработчика (панель
+  может перехватить), а `click` — это финальная точка
+  пользовательского жеста, которую браузер гарантирует; (b)
+  разница между `pointerdown` и `click` в одном task'е
+  отсутствует — активация переживает оба; (c) дополнительная
+  точка отказа без выигрыша.
+
+  «Раз контекст всё равно придётся создавать в жесте — проще
+  отказаться от отдельного контекста и считать уровень на
+  выходном». Возражения: (a) выходной контекст создаётся в
+  своём жесте (кнопка Play) — до него микрофон работать не
+  будет, а пользователь может начать с микрофона; (b)
+  общий контекст — это ровно тот шаринг, который раньше
+  ломал сэмпл-банки (см. `MicCapture.ts`); (c) микрофонный
+  контекст никогда не подключается к `destination`, поэтому
+  он не может за feedback'нуть в колонки.
+
+antithesis: |
+  (1) «Стоит просто перенести создание контекста внутрь
+  `getUserMedia`-обработчика и не трогать UI». Возражения:
+  обработчик промпта разрешения не является пользовательским
+  жестом — транзиентная активация к этому моменту уже
+  мертва; это и есть исходная ошибка.
+
+  (2) «Надо ещё и `AudioContext` из выходного пути прибить
+  к жесту — тогда и воспроизведение не сломается». Возражения:
+  выходной контекст уже создаётся в жесте (`unlockAudioContext`
+  вызывается синхронно из обработчика Play) — проблема была
+  только в микрофонном пути.
+
+  (3) «Простое решение — считать уровень через
+  `MediaRecorder`/декодирование, без `AudioContext` вообще».
+  Возражения: декодирование на main thread на каждом тике —
+  это работа, которую iOS-браузер и так ограничивает, и оно
+  не решает главного (свист всё ещё нужен `AnalyserNode` для
+  pitch-детекции).
+
+scope:
+  paths:
+    - "ui/src/infrastructure/audio/micAudioContext.ts"
+    - "ui/src/infrastructure/audio/micAudioContext.test.ts"
+    - "ui/src/infrastructure/audio/MicCapture.ts"
+    - "ui/src/infrastructure/audio/MicCapture.test.ts"
+    - "ui/src/infrastructure/stt/ServerWhisperSTT.ts"
+    - "ui/src/presentation/components/MicPanel.tsx"
+    - "ui/src/presentation/components/WhistleMiniFAB.tsx"
+    - "ui/src/presentation/components/WhistleMiniFAB.test.tsx"
+    - "ui/src/presentation/components/VoiceAIMiniFAB.tsx"
+    - "ui/src/presentation/components/VoiceAIMiniFAB.test.tsx"
+    - "ui/src/presentation/components/RecordingPanel.tsx"
+  exclusions:
+    - "ui/node_modules/**"
+    - "ui/dist/**"
+    - "ui/src/domain/**"
+    - "ui/src/application/**"
+    - "ui/src/infrastructure/stt/WebSpeechSTT.ts"
+    - "ui/src/infrastructure/stt/FallbackSTT.ts"
+
+outcomes:
+  - id: mic-context-is-primed-inside-the-gesture
+    statement: |
+      `WhistleMiniFAB.test.tsx > WhistleMiniFAB — the mic context
+      is primed inside the gesture` и
+      `VoiceAIMiniFAB.test.tsx > VoiceAIMiniFAB — the mic context
+      is primed inside the gesture`: стартующее нажатие вызывает
+      `primeMicAudioContext()` ровно один раз, останавливающее —
+      ни разу.
+  - id: capture-runs-on-the-primed-context
+    statement: |
+      `MicCapture.test.ts > MicCapture > uses the context that was
+      primed inside the user gesture`: захват строит граф на
+      primed-контексте (`createMediaStreamSource` вызван на нём)
+      и закрывает его на `stop()`.
+  - id: dead-context-is-reported-not-ignored
+    statement: |
+      `MicCapture.test.ts > MicCapture > reports a context that
+      never starts instead of listening to silence`: при
+      `state === 'suspended'` и отказанном `resume()` приходит
+      `onError` с текстом про «аудио-контекст», состояние
+      становится `errored`, а трек микрофона останавливается.
+  - id: meter-reports-whether-it-runs
+    statement: |
+      `ServerWhisperSTT` метра уровня отдаёт `alive()`; при
+      мёртвой метре лог пишет предупреждение, а take закрывается
+      вручную — тишина на сервер не уходит (тест «no speech → no
+      tick upload» остаётся зелёным).
+  - id: precommit-green
+    statement: |
+      `cd ui && npm run test:precommit` (tsc strict + vitest +
+      lint:no-console + validate:presets) завершается exit 0.
+
+obligations:
+  - id: prime-called-on-starting-press
+    claim: |
+      `WhistleMiniFAB.test.tsx` и `VoiceAIMiniFAB.test.tsx`
+      содержат тесты «the starting press primes the
+      AudioContext» и «the stopping press does not prime another
+      context».
+    acceptance:
+      all:
+        - verifier: tests/presentation/components/VoiceAIMiniFAB.test.tsx
+        - verifier: tests/presentation/components/WhistleMiniFAB.test.tsx
+  - id: capture-uses-primed-context
+    claim: |
+      `MicCapture.test.ts` содержит тест «uses the context that
+      was primed inside the user gesture».
+    acceptance:
+      all:
+        - verifier: tests/infrastructure/audio/MicCapture.test.ts
+  - id: dead-context-is-an-error
+    claim: |
+      `MicCapture.test.ts` содержит тест «reports a context that
+      never starts instead of listening to silence», и в нём
+      проверяется, что трек микрофона остановлен.
+    acceptance:
+      all:
+        - verifier: tests/infrastructure/audio/MicCapture.test.ts
+  - id: mic-context-module-contract
+    claim: |
+      `micAudioContext.test.ts` покрывает контракт модуля:
+      prime создаёт и запускает контекст, контекст забирается
+      один раз, неиспользованный primed-контекст закрывается
+      следующим prime'ом, `ensureAudioContextRunning` ждёт
+      `resume()` и возвращает `false`, когда он отказан.
+    acceptance:
+      all:
+        - verifier: tests/infrastructure/audio/micAudioContext.test.ts
+  - id: silence-is-never-uploaded
+    claim: |
+      Существующий тест `ServerWhisperSTT.test.ts > no speech → no
+      tick upload (sawSpeech guard)` остаётся зелёным: мёртвая
+      метра не превращается в загрузку тишины.
+    acceptance:
+      all:
+        - verifier: tests/infrastructure/stt/ServerWhisperSTT.test.ts
+  - id: precommit-gate-green
+    claim: |
+      `cd ui && npm run test:precommit` завершается exit 0.
+    acceptance:
+      all:
+        - verifier: bash npm --dir ui run test:precommit
+  - id: mathc-validate-clean
+    claim: |
+      `mathc validate decisions/wavecode-ios-mic-audio-context.yaml`
+      завершается exit 0 без `MC-*` reject-диагностик.
+    acceptance:
+      all:
+        - verifier: mathc validate
+
+risk:
+  declared_triggers:
+    - prime-is-called-from-a-surface-that-never-starts-a-take-and-leaks-an-audio-context
+    - the-primed-context-is-taken-by-a-different-session-than-the-one-that-primed-it
+    - the-meter-reports-alive-but-the-level-stays-zero-on-a-browser-that-lies-about-its-state
+    - ios-multi-context-limit-silences-the-output-context-while-the-mic-context-runs
+  owner: human:operator
+
+reversal:
+  - signal: the-prime-throws-on-some-browser-and-breaks-the-mic-entirely
+    action: rework
+  - signal: ios-still-deaf-after-the-prime-then-the-problem-is-not-the-context
+    action: review
+
+relations:
+  addresses:
+    - wavecode-voice-rec-and-meter@1
+    - wavecode-mic-to-strudel@1
+    - wavecode-whistle-replace-score@1

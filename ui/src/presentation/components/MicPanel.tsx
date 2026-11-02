@@ -22,6 +22,7 @@ import { micSnippetFromBuffers } from '~/domain/audio/micSnippet';
 import { MELODIC_SOUNDS, DRUMS_ONLY_ID } from '~/domain/sounds';
 import { PianoRollPreview } from './PianoRollPreview';
 import { MicMeter } from './MicMeter';
+import { primeMicAudioContext } from '~/infrastructure/audio/micAudioContext';
 
 /**
  * MicPanel — UX-redesigned inline live-transcription toolbar.
@@ -135,8 +136,16 @@ export function MicPanel(): JSX.Element {
   };
 
   const onToggleMic = (): void => {
-    if (micListening()) stopMic();
-    else startMic();
+    if (micListening()) {
+      stopMic();
+      return;
+    }
+    // The pitch analyser needs an AudioContext, and on iOS it only
+    // runs if it was created AND started inside this tap — a context
+    // created after the microphone prompt stays suspended and the
+    // analyser reads zeroes. See `micAudioContext.ts`.
+    primeMicAudioContext();
+    startMic();
   };
 
   /** Preview toggle: when ON, the recorded snippet plays through the
