@@ -234,9 +234,63 @@ describe('LiveLLMClient.streamCompletion — SSE streaming', () => {
     expect(body['model']).toBe('fast');
     // DeepSeek-профиль (по умолчанию): reasoning_effort едет в extra_body,
     // потому что LiteLLM дропает provider-специфичные поля верхнего уровня.
-    // 'off' → 'low': DeepSeek не умеет выключать reasoning.
-    expect(body['extra_body']).toEqual({ reasoning_effort: 'low' });
+    // 'off' → 'none': DeepSeek РЕАЛЬНО выключает reasoning на 'none'
+    // (замер 2026-11-02: 0 символов reasoning, первый токен через 1.0-1.4 с
+    // против 4.6-12.1 с у low/high).
+    expect(body['extra_body']).toEqual({ reasoning_effort: 'none' });
     expect(body['reasoning_effort']).toBeUndefined();
+  });
+
+  it('encodes the reasoning level into `user` so the proxy cache separates effort levels', async () => {
+    // Ключ диск-кэша LiteLLM НЕ включает extra_body: запрос с
+    // effort=low, затем с effort=none по тому же промпту → второй вернул
+    // кэш за 0.02 с, т.е. отдал ответ, посчитанный с ДРУГИМ уровнем
+    // размышления. `user` в ключ входит — поэтому уровень кодируется в
+    // него (замер 2026-11-02).
+    fetchMock.mockImplementation(() =>
+      Promise.resolve(
+        fakeResponse({ chunks: ['data: {"choices":[{"delta":{"content":"x"}}]}\n\n'] }),
+      ),
+    );
+    const layer = makeLiveLLMClient({
+      apiKey: 'sk-litellm-test',
+      apiUrl: 'https://example.test/v1',
+    });
+    const bodyFor = async (thinking: 'low' | 'high' | 'off'): Promise<Record<string, unknown>> => {
+      await Effect.runPromise(
+        Effect.gen(function* () {
+          const llm = yield* LLMClient;
+          yield* llm.streamCompletion(makeRequest({ model: 'fast', thinking }));
+        }).pipe(Effect.provide(layer)),
+      );
+      const calls = fetchMock.mock.calls;
+      const [, init] = calls[calls.length - 1] as [string, RequestInit];
+      return JSON.parse(init.body as string) as Record<string, unknown>;
+    };
+
+    expect((await bodyFor('off'))['user']).toBe('wavecode-effort-none');
+    expect((await bodyFor('low'))['user']).toBe('wavecode-effort-low');
+    expect((await bodyFor('high'))['user']).toBe('wavecode-effort-high');
+  });
+
+  it('passes an AbortSignal so a hung upstream can be cancelled', async () => {
+    fetchMock.mockImplementation(() =>
+      Promise.resolve(
+        fakeResponse({ chunks: ['data: {"choices":[{"delta":{"content":"x"}}]}\n\n'] }),
+      ),
+    );
+    const layer = makeLiveLLMClient({
+      apiKey: 'sk-litellm-test',
+      apiUrl: 'https://example.test/v1',
+    });
+    await Effect.runPromise(
+      Effect.gen(function* () {
+        const llm = yield* LLMClient;
+        yield* llm.streamCompletion(makeRequest());
+      }).pipe(Effect.provide(layer)),
+    );
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(init.signal).toBeInstanceOf(AbortSignal);
   });
 
   it('sends max_tokens=4000 so reasoning cannot eat the whole budget', async () => {
