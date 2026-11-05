@@ -9,6 +9,9 @@ import {
   isScoreBroken,
   SELF_HEAL_RETRY_BUDGET,
   cleanLLMResponse,
+  trimHistory,
+  MAX_HISTORY_CHARS,
+  MAX_HISTORY_TURNS,
   type DialogTurn,
   type FocusedContextLike,
 } from './llmEdit';
@@ -236,6 +239,78 @@ describe('applyEditStream — self-heal retry', () => {
     expect(lastUserMsg?.content).toContain('stack(note("c4"');
     expect(lastUserMsg?.content).toContain('unbalanced parens');
     void fixMsg;
+  });
+});
+
+describe('applyEditStream — latency defaults', () => {
+  it('defaults to the fast tier with reasoning off', async () => {
+    // 2026-11-02: пути, которые не передают настройки явно (голос,
+    // «выдели и спроси»), раньше уходили в `smart` + `low` — то есть в
+    // deepseek-v4-pro с размышлением: 4.6-12.1 с до первого видимого
+    // токена. Дефолт теперь — flash без размышления (~1 с).
+    const { counter } = await runWithFakeLLM(
+      applyEditStream('note("c4")', 'ok'),
+      [() => chunk('note("c4")')],
+    );
+    expect(counter.requests[0]?.model).toBe('fast');
+    expect(counter.requests[0]?.thinking).toBe('off');
+  });
+
+  it('runs the self-heal retry without reasoning even when the first try had it', async () => {
+    // Ремонт — чистая синтаксическая правка по известной причине.
+    // Размышление в ней добавило бы 5-12 с невидимого ожидания.
+    const { counter } = await runWithFakeLLM(
+      applyEditStream(
+        'note("c4")',
+        'wrap in stack',
+        [],
+        { status: 'unknown' },
+        { model: 'smart', thinking: 'high' },
+      ),
+      [
+        () => chunk('stack(note("c4"'),
+        () => chunk('stack(note("c4"))'),
+      ],
+    );
+    expect(counter.requests[0]?.thinking).toBe('high');
+    expect(counter.requests[1]?.thinking).toBe('off');
+    expect(counter.requests[1]?.model).toBe('smart');
+  });
+});
+
+describe('trimHistory — bounded prompt prefix', () => {
+  it('keeps at most MAX_HISTORY_TURNS turns', () => {
+    const history = Array.from({ length: 12 }, (_, i) => ({
+      role: 'user' as const,
+      content: `turn ${i}`,
+    }));
+    expect(trimHistory(history)).toHaveLength(MAX_HISTORY_TURNS);
+  });
+
+  it('drops the oldest turns until the char budget is met', () => {
+    const history = Array.from({ length: 6 }, () => ({
+      role: 'assistant' as const,
+      content: 'x'.repeat(1000),
+    }));
+    const trimmed = trimHistory(history);
+    expect(trimmed.length).toBeLessThan(history.length);
+    const total = trimmed.reduce((acc, t) => acc + t.content.length, 0);
+    expect(total).toBeLessThanOrEqual(MAX_HISTORY_CHARS);
+  });
+
+  it('always keeps the last turn, however long it is', () => {
+    const history = [
+      { role: 'user' as const, content: 'y'.repeat(9000) },
+      { role: 'user' as const, content: 'z'.repeat(9000) },
+    ];
+    const trimmed = trimHistory(history);
+    expect(trimmed).toHaveLength(1);
+    expect(trimmed[0]?.content).toBe('z'.repeat(9000));
+  });
+
+  it('leaves a short history untouched', () => {
+    const history = [{ role: 'user' as const, content: 'добавь бас' }];
+    expect(trimHistory(history)).toEqual(history);
   });
 });
 

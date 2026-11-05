@@ -316,6 +316,45 @@ export type DialogTurn = {
 };
 
 /**
+ * Границы истории, которая реально уходит провайдеру.
+ *
+ * История растёт двумя способами: числом ходов и длиной каждого хода
+ * (assistant-сообщение — это ПОЛНЫЙ score, он растёт с каждой правкой).
+ * Префикс промпта — самая дорогая часть запроса: он пересобирается и
+ * переотправляется при каждом новом score, поэтому кэш прокси его не
+ * спасает.
+ *
+ * 10 ходов × ~1 KB = 10 KB префикса, и каждый байт платится дважды:
+ * один раз на отправку, второй — на повторный запрос при self-heal.
+ * Поэтому держим историю в бюджете: не больше `MAX_HISTORY_TURNS` ходов
+ * И не больше `MAX_HISTORY_CHARS` символов; при переполнении выкидываем
+ * самые старые ходы.
+ */
+export const MAX_HISTORY_TURNS = 4;
+export const MAX_HISTORY_CHARS = 4000;
+
+/**
+ * Обрезает историю по обоим лимитам, выкидывая самые старые ходы.
+ *
+ * Последний ход (текущая реплика) не трогаем — даже если он длинный:
+ * выкинуть его — значит потерять контекст инструкции.
+ */
+export const trimHistory = (
+  history: ReadonlyArray<DialogTurn>,
+  maxTurns: number = MAX_HISTORY_TURNS,
+  maxChars: number = MAX_HISTORY_CHARS,
+): ReadonlyArray<DialogTurn> => {
+  const turns = history.slice(-maxTurns);
+  let total = turns.reduce((acc, t) => acc + t.content.length, 0);
+  while (turns.length > 1 && total > maxChars) {
+    const dropped = turns.shift();
+    if (dropped === undefined) break;
+    total -= dropped.content.length;
+  }
+  return turns;
+};
+
+/**
  * Hard cap on the number of self-heal retries per `applyEditStream`
  * invocation. The LLM might produce a perpetually broken score (e.g.
  * a model that does not understand Strudel at all); without this
@@ -327,6 +366,23 @@ export type DialogTurn = {
  * `obligation: self-heal-budget-is-one`.
  */
 export const SELF_HEAL_RETRY_BUDGET = 1;
+
+/**
+ * Дефолты для вызовов, которые НЕ передали настройки явно.
+ *
+ * Голосовой путь (`intentRouter`) и правило «выдели и спроси» —
+ * именно эти два места раньше молча уходили в `smart` + `low`, то есть
+ * в deepseek-v4-pro с размышлением: первый видимый токен приходил
+ * через 4.6-12.1 с, и всё это время пользователь смотрел в пустой
+ * чат (клиент выбрасывает reasoning-токены из потока).
+ *
+ * Замер 2026-11-02 через llm.kosov.online на реальном промпте wavecode:
+ *   fast + effort=none → первый токен 0.97 с, ответ 1.37 с, 0/8 правок
+ *                        потребовали self-heal-повтора.
+ *   smart + effort=none → первый токен 1.19 с, ответ 1.97 с, 0/8.
+ */
+export const DEFAULT_MODEL: 'smart' | 'fast' = 'fast';
+export const DEFAULT_THINKING: 'low' | 'high' | 'off' = 'off';
 
 /**
  * Callbacks for `applyEditStream`. Each is invoked at most once per
@@ -457,7 +513,7 @@ export const applyEditStream = (
   Effect.gen(function* () {
     const llm = yield* LLMClient;
 
-    const recentHistory = history.slice(-10);
+    const recentHistory = trimHistory(history);
     const userMessage = {
       id: `user-${Date.now()}`,
       role: 'user' as const,
@@ -484,8 +540,8 @@ export const applyEditStream = (
     const firstRaw = yield* readStream(
       llm,
       {
-        model: options.model ?? 'smart',
-        thinking: options.thinking ?? 'low',
+        model: options.model ?? DEFAULT_MODEL,
+        thinking: options.thinking ?? DEFAULT_THINKING,
         systemPrompt: SYSTEM_PROMPT,
         messages: baseMessages,
       },
@@ -522,8 +578,13 @@ export const applyEditStream = (
     const secondRaw = yield* readStream(
       llm,
       {
-        model: options.model ?? 'smart',
-        thinking: options.thinking ?? 'low',
+        model: options.model ?? DEFAULT_MODEL,
+        // Ремонтный запрос — это чистая синтаксическая правка по уже
+        // известной причине («unbalanced parens»). Размышление здесь
+        // бесполезно: оно добавляет к каждому повтору 5-12 секунд
+        // невидимого пользователю ожидания. Поэтому ремонт всегда идёт
+        // без reasoning, даже если первая попытка была с 'high'.
+        thinking: 'off',
         systemPrompt: FIX_SYSTEM_PROMPT,
         messages: fixMessages,
       },
@@ -629,7 +690,7 @@ export const applyEditWithContext = (
   Effect.gen(function* () {
     const llm = yield* LLMClient;
 
-    const recentHistory = history.slice(-10);
+    const recentHistory = trimHistory(history);
     const messages = [
       ...recentHistory.map((t, i) => ({
         id: `hist-${i}`,
@@ -654,8 +715,8 @@ export const applyEditWithContext = (
     const raw = yield* readStream(
       llm,
       {
-        model: options.model ?? 'smart',
-        thinking: options.thinking ?? 'low',
+        model: options.model ?? DEFAULT_MODEL,
+        thinking: options.thinking ?? DEFAULT_THINKING,
         systemPrompt: SYSTEM_PROMPT,
         messages,
       },
