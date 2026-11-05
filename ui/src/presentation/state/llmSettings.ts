@@ -58,8 +58,14 @@ export const modelLabel = (value: Model): string => modelTier(value).label;
  * игнорируется провайдером (проверено: reasoning даже растёт). Поэтому
  * опция `off` подписана «min»: клиент отправляет минимальный доступный
  * уровень (`reasoning_effort=low`), а не обещает полное отключение.
+ *
+ * 2026-11-02: замер пересмотрел это. `reasoning_effort=none` DeepSeek
+ * РЕАЛЬНО отключает (0 символов reasoning, первый токен через 1.0-1.4 с
+ * против 4.6-12.1 с у low/high). Поэтому клиентский `off` теперь
+ * отображается как «выкл» и означает РЕАЛЬНОЕ отключение размышления.
  */
-export const thinkingLabel = (t: Thinking): string => (t === 'low' ? 'low' : t === 'high' ? 'high' : 'min');
+export const thinkingLabel = (t: Thinking): string =>
+  t === 'low' ? 'low' : t === 'high' ? 'high' : 'выкл';
 
 type LLMSettings = {
   readonly model: Model;
@@ -76,18 +82,39 @@ const defaults: LLMSettings = {
   // 2026-10-26: после перехода прокси на DeepSeek замер через
   // llm.kosov.online: model=fast + extra_body.reasoning_effort=low →
   // 125 completion-токенов, 1.8 s (без effort было 1221 токенов, 7.9 s).
-  // Дефолт = fast + low: быстрый ответ с приемлемым качеством.
-  // Юзер может переключиться на smart для задач, где важнее качество
-  // рассуждений (coding, debugging).
+  // 2026-11-02: дефолт размышления — 'off' (→ reasoning_effort=none).
+  // Замеры через llm.kosov.online на реальном промпте wavecode:
+  //   effort=none → первый токен 1.0-1.4 с, reasoning 0 симв.
+  //   effort=low  → первый токен 4.6-10.3 с, reasoning 700-1800 симв.
+  //   effort=high → первый токен 7.4-11.2 с, reasoning 1400-2500 симв.
+  // Клиент выбрасывает reasoning-токены из потока, поэтому «размышление»
+  // для пользователя — это пустой экран на 5-12 секунд. Score-правки
+  // рассуждений не требуют: 8/8 типовых инструкций разобрались без
+  // self-heal-повтора даже на flash.
   model: 'fast',
-  thinking: 'low',
+  thinking: 'off',
 };
+
+/**
+ * Значения, которые wavecode записывал в localStorage автоматически
+ * (дефолты v1). Их НИКТО не выбирал руками — просто `save()` сработал
+ * при первом изменении любой настройки.
+ */
+const LEGACY_DEFAULTS: LLMSettings = { model: 'fast', thinking: 'low' };
 
 const load = (): LLMSettings => {
   try {
     const raw = localStorage.getItem(KEY);
     if (!raw) return defaults;
-    return { ...defaults, ...(JSON.parse(raw) as Partial<LLMSettings>) };
+    const stored = JSON.parse(raw) as Partial<LLMSettings>;
+    // Миграция v1 → v2: если в хранилище лежит ровно старый дефолт
+    // (пользователь его не выбирал), переносим на новый дефолт с
+    // выключенным размышлением. Явный выбор пользователя (любая другая
+    // комбинация) уважаем.
+    if (stored.model === LEGACY_DEFAULTS.model && stored.thinking === LEGACY_DEFAULTS.thinking) {
+      return defaults;
+    }
+    return { ...defaults, ...stored };
   } catch {
     return defaults;
   }
