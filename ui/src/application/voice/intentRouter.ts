@@ -26,7 +26,7 @@
 import { Effect } from 'effect';
 import type { VoiceIntent } from '~/domain/voice/VoiceIntent';
 import { LLMClient, AudioEngine } from '~/domain/services';
-import { applyEditStream, type ApplyEditResult } from '~/application/useCases/llmEdit';
+import { applyEditStream, DEFAULT_MODEL, type ApplyEditResult } from '~/application/useCases/llmEdit';
 
 /**
  * Shared context the router needs at call-time that is NOT a
@@ -38,6 +38,18 @@ import { applyEditStream, type ApplyEditResult } from '~/application/useCases/ll
 export type RouterContext = {
   readonly currentScore: string;
   readonly nowMs: number;
+  /**
+   * Тир модели, выбранный пользователем в настройках ИИ.
+   *
+   * Раньше голосовой путь его вообще не учитывал: `applyEditStream`
+   * получал пустые опции и уходил в свой дефолт `smart`
+   * (deepseek-v4-pro). С размышлением это 4.6-12.1 секунд до первого
+   * видимого токена — пользователь успевал решить, что голос не
+   * работает. Теперь тир приходит из UI-настроек.
+   *
+   * Необязательный: старые вызовы без него получают `DEFAULT_MODEL`.
+   */
+  readonly model?: 'smart' | 'fast';
 };
 
 /**
@@ -110,7 +122,15 @@ export const routeIntent = (
       intent.instruction,
       [],
       { status: 'unknown' },
-      {},
+      {
+        model: ctx.model ?? DEFAULT_MODEL,
+        // Голос — это быстрый канал: пользователь говорит короткую
+        // команду и ждёт звука. Размышление здесь всегда выключено,
+        // даже если в настройках ИИ выбрано «много»: reasoning-токены
+        // клиент всё равно выбрасывает из потока, так что пользователь
+        // смотрел бы в пустой чат 5-12 секунд (замер 2026-11-02).
+        thinking: 'off',
+      },
       { ...callbacks, onComplete },
     ).pipe(Effect.mapError((err): Error => (err instanceof Error ? err : new Error(String(err)))));
 

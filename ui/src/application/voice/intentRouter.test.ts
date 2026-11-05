@@ -33,15 +33,18 @@ type Recorder = {
   llmCalls: number;
   evalCalls: number;
   lastEvalInput: string | null;
+  /** Последний запрос, ушедший в LLMClient. */
+  lastRequest: CompletionRequest | null;
 };
 
 const buildServices = (response: ReadableStream<CompletionChunk>): { layer: Layer.Layer<LLMClient | AudioEngine, never, never>; rec: Recorder } => {
-  const rec: Recorder = { llmCalls: 0, evalCalls: 0, lastEvalInput: null };
+  const rec: Recorder = { llmCalls: 0, evalCalls: 0, lastEvalInput: null, lastRequest: null };
   const llmLayer = Layer.succeed(
     LLMClient,
     {
-      streamCompletion: (_req: CompletionRequest) => {
+      streamCompletion: (req: CompletionRequest) => {
         rec.llmCalls += 1;
+        rec.lastRequest = req;
         return Effect.succeed(response);
       },
     },
@@ -104,6 +107,39 @@ describe('routeIntent — edit-score route', () => {
     expect(rec.lastEvalInput).toBe('note("c4")');
     expect(tokens.join('')).toBe('note("c4")');
     expect(completedWith[0]).toBe('note("c4")');
+  });
+
+  it('routes with the tier the user picked, and never with reasoning on', async () => {
+    // 2026-11-02: голосовой путь раньше уходил в дефолт `smart`
+    // (deepseek-v4-pro) с размышлением — 4.6-12.1 с до первого
+    // видимого токена, и всё это время чат пустой (клиент выбрасывает
+    // reasoning-токены из потока). Тир приходит из настроек, размышление
+    // выключено всегда.
+    const { layer, rec } = buildServices(chunk('note("c4")'));
+    const intent: VoiceIntent = {
+      kind: 'edit-score',
+      instruction: 'добавь бас',
+      confidence: 0.9,
+      timestampMs: ctx(rec).nowMs,
+    };
+    await Effect.runPromise(
+      routeIntent(intent, { ...ctx(rec), model: 'smart' }).pipe(Effect.provide(layer)),
+    );
+    expect(rec.lastRequest?.model).toBe('smart');
+    expect(rec.lastRequest?.thinking).toBe('off');
+  });
+
+  it('falls back to the fast tier when the caller passes no tier', async () => {
+    const { layer, rec } = buildServices(chunk('note("c4")'));
+    const intent: VoiceIntent = {
+      kind: 'edit-score',
+      instruction: 'добавь бас',
+      confidence: 0.9,
+      timestampMs: ctx(rec).nowMs,
+    };
+    await Effect.runPromise(routeIntent(intent, ctx(rec)).pipe(Effect.provide(layer)));
+    expect(rec.lastRequest?.model).toBe('fast');
+    expect(rec.lastRequest?.thinking).toBe('off');
   });
 
   it('calls audio.eval with the current score when the LLM emits unchanged output', async () => {

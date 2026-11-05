@@ -115,6 +115,18 @@ export type VoiceSessionDeps = {
    * `replaceScore` dispatch; voice was the only one that didn't.
    */
   readonly onApplied?: (score: string) => void;
+  /**
+   * Текущий выбор модели пользователя (тир `smart` / `fast`).
+   *
+   * Функция, а не значение: пользователь может переключить тир в
+   * настройках ИИ прямо во время голосовой сессии, и следующий
+   * запрос обязан его увидеть. `application/` не имеет права импортировать
+   * `presentation/state/llmSettings`, поэтому зависимость внедряется
+   * снаружи — тем же приёмом, что и `onApplied`.
+   *
+   * Если зависимость не передана, маршрут использует `DEFAULT_MODEL`.
+   */
+  readonly llmModel?: () => 'smart' | 'fast';
 };
 
 /** Handle returned by `createVoiceAISession`. All methods are pure
@@ -246,7 +258,11 @@ export const createVoiceAISession = (
         const applied: { score: string | null } = { score: null };
         const routeEff = routeIntent(
           { kind: 'edit-score', instruction, confidence: 1, timestampMs },
-          { currentScore: score, nowMs: timestampMs },
+          {
+            currentScore: score,
+            nowMs: timestampMs,
+            ...(deps.llmModel ? { model: deps.llmModel() } : {}),
+          },
           {
             onComplete: (cleaned: string): void => {
               applied.score = cleaned;
