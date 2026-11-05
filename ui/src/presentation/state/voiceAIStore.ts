@@ -79,6 +79,7 @@ import { acquireMic, releaseMic } from './micMutexStore';
 import { resolveSttEngineKind } from '~/infrastructure/stt/selectSttLayer';
 import { getServerWhisperRmsLevel } from '~/infrastructure/stt/ServerWhisperSTT';
 import { appStore, dispatch as dispatchApp } from './appStore';
+import { getLLMSettings } from './llmSettings';
 import { AppLayer } from '~/infrastructure/composition';
 import { logger } from '~/infrastructure/log';
 
@@ -445,6 +446,10 @@ export const initVoiceAI = (deps: {
     onApplied: (score: string): void => {
       dispatchApp({ type: 'replaceScore', text: score });
     },
+    // Тир модели из настроек ИИ. Функция, а не значение: пользователь
+    // может переключить тир во время сессии, и следующий голосовой
+    // запрос обязан его увидеть.
+    llmModel: (): 'smart' | 'fast' => getLLMSettings().model,
   });
   handle = Effect.runSync(handleProgram);
 

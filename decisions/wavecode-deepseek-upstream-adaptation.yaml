@@ -1,10 +1,10 @@
 ---
 schema: math-coding/3.3
 id: wavecode-deepseek-upstream-adaptation
-revision: 1
+revision: 2
 state: active
-body_sha: "sha256:861a40e40624c15efe1197812567a8c0bae8907d24e2babf29e16b6fe81b4809"
-yaml_sha: "sha256:861a40e40624c15efe1197812567a8c0bae8907d24e2babf29e16b6fe81b4809"
+body_sha: "sha256:7a1230ca400209fb0724e9c37c05128b683042c0f54706cdce69472461be8205"
+yaml_sha: "sha256:7a1230ca400209fb0724e9c37c05128b683042c0f54706cdce69472461be8205"
 
 axiom_link:
   - A0
@@ -56,8 +56,16 @@ commitment: |
       диагностируется как «лимит токенов исчерпан на размышления».
 
   (4) Подписи моделей в UI соответствуют фактической маршрутизации
-      прокси; опция размышления «off» подписана «min», потому что
-      DeepSeek не умеет выключать reasoning (`effort=off` игнорируется).
+      прокси.
+
+      Ревизия 2 (2026-11-02): пункт про подпись «min» снят — замер
+      того же дня опроверг его посылку. `reasoning_effort=none` DeepSeek
+      РЕАЛЬНО отключает (0 символов reasoning, первый токен 1.07-1.44 с
+      против 4.57-10.27 с у `low` и 7.35-11.23 с у `high`, 3/3 прогона),
+      тогда как `off` и `minimal` действительно игнорируются. Поэтому
+      клиентский «off» означает `none`, а подпись — «выкл». Подробности и
+      остальные обязательства этой ревизии — в решении
+      `wavecode-llm-latency-fast-path`.
 
 counterexample: |
   «Достаточно поменять две строки в linter-совместимых местах: убрать
@@ -137,8 +145,9 @@ outcomes:
     statement: |
       `MODEL_TIERS` в UI описывает текущую маршрутизацию прокси
       (`smart` → deepseek-v4-pro, `fast` → deepseek-flash) и не
-      содержит устаревших MiniMax-подписей; опция размышления «off»
-      подписана «min».
+      содержит устаревших MiniMax-подписей. Ревизия 2: подпись опции
+      размышления «off» — «выкл», а не «min»: DeepSeek отключает
+      reasoning на `reasoning_effort=none` (замер 2026-11-02).
   - id: precommit-green
     statement: |
       `cd ui && npm run test:precommit` (tsc strict + vitest +
@@ -194,7 +203,8 @@ obligations:
   - id: model-labels-match-proxy-routing
     claim: |
       `MODEL_TIERS` описывает DeepSeek-маршрутизацию и не содержит
-      устаревших MiniMax-подписей; `thinkingLabel('off')` = 'min'.
+      устаревших MiniMax-подписей; `thinkingLabel('off')` = 'выкл'
+      (ревизия 2: DeepSeek отключает reasoning на `effort=none`).
     acceptance:
       all:
         - verifier: vitest-run-llm-settings

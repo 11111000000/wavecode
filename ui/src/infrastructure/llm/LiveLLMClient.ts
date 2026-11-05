@@ -4,10 +4,9 @@ import { LLMClient, type CompletionRequest, type CompletionChunk } from '~/domai
 /**
  * Live LLM client — raw fetch к llm.kosov.online (LiteLLM proxy, OpenAI-compatible).
  *
- * Models (через llm-proxy):
- *   - "smart" → MiniMax-M3 (reasoning ON, ~3-21s end-to-end).
- *   - "fast"  → MiniMax-M2.1-highspeed (reasoning OFF через
- *               thinking=disabled, non-reasoning mode, ~1.0-1.5s TTFB).
+ * Models (через llm-proxy, 2026-10-26 → DeepSeek direct):
+ *   - "smart" → deepseek-v4-pro   (глубже, но всё равно быстро без reasoning)
+ *   - "fast"  → deepseek-flash    (быстрый, reasoning почти не тратит)
  *
  * Streaming: chat/completions called with `stream: true` returns
  * Server-Sent Events. We parse each `data: {...}` line and emit a
@@ -16,6 +15,23 @@ import { LLMClient, type CompletionRequest, type CompletionChunk } from '~/domai
  * arrive — no buffering until the full body is read. If the proxy
  * ever returns a buffered JSON response (some LiteLLM builds do),
  * we fall back to the legacy JSON path and synthesize one big chunk.
+ *
+ * ── Почему reasoning_effort решает всё ──────────────────────────────────
+ *
+ * Reasoning-модель тратит время на скрытое «размышление» ДО первого
+ * токена ответа. Клиент эти токены выбрасывает (`delta.reasoning_content`
+ * не enqueue-ится), поэтому пользователь видит пустой экран ровно
+ * столько, сколько модель думала. Замеры 2026-11-02 через
+ * llm.kosov.online (системный prompt wavecode + правка одного паттерна):
+ *
+ *   effort=high → первый токен 7.4-11.2 с, reasoning 1400-2500 симв.
+ *   effort=low  → первый токен 4.6-10.3 с, reasoning  700-1800 симв.
+ *   effort=none → первый токен 1.0-1.4 с, reasoning     0 симв.  ← 3/3
+ *
+ * `none` — единственный уровень, который DeepSeek реально отключает
+ * (в отличие от `off`/`minimal`, которые он игнорирует). Именно он
+ * стоит по умолчанию: score-правка не требует рассуждений, а
+ * пользователь не должен ждать пустого экрана.
  */
 
 type Model = 'smart' | 'fast';
@@ -28,20 +44,44 @@ type Model = 'smart' | 'fast';
  * sits in front of both) silently drops provider-specific top-level
  * fields — only `extra_body` is passed through to the provider.
  *
- *   deepseek — `extra_body.reasoning_effort` (low|high). DeepSeek has no
- *              "off": `effort=off` is ignored and reasoning even grows
- *              (measured 2026-10-26), so the client's `off` maps to the
- *              smallest level the provider actually honours.
- *   minimax  — `extra_body.thinking.type = 'disabled'` for the fast tier
- *              (the MiniMax-native way to switch reasoning off).
+ *   deepseek — `extra_body.reasoning_effort` (none|low|high). `none`
+ *              отключает reasoning полностью (замер 2026-11-02: 0
+ *              символов reasoning, 1.1 с до первого токена); `off`
+ *              и `minimal` провайдер ИГНОРИРУЕТ — на них reasoning
+ *              даже растёт. Поэтому клиентский 'off' → 'none'.
+ *   minimax  — `extra_body.thinking.type = 'disabled'` (MiniMax-native
+ *              способ выключить reasoning).
  */
 type Upstream = 'deepseek' | 'minimax';
+
+/**
+ * Уровень reasoning, который уходит провайдеру.
+ *
+ * `none` — reasoning выключен. `low`/`high` — размышление включено,
+ * время до первого токена ответа растёт в разы (см. замеры в шапке).
+ */
+type Effort = 'none' | 'low' | 'high';
+
+/**
+ * Жёсткий потолок на ожидание заголовков ответа.
+ *
+ * Раньше fetch шёл без `signal` и без таймаута: зависший upstream
+ * висел бесконечно, а «отмена» голосового запроса (barge-in)
+ * прерывала только Effect-волокно — HTTP-запрос продолжал жить.
+ */
+const REQUEST_TIMEOUT_MS = 45_000;
+
+/**
+ * Потолок на «тишину» в теле SSE-потока: если модель начала ответ и
+ * замолчала, мы не должны висеть вечно.
+ */
+const STREAM_IDLE_TIMEOUT_MS = 30_000;
 
 type LiveLLMClientDeps = {
   readonly apiUrl: string;
   readonly apiKey: string;
   readonly defaultModel: Model;
-  readonly defaultThinking: 'low' | 'high';
+  readonly defaultThinking: 'low' | 'high' | 'off';
   readonly upstream: Upstream;
 };
 
@@ -54,9 +94,9 @@ const make = (deps: LiveLLMClientDeps): Context.Tag.Service<typeof LLMClient> =>
         ...req.messages.map((m) => ({ role: m.role, content: m.content })),
       ];
 
-      // Получаем thinking preference из метаданных запроса (если есть).
-      const thinkingRaw = (req as { thinking?: 'low' | 'high' | 'off' }).thinking;
-      const thinking: 'low' | 'high' | 'off' = thinkingRaw ?? deps.defaultThinking;
+      // Уровень размышления: 'off' = размышления нет (самый быстрый
+      // путь), 'low'/'high' = модель сначала думает.
+      const thinking: 'low' | 'high' | 'off' = req.thinking ?? deps.defaultThinking;
 
       // max_tokens: 4000 (было 2000). Upstream — reasoning-модель: при
       // effort=high (дефолт провайдера) размышление съедает весь бюджет,
@@ -72,6 +112,8 @@ const make = (deps: LiveLLMClientDeps): Context.Tag.Service<typeof LLMClient> =>
         max_tokens: 4000,
       };
 
+      // effort, который реально поедет провайдеру.
+      let effort: Effort = 'none';
       if (deps.upstream === 'deepseek') {
         // reasoning_effort уходит в extra_body, а НЕ top-level: у прокси
         // глобальный litellm_settings.drop_params=true, и LiteLLM молча
@@ -82,29 +124,50 @@ const make = (deps: LiveLLMClientDeps): Context.Tag.Service<typeof LLMClient> =>
         // extra_body проходит насквозь — это единственная форма, которая
         // реально доезжает до провайдера.
         //
-        // DeepSeek не умеет выключать reasoning: effort=off/minimal/none
-        // игнорируются (замер 2026-10-26 — reasoning даже растёт). Поэтому
-        // клиентский 'off' означает минимальный доступный уровень 'low'.
-        const effort = thinking === 'high' ? 'high' : 'low';
+        // 'off' → 'none': DeepSeek игнорирует off/minimal (замер
+        // 2026-10-26), но 'none' РЕАЛЬНО выключает reasoning (замер
+        // 2026-11-02, 3/3 прогона: 0 символов reasoning, первый токен
+        // через 1.0-1.4 с против 4.6-12.1 с у low/high).
+        effort = thinking === 'high' ? 'high' : thinking === 'low' ? 'low' : 'none';
         requestBody.extra_body = { reasoning_effort: effort };
       } else {
         // MiniMax-профиль: reasoning отключается полем thinking.type.
+        effort = thinking === 'high' ? 'high' : thinking === 'low' ? 'low' : 'none';
         if (thinking !== 'off') {
           requestBody.reasoning_effort = thinking === 'high' ? 'high' : 'low';
         }
-        if (modelName === 'fast') {
+        if (thinking === 'off') {
           requestBody.extra_body = { thinking: { type: 'disabled' } };
         }
       }
+
+      // Ключ диск-кэша LiteLLM НЕ включает extra_body (замер 2026-11-02:
+      // запрос с effort=low, затем с effort=none по тому же промпту →
+      // второй вернул кэш за 0.02 с, т.е. отдал ответ, посчитанный с
+      // ДРУГИМ уровнем размышления). `user` в ключ входит (проверено тем
+      // же замером: смена user → cache miss). Кодируем уровень в `user`,
+      // чтобы у каждого уровня была своя запись кэша, а одинаковые
+      // запросы по-прежнему кэшировались.
+      requestBody.user = `wavecode-effort-${effort}`;
 
       console.log('[llm] → request (stream)', {
         model: modelName,
         messages: messages.length,
         upstream: deps.upstream,
         thinking,
+        effort,
         extra_body: requestBody.extra_body,
         reasoning_effort: requestBody.reasoning_effort,
       });
+
+      // Таймаут + прерывание: fetch обязан умирать вместе с Effect-волокном,
+      // иначе «отмена» голосового запроса оставляла HTTP-запрос жить.
+      const abortController = new AbortController();
+      let timedOut = false;
+      const timeoutHandle = setTimeout(() => {
+        timedOut = true;
+        abortController.abort();
+      }, REQUEST_TIMEOUT_MS);
 
       const response = yield* Effect.tryPromise({
         try: () =>
@@ -115,9 +178,27 @@ const make = (deps: LiveLLMClientDeps): Context.Tag.Service<typeof LLMClient> =>
               Authorization: `Bearer ${deps.apiKey}`,
             },
             body: JSON.stringify(requestBody),
+            signal: abortController.signal,
           }),
-        catch: (err) => classifyLLMTransportError(err, deps.apiUrl),
-      });
+        catch: (err) =>
+          timedOut
+            ? new Error(
+              `LLM не ответил за ${REQUEST_TIMEOUT_MS / 1000} с ` +
+                `(${modelName}, effort=${effort}). Проверь прокси llm.kosov.online.`,
+            )
+            : classifyLLMTransportError(err, deps.apiUrl),
+      }).pipe(
+        Effect.onInterrupt(() =>
+          Effect.sync(() => {
+            abortController.abort();
+          }),
+        ),
+        Effect.ensuring(
+          Effect.sync(() => {
+            clearTimeout(timeoutHandle);
+          }),
+        ),
+      );
 
       if (!response.ok) {
         const text = yield* Effect.tryPromise({
@@ -197,11 +278,32 @@ const make = (deps: LiveLLMClientDeps): Context.Tag.Service<typeof LLMClient> =>
             reasoningChars += outcome.reasoningChars;
             if (outcome.finishReason) finishReason = outcome.finishReason;
           };
+          // Сторож тишины: модель могла начать ответ и зависнуть. Без
+          // него «молчащий» SSE держит UI в состоянии «стриминг» вечно.
+          let idleTimer: ReturnType<typeof setTimeout> | null = null;
+          const clearIdleTimer = (): void => {
+            if (idleTimer === null) return;
+            clearTimeout(idleTimer);
+            idleTimer = null;
+          };
+          const armIdleTimer = (): void => {
+            clearIdleTimer();
+            idleTimer = setTimeout(() => {
+              failOnce(
+                new Error(
+                  `LLM замолчал на ${STREAM_IDLE_TIMEOUT_MS / 1000} с ` +
+                    'после начала ответа (SSE-поток прерван).',
+                ),
+              );
+            }, STREAM_IDLE_TIMEOUT_MS);
+          };
           const pump = async (): Promise<void> => {
             try {
+              armIdleTimer();
               while (true) {
                 const next = await reader.read();
                 if (next.done) break;
+                armIdleTimer();
                 if (next.value) buffer += decoder.decode(next.value, { stream: true });
                 let nlIdx = buffer.indexOf('\n');
                 while (nlIdx !== -1) {
@@ -211,6 +313,7 @@ const make = (deps: LiveLLMClientDeps): Context.Tag.Service<typeof LLMClient> =>
                   nlIdx = buffer.indexOf('\n');
                 }
               }
+              clearIdleTimer();
               buffer += decoder.decode();
               if (buffer.trim()) {
                 consume(buffer);
@@ -235,6 +338,7 @@ const make = (deps: LiveLLMClientDeps): Context.Tag.Service<typeof LLMClient> =>
             } catch (err) {
               failOnce(err instanceof Error ? err : new Error(String(err)));
             } finally {
+              clearIdleTimer();
               try {
                 await reader.cancel();
               } catch {
@@ -556,8 +660,11 @@ export const makeLiveLLMClient = (
 ): Layer.Layer<LLMClient, never, never> => {
   const apiUrl = config.apiUrl ?? import.meta.env.VITE_LLM_PROXY_URL ?? 'https://llm.kosov.online/v1';
   const apiKey = config.apiKey ?? import.meta.env.VITE_LLM_PROXY_KEY ?? '';
-  const defaultModel = (config.defaultModel ?? 'smart') as Model;
-  const defaultThinking = config.defaultThinking ?? 'low';
+  // `fast` по умолчанию: score-правка не требует глубоких рассуждений,
+  // а deepseek-flash без reasoning отвечает за ~1 с (замер 2026-11-02).
+  const defaultModel = (config.defaultModel ?? 'fast') as Model;
+  // `off` по умолчанию: reasoning выключен → первый токен за ~1 с.
+  const defaultThinking = config.defaultThinking ?? 'off';
 
   // Which provider the proxy routes to. The request body differs (see
   // `Upstream`), so the client must know — otherwise it sends MiniMax-only

@@ -6,11 +6,13 @@ import {
 import { SettingsIcon } from '~/presentation/icons';
 
 const THINKING_OPTIONS: ReadonlyArray<{ value: Thinking; label: string }> = [
+  // 2026-11-02: «выкл» теперь означает РЕАЛЬНОЕ отключение размышления
+  // (`reasoning_effort=none` → 0 символов reasoning, первый токен через
+  // ~1 с вместо 4.6-12.1 с). До этого DeepSeek игнорировал effort=off,
+  // и опция приходилось называть «минимум».
+  { value: 'off', label: 'выкл (быстрее)' },
   { value: 'low', label: 'мало' },
   { value: 'high', label: 'много' },
-  // 2026-10-26: не «выкл» — DeepSeek не умеет выключать reasoning
-  // (effort=off игнорируется). Это минимальный доступный уровень.
-  { value: 'off', label: 'минимум' },
 ];
 
 /**
