@@ -1,0 +1,284 @@
+---
+schema: math-coding/3.3
+id: wavecode-llm-latency-fast-path
+revision: 1
+state: active
+body_sha: "sha256:066effddf918a67b9b4c17e7acb48b9ec43c60de9c98bd0365de395b607895ab"
+yaml_sha: "sha256:066effddf918a67b9b4c17e7acb48b9ec43c60de9c98bd0365de395b607895ab"
+
+axiom_link:
+  - A0
+  - A3
+
+intent: |
+  2026-11-02 пользователь сообщил: «Ответ от нейросети идёт слишком долго —
+  что при распознании голоса, что при собственно получении кода». Подозрение
+  выдвинуто верное: выбранная модель размышляет, а время размышления видно
+  пользователю как пустой экран.
+
+  Замеры через llm.kosov.online (системный prompt wavecode — 4630 симв. —
+  плюс правка одного паттерна в score, streaming, 2026-11-02):
+
+    effort=high → первый видимый токен  7.35-11.23 с, reasoning 1417-2544 симв.
+    effort=low  → первый видимый токен  4.57-10.27 с, reasoning  732-1785 симв.
+    effort=none → первый видимый токен  1.07-1.44 с, reasoning     0 симв.  (3/3)
+
+  Три причины складывались в одну:
+
+  (1) Размышление невидимо. `LiveLLMClient` намеренно НЕ enqueue-ит
+      `delta.reasoning_content` в поток (`cleanLLMResponse` вычистит его
+      позже). Это правильно для транскрипта, но превращает время
+      размышления в пустой чат: пользователь смотрел в молчание 5-12 с.
+
+  (2) Голосовой путь был зашит на `smart`. `intentRouter` звал
+      `applyEditStream` с пустыми опциями, и тот уходил в свой дефолт
+      `smart` (deepseek-v4-pro) + `low`. Это худшая комбинация: тяжёлая
+      модель И размышление. Тир, выбранный пользователем, голос игнорировал
+      полностью.
+
+  (3) Настройка «выключить размышление» не выключала размышление. DeepSeek
+      игнорирует `effort=off` и `effort=minimal` — это было зафиксировано
+      2026-10-26 и считалось актуальным. Замер 2026-11-02 опроверг это:
+      `effort=none` РЕАЛЬНО отключает reasoning (0 символов, 3/3 прогона).
+      Старое поведение клиента отправляло `low` вместо «выключено», то
+      есть 4.6-12.1 с пустоты вместо 1.1 с.
+
+  Отдельно: кэш LiteLLM на диске не включает `extra_body` в ключ, поэтому
+  уровень размышления, посчитанный первым запросом, залипал на все
+  последующие запросы с тем же промптом и моделью на час (ttl 3600).
+
+commitment: |
+  (1) `thinking: 'off'` на профиле DeepSeek означает
+      `extra_body.reasoning_effort = 'none'` — реальное отключение
+      размышления, а не деградацию до 'low'. Подпись в UI: «выкл».
+
+  (2) Интерактивные дефолты: тир `fast` и размышление `off`. Историческая
+      комбинация v1 (`fast` + `low`), которую пользователь никогда не
+      выбирал руками, мигрирует на новый дефолт; явный выбор уважается.
+
+  (3) Голосовой маршрут использует тир, выбранный пользователем, и ВСЕГДА
+      идёт без размышления: голос — быстрый канал, а reasoning-токены
+      пользователю не видны.
+
+  (4) Ремонтный (self-heal) запрос всегда идёт без размышления: это
+      синтаксическая правка по уже известной причине, и размышление
+      добавило бы 5-12 с невидимого ожидания к каждому повтору.
+
+  (5) Запрос к LLM несёт AbortSignal: потолок 45 с на заголовки ответа и
+      30 с на «тишину» в теле SSE-потока. Прерывание Effect-волокна
+      (barge-in в голосовом сценарии) abort-ит HTTP-запрос, а не только
+      волокно.
+
+  (6) Уровень размышления кодируется в поле `user` тела запроса: ключ
+      диск-кэша LiteLLM включает `user`, но не включает `extra_body`, —
+      поэтому у каждого уровня своя запись кэша.
+
+  (7) Префикс промпта ограничен: история диалога — не больше 4 ходов и
+      не больше 4000 символов; при переполнении выкидываются самые старые
+      ходы, последний ход не трогается.
+
+counterexample: |
+  «Достаточно отправлять `reasoning_effort: 'low'` и не трогать больше
+  ничего — модель и так отвечает быстро».
+
+  Возражения: (а) замер 2026-11-02 на реальном промпте wavecode даёт
+  4.57-10.27 с до первого видимого токена на `low` против 1.07-1.44 с на
+  `none` — разница в 3-9 раз, и она вся в невидимой части ответа; (б)
+  голосовой путь при `low` остаётся на 4.6-12.1 с пустоты, то есть
+  исходная жалоба («долго при распознании голоса») не лечится вовсе;
+  (в) 217 предупреждений math-coding в этом репозитории — прямое
+  следствие того, что «достаточно поправить одну строку» оставляет
+  неучтёнными измеренные факты.
+
+  «Размышление нужно оставить включённым по умолчанию — оно улучшает
+  качество score-правок». Возражения: качество измерено — на восьми
+  типовых инструкциях («добавь бит», «сделай быстрее», «убери бас»,
+  «добавь хэт», «приглуши всё», «сделай мелодию выше на октаву», «добавь
+  фильтр на бас», «добавь синтезатор») и flash, и pro дали 0/8 нечитаемых
+  ответа без размышления. Размышление не купило ни одного разбора с
+  первого раза; оно купило 5-12 с ожидания.
+
+  «Просто показывать reasoning пользователю, чтобы он видел, что модель
+  думает». Возражения: (а) reasoning — это внутренний черновик модели, а
+  не ответ; показ черновика в UI score-редактора — это шум, который
+  конкурирует с самим score; (б) даже показ не убирает задержку: первый
+  токен ответа всё равно приходит после всего размышления.
+
+antithesis: |
+  «Размышление должно включаться автоматически для сложных инструкций —
+  тогда качество вырастет, а быстрый путь останется для простых». Отвергнуто:
+  сложность инструкции клиенту неизвестна (это свободный текст), а
+  авто-режим означает ровно то невидимое ожидание, на которое жалуются.
+  Порог «сложная инструкция» пришлось бы угадывать на стороне клиента;
+  явный выбор пользователя («Размышление: много») даёт ту же
+  управляемость без угадывания.
+
+  «Уровень размышления не должен влиять на кэш — иначе один и тот же
+  промпт будет давать разные ответы». Возражение-в-ответ: сейчас
+  влияет, и как раз неявно: ключ кэша игнорирует `extra_body`, поэтому
+  ответ, посчитанный с `high`, отдаётся как ответ на запрос с `none`.
+  Разделение по уровню делает кэш честным: одинаковый уровень → одинаковый
+  ответ, разный уровень → разные записи.
+
+scope:
+  paths:
+    - "ui/src/infrastructure/llm/LiveLLMClient.ts"
+    - "ui/src/infrastructure/llm/LiveLLMClient.test.ts"
+    - "ui/src/application/useCases/llmEdit.ts"
+    - "ui/src/application/useCases/llmEdit.test.ts"
+    - "ui/src/application/voice/intentRouter.ts"
+    - "ui/src/application/voice/intentRouter.test.ts"
+    - "ui/src/application/voice/VoiceAISession.ts"
+    - "ui/src/presentation/state/voiceAIStore.ts"
+    - "ui/src/presentation/state/llmSettings.ts"
+    - "ui/src/presentation/state/llmSettings.test.ts"
+    - "ui/src/presentation/components/LLMSettingsPopover.tsx"
+    - "decisions/wavecode-llm-latency-fast-path.yaml"
+    - "decisions/wavecode-deepseek-upstream-adaptation.yaml"
+  exclusions:
+    - "ui/node_modules/**"
+    - "ui/dist/**"
+    - "ui/src/domain/**"
+
+outcomes:
+  - id: first-visible-token-within-two-seconds
+    statement: |
+      На типовой правке score (системный prompt wavecode + один паттерн)
+      первый видимый токен ответа приезжает за ≤ 2 с на обоих тирах:
+      `fast` — 0.97 с в среднем, `smart` — 1.19 с в среднем (замер
+      2026-11-02, 8 инструкций на тир). До правки `smart` давал 4.6-12.1 с.
+  - id: voice-route-honours-user-tier
+    statement: |
+      Голосовой маршрут отправляет в LLM тир, выбранный пользователем в
+      настройках ИИ, и `thinking: 'off'` — независимо от настройки
+      размышления.
+  - id: reasoning-off-really-disables-reasoning
+    statement: |
+      При `thinking: 'off'` тело запроса содержит
+      `extra_body.reasoning_effort = 'none'`, и поток не содержит ни одного
+      символа `reasoning_content`.
+  - id: self-heal-retry-costs-one-fast-round-trip
+    statement: |
+      Ремонтный запрос отправляется с `thinking: 'off'` даже если первая
+      попытка была с `high`.
+  - id: hung-upstream-cannot-hang-the-ui
+    statement: |
+      Запрос к LLM уходит с `signal: AbortSignal`; прерывание волокна
+      abort-ит HTTP-запрос; потолок на заголовки — 45 с, на «тишину» в
+      теле потока — 30 с.
+  - id: cache-key-separates-reasoning-levels
+    statement: |
+      Поле `user` тела запроса содержит уровень размышления
+      (`wavecode-effort-none|low|high`), поэтому ключ диск-кэша LiteLLM
+      различает уровни.
+  - id: prompt-prefix-is-bounded
+    statement: |
+      История диалога, уходящая провайдеру, — не больше 4 ходов и не
+      больше 4000 символов; последний ход сохраняется всегда.
+  - id: precommit-green
+    statement: |
+      `cd ui && npm run test:precommit` (tsc strict + vitest +
+      lint:no-console + validate:presets) завершается exit 0.
+  - id: mathc-validate-clean
+    statement: |
+      `mathc validate decisions/wavecode-llm-latency-fast-path.yaml`
+      завершается exit 0 без `MC-*` reject-диагностик.
+
+obligations:
+  - id: off-maps-to-reasoning-none
+    claim: |
+      В теле запроса при `thinking: 'off'` поле `extra_body` равно
+      `{ reasoning_effort: 'none' }`, а не `{ reasoning_effort: 'low' }`.
+    acceptance:
+      all:
+        - verifier: tests/infrastructure/llm/LiveLLMClient.test.ts
+  - id: effort-level-is-part-of-the-cache-key
+    claim: |
+      Поле `user` тела запроса равно `wavecode-effort-none|low|high` в
+      зависимости от уровня размышления.
+    acceptance:
+      all:
+        - verifier: tests/infrastructure/llm/LiveLLMClient.test.ts
+  - id: request-carries-an-abort-signal
+    claim: |
+      Вызов `fetch` в `LiveLLMClient` передаёт `signal`, а прерывание
+      волокна abort-ит запрос.
+    acceptance:
+      all:
+        - verifier: tests/infrastructure/llm/LiveLLMClient.test.ts
+  - id: interactive-defaults-are-fast-and-unreasoned
+    claim: |
+      `DEFAULT_MODEL` = 'fast', `DEFAULT_THINKING` = 'off', и вызов
+      `applyEditStream` без явных опций уходит с ними.
+    acceptance:
+      all:
+        - verifier: tests/application/useCases/llmEdit.test.ts
+  - id: self-heal-retry-disables-reasoning
+    claim: |
+      Второй запрос `applyEditStream` (self-heal) несёт
+      `thinking: 'off'` независимо от уровня первой попытки.
+    acceptance:
+      all:
+        - verifier: tests/application/useCases/llmEdit.test.ts
+  - id: history-is-bounded
+    claim: |
+      `trimHistory` держит не больше `MAX_HISTORY_TURNS` ходов и не
+      больше `MAX_HISTORY_CHARS` символов, сохраняя последний ход.
+    acceptance:
+      all:
+        - verifier: tests/application/useCases/llmEdit.test.ts
+  - id: voice-route-uses-user-tier-without-reasoning
+    claim: |
+      `routeIntent` отправляет тир из `RouterContext.model` и всегда
+      `thinking: 'off'`.
+    acceptance:
+      all:
+        - verifier: tests/application/voice/intentRouter.test.ts
+  - id: settings-default-and-labels-match-reality
+    claim: |
+      Дефолт настроек ИИ — `{ model: 'fast', thinking: 'off' }`,
+      `thinkingLabel('off')` = 'выкл', а непрочитанная комбинация v1
+      мигрирует на новый дефолт.
+    acceptance:
+      all:
+        - verifier: tests/presentation/state/llmSettings.test.ts
+  - id: typecheck-lint-green
+    claim: |
+      `npm run typecheck`, `npm run lint:no-console` и
+      `npm run validate:presets` завершаются exit 0.
+    acceptance:
+      all:
+        - verifier: text-scan-ui-precommit-green
+  - id: mathc-validate-clean
+    claim: |
+      `mathc validate decisions/wavecode-llm-latency-fast-path.yaml`
+      завершается exit 0 без `MC-*` reject-диагностик.
+    acceptance:
+      all:
+        - verifier: mathc validate
+
+risk:
+  declared_triggers:
+    - deepseek-stops-honouring-extra_body-reasoning_effort-none
+    - the-proxy-cache-key-starts-including-extra_body-and-the-user-field-becomes-redundant
+    - deepseek-flash-degrades-on-score-edits-and-the-self-heal-rate-rises
+    - the-proxy-rejects-the-user-field-as-an-unknown-parameter
+    - a-user-explicitly-chose-thinking-high-and-complains-that-the-voice-path-ignores-it
+    - the-whisper-relay-on-angara-1-stops-keeping-up-and-the-stt-leg-becomes-the-bottleneck
+  owner: human:operator
+
+reversal:
+  - signal: deepseek-stops-honouring-reasoning_effort-none
+    action: rework
+  - signal: the-proxy-rejects-the-user-field
+    action: rework
+  - signal: users-report-worse-score-quality-with-reasoning-off
+    action: rework
+  - signal: the-stt-leg-becomes-the-dominant-latency-and-the-llm-leg-is-already-fast
+    action: review
+
+relations:
+  refines:
+    - wavecode-deepseek-upstream-adaptation@1
+  addresses:
+    - wavecode-ai-streaming-and-self-heal@1
