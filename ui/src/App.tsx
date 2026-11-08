@@ -21,9 +21,7 @@ import { DisclaimerGate } from './presentation/components/DisclaimerGate';
 import { useConsentGate } from './presentation/state/consentGate';
 import { VoiceFAB } from './presentation/components/VoiceFAB';
 import { initVoiceAI } from './presentation/state/voiceAIStore';
-import { initWhistle } from './presentation/state/whistleStore';
 import { selectSttLayer } from './infrastructure/stt/selectSttLayer';
-import { AppLayer } from './infrastructure/composition';
 
 export function App(): JSX.Element {
   const route = useHashRoute();
@@ -59,7 +57,6 @@ function AppShell(): JSX.Element {
   // selectSttLayer.ts for the decision table and the
   // VITE_STT_BACKEND override.
   initVoiceAI({ sttLayer: selectSttLayer() });
-  initWhistle({ audioLayer: AppLayer });
 
   const undo = (): void => { void stopAudio(); dispatch({ type: 'undoScore' }); };
   const redo = (): void => { void stopAudio(); dispatch({ type: 'redoScore' }); };

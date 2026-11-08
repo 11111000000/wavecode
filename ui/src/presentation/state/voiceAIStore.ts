@@ -29,7 +29,7 @@
  * Mic channel policy: voice-AI uses `speech-api-internal` (Chrome
  * shares its internal pipeline with our AudioContext). When the
  * resolved STT engine is the server relay — it opens the mic itself
- * — voice-AI additionally claims `mic-direct`, so the whistle cannot
+ * — voice-AI additionally claims `mic-direct`, so the Mic sheet cannot
  * grab the same device mid-dictation. The mutex still tracks the
  * session so future mic-direct paths re-use the single-slot rule.
  * See `decisions/wavecode-voice-fab.yaml` outcome
@@ -167,8 +167,7 @@ export const [voiceAIElapsedSec, setVoiceAIElapsedSec] = createSignal<number>(0)
  * a sign the field does not belong to the machine. The reducer keeps
  * `review.editedText` as the record of what the RECOGNISER produced;
  * this signal is what the USER has, and it survives every transition
- * — including the panel being hidden by the whistle mode and coming
- * back.
+ * — including the dock being hidden and coming back.
  *
  * `voiceAIDraftDirty` is the hinge: while it is false the buffer
  * mirrors the transcript (the recogniser owns the text), and once the
@@ -194,10 +193,9 @@ export const clearVoiceAIDraft = (): void => {
 };
 
 /**
- * The text the user asked to send while the take was still in
- * flight.
+ * The user asked to send, and the take was still in flight.
  *
- * Why the send can be parked
+ * Why the send can be queued
  * --------------------------
  * «→ В ИИ» was enabled whenever the composer held text, but the
  * orchestrator only routed a send from `review` / `sent`
@@ -208,12 +206,16 @@ export const clearVoiceAIDraft = (): void => {
  *
  * The fix is not to disable the button (the user pressed it with a
  * text in hand and a reason) but to HONOUR the press: the request
- * is parked here, the take is stopped, and the moment the transcript
- * lands in `review` the parked text goes to the LLM.
+ * is queued here, the take is stopped, and the moment the transcript
+ * lands in `review` the composer goes to the LLM.
+ *
+ * A FLAG, not the text. The text at press time is whatever interim
+ * had arrived; the final transcript is strictly better and lands
+ * later. Parking the text would send the worse version.
  */
-export const [voiceAIPendingSend, setVoiceAIPendingSend] = createSignal<
-  string | null
->(null);
+export const [voiceAISendQueued, setVoiceAISendQueued] = createSignal<boolean>(
+  false,
+);
 
 /**
  * Mirror the recogniser's text into the buffer — but only while the
@@ -500,7 +502,7 @@ export const initVoiceAI = (deps: {
     // through `audio.eval` but cannot reach the app store on its own
     // (`application/` must not import `presentation/`), so the
     // dispatch is injected here — the same `replaceScore` call
-    // `AIEditPanel`, `micStore`, `whistleStore` and `pianoRecStore`
+    // `AIEditPanel`, `micStore` and `pianoRecStore`
     // already make. Without it the voice path played the new pattern
     // and left the editor buffer untouched, which the user reported
     // as "the LLM failed to parse it".
@@ -561,23 +563,6 @@ const publishState = (s: VoiceSessionState): void => {
   // transcript landed (`review`) or the take was abandoned
   // (`errored` / `idle`).
   if (s.tag !== 'listening') setVoiceAIFlushing(false);
-  // A take that reaches `review` by itself — the 1.3 s silence flush,
-  // or the 100 s hard cap — never goes through `stopVoiceAI`, so
-  // nothing released the mic claims. The engine has stopped by this
-  // point (`subscribeLoop` calls `stt.stop()` on the way to review),
-  // so holding `mic-direct` keeps the device locked for nothing and
-  // blocks the whistle button.
-  if (s.tag === 'review') {
-    releaseOwnChannels();
-    // The user pressed «→ В ИИ» while the take was still in flight.
-    // The request was parked; now that the transcript is on screen
-    // it can go. Without this the button was a silent no-op.
-    const pending = voiceAIPendingSend();
-    if (pending !== null && handle !== null) {
-      setVoiceAIPendingSend(null);
-      void Effect.runPromise(handle.sendReview(pending));
-    }
-  }
   if (
     s.tag === 'listening'
     || s.tag === 'transcribing'
@@ -590,6 +575,29 @@ const publishState = (s: VoiceSessionState): void => {
   ) {
     setVoiceAITranscript(s.transcript);
     syncDraftFromTranscript(s.transcript);
+  }
+  if (s.tag === 'review') {
+    // A take that reaches `review` by itself — the 1.3 s silence flush,
+    // or the 100 s hard cap — never goes through `stopVoiceAI`, so
+    // nothing released the mic claims. The engine has stopped by this
+    // point (`subscribeLoop` calls `stt.stop()` on the way to review),
+    // so holding `mic-direct` keeps the device locked for nothing and
+    // blocks the other mic modes.
+    releaseOwnChannels();
+    // The user pressed «→ В ИИ» while the take was still in flight.
+    // The request was queued; now that the transcript is on screen it
+    // can go. Without this the button was a silent no-op.
+    //
+    // It runs AFTER the draft sync above on purpose: the final
+    // transcript has just landed in the composer, and THAT is what
+    // should reach the LLM — not the interim the user pressed send on.
+    if (voiceAISendQueued() && handle !== null) {
+      setVoiceAISendQueued(false);
+      const text = voiceAIDraft().trim();
+      if (text.length > 0) {
+        void Effect.runPromise(handle.sendReview(text));
+      }
+    }
   }
   if (s.tag === 'errored') {
     setVoiceAIError({ kind: pendingErrorKind, message: s.error });
@@ -724,7 +732,7 @@ const sttFailureMessage = (err: {
  *      owner. Failure surfaces as `MicBusyError`.
  *   2. If the resolved STT engine is the server relay, also claim
  *      `mic-direct`: that engine calls `getUserMedia` itself, so
- *      without the second claim the whistle could open the same
+ *      without the second claim the Mic sheet could open the same
  *      device mid-dictation. This is the case `decisions/
  *      wavecode-voice-fab` deferred to "when voice-AI is
  *      mic-direct" (outcome `mic-mutex-correct`); Chrome keeps the
@@ -963,7 +971,7 @@ export const dismissVoiceAI = (): Effect.Effect<void, never, never> =>
       setVoiceAIFlushing(false);
       setVoiceAITranscript(initialTranscriptState(langAtInit));
       setVoiceAIError(null);
-      setVoiceAIPendingSend(null);
+      setVoiceAISendQueued(false);
       // The session is over: the buffer goes with it. A new take
       // starts from an empty composer (see `startVoiceAI`).
       setVoiceAIDraft('');
@@ -1039,11 +1047,11 @@ export const sendVoiceAIReview = (text: string): Effect.Effect<void, never, neve
       return;
     }
     if (tag === 'arming' || tag === 'listening' || tag === 'transcribing') {
-      setVoiceAIPendingSend(text);
+      setVoiceAISendQueued(true);
       if (tag === 'arming' || tag === 'listening') {
         // Stop the take so the recogniser actually flushes it. The
         // flush is a network round trip and the caller has no reason
-        // to wait for it — the parked send fires from `publishState`
+        // to wait for it — the queued send fires from `publishState`
         // when the transcript lands.
         void Effect.runPromise(stopVoiceAI());
       }
@@ -1148,6 +1156,7 @@ export const __resetVoiceAIForTests = (): void => {
   setVoiceAISupported(true);
   setVoiceAIDraft('');
   setVoiceAIDraftDirty(false);
+  setVoiceAISendQueued(false);
 };
 
 onCleanup(() => {

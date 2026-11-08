@@ -7,7 +7,6 @@ import {
   startVoiceAI,
   stopVoiceAI,
   cancelVoiceAIInFlight,
-  voiceAIDraft,
   voiceAIFlushing,
 } from '../state/voiceAIStore';
 import { MicIcon } from '../icons';
@@ -195,18 +194,6 @@ export function VoiceAIMiniFAB(props: Props): JSX.Element {
       : 'Голос → ИИ (нажми, чтобы записать; нажми ещё раз, чтобы остановить)';
   };
 
-  const hintText = (): string => {
-    if (phase() === 'recording') return 'Слушаю…';
-    if (phase() === 'busy') return 'Распознаю…';
-    return voiceAIDraft() || '…';
-  };
-
-  const showHint = (): boolean => {
-    const p = phase();
-    if (p === 'recording' || p === 'busy') return true;
-    return voiceAIDraft().trim().length > 0;
-  };
-
   return (
     <button
       type="button"
@@ -226,17 +213,12 @@ export function VoiceAIMiniFAB(props: Props): JSX.Element {
       >
         {/* While recording the button IS the REC button: the mic
          * glyph is replaced by the blinking dot, so the state is
-         * readable at a glance and not only from the panel. */}
+         * readable at a glance and not only from the dock. */}
         <span class="voice-mini-fab__rec-dot" aria-hidden="true" />
       </Show>
       <span class="voice-mini-fab__label" aria-hidden="true">
         {isRecording() ? 'REC' : 'Голос'}
       </span>
-      <Show when={showHint()}>
-        <span class="voice-mini-fab__hint" aria-hidden="true">
-          {hintText()}
-        </span>
-      </Show>
       <Show when={isPermissionBlocked()}>
         <span class="voice-mini-fab__badge" aria-hidden="true" title="Браузер блокирует микрофон">
           !

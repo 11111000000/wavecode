@@ -174,18 +174,22 @@
 
   /* ── VOICE FAB CLUSTER GEOMETRY ──────────────────────────────────
    *  wavecode-voice-ux-fixes. `.voice-fab-group` (components.css) is
-   *  a fixed bottom-right column holding two 56px mini-FABs with an
+   *  a fixed bottom-right column holding the voice button(s) with an
    *  8px gap, padded off the TabBar by --space-lg + --safe-bottom.
    *
-   *  These tokens exist so the floating voice panels can anchor to the
+   *  These tokens exist so the floating voice dock can anchor to the
    *  cluster instead of guessing a pixel offset. They previously
    *  hardcoded `calc(var(--tabbar-h) + 240px + var(--safe-bottom))`,
    *  which overshot the real cluster height by ~44px and — on short
    *  viewports — pushed the panel up under `.app-transport-bar`
    *  (z-index z-sheet+12 vs the panel's z-sheet+4), so the transport
-   *  bar swallowed every click meant for the panel's own buttons. */
+   *  bar swallowed every click meant for the panel's own buttons.
+   *
+   *  ONE button now: the whistle path is the Mic bottom sheet, so
+   *  the cluster is a single 56px circle and the dock sits one
+   *  button-height lower than it used to. */
   --voice-mini-fab-size: 56px;
-  --voice-fab-stack-h: calc(2 * var(--voice-mini-fab-size) + var(--space-sm));
+  --voice-fab-stack-h: var(--voice-mini-fab-size);
   /* Distance from the viewport bottom to the TOP of the FAB cluster —
    *  i.e. the `bottom` offset a panel needs to sit exactly on it. */
   --voice-fab-cluster-h: calc(
