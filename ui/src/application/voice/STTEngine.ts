@@ -1,6 +1,6 @@
 /**
  * STTEngine — application-layer service tag for speech-to-text
- * implementations (WebSpeechSTT today; WhisperSTTStub tomorrow).
+ * implementations (WebSpeechSTT today; the server relay tomorrow).
  *
  * The interface is intentionally narrow: capability check, start a
  * stream of transcript chunks, stop. Streaming is exposed via
