@@ -1,0 +1,373 @@
+---
+schema: math-coding/3.3
+id: wavecode-voice-minimal-dock
+revision: 1
+state: active
+body_sha: "sha256:7fd47880aa30046df68e93eb34c04ac3b3241d443ebbb7735d281c0be3b96ef5"
+yaml_sha: "sha256:7fd47880aa30046df68e93eb34c04ac3b3241d443ebbb7735d281c0be3b96ef5"
+
+intent: |
+  Голосовой ввод был размазан по ЧЕТЫРЁМ поверхностям, и три из них
+  жили одновременно:
+
+  1. `VoiceAIMiniFAB` — плавающая кнопка «Голос» (голос → ИИ).
+  2. `WhistleMiniFAB` — вторая плавающая кнопка «Свист» (микрофон →
+     ноты), ровно под первой.
+  3. `RecordingPanel` — плавающая панель, у которой были СВОЯ шапка
+     (иконка микрофона, заголовок «Голос», пилюля «⚠ ошибка») и
+     СВОЯ красная кнопка ●REC — второй красный круг на экране,
+     означающий ровно то же, что и кнопка рядом.
+  4. `MicPanel` — bottom sheet «Mic», который делал работу свиста
+     ЛУЧШЕ: там были выбор инструмента, выбор слота («в конец» /
+     «под курсор»), живой piano-roll и превью. `WhistleBody` был
+     урезанной копией без слота и без превью.
+
+  И при этом голосовой ввод ощущался не «некрасивым», а «сломанным».
+  Три бага были найдены разбором кода, и все три — про ложь
+  интерфейса, а не про эстетику:
+
+  - «→ В ИИ» был ENABLED всякий раз, когда в поле лежал текст, но
+    оркестратор принимал отправку только из `review` / `sent`
+    (`VoiceAISession.runRouteFromReview`). Нажатие во время записи
+    делало РОВНО НИЧЕГО: ни ошибки, ни тоста, ни смены состояния.
+    Кнопка выглядела живой и была мёртвой — худшее из возможных
+    сочетаний.
+  - Мини-FAB определял «браузер заблокировал микрофон» regex-ом по
+    ТЕКСТУ ошибки (`/permission|NotAllowed|microphone.*block/i`),
+    а все пользовательские сообщения в приложении — на русском.
+    Regex не мог сработать никогда: бейдж «!», ради которого он и
+    существовал, не мог появиться.
+  - Микрофон оставался «занятым» ещё до минуты после остановки:
+    `releaseMic` вызывался ПОСЛЕ `handle.stop()`, а тот ждёт весь
+    round trip реле (16-32 с замерено). Устройство физически было
+    свободно — занято было только учётное состояние.
+
+  Решение: ОДНА плавающая кнопка и ОДИН док-бар. Никакой second
+  way сделать то же самое, никаких анимаций-украшений, и ни одного
+  места, где интерфейс говорит пользователю неправду.
+
+commitment: |
+  1. Во всём приложении ровно ОДНА плавающая кнопка голосового
+     ввода (`.voice-mini-fab`). Путь «микрофон → ноты в score» —
+     это bottom sheet «Mic»; отдельной кнопки «Свист» не
+     существует, подсистема свиста удалена.
+  2. Голосовой док — ровно ТРИ строки: строка статуса, композер
+     (текстовое поле), одно действие. Ни шапки, ни собственной
+     кнопки записи, ни кнопки «Очистить текст».
+  3. Композер присутствует и редактируем в каждом активном
+     состоянии FSM (наследует контракт
+     `wavecode-voice-composer-ux`).
+  4. Строка статуса говорит ровно одну фразу на состояние FSM.
+  5. Нажатие «→ В ИИ» НИКОГДА не является молчаливым no-op: либо
+     отправка уходит, либо запрос ставится в очередь и уходит при
+     появлении транскрипта, либо кнопки нет.
+  6. Вид отказа переносится как ДАННЫЕ (`VoiceAIError.kind`), а не
+     как проза: бейдж «!» на кнопке может сработать.
+  7. Микрофон освобождается в момент окончания ЗАПИСИ, а не когда
+     распознаватель ответит.
+  8. В голосовом кластере нет бесконечных pulse-анимаций.
+     Мигающая точка REC — единственная, и она несёт смысл.
+
+scope:
+  paths:
+    - "ui/src/presentation/components/VoiceFAB.tsx"
+    - "ui/src/presentation/components/VoiceFAB.test.tsx"
+    - "ui/src/presentation/components/VoiceAIMiniFAB.tsx"
+    - "ui/src/presentation/components/VoiceAIMiniFAB.test.tsx"
+    - "ui/src/presentation/components/RecordingPanel.tsx"
+    - "ui/src/presentation/components/RecordingPanel.test.tsx"
+    - "ui/src/presentation/state/voiceAIStore.ts"
+    - "ui/src/presentation/state/voiceAIStore.test.ts"
+    - "ui/src/presentation/state/whistleStore.ts"
+    - "ui/src/presentation/components/WhistleMiniFAB.tsx"
+    - "ui/src/application/voice/VoiceAISession.ts"
+    - "ui/src/application/voice/WhistleSession.ts"
+    - "ui/src/domain/audio/whistleSession.ts"
+    - "ui/src/domain/audio/MicChannel.ts"
+    - "ui/src/presentation/icons/index.tsx"
+    - "ui/src/App.tsx"
+    - "ui/src/styles/components.css"
+    - "ui/src/styles/tokens.css"
+    - "scripts/verify/voice-cluster-tests.sh"
+    - "scripts/verify/voice-store-tests.sh"
+    - "scripts/verify/voice-cluster-shape.sh"
+    - "scripts/verify/ui-gate.sh"
+  exclusions:
+    - "ui/node_modules/**"
+    - "ui/dist/**"
+    - "ui/src/infrastructure/stt/ServerWhisperSTT.ts"
+    - "ui/src/infrastructure/audio/**"
+
+outcomes:
+  - id: wavecode-voice-minimal-dock-outcome-one-control
+    statement: |
+      В `#/app` плавает ровно одна кнопка голосового ввода; путь
+      «микрофон → ноты» открывается через Mic-шит (таб «mic»
+      нижней панели).
+  - id: wavecode-voice-minimal-dock-outcome-three-row-dock
+    statement: |
+      Голосовой док имеет три строки — статус, композер, одно
+      действие — и не содержит шапки, кнопки ●REC и кнопки
+      «Очистить текст».
+  - id: wavecode-voice-minimal-dock-outcome-send-is-never-a-no-op
+    statement: |
+      Нажатие «→ В ИИ» во время записи останавливает take и
+      отправляет транскрипт, как только он появляется; кнопка не
+      может быть нажата «в никуда».
+  - id: wavecode-voice-minimal-dock-outcome-failure-is-data
+    statement: |
+      Отказ классифицируется на месте возникновения и доезжает до
+      UI как `VoiceAIError.kind`; бейдж «!» заблокированного
+      микрофона срабатывает.
+  - id: wavecode-voice-minimal-dock-outcome-mic-freed-at-capture-close
+    statement: |
+      После остановки записи микрофон свободен немедленно, а не
+      через 16-32 с ожидания ответа распознавателя.
+  - id: wavecode-voice-minimal-dock-outcome-quiet-cluster
+    statement: |
+      В голосовом кластере нет бесконечных анимаций: цвет кнопки
+      и строка статуса несут состояние, мигает только точка REC.
+
+obligations:
+  - id: one-floating-voice-control
+    claim: |
+      `VoiceFAB.test.tsx` утверждает, что в кластере ровно ОДИН
+      `.voice-mini-fab`, что это `.voice-mini-fab--ai` и что
+      `.voice-mini-fab--whistle` отсутствует.
+    acceptance:
+      all:
+        - verifier: scripts/verify/voice-cluster-tests.sh
+  - id: dock-has-three-rows
+    claim: |
+      `RecordingPanel.test.tsx` утверждает, что у дока нет
+      `.voice-recording-panel__head`, нет
+      `.voice-recording-panel__rec` и нет
+      `.voice-recording-panel__btn--clear` — то есть ни шапки, ни
+      второй кнопки записи, ни текстовой кнопки.
+    acceptance:
+      all:
+        - verifier: scripts/verify/voice-cluster-tests.sh
+  - id: composer-present-in-every-state
+    claim: |
+      Параметризованный тест `RecordingPanel.test.tsx` проверяет
+      наличие `.voice-recording-panel__review-textarea` без
+      `readonly`/`disabled` в восьми состояниях FSM.
+    acceptance:
+      all:
+        - verifier: scripts/verify/voice-cluster-tests.sh
+  - id: status-phrase-per-state
+    claim: |
+      `RecordingPanel.test.tsx` проверяет фразу статусной строки в
+      каждом состоянии (`arming` → «Готовлю микрофон…», `listening` →
+      «Записываю», `review` → «Текст готов», `requesting` →
+      «Отправляю», `applying` → «Применяю», `sent` → «Правка
+      применена») и наличие спиннера только в «ждущих» состояниях.
+    acceptance:
+      all:
+        - verifier: scripts/verify/voice-cluster-tests.sh
+  - id: send-queue-is-not-a-no-op
+    claim: |
+      `voiceAIStore.test.ts` (REGRESSION) утверждает, что отправка
+      во время take ставится в очередь и уходит, когда транскрипт
+      приходит в `review`.
+    acceptance:
+      all:
+        - verifier: scripts/verify/voice-store-tests.sh
+  - id: failure-kind-is-data
+    claim: |
+      `voiceAIStore.test.ts` (REGRESSION) утверждает, что отказ
+      `permission-denied` даёт `voiceAIError()?.kind === 'permission'`
+      и человекочитаемое сообщение.
+    acceptance:
+      all:
+        - verifier: scripts/verify/voice-store-tests.sh
+  - id: mic-released-at-capture-close
+    claim: |
+      `voiceAIStore.test.ts` (REGRESSION) утверждает, что канал
+      микрофона освобождён, пока round trip распознавателя ещё не
+      завершился.
+    acceptance:
+      all:
+        - verifier: scripts/verify/voice-store-tests.sh
+  - id: composer-survives-an-empty-transcript
+    claim: |
+      `voiceAIStore.test.ts` (REGRESSION) утверждает, что ошибка с
+      пустым транскриптом не стирает текст, который надиктовал
+      пользователь.
+    acceptance:
+      all:
+        - verifier: scripts/verify/voice-store-tests.sh
+  - id: toggle-replaces-hold
+    claim: |
+      `VoiceAIMiniFAB.tsx` не содержит обработчиков
+      `onPointerUp` / `onPointerLeave`, завершающих take: запись
+      живёт дольше пальца.
+    acceptance:
+      all:
+        - verifier: shell-grep-absent ui/src/presentation/components/VoiceAIMiniFAB.tsx onPointerUp
+  - id: rec-state-is-published
+    claim: |
+      Кнопка публикует `data-rec-state` («on» во время записи) и
+      рендерит `.voice-mini-fab__rec-dot`; в CSS есть правило
+      `.voice-mini-fab[data-rec-state='on']`.
+    acceptance:
+      all:
+        - verifier: shell-grep ui/src/presentation/components/VoiceAIMiniFAB.tsx voice-mini-fab__rec-dot
+  - id: panel-css-has-no-magic-offset
+    claim: |
+      В `ui/src/styles/components.css` нет ни одного
+      `calc(var(--tabbar-h) + <число>px` для `.voice-recording-panel`
+      — док использует `var(--voice-fab-cluster-h)`.
+    acceptance:
+      all:
+        - verifier: scripts/verify/voice-cluster-shape.sh
+  - id: panel-ceiling-cascade-correct
+    claim: |
+      Мобильное переопределение `--voice-panel-max-h`
+      (`@media (max-width: 720px)`) объявлено в `tokens.css`, то
+      есть в том же `@layer tokens`, что и базовое значение.
+    acceptance:
+      all:
+        - verifier: shell-grep ui/src/styles/tokens.css max-width: 720px
+  - id: no-pulse-keyframes-in-voice-cluster
+    claim: |
+      В голосовом блоке `ui/src/styles/components.css` нет
+      keyframes pulse для кнопки или дока: остались только
+      `voice-mini-fab-rec-blink` (точка REC), спиннер дока и
+      появление дока.
+    acceptance:
+      all:
+        - verifier: shell-grep-absent ui/src/styles/components.css voice-mini-fab-pulse
+  - id: no-dead-recording-subsystems
+    claim: |
+      В дереве нет `RecordButton.tsx`, `LoopRecorderPanel.tsx`,
+      `recorderStore.ts`, `WhisperSTTStub.ts` и
+      `WakeWordDetector.ts` — ни один из них не был смонтирован.
+    acceptance:
+      all:
+        - verifier: scripts/verify/voice-cluster-shape.sh
+  - id: typecheck-and-tests-green
+    claim: |
+      `npm --dir ui run typecheck` и `npm --dir ui exec vitest run`
+      завершаются exit 0.
+    acceptance:
+      all:
+        - verifier: scripts/verify/ui-gate.sh
+        - verifier: scripts/verify/ui-gate.sh
+  - id: mathc-validate-clean
+    claim: |
+      `mathc validate decisions/wavecode-voice-minimal-dock.yaml`
+      завершается exit 0 без `MC-*` reject-диагностик.
+    acceptance:
+      all:
+        - verifier: mathc validate decisions/wavecode-voice-minimal-dock.yaml
+
+axiom_link:
+  - A0
+  - A3
+
+counterexample: |
+  Самое сильное возражение — к свисту.
+
+  Свист был ОДНИМ ТАПОМ: нажал кнопку → свистишь → ноты появляются
+  → «Применить». Mic-шит — это ЧЕТЫРЕ шага: открыть шит → START →
+  свистишь → «Add to score». Для человека, который свистит по
+  десять раз в день, это минус два тапа на каждый свист, и он
+  теперь в приложении, которое «про то, чтобы быстро записать
+  мелодию».
+
+  Возражение в свою защиту: Mic-шит даёт то, чего свист-кнопка не
+  давала вообще — выбор слота (вставить в конец или под курсор),
+  живой piano-roll с превью и превью-прослушивание. Свист-кнопка
+  вставляла ноты одним способом и без прослушивания. То есть мы
+  не «отняли» у пользователя быстрый свист, мы заменили кнопку на
+  шит, который умеет больше, — но за два лишних тапа.
+
+  Второе возражение: кнопка «Очистить текст» была удалена, потому
+  что textarea умеет select-all-delete. Для того, кто надиктовал
+  фразу и хочет начать заново, это лишние два нажатия. Ответ: в
+  голосовом доке осталось одно текстовое действие, и добавление
+  второго рядом с ним делало ряд из двух кнопок, где одна — копия
+  встроенного поведения textarea.
+
+antithesis: |
+  (1) «Один тап на свист важнее единой кнопки».
+  Возражение: единая кнопка — это про ВОСПРИНИМАЕМОСТЬ, а не про
+  скорость. Две плавающие кнопки микрофона означали, что перед
+  пользователем стоит вопрос «какая из них моя?» — и он решался
+  каждый раз, до того как что-то заработает. Свист как ОТДЕЛЬНАЯ
+  кнопка оправдан только если он отдельный сценарий; он не
+  отдельный, он подмножество Mic-шита.
+
+  (2) «Убрать pulse-анимации — это ухудшение UX».
+  Возражение: pulse на кнопке не сообщал НИЧЕГО, чего не сообщал бы
+  её цвет и строка статуса. Мигающая точка REC — осталась, потому
+  что она единственная несёт смысл «микрофон открыт прямо сейчас».
+  Это ровно тот же аргумент, что в
+  `wavecode-ui-minimal-pass-phase-2`, только применённый к
+  голосу.
+
+  (3) «Очередь отправки отправит не тот текст».
+  Возражение: да, и это намеренно. Пользователь нажал «→ В ИИ»,
+  когда в поле лежал interim; final-транскрипт приходит позже и
+  он лучше. Очередь хранит ФЛАГ, а не текст, и отправляет то, что
+  лежит в поле в момент появления транскрипта. Если пользователь
+  правил текст вручную — правил он, и уйдёт его версия (dirty-флаг
+  не даёт распознавателю её перезаписать).
+
+  (4) «Нет кнопки «Очистить» — это шаг назад для тех, кто
+  надиктовал лишнее».
+  Возражение: выделить и удалить в textarea — два нажатия на
+  клавиатуре, которые работают везде; кнопка была третьим текстовым
+  действием в доке, где текст — единственная настоящая работа.
+
+assumptions:
+  - id: mic-sheet-covers-whistle-capability
+    state: proven
+    statement: |
+      Mic-шит (`MicPanel.tsx` + `micStore`) реализует тот же
+      микрофон → ноты путь, что и удалённая свист-подсистема: тот
+      же `MicCapture`/YIN-детектор, тот же превью-буфер
+      `micPreviewNotes`. Дополнительно у Mic-шита есть выбор
+      слота и piano-roll, которых у свиста не было.
+    owner: human:operator
+  - id: relay-round-trip-stays-in-range
+    state: assumed
+    statement: |
+      Round trip серверного whisper-реле остаётся в диапазоне
+      16-32 с. Если он станет заметно быстрее, тексты дока («Распознаю…»)
+      надо будет переписать — они написаны под текущую задержку.
+    owner: human:operator
+
+risk:
+  declared_triggers:
+    - the-whistle-flow-lost-two-taps-and-users-who-whistle-a-lot-complain
+    - the-send-queue-sends-the-final-transcript-where-the-user-wanted-the-interim
+    - removing-the-clear-button-costs-a-keystroke-for-users-who-mishear-a-phrase
+    - the-mic-sheet-becomes-the-only-mic-entry-and-the-tab-bar-crowds
+    - the-dock-overlaps-the-transport-bar-again-if-the-fab-cluster-height-changes
+  owner: human:operator
+
+reversal:
+  - signal: users-who-whistle-report-that-the-mic-sheet-is-slower-than-the-old-button
+    action: rework
+    note: |
+      Тогда вернуть ОДИН тап: кнопка микрофона в Mic-шите, которая
+      стартует запись сразу, без открытия шита.
+  - signal: the-send-queue-is-reported-as-sending-the-wrong-text
+    action: rework
+  - signal: the-dock-overlaps-the-transport-bar-on-a-short-viewport
+    action: halt
+
+relations:
+  supersedes:
+    - wavecode-voice-fab-toggle-rec@1
+    - wavecode-voice-ux-fixes@1
+  refines:
+    - wavecode-voice-composer-ux@1
+    - wavecode-voice-confirm-before-send@1
+    - wavecode-voice-second-take-sendable@1
+    - wavecode-voice-take-continuation@1
+    - wavecode-server-stt@1
+  addresses:
+    - wavecode-bootstrap-math-coding-3.3@1

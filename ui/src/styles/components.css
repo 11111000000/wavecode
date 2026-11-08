@@ -6304,9 +6304,8 @@ textarea.ai-textarea:focus-visible {
  *  - NO hint chip. The dock shows the status and the transcript;
  *    a floating chip repeating them was noise.
  *  - The dock is anchored with `--voice-fab-cluster-h`, the measured
- *    height of the FAB column. The old literal
- *    `calc(var(--tabbar-h) + 240px + ...)` overshot by ~44px and, once
- *    the panel grew tall enough, slid its buttons under
+ *    height of the FAB column. The old literal pixel offset overshot by
+ *    ~44px and, once the panel grew tall enough, slid its buttons under
  *    `.app-transport-bar` — whose z-index beats the panel's, so the
  *    buttons became unclickable.
  * ========================================================================= */
