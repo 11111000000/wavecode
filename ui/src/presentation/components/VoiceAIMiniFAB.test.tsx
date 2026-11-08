@@ -9,7 +9,6 @@ import {
   voiceAIState,
   voiceAIFlushing,
 } from '../state/voiceAIStore';
-import { __resetWhistleForTests } from '../state/whistleStore';
 import { resetMicMutexForTests } from '../state/micMutexStore';
 import { initialTranscriptState } from '~/domain/voice/Transcript';
 
@@ -38,7 +37,6 @@ import { primeMicAudioContext } from '~/infrastructure/audio/micAudioContext';
 
 beforeEach(() => {
   __resetVoiceAIForTests();
-  __resetWhistleForTests();
   resetMicMutexForTests();
   vi.clearAllMocks();
 });
@@ -46,7 +44,6 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   __resetVoiceAIForTests();
-  __resetWhistleForTests();
   resetMicMutexForTests();
 });
 
@@ -59,6 +56,9 @@ afterEach(() => {
 const fakeHandle = (calls: { start: number; stop: number }) => ({
   start: () => Effect.sync(() => { calls.start += 1; }),
   stop: () => Effect.sync(() => { calls.stop += 1; }),
+  // Closing the capture is separate from waiting for the transcript:
+  // the microphone is free immediately, the answer takes a round trip.
+  closeCapture: () => Effect.void,
   onChunk: () => Effect.void,
   enterReview: () => Effect.void,
   sendReview: () => Effect.void,
@@ -256,7 +256,10 @@ describe('VoiceAIMiniFAB — the REC state', () => {
     expect(btn.querySelector('.voice-mini-fab__label')?.textContent).toBe('REC');
   });
 
-  it('shows «Слушаю…» in the hint chip while recording', async () => {
+  it('has no hint chip — the dock carries the status', async () => {
+    // The button used to float a chip next to it showing «Слушаю…»
+    // and the live transcript. The dock below says the same thing in
+    // more room; the chip was a third copy of the same state.
     const calls = { start: 0, stop: 0 };
     __setVoiceAIHandleForTests(fakeHandle(calls) as never);
 
@@ -267,11 +270,13 @@ describe('VoiceAIMiniFAB — the REC state', () => {
     fireEvent.click(btn);
     await settle();
     __publishVoiceAIStateForTests(listeningState());
-    const hint = container.querySelector('.voice-mini-fab__hint');
-    expect(hint?.textContent).toContain('Слушаю');
+    expect(container.querySelector('.voice-mini-fab__hint')).toBeNull();
   });
 
-  it('shows «Распознаю…» while the stopped take is being uploaded', async () => {
+  it('the busy state is visible from the button itself', async () => {
+    // The flush window: the take is closed, the audio is uploading.
+    // The button says so through its state attribute — the dock's
+    // status line spells it out in words.
     const calls = { start: 0, stop: 0 };
     __setVoiceAIHandleForTests(fakeHandle(calls) as never);
 
@@ -284,8 +289,10 @@ describe('VoiceAIMiniFAB — the REC state', () => {
     __publishVoiceAIStateForTests(listeningState());
     fireEvent.click(btn);
     await settle();
-    const hint = container.querySelector('.voice-mini-fab__hint');
-    expect(hint?.textContent).toContain('Распознаю');
+    expect(voiceAIFlushing()).toBe(true);
+    expect(btn.getAttribute('data-state')).toBe('listening');
+    // The REC look is off: the microphone is not open any more.
+    expect(btn.getAttribute('data-rec-state')).toBe('off');
   });
 
   it('goes back to the idle look when the take ends', async () => {

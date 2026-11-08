@@ -1,40 +1,36 @@
 import { type JSX } from 'solid-js';
 import { VoiceAIMiniFAB } from './VoiceAIMiniFAB';
-import { WhistleMiniFAB } from './WhistleMiniFAB';
 import { RecordingPanel } from './RecordingPanel';
 
 /**
- * VoiceFAB — voice-input control cluster, всегда виден в правом
- * нижнем углу редактора. Без speed-dial.
+ * VoiceFAB — the voice-input cluster in the bottom-right corner of
+ * the editor.
  *
- * Раньше: одна большая primary-кнопка-«меню», по клику
- * разворачивалась стопка из VoiceAIMiniFAB + WhistleMiniFAB.
- * UX-жалоба: «жму микрофон — открывается ещё одна кнопка с
- * микрофоном, непонятно что вообще происходит». Двойная иконка
- * микрофона (primary + мини-AI) + отсутствие явной обратной связи
- * по записи сбивали с толку.
+ * ONE floating control
+ * -------------------
+ * There used to be two: `VoiceAIMiniFAB` («Голос») and
+ * `WhistleMiniFAB` («Свист»), stacked above each other. Both opened
+ * the microphone, and the second one did the same work as the Mic
+ * bottom sheet — which already had an instrument picker, a slot
+ * picker («в конец» / «под курсор»), a live piano-roll and a
+ * preview. Two buttons, one device, two ways to say the same thing.
  *
- * Сейчас: оба мини-FAB всегда на экране, у каждого свой
- * aria-label и подпись-чип рядом.
- *   - VoiceAIMiniFAB  → «Голос»: тап = старт/стоп распознавания,
- *                       удержание = одна фраза.
- *   - WhistleMiniFAB  → «Свист»:  press-and-hold = запись свиста →
- *                       нота → вставка в score.
+ * The whistle path is now the Mic sheet and nothing else. What is
+ * left is a single button with a single meaning: press to record,
+ * press again to stop. The dock below it (`RecordingPanel`) carries
+ * the transcript and the one action that follows it.
  *
- * Состояние записи транслируется через
- *   - data-state на самой кнопке (glow + pulse animation),
- *   - RecordingPanel (панель внизу: 🎙️ + transcript + заметки;
- *     единая для voice-AI и whistle — раньше для whistle
- *     панели не было вовсе).
- *   - inline-hint «слушаю…» / расшифровка прямо в кнопке.
+ * What happened to the old speed-dial
+ * ----------------------------------
+ * A big primary FAB that expanded into the stack was tried and
+ * rejected: «жму микрофон — открывается ещё одна кнопка с
+ * микрофоном, непонятно что вообще происходит». The stack was the
+ * fix. The stack is gone because there is only one thing left to
+ * stack.
  *
- * VoiceTranscriptOverlay (старый чип-оверлей) удалён — RecordingPanel
- * его заменяет для voice-AI и расширяет функциональность для whistle.
- * VoiceAITextReview (модал-проверка текста перед отправкой в ИИ)
- * удалён в `decisions/wavecode-voice-live-transcript`: live interim
- * chunks (`interim` kind) делают панель самодостаточной, отдельный
- * review-шаг больше не нужен. FSM-тег `review` всё ещё существует в
- * редукторе для будущих расширений, но UI-аффорданса нет.
+ * `VoiceTranscriptOverlay` (the old transcript chip) and
+ * `VoiceAITextReview` (the old modal review) are both gone too — the
+ * dock replaced them.
  */
 export function VoiceFAB(): JSX.Element {
   return (
@@ -42,7 +38,6 @@ export function VoiceFAB(): JSX.Element {
       <div class="voice-fab-group">
         <div class="voice-mini-fab-stack">
           <VoiceAIMiniFAB />
-          <WhistleMiniFAB />
         </div>
       </div>
       <RecordingPanel />

@@ -7,7 +7,6 @@ import {
   startVoiceAI,
   stopVoiceAI,
   cancelVoiceAIInFlight,
-  voiceAIDraft,
   voiceAIFlushing,
 } from '../state/voiceAIStore';
 import { MicIcon } from '../icons';
@@ -59,12 +58,16 @@ const formatError = (
 
 /** True when the most recent voice-AI failure was permission-related.
  *  Surfaced as a "blocked" badge on the FAB so the user knows why
- *  the cluster isn't responding — no need to tap repeatedly. */
-const isPermissionBlocked = (): boolean => {
-  const e = voiceAIError();
-  if (e === null) return false;
-  return /permission|NotAllowed|microphone.*block/i.test(e);
-};
+ *  the cluster isn't responding — no need to tap repeatedly.
+ *
+ *  This reads the failure's KIND, not its text. The old version
+ *  matched `/permission|NotAllowed|microphone.*block/i` against the
+ *  message — and every message in this app is in Russian, so the
+ *  regex could never match and the badge could never appear. The
+ *  failure site knows what went wrong; that fact has to travel as
+ *  data, not as prose. */
+const isPermissionBlocked = (): boolean =>
+  voiceAIError()?.kind === 'permission';
 
 /**
  * Run a possibly-failing Effect with a user-facing toast on failure.
@@ -185,22 +188,10 @@ export function VoiceAIMiniFAB(props: Props): JSX.Element {
       return 'Открой в Chrome для голосового управления';
     }
     const err = voiceAIError();
-    if (err !== null) return err;
+    if (err !== null) return err.message;
     return isRecording()
       ? 'Остановить запись'
       : 'Голос → ИИ (нажми, чтобы записать; нажми ещё раз, чтобы остановить)';
-  };
-
-  const hintText = (): string => {
-    if (phase() === 'recording') return 'Слушаю…';
-    if (phase() === 'busy') return 'Распознаю…';
-    return voiceAIDraft() || '…';
-  };
-
-  const showHint = (): boolean => {
-    const p = phase();
-    if (p === 'recording' || p === 'busy') return true;
-    return voiceAIDraft().trim().length > 0;
   };
 
   return (
@@ -222,17 +213,12 @@ export function VoiceAIMiniFAB(props: Props): JSX.Element {
       >
         {/* While recording the button IS the REC button: the mic
          * glyph is replaced by the blinking dot, so the state is
-         * readable at a glance and not only from the panel. */}
+         * readable at a glance and not only from the dock. */}
         <span class="voice-mini-fab__rec-dot" aria-hidden="true" />
       </Show>
       <span class="voice-mini-fab__label" aria-hidden="true">
         {isRecording() ? 'REC' : 'Голос'}
       </span>
-      <Show when={showHint()}>
-        <span class="voice-mini-fab__hint" aria-hidden="true">
-          {hintText()}
-        </span>
-      </Show>
       <Show when={isPermissionBlocked()}>
         <span class="voice-mini-fab__badge" aria-hidden="true" title="Браузер блокирует микрофон">
           !

@@ -13,11 +13,10 @@
  *
  * Owner kinds
  * -----------
- * The four owners currently in scope map 1:1 to the four FAB/panel
- * entry points declared in `decisions/wavecode-voice-fab.yaml`:
- *   - `voice-ai`      → VoiceAIMiniFAB (mp3 path: STTEngine)
- *   - `whistle`       → WhistleMiniFAB (existing micSnippet flow)
- *   - `loop-recorder` → LoopRecorder panel (mic to loop)
+ * The owner kind says WHO holds the channel, not which button:
+ *   - `voice-ai`      → VoiceAIMiniFAB (STT path)
+ *   - `whistle`       → the mic→notes path (the Mic sheet)
+ *   - `loop-recorder` → the loop recorder (mic to loop; draft)
  *   - `midi-learn`    → MIDI learn-assign (mic-triggered mapping)
  *
  * Channel kinds

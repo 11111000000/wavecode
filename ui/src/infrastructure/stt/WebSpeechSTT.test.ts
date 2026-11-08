@@ -14,7 +14,7 @@
  *     `_tag === 'SttUnsupported'` and `reason === 'no-speech-api'`
  *     when SpeechRecognition is unavailable. The orchestrator
  *     (`VoiceAISession`) uses the same error type for browser
- *     fallback — `WhisperSTTStub.start()` returns the same shape.
+ *     fallback — the stub's `start()` returns the same shape.
  *
  * What this does NOT cover
  * ------------------------

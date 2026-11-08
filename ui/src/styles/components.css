@@ -6281,20 +6281,33 @@ textarea.ai-textarea:focus-visible {
 }
 
 /* =========================================================================
- *  VOICE FAB — voice-input mini-FAB stack + transcript overlay
+ *  VOICE — one button, one dock.
  *
  *  Layout (mobile-first, bottom-right):
- *    ┌─────────────┐
- *    │   overlay   │  <- transcript chip (when voice-AI active)
- *    ├─────────────┤
- *    │ mini-AI     │  <- 56x56 (mic icon, tap-to-toggle)
- *    ├─────────────┤
- *    │ mini-whistle│  <- 56x56 (whistle icon, press-and-hold)
- *    └─────────────┘
- *  Оба мини-FAB видны всегда (без speed-dial expansion) — раньше
- *  primary-FAB-«меню» прятал их до первого тапа, и появление
- *  «ещё одной кнопки с микрофоном» сбивало с толку (юзер не
- *  понимал, на что нажал и записалось ли что-то).
+ *    ┌──────────────────────────────────────────────┐
+ *    │ ⟳ Записываю… 7 с           ▓▓▓▓░░░░   🗑  ✕ │  ← status row
+ *    │ распознанный текст…                          │  ← composer
+ *    │                                  [ → В ИИ ]  │  ← action
+ *    └──────────────────────────────────────────────┘
+ *                                       [○]  ← the one mic button
+ *
+ *  What changed and why
+ *  --------------------
+ *  - ONE floating control. There used to be two — «Голос» and
+ *    «Свист» — both opening the microphone, and the whistle path
+ *    was a slimmer copy of the Mic bottom sheet. The whistle is the
+ *    Mic sheet now; the stack is gone.
+ *  - NO pulse animations. The box-shadow pulse on the button was
+ *    decoration, not signal: the button's colour already says which
+ *    state it is in. The one animation that stayed is the blinking
+ *    REC dot — that one IS the signal.
+ *  - NO hint chip. The dock shows the status and the transcript;
+ *    a floating chip repeating them was noise.
+ *  - The dock is anchored with `--voice-fab-cluster-h`, the measured
+ *    height of the FAB column. The old literal pixel offset overshot by
+ *    ~44px and, once the panel grew tall enough, slid its buttons under
+ *    `.app-transport-bar` — whose z-index beats the panel's, so the
+ *    buttons became unclickable.
  * ========================================================================= */
 
 .voice-fab-group {
@@ -6311,17 +6324,8 @@ textarea.ai-textarea:focus-visible {
 }
 .voice-fab-group > * { pointer-events: auto; }
 
-/* Overrides the existing .wc-fab fixed position if a primary FAB is
- *  ever re-added inside the group (см. .voice-fab-group .wc-fab
- *  ниже). Сейчас primary нет — правило no-op, оставлено на случай
- *  будущей гибридной раскладки (e.g. overflow actions). */
-.voice-fab-group .wc-fab {
-  position: relative;
-  right: auto;
-  bottom: auto;
-}
-
-/* Stack of mini-FABs — always visible. */
+/* The column that holds the voice buttons. One button lives here
+ * now; the wrapper stays so the geometry tokens keep one owner. */
 .voice-mini-fab-stack {
   display: flex;
   flex-direction: column;
@@ -6329,8 +6333,9 @@ textarea.ai-textarea:focus-visible {
   align-items: flex-end;
 }
 
-/* Mini-FAB base: 56x56 (mobile-first touch target), square corners,
- * translucent surface, soft glow that intensifies while listening. */
+/* Mini-FAB base: 56x56 (mobile-first touch target), round, quiet.
+ * A single accent border, no glow — the glow was one more thing
+ * moving on a screen the user is reading a score on. */
 .voice-mini-fab {
   display: inline-flex;
   align-items: center;
@@ -6351,11 +6356,10 @@ textarea.ai-textarea:focus-visible {
     transform var(--dur-2xs) var(--ease),
     background var(--dur-xs) var(--ease),
     border-color var(--dur-xs) var(--ease),
-    box-shadow var(--dur-xs) var(--ease);
+    color var(--dur-xs) var(--ease);
 }
 .voice-mini-fab:hover:not(:disabled) {
   transform: translateY(-1px) scale(1.04);
-  box-shadow: var(--shadow-fab), var(--shadow-glow-primary);
 }
 .voice-mini-fab:active:not(:disabled) {
   transform: scale(0.96);
@@ -6365,18 +6369,21 @@ textarea.ai-textarea:focus-visible {
   cursor: not-allowed;
 }
 
+/* The one accent: violet for the brand/idle state. */
 .voice-mini-fab--ai {
   color: var(--primary);
   border-color: var(--primary);
 }
+
+/* Working states. A quiet tint, not a glow — the dock's status line
+ * says what is happening in words, the button only has to look
+ * different from idle. */
 .voice-mini-fab--ai[data-state='listening'],
 .voice-mini-fab--ai[data-state='transcribing'],
 .voice-mini-fab--ai[data-state='applying'],
 .voice-mini-fab--ai[data-state='requesting'] {
   background: var(--primary-soft);
   border-color: var(--primary);
-  box-shadow: var(--shadow-fab), var(--shadow-glow-primary), 0 0 20px var(--primary-glow);
-  animation: voice-mini-fab-pulse 1.8s ease-in-out infinite;
 }
 .voice-mini-fab--ai[data-state='errored'] {
   color: var(--err);
@@ -6386,50 +6393,29 @@ textarea.ai-textarea:focus-visible {
 
 /* REC state — the mini-FAB IS the record button while a take is
  * running. The icon is replaced by a blinking dot, the chip reads
- * «REC» and the whole button turns red, so "the microphone is
- * open" is readable from the button alone and not only from the
- * panel. The rule sits AFTER the per-mode colouring above so it
- * wins over the voice/whistle tint (both are the same specificity
- * — one class + one attribute — and this one comes later). */
+ * «REC» and the button turns red, so "the microphone is open" is
+ * readable from the button alone and not only from the dock. The
+ * rule sits AFTER the per-mode colouring above so it wins over the
+ * voice tint (both are the same specificity — one class + one
+ * attribute — and this one comes later). */
 .voice-mini-fab[data-rec-state='on'] {
   color: var(--err);
   border-color: var(--err);
   background: var(--err-soft);
-  box-shadow: var(--shadow-fab), 0 0 20px var(--err-soft);
-  animation: voice-mini-fab-rec-pulse 1.4s ease-in-out infinite;
 }
-@keyframes voice-mini-fab-rec-pulse {
-  0%, 100% { box-shadow: var(--shadow-fab), 0 0 14px var(--err-soft); }
-  50%      { box-shadow: var(--shadow-fab), 0 0 28px var(--err-soft); }
-}
+
+/* The one animation in the whole voice cluster, and it is a signal:
+ * the microphone is live. */
 .voice-mini-fab__rec-dot {
   width: 14px;
   height: 14px;
   border-radius: var(--radius-full);
   background: var(--err);
-  box-shadow: 0 0 10px var(--err-soft);
   animation: voice-mini-fab-rec-blink 1.1s ease-in-out infinite;
 }
 @keyframes voice-mini-fab-rec-blink {
   0%, 100% { opacity: 1; }
   50%      { opacity: 0.35; }
-}
-
-.voice-mini-fab--whistle {
-  color: var(--cyan);
-  border-color: var(--cyan);
-}
-.voice-mini-fab--whistle[data-state='arming'],
-.voice-mini-fab--whistle[data-state='recording'] {
-  background: var(--cyan-soft);
-  border-color: var(--cyan);
-  box-shadow: var(--shadow-fab), var(--shadow-glow-cyan), 0 0 20px var(--cyan-glow);
-  animation: voice-mini-fab-pulse 1.8s ease-in-out infinite;
-}
-.voice-mini-fab--whistle[data-state='errored'] {
-  color: var(--err);
-  border-color: var(--err);
-  background: var(--err-soft);
 }
 
 /* Inline permission-blocked badge — a small "!" pill that surfaces
@@ -6450,11 +6436,6 @@ textarea.ai-textarea:focus-visible {
   line-height: 18px;
   text-align: center;
   pointer-events: none;
-  animation: voice-mini-fab-badge-pulse 1.6s ease-in-out infinite;
-}
-@keyframes voice-mini-fab-badge-pulse {
-  0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 var(--err-soft); }
-  50%      { transform: scale(1.06); box-shadow: 0 0 0 4px transparent; }
 }
 .voice-mini-fab--ai[data-permission-blocked='true'] {
   border-color: var(--err);
@@ -6462,15 +6443,10 @@ textarea.ai-textarea:focus-visible {
   background: color-mix(in oklab, var(--err) 8%, var(--surface-2));
 }
 
-@keyframes voice-mini-fab-pulse {
-  0%, 100% { box-shadow: var(--shadow-fab), var(--shadow-glow-primary), 0 0 20px var(--primary-glow); }
-  50%      { box-shadow: var(--shadow-fab), var(--shadow-glow-primary), 0 0 32px var(--primary-glow); }
-}
-
-/* Inline label chip — always visible short name ("Голос" / "Свист"),
- *  чтобы юзер сразу видел назначение кнопки, а не догадывался по
- *  иконке. Positioned to the LEFT of the icon, smaller than the
- *  transient `.voice-mini-fab__hint` (which shows live transcript). */
+/* Inline label chip — always visible short name ("Голос"), so the
+ * user knows what the button does without a tap. Quiet by design:
+ * no border, muted ink — it names the button, it does not compete
+ * with it. */
 .voice-mini-fab__label {
   position: absolute;
   top: 50%;
@@ -6481,314 +6457,30 @@ textarea.ai-textarea:focus-visible {
   font-weight: var(--fw-medium);
   padding: 2px var(--space-xs);
   background: var(--surface-3);
-  border: 1px solid var(--border-strong);
   border-radius: var(--radius-md);
-  color: var(--fg);
-  pointer-events: none;
-  opacity: 0.85;
-}
-.voice-mini-fab--ai .voice-mini-fab__label     { color: var(--primary); border-color: var(--primary); }
-.voice-mini-fab--whistle .voice-mini-fab__label { color: var(--cyan);    border-color: var(--cyan); }
-
-/* Inline hint chip — shown while listening / recording. Positioned
- *  to the LEFT of the icon so the waveform doesn't overlap the FAB. */
-.voice-mini-fab__hint {
-  position: absolute;
-  top: 50%;
-  right: calc(100% + var(--space-xs));
-  transform: translateY(-50%);
-  white-space: nowrap;
-  font-size: var(--fs-xs);
-  padding: 2px var(--space-xs);
-  background: var(--surface-3);
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-md);
-  color: var(--fg);
-  max-width: 240px;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  color: var(--fg-dim);
   pointer-events: none;
 }
-
-/* Transcript overlay — bottom-center, just above the FAB group. */
-.voice-transcript-overlay {
-  position: fixed;
-  bottom: var(--voice-fab-cluster-h);
-  left: 50%;
-  transform: translateX(-50%);
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-xs);
-  padding: var(--space-xs) var(--space-md);
-  background: var(--surface-2);
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-pill);
-  color: var(--fg);
-  font-family: var(--font-sans);
-  font-size: var(--fs-sm);
-  max-width: calc(100vw - 32px);
-  z-index: calc(var(--z-sheet) + 4);
-  box-shadow: var(--shadow-pop);
-  animation: voice-transcript-overlay-in var(--dur-xs) var(--ease-spring);
-}
-.voice-transcript-overlay[data-state='errored'] {
-  border-color: var(--err);
-  color: var(--err);
-}
-.voice-transcript-overlay__icon { font-size: 14px; }
-.voice-transcript-overlay__text {
-  max-width: 320px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.voice-transcript-overlay__error { font-weight: var(--fw-medium); }
-
-/* Inline review-action button — appears next to the transcript
- * text while voice-AI is actively listening/applying. Tapping it
- * dispatches `enter-review` on the orchestrator (see
- * VoiceTranscriptOverlay.tsx) which freezes STT and opens the
- * review-and-edit modal. Visual: ghost-button with right-arrow so
- * it reads as "next step →" rather than a destructive action. */
-.voice-transcript-overlay__btn {
-  margin-left: var(--space-xs);
-  padding: 2px var(--space-xs);
-  background: transparent;
-  border: 1px solid var(--border-strong);
-  color: var(--primary);
-  border-radius: var(--radius-md);
-  font-size: var(--fs-xs);
-  font-weight: var(--fw-medium);
-  font-family: var(--font-sans);
-  cursor: pointer;
-  transition:
-    background var(--dur-2xs) var(--ease),
-    border-color var(--dur-2xs) var(--ease),
-    color var(--dur-2xs) var(--ease);
-}
-.voice-transcript-overlay__btn:hover {
-  background: var(--primary-soft);
-  border-color: var(--primary);
-}
-.voice-transcript-overlay[data-state='errored'] .voice-transcript-overlay__btn {
-  display: none;
-}
-
-@keyframes voice-transcript-overlay-in {
-  from { opacity: 0; transform: translate(-50%, 8px); }
-  to   { opacity: 1; transform: translate(-50%, 0); }
-}
+.voice-mini-fab--ai .voice-mini-fab__label { color: var(--primary); }
 
 /* =========================================================================
- *  VOICE REVIEW PANEL — modal-like prompt shown when the user pauses the
- *  voice-AI session to edit the dictated text before sending it to the LLM.
+ *  VOICE DOCK — the status panel visible while voice-AI is active.
  *
- *  Renders ONLY when FSM is in `review`; parents (`VoiceFAB`) toggle it
- *  via Solid's `<Show>`. Position: bottom-center, anchored to
- *  `--voice-fab-cluster-h` (the real measured height of the two-FAB
- *  cluster) so it sits flush on top of the cluster and nowhere else,
- *  and capped by `--voice-panel-max-h` so its textarea + footer can
- *  never grow up under the fixed TopBar / transport bar.
- * ========================================================================= */
-.voice-review-panel {
-  position: fixed;
-  left: 50%;
-  bottom: var(--voice-fab-cluster-h);
-  max-height: var(--voice-panel-max-h);
-  overflow-y: auto;
-  transform: translateX(-50%);
-  width: min(540px, calc(100vw - 32px));
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-sm);
-  padding: var(--space-md);
-  background: var(--surface-2);
-  border: 1px solid var(--primary);
-  border-radius: var(--radius-lg);
-  color: var(--fg);
-  font-family: var(--font-sans);
-  box-shadow: var(--shadow-pop), var(--shadow-glow-primary);
-  z-index: calc(var(--z-sheet) + 6);
-  animation: voice-review-panel-in var(--dur-xs) var(--ease-spring);
-}
-@keyframes voice-review-panel-in {
-  from { opacity: 0; transform: translate(-50%, 12px); }
-  to   { opacity: 1; transform: translate(-50%, 0); }
-}
-.voice-review-panel__head {
-  display: flex;
-  align-items: center;
-  gap: var(--space-xs);
-  /* Same reasoning as .voice-recording-panel__head: the ✕ must stay
-   * reachable when the panel is squeezed against the transport bar. */
-  flex-shrink: 0;
-}
-.voice-review-panel__icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  border-radius: var(--radius-full);
-  background: var(--primary-soft);
-  color: var(--primary);
-}
-.voice-review-panel__title {
-  flex: 1;
-  margin: 0;
-  font-size: var(--fs-sm);
-  font-weight: var(--fw-medium);
-  color: var(--fg);
-}
-.voice-review-panel__close {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  background: transparent;
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-md);
-  color: var(--fg-muted);
-  cursor: pointer;
-  transition:
-    background var(--dur-2xs) var(--ease),
-    color var(--dur-2xs) var(--ease);
-}
-.voice-review-panel__close:hover {
-  background: var(--surface-3);
-  color: var(--fg);
-}
-.voice-review-panel__textarea {
-  width: 100%;
-  min-height: 96px;
-  max-height: 240px;
-  /* Grows into the panel's spare height and shrinks with it, so the
-   * footer buttons stay visible on a short viewport. The 96px floor is
-   * deliberate (one and a half lines of dictated text); below that the
-   * panel's own `overflow-y: auto` takes over as the backstop. */
-  flex: 1 1 auto;
-  resize: vertical;
-  padding: var(--space-sm);
-  background: var(--surface-1);
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-md);
-  color: var(--fg);
-  font-family: var(--font-sans);
-  font-size: var(--fs-sm);
-  line-height: var(--lh-base);
-}
-.voice-review-panel__textarea:focus {
-  outline: none;
-  border-color: var(--primary);
-  box-shadow: 0 0 0 2px var(--primary-soft);
-}
-.voice-review-panel__interim {
-  margin: 0;
-  font-size: var(--fs-xs);
-  color: var(--fg-muted);
-  font-style: italic;
-}
-.voice-review-panel__actions {
-  display: flex;
-  align-items: stretch;
-  gap: var(--space-xs);
-  justify-content: flex-end;
-  flex-shrink: 0;
-}
-.voice-review-panel__btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 6px var(--space-sm);
-  background: var(--surface-3);
-  color: var(--fg);
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-md);
-  font-family: var(--font-sans);
-  font-size: var(--fs-xs);
-  font-weight: var(--fw-medium);
-  cursor: pointer;
-  transition:
-    background var(--dur-2xs) var(--ease),
-    border-color var(--dur-2xs) var(--ease),
-    color var(--dur-2xs) var(--ease);
-}
-.voice-review-panel__btn:hover:not(:disabled) {
-  background: var(--surface-1);
-}
-.voice-review-panel__btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-.voice-review-panel__btn--ghost {
-  background: transparent;
-  color: var(--fg-muted);
-}
-.voice-review-panel__btn--ghost:hover:not(:disabled) {
-  color: var(--err);
-  border-color: var(--err);
-}
-.voice-review-panel__btn--secondary {
-  color: var(--fg);
-}
-.voice-review-panel__btn--primary {
-  background: var(--primary);
-  color: var(--fg-inverse);
-  border-color: var(--primary);
-}
-.voice-review-panel__btn--primary:hover:not(:disabled) {
-  background: var(--primary);
-  filter: brightness(1.08);
-  border-color: var(--primary);
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .voice-mini-fab--ai[data-state='listening'],
-  .voice-mini-fab--ai[data-state='transcribing'],
-  .voice-mini-fab--ai[data-state='applying'],
-  .voice-mini-fab--ai[data-state='requesting'],
-  .voice-mini-fab--whistle[data-state='arming'],
-  .voice-mini-fab--whistle[data-state='recording'] {
-    animation: none;
-  }
-}
-
-/* =========================================================================
- *  VOICE RECORDING PANEL — bottom-anchored status card visible while
- *  voice-AI OR whistle is active. Replaces the previous voice-AI
- *  transcript chip (now folded into the unified panel) and adds
- *  whistle feedback that didn't exist before (no bottom panel for
- *  whistle = unsafe).
+ *  Three rows, nothing else:
+ *    row 1 — what the machine is doing (spinner, phrase, level bar,
+ *            discard, close)
+ *    row 2 — the composer: always present, always editable
+ *    row 3 — the one action that follows the text
  *
- *  Layout (mobile-first, bottom-center, just above the FAB group):
- *    ┌───────────────────────────────────────────┐
- *    │ [icon] Title                  [✕ stop]    │  ← head
- *    │ ────────────────────────────────────────  │
- *    │ live transcript / notes strip             │  ← body
- *    │ ────────────────────────────────────────  │
- *    │ [primary btn]  [rms]  [count]             │  ← actions
- *    └───────────────────────────────────────────┘
- *
- *  Width is capped via `width: min(...)` so it never overflows the
- *  viewport on phones. The panel is `position: fixed` so it floats
- *  above the editor / TabBar / FAB cluster without affecting them.
- *
- *  wavecode-voice-ux-fixes: `bottom` is `--voice-fab-cluster-h`, the
- *  measured height of the two-FAB cluster, instead of the old literal
- *  `calc(var(--tabbar-h) + 240px + ...)`. The literal overshot by
- *  ~44px and, once the panel grew tall enough, slid its buttons under
- *  `.app-transport-bar` — whose z-index (z-sheet+12) beats the panel's
- *  (z-sheet+4), so the ✕ / «Проверить» became unclickable. The panel
- *  now sits flush above the cluster and `--voice-panel-max-h` keeps a
- *  long transcript scrolling inside the panel rather than pushing it
- *  into the transport bar.
+ *  There is no header row any more: the title «Голос» was noise
+ *  (the user pressed the mic button and knows what it does) and the
+ *  «⚠ ошибка» pill said what the status line already says.
  * ========================================================================= */
 .voice-recording-panel {
   position: fixed;
   left: 50%;
   bottom: var(--voice-fab-cluster-h);
-  /* Cap the height so a long transcript scrolls inside the panel
+  /* Cap the height so a long transcript scrolls inside the dock
    * instead of growing it upward into the fixed transport bar. */
   max-height: var(--voice-panel-max-h);
   overflow-y: auto;
@@ -6798,279 +6490,161 @@ textarea.ai-textarea:focus-visible {
   flex-direction: column;
   gap: var(--space-sm);
   padding: var(--space-md);
-  background: var(--surface-2);
-  border: 1px solid var(--border-strong);
+  background: var(--surface-1);
+  border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   color: var(--fg);
   font-family: var(--font-sans);
   font-size: var(--fs-sm);
   box-shadow: var(--shadow-pop);
   z-index: calc(var(--z-sheet) + 4);
-  animation: voice-recording-panel-in var(--dur-xs) var(--ease-spring);
+  animation: voice-recording-panel-in var(--dur-xs) var(--ease-out);
 }
 .voice-recording-panel[data-mode='voice-ai'] {
-  border-color: var(--primary);
-  box-shadow: var(--shadow-pop), var(--shadow-glow-primary);
-}
-.voice-recording-panel[data-mode='whistle'] {
-  border-color: var(--cyan);
-  box-shadow: var(--shadow-pop), var(--shadow-glow-cyan);
+  border-color: var(--border-strong);
 }
 .voice-recording-panel[data-state='errored'] {
   border-color: var(--err);
-  box-shadow: var(--shadow-pop), 0 0 16px var(--err-glow);
 }
 @keyframes voice-recording-panel-in {
-  from { opacity: 0; transform: translate(-50%, 12px); }
+  from { opacity: 0; transform: translate(-50%, 8px); }
   to   { opacity: 1; transform: translate(-50%, 0); }
 }
 
-.voice-recording-panel__head {
-  display: flex;
-  align-items: center;
-  gap: var(--space-sm);
-  /* Pin the ✕ against the transport bar: only the transcript below
-   * scrolls, so the control that stops the session can never be
-   * pushed out of the panel by a long dictated sentence. */
-  flex-shrink: 0;
-}
-.voice-recording-panel__icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  border-radius: var(--radius-full);
-}
-.voice-recording-panel__icon--ai {
-  background: var(--primary-soft);
-  color: var(--primary);
-}
-.voice-recording-panel__icon--whistle {
-  background: var(--cyan-soft);
-  color: var(--cyan);
-}
-.voice-recording-panel__title {
-  flex: 1;
-  font-size: var(--fs-sm);
-  font-weight: var(--fw-medium);
-  color: var(--fg);
-}
-.voice-recording-panel__err-pill {
-  font-size: var(--fs-xs);
-  padding: 2px var(--space-xs);
-  background: var(--err-soft);
-  color: var(--err);
-  border: 1px solid var(--err);
-  border-radius: var(--radius-md);
-  font-weight: var(--fw-medium);
-}
-.voice-recording-panel__close {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  background: transparent;
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-md);
-  color: var(--fg-muted);
-  cursor: pointer;
-  transition: background var(--dur-2xs) var(--ease), color var(--dur-2xs) var(--ease);
-}
-.voice-recording-panel__close:hover {
-  background: var(--surface-3);
-  color: var(--fg);
-}
-
-/* Instrument picker — the whistle's melodic sound. A native <select>
- * so a phone opens its own picker sheet (a row of 15 buttons would be
- * unusable on a 360 px screen). Disabled while a take runs or while
- * notes are buffered: a take's timbre is fixed when it starts. */
-.voice-recording-panel__instrument {
-  appearance: none;
-  background: var(--surface-3);
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-md);
-  color: var(--fg);
-  font-family: var(--font-sans);
-  font-size: var(--fs-xs);
-  font-weight: var(--fw-medium);
-  padding: 2px var(--space-xs);
-  cursor: pointer;
-  max-width: 140px;
-}
-.voice-recording-panel__instrument:disabled {
-  opacity: 0.55;
-  cursor: not-allowed;
-}
-.voice-recording-panel__instrument:hover:not(:disabled) {
-  border-color: var(--cyan);
-  color: var(--cyan);
-}
-
-/* «Удалить» — deletes the recorded AUDIO and keeps the text. Sits
- * next to the ✕ in the panel head, one step quieter than the ✕:
- * the ✕ closes the panel, this one keeps it open. */.voice-recording-panel__delete {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  background: transparent;
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-md);
-  color: var(--fg-muted);
-  cursor: pointer;
-  transition: background var(--dur-2xs) var(--ease), color var(--dur-2xs) var(--ease);
-}
-.voice-recording-panel__delete:hover {
-  background: var(--err-soft);
-  color: var(--err);
-}
-
-.voice-recording-panel__body {
-  display: flex;
-  align-items: baseline;
-  gap: var(--space-sm);
-  flex-wrap: wrap;
-  /* Flex items default to `min-height: auto`, which refuses to shrink
-   * below the content — that is what let a long transcript push the
-   * actions row under the transport bar. `min-height: 0` lets this
-   * row absorb the shrink and scroll instead. */
-  min-height: 0;
-  overflow-y: auto;
-}
-.voice-recording-panel__stage {
-  font-weight: var(--fw-medium);
-  color: var(--fg);
-}
-
-/* The composer (`decisions/wavecode-voice-composer-ux`).
- *
- * One editable field for the whole session + one line that says what
- * the machine is doing right now. The field is ALWAYS there — while
- * the mic is open, while the recogniser thinks, while the LLM
- * answers, and after the edit was applied — because a text the user
- * cannot reach is a text the user cannot fix.
- *
- * The container sets `min-height: 0` so the textarea's flex grow can
- * shrink when the panel hits its `--voice-panel-max-h` cap, and so
- * the ✕ in the head never gets pushed off-screen by a long edit. The
- * textarea is small on purpose (rows=2 in JSX): the panel must not
- * balloon into the fixed transport bar on mobile viewports. */
-.voice-recording-panel__composer {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2xs);
-  min-height: 0;
-}
-.voice-recording-panel__review-textarea {
-  width: 100%;
-  /* Floor of 56px (~2 lines at fs-sm / lh-base) so the field is
-   * clearly editable; ceiling of 96px (~3 lines) so the panel
-   * stays single-screen on a 360×640 phone. The flex `1 1 auto`
-   * lets it grow in between, taking spare height off the panel
-   * cap before the panel's own overflow:auto kicks in. */
-  min-height: 56px;
-  max-height: 96px;
-  flex: 1 1 auto;
-  resize: vertical;
-  padding: var(--space-sm);
-  background: var(--surface-1);
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-md);
-  color: var(--fg);
-  font-family: var(--font-sans);
-  font-size: var(--fs-sm);
-  line-height: var(--lh-base);
-}
-.voice-recording-panel__review-textarea:focus {
-  outline: none;
-  border-color: var(--primary);
-  box-shadow: 0 0 0 2px var(--primary-soft);
-}
-
-/* Status line — the answer to «ушло не ушло, крутится или нет».
- * One phrase per machine state, always on screen while the panel is
- * open. */
+/* Row 1 — the status line. */
 .voice-recording-panel__status {
   display: flex;
   align-items: center;
-  gap: var(--space-xs);
-  min-height: 1.4em;
-  font-size: var(--fs-xs);
-  color: var(--fg-muted);
+  gap: var(--space-sm);
+  min-height: var(--control-h);
 }
 .voice-recording-panel__status-text {
-  flex: 1 1 auto;
-  min-width: 0;
-  word-break: break-word;
+  font-size: var(--fs-xs);
+  color: var(--fg-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
-/* The RMS meter lives in the status row now: it is a readout of the
- * machine's state, not a separate widget. It keeps a fixed width so
- * it never squeezes the phrase next to it. */
+.voice-recording-panel[data-state='errored'] .voice-recording-panel__status-text {
+  color: var(--err);
+}
+.voice-recording-panel[data-state='review'] .voice-recording-panel__status-text,
+.voice-recording-panel[data-state='sent'] .voice-recording-panel__status-text {
+  color: var(--fg);
+}
+
+/* The level bar — only while the mic is open. Its presence says
+ * "the device is live" more honestly than any label. */
 .voice-recording-panel__status .voice-recording-panel__rms {
-  flex: 0 0 90px;
-  max-width: 90px;
+  flex: 1 1 auto;
+  min-width: 32px;
+  max-width: 120px;
+  height: 3px;
+  border-radius: var(--radius-pill);
+  background: var(--surface-3);
+  overflow: hidden;
 }
-/* The spinner is the ONLY motion in the panel: it appears exactly
- * when the app is waiting for something that is not the user —
- * the recogniser, the relay, the LLM. */
+.voice-recording-panel__rms-fill {
+  display: block;
+  height: 100%;
+  background: var(--err);
+  transition: width var(--dur-2xs) var(--ease);
+}
+
+/* The spinner — only while the MACHINE is the one working. */
 .voice-recording-panel__spinner {
-  flex: 0 0 auto;
-  width: 10px;
-  height: 10px;
-  border-radius: var(--radius-full);
-  border: 2px solid var(--border-strong);
+  width: 11px;
+  height: 11px;
+  flex-shrink: 0;
+  border: 1.5px solid var(--border-strong);
   border-top-color: var(--primary);
-  animation: voice-recording-panel-spin 0.9s linear infinite;
+  border-radius: var(--radius-full);
+  animation: voice-recording-panel-spin 0.8s linear infinite;
 }
 @keyframes voice-recording-panel-spin {
   to { transform: rotate(360deg); }
 }
-.voice-recording-panel__hz {
-  font-family: var(--font-mono);
-  font-size: var(--fs-xs);
-  color: var(--fg-muted);
-  background: var(--surface-3);
-  padding: 2px var(--space-xs);
-  border-radius: var(--radius-md);
-}
 
-.voice-recording-panel__strip {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2xs);
+/* Icon buttons in the status row: discard the audio, close the dock.
+ * `margin-left: auto` on the first one pushes both to the right edge
+ * — the level bar sits next to the phrase, where it belongs. */
+.voice-recording-panel__delete,
+.voice-recording-panel__close {
+  display: inline-flex;
   align-items: center;
-}
-.voice-recording-panel__note {
-  display: inline-block;
-  padding: 2px var(--space-xs);
-  background: var(--cyan-soft);
-  border: 1px solid var(--cyan);
+  justify-content: center;
+  flex-shrink: 0;
+  width: var(--control-h-sm);
+  height: var(--control-h-sm);
+  padding: 0;
+  background: transparent;
+  border: 1px solid transparent;
   border-radius: var(--radius-md);
-  color: var(--cyan);
-  font-family: var(--font-mono);
-  font-size: var(--fs-xs);
-  font-weight: var(--fw-medium);
+  color: var(--fg-ghost);
+  cursor: pointer;
+  transition:
+    color var(--dur-2xs) var(--ease),
+    border-color var(--dur-2xs) var(--ease);
+}
+.voice-recording-panel__delete { margin-left: auto; }
+/* When there is no trash button the ✕ takes its place at the right
+ * edge. With one, the trash already owns the auto margin and the ✕
+ * sits right next to it — otherwise the free space would be split
+ * between the two and they would drift apart. */
+.voice-recording-panel__close { margin-left: auto; }
+.voice-recording-panel__delete + .voice-recording-panel__close {
+  margin-left: 0;
+}
+.voice-recording-panel__delete:hover,
+.voice-recording-panel__close:hover {
+  color: var(--fg);
+  border-color: var(--border-strong);
+}
+.voice-recording-panel__delete:hover { color: var(--err); }
+
+/* Row 2 — the composer. Always there, always editable. */
+.voice-recording-panel__composer {
+  display: flex;
+  flex-direction: column;
+}
+.voice-recording-panel__review-textarea {
+  width: 100%;
+  min-height: 56px;
+  max-height: 96px;
+  padding: var(--space-sm);
+  background: var(--surface-2);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  font-family: var(--font-sans);
+  font-size: var(--fs-base);
+  line-height: var(--lh-base);
+  resize: vertical;
+}
+.voice-recording-panel__review-textarea::placeholder {
+  color: var(--fg-ghost);
+}
+.voice-recording-panel__review-textarea:focus {
+  outline: none;
+  border-color: var(--primary);
 }
 
+/* Row 3 — the one action. */
 .voice-recording-panel__actions {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   gap: var(--space-sm);
-  flex-wrap: wrap;
-  flex-shrink: 0;
 }
 .voice-recording-panel__btn {
   display: inline-flex;
   align-items: center;
   gap: var(--space-2xs);
-  padding: var(--space-xs) var(--space-sm);
+  height: var(--control-h);
+  padding: 0 var(--space-md);
   border-radius: var(--radius-md);
   border: 1px solid var(--border-strong);
-  background: transparent;
+  background: var(--surface-2);
   color: var(--fg);
   font-family: var(--font-sans);
   font-size: var(--fs-xs);
@@ -7079,173 +6653,35 @@ textarea.ai-textarea:focus-visible {
   transition:
     background var(--dur-2xs) var(--ease),
     border-color var(--dur-2xs) var(--ease),
-    color var(--dur-2xs) var(--ease);
+    opacity var(--dur-2xs) var(--ease);
+}
+.voice-recording-panel__btn:hover:not(:disabled) {
+  border-color: var(--primary);
 }
 .voice-recording-panel__btn:disabled {
-  opacity: 0.5;
+  opacity: 0.4;
   cursor: not-allowed;
 }
 .voice-recording-panel__btn--primary {
+  background: var(--primary);
   border-color: var(--primary);
-  color: var(--primary);
+  color: var(--fg-inverse);
 }
 .voice-recording-panel__btn--primary:hover:not(:disabled) {
-  background: var(--primary-soft);
+  background: color-mix(in oklab, var(--primary) 85%, var(--fg));
+  border-color: color-mix(in oklab, var(--primary) 85%, var(--fg));
 }
-
-/* «Отменить отправку» — the primary button while the request is on
- * the wire. Same slot, different meaning, so the user never has to
- * hunt for a second button to pull the plug: the thing that sends
- * becomes the thing that stops sending. */
 .voice-recording-panel__btn--cancel {
-  border-color: var(--err);
   color: var(--err);
-}
-.voice-recording-panel__btn--cancel:hover {
-  background: var(--err-soft);
-}
-
-/* «Очистить текст» — the small button that empties the recognised-text
- * field. Deliberately quiet: it is a convenience, not a primary
- * action, and it must not compete with «→ В ИИ» for attention. */
-.voice-recording-panel__btn--clear {
-  padding: var(--space-2xs) var(--space-xs);
-  font-size: var(--fs-3xs);
-  color: var(--fg-muted);
-}
-.voice-recording-panel__btn--clear:hover:not(:disabled) {
-  background: var(--surface-3);
-  color: var(--fg);
-}
-.voice-recording-panel__hint {
-  font-size: var(--fs-xs);
-  color: var(--fg-muted);
-}
-
-/* Arm panel — the "жду ●REC" state for both voice-AI and whistle,
- * triggered by a fast tap on the corresponding mini-FAB. Two
- * affordances: a single REC toggle (off by default, click to start)
- * and (whistle only) a «Применить» button that's disabled until
- * notes have been buffered. Voice-AI doesn't get an apply here —
- * its submit affordance lives in the review body that fires after
- * the first final chunk. */
-.voice-recording-panel__armed {
-  display: flex;
-  align-items: center;
-  gap: var(--space-sm);
-  flex-wrap: wrap;
-  min-height: 0;
-}
-.voice-recording-panel__rec {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-xs);
-  padding: var(--space-2xs) var(--space-sm);
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-pill);
-  background: var(--surface-3);
-  color: var(--fg);
-  font-family: var(--font-sans);
-  font-size: var(--fs-xs);
-  font-weight: var(--fw-medium);
-  letter-spacing: 0.04em;
-  cursor: pointer;
-  transition:
-    background var(--dur-2xs) var(--ease),
-    border-color var(--dur-2xs) var(--ease),
-    color var(--dur-2xs) var(--ease);
-}
-.voice-recording-panel__rec:hover {
-  background: var(--surface-2);
-}
-.voice-recording-panel__rec-dot {
-  width: 10px;
-  height: 10px;
-  border-radius: var(--radius-full);
-  background: var(--err);
-  transition: background var(--dur-2xs) var(--ease);
-}
-/* Highlighted (recording): tinted border + filled dot + softening
- * background that matches the panel's active-mode tone. The
- * data-rec-state attribute keeps both styles publishable from one
- * JSX path without re-rendering with a separate class per state. */
-.voice-recording-panel__rec--on {
   border-color: var(--err);
   background: var(--err-soft);
-  color: var(--err);
-  box-shadow: 0 0 0 2px var(--err-soft);
-  animation: voice-recording-panel-pulse 1.6s ease-in-out infinite;
-}
-.voice-recording-panel__rec--off .voice-recording-panel__rec-dot {
-  background: var(--fg-muted);
-  opacity: 0.6;
-}
-.voice-recording-panel__rec--on .voice-recording-panel__rec-dot {
-  background: var(--err);
-  box-shadow: 0 0 0 3px var(--err-soft);
-}
-@keyframes voice-recording-panel-pulse {
-  0%, 100% { box-shadow: 0 0 0 2px var(--err-soft); }
-  50%      { box-shadow: 0 0 0 5px var(--err-soft); }
-}
-.voice-recording-panel__rec-label {
-  font-family: var(--font-mono);
-}
-
-/* Apply button — splices the buffered notes into score for the
- * whistle path only. Voice-AI's analogous action («→ В ИИ») lives
- * on the review form's primary button and is styled by the
- * existing `.voice-recording-panel__btn--primary` block. */
-.voice-recording-panel__btn--apply {
-  border-color: var(--cyan);
-  color: var(--cyan);
-}
-.voice-recording-panel__btn--apply:hover:not(:disabled) {
-  background: var(--cyan-soft);
-}
-
-/* Inline-aligned actions row for whistle when both REC and
- * «Применить» are visible — keeps the hint + REC + apply + count
- * on a single row that wraps on narrow viewports. */
-.voice-recording-panel__actions--split {
-  flex-wrap: wrap;
-}
-
-.voice-recording-panel__rms {
-  flex: 1;
-  min-width: 60px;
-  max-width: 160px;
-  height: 6px;
-  border-radius: var(--radius-full);
-  background: var(--surface-3);
-  overflow: hidden;
-}
-.voice-recording-panel__rms-fill {
-  height: 100%;
-  background: linear-gradient(90deg, var(--cyan), var(--primary));
-  transition: width var(--dur-2xs) var(--ease);
-}
-.voice-recording-panel__count {
-  font-size: var(--fs-xs);
-  color: var(--fg-muted);
-  font-family: var(--font-mono);
-}
-/* Live voice-AI body — transcript on the left, RMS meter on the
- * right. The meter only renders on the server STT path (where our
- * code owns the mic and can run an AnalyserNode); on the Web Speech
- * path the meter is omitted and the transcript spans the row. */
-.voice-recording-panel__rms-row {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2xs);
-  flex-shrink: 0;
 }
 
 @media (prefers-reduced-motion: reduce) {
   .voice-recording-panel {
     animation: none;
   }
-  .voice-recording-panel__rec--on {
+  .voice-mini-fab__rec-dot {
     animation: none;
   }
   .voice-recording-panel__spinner {

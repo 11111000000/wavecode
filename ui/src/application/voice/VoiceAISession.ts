@@ -137,6 +137,22 @@ export type VoiceSessionHandle = {
     input: VoiceSessionInput,
   ) => Effect.Effect<void, MicBusyError | SttUnsupportedError, never>;
   readonly stop: () => Effect.Effect<void, never, never>;
+  /**
+   * End the capture WITHOUT waiting for the recogniser's answer.
+   *
+   * `stop()` does two very different things: it closes the
+   * microphone, and it waits for the transcript. The wait is a full
+   * relay round trip — 15.8-17.1 s warm on 2026-10-23, 32.2 s for a
+   * phone take — and the microphone has nothing to do with it: the
+   * device is free the moment the capture ends.
+   *
+   * Keeping the two together meant the mic channel stayed claimed
+   * for the whole round trip, so every other mic mode answered
+   * «микрофон занят» for half a minute after the user had already
+   * lifted their finger. Splitting them lets the presenter release
+   * the device the instant the take is over.
+   */
+  readonly closeCapture: () => Effect.Effect<void, never, never>;
   /** Explicit chunk-feed for non-STT pipelines (test streams,
    *  future wake-word buffers). Unlike the STT subscriber, this
    *  does NOT auto-review — callers that want confirmation must
@@ -568,6 +584,20 @@ export const createVoiceAISession = (
           yield* Ref.set(drainRef, drainFiber);
           yield* Fiber.await(drainFiber);
           yield* Ref.set(drainRef, null);
+        }),
+      /**
+       * Close the capture and return.
+       *
+       * `deps.stt.stop()` is idempotent by the engine contract
+       * (`STTEngine.ts`): the server engine's flush no-ops when a
+       * flush is already running, and the Web Speech adapter nulls
+       * its handle before touching it. So calling this and then
+       * `stop()` is safe — `stop()` finds the flush already in
+       * flight and simply waits for the transcript.
+       */
+      closeCapture: () =>
+        Effect.gen(function* () {
+          yield* deps.stt.stop();
         }),
       onChunk: (chunk: TranscriptChunk) =>
         Effect.gen(function* () {

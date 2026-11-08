@@ -2,9 +2,25 @@
 schema: math-coding/3.3
 id: wavecode-voice-fab-toggle-rec
 revision: 1
-state: active
-body_sha: "sha256:dae23d1dd60855ce3a483ba22b7621866831f7450cb22cefa7ff008b725a3c5f"
-yaml_sha: "sha256:dae23d1dd60855ce3a483ba22b7621866831f7450cb22cefa7ff008b725a3c5f"
+state: superseded
+
+# Superseded by `wavecode-voice-minimal-dock` (revision 1). The
+# obligations this decision carried are re-stated there — the ones
+# that still hold — and the ones the redesign deliberately breaks are
+# listed in that decision's `antithesis`:
+#   - `panel-delete-and-clear-exist` (the «Очистить текст» button
+#     is gone; the textarea has a native select-and-delete),
+#   - `toggle-behaviour-is-tested` / `whistle-buffer-survives-resume`
+#     / `hint-chip-reactive` / `instrument-single-source` (the whole
+#     whistle subsystem is gone — the Mic bottom sheet is the
+#     mic→notes path),
+#   - `review-button-gated-by-fsm` (the send button is no longer
+#     hidden outside `review`: pressing it queues the send),
+#   - `layer-boundaries-untouched` (the orchestrator gained a
+#     `closeCapture` operation — releasing the microphone is an
+#     application-layer concern, not a presentation one).
+body_sha: "sha256:36422bc8d283302e461a964008319f94954e5bf91e3e7b39dea6047b13e3c45a"
+yaml_sha: "sha256:36422bc8d283302e461a964008319f94954e5bf91e3e7b39dea6047b13e3c45a"
 
 axiom_link:
   - A0
@@ -296,3 +312,5 @@ relations:
     - wavecode-voice-confirm-before-send@1
     - wavecode-voice-take-continuation@1
     - wavecode-voice-second-take-sendable@1
+  superseded_by:
+    - wavecode-voice-minimal-dock@1
