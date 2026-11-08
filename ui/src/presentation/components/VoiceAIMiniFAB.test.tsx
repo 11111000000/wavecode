@@ -59,6 +59,9 @@ afterEach(() => {
 const fakeHandle = (calls: { start: number; stop: number }) => ({
   start: () => Effect.sync(() => { calls.start += 1; }),
   stop: () => Effect.sync(() => { calls.stop += 1; }),
+  // Closing the capture is separate from waiting for the transcript:
+  // the microphone is free immediately, the answer takes a round trip.
+  closeCapture: () => Effect.void,
   onChunk: () => Effect.void,
   enterReview: () => Effect.void,
   sendReview: () => Effect.void,

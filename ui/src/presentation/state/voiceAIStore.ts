@@ -91,7 +91,39 @@ export const [voiceAITranscript, setVoiceAITranscript] = createSignal<
   TranscriptState
 >(initialTranscriptState());
 
-export const [voiceAIError, setVoiceAIError] = createSignal<string | null>(
+/**
+ * What kind of failure the voice session is carrying.
+ *
+ * Why this is a discriminated type and not a message string
+ * ---------------------------------------------------------
+ * The mini-FAB used to decide "did the browser block the mic?" by
+ * regex-matching the error TEXT (`/permission|NotAllowed|
+ * microphone.*block/i`). Every user-facing message in this file is
+ * in Russian, so the regex never matched anything and the "!"
+ * badge — the whole reason it existed, so the user would know the
+ * cluster is blocked instead of tapping a dead button — could not
+ * fire. The kind is known at the failure site; it has to survive
+ * the trip to the UI as data, not as prose.
+ */
+export type VoiceAIErrorKind =
+  /** the browser denied the microphone */
+  | 'permission'
+  /** another mic mode holds the device */
+  | 'busy'
+  /** the recogniser or the proxy is unreachable */
+  | 'network'
+  /** the engine is broken, wedged, or unsupported */
+  | 'engine'
+  /** the LLM request failed */
+  | 'route'
+  | 'unknown';
+
+export type VoiceAIError = {
+  readonly kind: VoiceAIErrorKind;
+  readonly message: string;
+};
+
+export const [voiceAIError, setVoiceAIError] = createSignal<VoiceAIError | null>(
   null,
 );
 
@@ -162,6 +194,28 @@ export const clearVoiceAIDraft = (): void => {
 };
 
 /**
+ * The text the user asked to send while the take was still in
+ * flight.
+ *
+ * Why the send can be parked
+ * --------------------------
+ * «→ В ИИ» was enabled whenever the composer held text, but the
+ * orchestrator only routed a send from `review` / `sent`
+ * (`VoiceAISession.runRouteFromReview`). Pressing the button during
+ * a take therefore did NOTHING — no error, no toast, no state
+ * change. The button looked live and was dead, which is the worst
+ * combination there is.
+ *
+ * The fix is not to disable the button (the user pressed it with a
+ * text in hand and a reason) but to HONOUR the press: the request
+ * is parked here, the take is stopped, and the moment the transcript
+ * lands in `review` the parked text goes to the LLM.
+ */
+export const [voiceAIPendingSend, setVoiceAIPendingSend] = createSignal<
+  string | null
+>(null);
+
+/**
  * Mirror the recogniser's text into the buffer — but only while the
  * user has not taken the buffer over. Called from `publishState`, the
  * single funnel where the FSM's state reaches the Solid signals.
@@ -169,6 +223,14 @@ export const clearVoiceAIDraft = (): void => {
 const syncDraftFromTranscript = (t: TranscriptState): void => {
   if (voiceAIDraftDirty()) return;
   const text = transcriptText(t);
+  // An empty transcript NEVER clears the composer.
+  //
+  // The relay answers with an empty string often enough — whisper on
+  // a clip it cannot make sense of returns "" — and the error paths
+  // publish an `errored` state that carries an EMPTY transcript. A
+  // straight mirror wiped the user's text on every error, which is
+  // exactly the moment the text matters most.
+  if (text.length === 0) return;
   if (text !== voiceAIDraft()) setVoiceAIDraft(text);
 };
 
@@ -304,12 +366,11 @@ const startElapsedTimer = (): void => {
         && t.interim === ''
         && t.final === ''
       ) {
-        setVoiceAIState({
-          tag: 'errored',
-          error:
-            'Не удалось получить текст от движка распознавания. Проверьте разрешения микрофона в адресной строке и попробуйте снова.',
-          transcript: t,
-        });
+        publishError(
+          'engine',
+          'Не удалось получить текст от движка распознавания. Проверьте разрешения микрофона в адресной строке и попробуйте снова.',
+          t.lang,
+        );
         // Stop the timer — the error state owns the rest of the UX.
         if (elapsedTimer !== null) {
           window.clearInterval(elapsedTimer);
@@ -473,16 +534,7 @@ export const initVoiceAI = (deps: {
             ? err
             : JSON.stringify(err);
       untrack(() => {
-        setVoiceAIState({
-          tag: 'errored',
-          error: message,
-          transcript: initialTranscriptState(
-            (() => {
-              const cur = voiceAIState();
-              return cur.tag === 'errored' ? cur.transcript.lang : (cur as { transcript: { lang: string } }).transcript.lang;
-            })(),
-          ),
-        });
+        publishError(classifyFailure(err), message, langAtInit);
       });
       return Effect.void;
     })(handle.stream).pipe(
@@ -515,7 +567,17 @@ const publishState = (s: VoiceSessionState): void => {
   // point (`subscribeLoop` calls `stt.stop()` on the way to review),
   // so holding `mic-direct` keeps the device locked for nothing and
   // blocks the whistle button.
-  if (s.tag === 'review') releaseOwnChannels();
+  if (s.tag === 'review') {
+    releaseOwnChannels();
+    // The user pressed «→ В ИИ» while the take was still in flight.
+    // The request was parked; now that the transcript is on screen
+    // it can go. Without this the button was a silent no-op.
+    const pending = voiceAIPendingSend();
+    if (pending !== null && handle !== null) {
+      setVoiceAIPendingSend(null);
+      void Effect.runPromise(handle.sendReview(pending));
+    }
+  }
   if (
     s.tag === 'listening'
     || s.tag === 'transcribing'
@@ -530,9 +592,69 @@ const publishState = (s: VoiceSessionState): void => {
     syncDraftFromTranscript(s.transcript);
   }
   if (s.tag === 'errored') {
-    setVoiceAIError(s.error);
+    setVoiceAIError({ kind: pendingErrorKind, message: s.error });
+    pendingErrorKind = 'unknown';
   } else if (voiceAIError() !== null) {
     setVoiceAIError(null);
+  }
+};
+
+/**
+ * The kind of the failure that is about to be published.
+ *
+ * The FSM's `errored` state carries a MESSAGE but no kind, and the
+ * reducer's `error` event cannot know one either — it is raised by
+ * whichever layer failed. The failure sites know, so they set this
+ * latch right before publishing; `publishState` consumes it.
+ */
+let pendingErrorKind: VoiceAIErrorKind = 'unknown';
+
+/**
+ * Publish an `errored` FSM state together with the KIND of the
+ * failure.
+ *
+ * Every error path goes through here. Three of them used to write
+ * `setVoiceAIState({tag:'errored', …})` directly, which bypassed
+ * `publishState` — and with it the `voiceAIError` mirror the mini-FAB
+ * reads. That is why the "!" badge never appeared: the failures it
+ * was built for are exactly the ones that skipped the funnel.
+ */
+const publishError = (
+  kind: VoiceAIErrorKind,
+  message: string,
+  lang: 'ru-RU' | string,
+): void => {
+  pendingErrorKind = kind;
+  publishState({
+    tag: 'errored',
+    error: message,
+    transcript: initialTranscriptState(lang),
+  });
+};
+
+/**
+ * Classify a failure that arrives as an opaque value.
+ *
+ * `SttUnsupportedError` carries a `reason` discriminator and
+ * `MicBusyError` carries a `_tag`; everything else is unknown. The
+ * STT engine's own message is English and internal («ServerWhisperSTT
+ * already recording; call stop() first») — it must never reach the
+ * user as-is, so `sttFailureMessage` translates the known reasons
+ * and this only classifies.
+ */
+const classifyFailure = (err: unknown): VoiceAIErrorKind => {
+  if (typeof err !== 'object' || err === null) return 'unknown';
+  const e = err as { readonly _tag?: unknown; readonly reason?: unknown };
+  if (e._tag === 'MicBusy') return 'busy';
+  switch (e.reason) {
+    case 'permission-denied':
+      return 'permission';
+    case 'network':
+      return 'network';
+    case 'no-speech-api':
+      return 'engine';
+    default:
+      return 'unknown';
   }
 };
 
@@ -693,14 +815,29 @@ export const startVoiceAI = (
       // to monitor, the user saw a stuck counter and an unresponsive ✕.
       // `err` is a discriminated union; `MicBusyError` has no `message`
       // field, so narrow to `SttUnsupportedError` before reading it.
-      if (result.left._tag === 'SttUnsupported') {
-        setVoiceAIState({
-          tag: 'errored',
-          error: sttFailureMessage(result.left),
-          transcript: initialTranscriptState(opts.lang),
+      // The narrow lives in a `const` so it survives the closure.
+      //
+      // It goes through `publishError`, not a raw `setVoiceAIState`:
+      // the raw write skipped the funnel and left `voiceAIError`
+      // null — so the mini-FAB's "!" badge, the one thing that tells
+      // the user the browser is blocking the mic, could never fire.
+      const left = result.left;
+      if (left._tag === 'SttUnsupported') {
+        untrack(() => {
+          publishError(
+            classifyFailure(left),
+            sttFailureMessage(left),
+            opts.lang,
+          );
         });
       } else {
-        setVoiceAIState({ tag: 'errored', error: 'Микрофон занят другой сессией', transcript: initialTranscriptState(opts.lang) });
+        untrack(() => {
+          publishError(
+            'busy',
+            'Микрофон занят другой сессией',
+            opts.lang,
+          );
+        });
       }
     }
   });
@@ -735,14 +872,25 @@ export const stopVoiceAI = (): Effect.Effect<void, never, never> =>
     setVoiceAIFlushing(true);
     stopElapsedTimer();
     stopRmsPoll();
+    // Close the capture FIRST. The microphone is free from this
+    // moment on; everything that follows is the recogniser's answer,
+    // and the microphone has nothing to do with it.
+    if (handle !== null) {
+      yield* handle.closeCapture();
+    }
+    // Release the mic channel NOW, not after the round trip.
+    //
+    // The old order — release after `handle.stop()` — held the
+    // channel for the whole upload (16-32 s measured), so the other
+    // mic modes answered «микрофон занят (voice-ai)» long after the
+    // user had lifted their finger. The device was physically free
+    // the whole time; only the bookkeeping said otherwise.
+    releaseOwnChannels();
+    // Now wait for the transcript. The FAB fires this and forgets —
+    // nobody blocks a touch handler on a network round trip.
     if (handle !== null) {
       yield* handle.stop();
     }
-    const sid = activeSessionId;
-    if (sid !== null) {
-      yield* Effect.sync(() => releaseMic(sid));
-    }
-    activeSessionId = null;
   });
 
 /**
@@ -777,11 +925,7 @@ export const discardVoiceAITake = (): Effect.Effect<void, never, never> =>
     if (handle !== null) {
       yield* handle.enterReview();
     }
-    const sid = activeSessionId;
-    if (sid !== null) {
-      yield* Effect.sync(() => releaseMic(sid));
-    }
-    activeSessionId = null;
+    releaseOwnChannels();
     yield* Effect.sync(() => {
       setVoiceAIFlushing(false);
     });
@@ -819,6 +963,7 @@ export const dismissVoiceAI = (): Effect.Effect<void, never, never> =>
       setVoiceAIFlushing(false);
       setVoiceAITranscript(initialTranscriptState(langAtInit));
       setVoiceAIError(null);
+      setVoiceAIPendingSend(null);
       // The session is over: the buffer goes with it. A new take
       // starts from an empty composer (see `startVoiceAI`).
       setVoiceAIDraft('');
@@ -855,14 +1000,54 @@ export const enterVoiceAIReview = (): Effect.Effect<void, never, never> => {
   });
 };
 
-/** Send the (user-edited) text to the LLM. Must be called from the
- *  `review` state — orchestrator's `sendReview` no-ops if not. */
+/**
+ * Send the (user-edited) text to the LLM.
+ *
+ * Every state the composer can be in has an answer here. The button
+ * used to be enabled whenever the field held text and then quietly
+ * did nothing outside `review` / `sent` — the orchestrator bailed out
+ * of `runRouteFromReview` and the press vanished. A control that
+ * swallows a press is worse than a control that is greyed out, so
+ * the press is honoured instead:
+ *
+ *   - `review` / `sent` → routed right away.
+ *   - `paused`           → the take ended without a final chunk; the
+ *                          reducer's `enter-review` is the path from
+ *                          `paused` into the sendable state.
+ *   - `arming` / `listening` / `transcribing` → the take is still in
+ *                          flight. The request is parked, the take is
+ *                          stopped, and it goes out the moment the
+ *                          transcript lands.
+ *   - `errored` / `requesting` / `applying` → nothing to route; the
+ *                          button is disabled in those states.
+ */
 export const sendVoiceAIReview = (text: string): Effect.Effect<void, never, never> => {
   if (handle === null) {
     return Effect.void;
   }
   return Effect.gen(function* () {
-    yield* handle!.sendReview(text);
+    // The FSM is read imperatively on purpose: this decides WHERE the
+    // text goes, not what the UI renders. `untrack` says so.
+    const tag = untrack(() => voiceAIState().tag);
+    if (tag === 'review' || tag === 'sent') {
+      yield* handle!.sendReview(text);
+      return;
+    }
+    if (tag === 'paused') {
+      yield* handle!.enterReview();
+      yield* handle!.sendReview(text);
+      return;
+    }
+    if (tag === 'arming' || tag === 'listening' || tag === 'transcribing') {
+      setVoiceAIPendingSend(text);
+      if (tag === 'arming' || tag === 'listening') {
+        // Stop the take so the recogniser actually flushes it. The
+        // flush is a network round trip and the caller has no reason
+        // to wait for it — the parked send fires from `publishState`
+        // when the transcript lands.
+        void Effect.runPromise(stopVoiceAI());
+      }
+    }
   });
 };
 

@@ -59,12 +59,16 @@ const formatError = (
 
 /** True when the most recent voice-AI failure was permission-related.
  *  Surfaced as a "blocked" badge on the FAB so the user knows why
- *  the cluster isn't responding — no need to tap repeatedly. */
-const isPermissionBlocked = (): boolean => {
-  const e = voiceAIError();
-  if (e === null) return false;
-  return /permission|NotAllowed|microphone.*block/i.test(e);
-};
+ *  the cluster isn't responding — no need to tap repeatedly.
+ *
+ *  This reads the failure's KIND, not its text. The old version
+ *  matched `/permission|NotAllowed|microphone.*block/i` against the
+ *  message — and every message in this app is in Russian, so the
+ *  regex could never match and the badge could never appear. The
+ *  failure site knows what went wrong; that fact has to travel as
+ *  data, not as prose. */
+const isPermissionBlocked = (): boolean =>
+  voiceAIError()?.kind === 'permission';
 
 /**
  * Run a possibly-failing Effect with a user-facing toast on failure.
@@ -185,7 +189,7 @@ export function VoiceAIMiniFAB(props: Props): JSX.Element {
       return 'Открой в Chrome для голосового управления';
     }
     const err = voiceAIError();
-    if (err !== null) return err;
+    if (err !== null) return err.message;
     return isRecording()
       ? 'Остановить запись'
       : 'Голос → ИИ (нажми, чтобы записать; нажми ещё раз, чтобы остановить)';

@@ -51,7 +51,7 @@ const enterVoiceAIReviewForTest = async (): Promise<void> => {
  *   3. Barge-in (cancelInFlight) walks the FSM back to idle.
  */
 
-const installFake = (): VoiceSessionHandle => {
+const installFake = (sent?: string[]): VoiceSessionHandle => {
   const stateRef = Ref.unsafeMake<VoiceSessionState>(initialVoiceSession());
   // Route through the store's OWN mirror, the same function the real
   // stream subscription uses. Re-implementing it here would let the
@@ -87,6 +87,12 @@ const installFake = (): VoiceSessionHandle => {
       Effect.sync(() => {
         setState({ tag: 'idle' });
       }),
+    closeCapture: () =>
+      Effect.sync(() => {
+        // The fake's capture close is a no-op on the FSM: the real
+        // orchestrator's `closeCapture` only closes the microphone and
+        // leaves the FSM alone (the transcript is still coming).
+      }),
     onChunk: () => Effect.void,
     cancelInFlight: () =>
       Effect.sync(() => {
@@ -103,8 +109,9 @@ const installFake = (): VoiceSessionHandle => {
           });
         }
       }),
-    sendReview: () =>
+    sendReview: (text: string) =>
       Effect.sync(() => {
+        sent?.push(text);
         const cur = voiceAIState();
         if (cur.tag === 'review' || cur.tag === 'sent') {
           setState({
@@ -449,6 +456,10 @@ describe('voiceAIStore — silence watchdog is engine-aware', () => {
         __publishVoiceAIStateForTests(listening);
       }),
       stop: () => Effect.never,
+      // The capture close is instantaneous in this fake — the long
+      // wait lives in `stop`, which is where the relay round trip
+      // actually blocks.
+      closeCapture: () => Effect.void,
       onChunk: () => Effect.void,
       cancelInFlight: () => Effect.void,
       enterReview: () => Effect.void,
@@ -592,6 +603,180 @@ describe('voiceAIStore — cancelling the send', () => {
     await Effect.runPromise(cancelVoiceAISend());
     expect(voiceAIState().tag).toBe('review');
     // The buffer is still there — the whole point of the cancel.
+    expect(voiceAIDraft()).toBe('сделай потише');
+  });
+});
+
+/**
+ * The three bugs that made the voice input feel broken rather than
+ * merely ugly. All three are regressions: each of them was a real
+ * report from the field.
+ */
+describe('voiceAIStore — the send is never a no-op', () => {
+  it('REGRESSION: «→ В ИИ» during a take goes out when the transcript lands', async () => {
+    // The button was enabled whenever the composer held text and the
+    // orchestrator only routed a send from `review` / `sent`. Pressing
+    // it during a take therefore did NOTHING — no error, no toast, no
+    // state change. A control that swallows a press is worse than one
+    // that is greyed out.
+    const sent: string[] = [];
+    const listening: VoiceSessionState = {
+      tag: 'listening',
+      transcript: initialTranscriptState('ru-RU'),
+      continuous: true,
+    };
+    const stateRef = Ref.unsafeMake<VoiceSessionState>(initialVoiceSession());
+    // A handle with the PRODUCTION shape of a flush: the FSM stays in
+    // `listening` until the transcript lands (that is what
+    // `VoiceAISession.stop` does — it waits for the round trip and
+    // the reducer walks listening → transcribing → review on its own).
+    __setVoiceAIHandleForTests({
+      stateRef,
+      start: () => Effect.sync(() => {
+        Effect.runSync(Ref.set(stateRef, listening));
+        __publishVoiceAIStateForTests(listening);
+      }),
+      stop: () => Effect.void,
+      closeCapture: () => Effect.void,
+      onChunk: () => Effect.void,
+      cancelInFlight: () => Effect.void,
+      enterReview: () => Effect.void,
+      sendReview: (text: string) => Effect.sync(() => {
+        sent.push(text);
+        __publishVoiceAIStateForTests({
+          tag: 'requesting',
+          transcript: initialTranscriptState('ru-RU'),
+          continuous: false,
+        });
+      }),
+      cancelReview: () => Effect.void,
+      cancelSend: () => Effect.void,
+      dismiss: () => Effect.void,
+      stream: Stream.empty,
+    } as unknown as VoiceSessionHandle);
+
+    await Effect.runPromise(startVoiceAI({ mode: 'continuous', lang: 'ru-RU' }));
+    setVoiceAIDraftText('сделай потише');
+
+    // The user presses send while the recogniser is still working.
+    await Effect.runPromise(sendVoiceAIReview('сделай потише'));
+    // Nothing has gone out yet — the transcript is still on its way.
+    expect(sent).toHaveLength(0);
+
+    // The transcript lands.
+    __dispatchVoiceAIForTests({ type: 'chunk', chunk: {
+      kind: 'final',
+      text: 'сделай потише',
+      confidence: 0.9,
+      lang: 'ru-RU',
+      timestampMs: 0,
+    } });
+    __dispatchVoiceAIForTests({ type: 'enter-review' });
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(sent).toEqual(['сделай потише']);
+    expect(voiceAIState().tag).toBe('requesting');
+  });
+});
+
+describe('voiceAIStore — the failure kind travels as data', () => {
+  it('REGRESSION: a permission denial is classified, not regex-matched', async () => {
+    // The mini-FAB decided "the browser blocked the mic" by matching
+    // `/permission|NotAllowed|microphone.*block/i` against the error
+    // TEXT — and every user-facing message in this app is in Russian,
+    // so the regex could never match. The "!" badge, the one thing
+    // that told the user the cluster was blocked instead of dead,
+    // could not fire.
+    const stateRef = Ref.unsafeMake<VoiceSessionState>(initialVoiceSession());
+    __setVoiceAIHandleForTests({
+      stateRef,
+      start: () => Effect.fail({
+        _tag: 'SttUnsupported',
+        reason: 'permission-denied',
+        message: 'Permission denied',
+      }),
+      stop: () => Effect.void,
+      closeCapture: () => Effect.void,
+      onChunk: () => Effect.void,
+      cancelInFlight: () => Effect.void,
+      enterReview: () => Effect.void,
+      sendReview: () => Effect.void,
+      cancelReview: () => Effect.void,
+      cancelSend: () => Effect.void,
+      dismiss: () => Effect.void,
+      stream: Stream.empty,
+    } as unknown as VoiceSessionHandle);
+
+    await Effect.runPromise(startVoiceAI({ mode: 'continuous', lang: 'ru-RU' }));
+
+    expect(voiceAIState().tag).toBe('errored');
+    expect(voiceAIError()?.kind).toBe('permission');
+    // The message stays human — the kind is what the UI branches on.
+    expect(voiceAIError()?.message).toBe('Браузер не дал доступ к микрофону');
+  });
+});
+
+describe('voiceAIStore — the microphone is freed when the capture ends', () => {
+  it('REGRESSION: the mic channel is released before the transcript lands', async () => {
+    // The release used to happen AFTER `handle.stop()` — which waits
+    // for the whole relay round trip (16-32 s measured). For those
+    // seconds every other mic mode answered «микрофон занят
+    // (voice-ai)» about a take that was already over.
+    const stateRef = Ref.unsafeMake<VoiceSessionState>(initialVoiceSession());
+    __setVoiceAIHandleForTests({
+      stateRef,
+      start: () => Effect.sync(() => {
+        Effect.runSync(Ref.set(stateRef, {
+          tag: 'listening',
+          transcript: initialTranscriptState('ru-RU'),
+          continuous: true,
+        }));
+      }),
+      // The round trip never settles inside the test — exactly what a
+      // 30 s relay wait looks like from here.
+      stop: () => Effect.never,
+      closeCapture: () => Effect.void,
+      onChunk: () => Effect.void,
+      cancelInFlight: () => Effect.void,
+      enterReview: () => Effect.void,
+      sendReview: () => Effect.void,
+      cancelReview: () => Effect.void,
+      cancelSend: () => Effect.void,
+      dismiss: () => Effect.void,
+      stream: Stream.empty,
+    } as unknown as VoiceSessionHandle);
+
+    await Effect.runPromise(startVoiceAI({ mode: 'continuous', lang: 'ru-RU' }));
+    expect(micMutexState().speechApiInternal).toHaveLength(1);
+
+    // Finger off the button. The flush is still in flight.
+    void Effect.runPromise(stopVoiceAI());
+    await Promise.resolve();
+
+    // The transcript has NOT landed — and the device is already free.
+    expect(voiceAIFlushing()).toBe(true);
+    expect(micMutexState().speechApiInternal).toHaveLength(0);
+  });
+});
+
+describe('voiceAIStore — the composer survives an empty transcript', () => {
+  it('REGRESSION: an error does not wipe the text the user dictated', () => {
+    __dispatchVoiceAIForTests({ type: 'arm' });
+    __dispatchVoiceAIForTests({ type: 'stt-ready' });
+    __dispatchVoiceAIForTests({ type: 'chunk', chunk: {
+      kind: 'final',
+      text: 'сделай потише',
+      confidence: 0.9,
+      lang: 'ru-RU',
+      timestampMs: 0,
+    } });
+    expect(voiceAIDraft()).toBe('сделай потише');
+
+    // The relay answers with an empty transcript often enough, and the
+    // error paths publish an `errored` state carrying an EMPTY
+    // transcript. A straight mirror wiped the user's text on every
+    // error — the moment it matters most.
+    __dispatchVoiceAIForTests({ type: 'error', message: 'движок умер' });
     expect(voiceAIDraft()).toBe('сделай потише');
   });
 });
