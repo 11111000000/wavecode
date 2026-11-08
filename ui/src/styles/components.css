@@ -6566,7 +6566,9 @@ textarea.ai-textarea:focus-visible {
   to { transform: rotate(360deg); }
 }
 
-/* Icon buttons in the status row: discard the audio, close the dock. */
+/* Icon buttons in the status row: discard the audio, close the dock.
+ * `margin-left: auto` on the first one pushes both to the right edge
+ * — the level bar sits next to the phrase, where it belongs. */
 .voice-recording-panel__delete,
 .voice-recording-panel__close {
   display: inline-flex;
@@ -6584,6 +6586,15 @@ textarea.ai-textarea:focus-visible {
   transition:
     color var(--dur-2xs) var(--ease),
     border-color var(--dur-2xs) var(--ease);
+}
+.voice-recording-panel__delete { margin-left: auto; }
+/* When there is no trash button the ✕ takes its place at the right
+ * edge. With one, the trash already owns the auto margin and the ✕
+ * sits right next to it — otherwise the free space would be split
+ * between the two and they would drift apart. */
+.voice-recording-panel__close { margin-left: auto; }
+.voice-recording-panel__delete + .voice-recording-panel__close {
+  margin-left: 0;
 }
 .voice-recording-panel__delete:hover,
 .voice-recording-panel__close:hover {
