@@ -46,7 +46,7 @@ this section, but defer to the source of truth above.
 ---
 
 Этот репозиторий использует методологию
-`math-coding 3.7` (дистрибутив 3.7, пути ниже) для документирования
+[math-coding 3.7](../math-coding/adoption/SKILL.md) для документирования
 решений.
 
 Каждое не-тривиальное решение фиксируется YAML-файлом в
@@ -54,37 +54,13 @@ this section, but defer to the source of truth above.
 валидируется ядром (`mathc validate`) и участвует в gate-gate
 (`mathc self-check`). Перед началом работы обязательно прочитать:
 
-1. `math-coding/adoption/SKILL.md` — протокол для проектов-адоптеров
-   (совместим с `mathc@>=3.7.4`); **файла в текущем checkout нет**
-2. `math-coding/axioms/index.md` — пять аксиом; **файла в текущем checkout нет**
-3. `decisions/decision.yaml` — active policy (что входит в scope,
-   какие paths закрыты)
-4. `schemas/decision.json` — JSON-schema, валидируемая ядром;
-   **файла в текущем checkout нет**
-
-### Метод здесь — 3.7, и он заморожен
-
-Формат решений `decisions/<id>.yaml` (семейство `math-coding/3.3`) —
-**замороженная версия метода**. Разрабатывается только четвёртая
-версия (`../math-coding`: `spec.json` + `mathc`), и она читает другой
-формат — `spec.json` с утверждениями, а не `decisions/*.yaml`. Форматы
-не совместимы, и моста между ними нет.
-
-Практически это значит:
-
-* новые решения в этом репозитории **не создаются**: формат 3.7 не
-  развивается, а `mathc validate` и `mathc self-check` в CI относятся к
-  замороженному ядру 3.7;
-* пути `../math-coding/adoption/SKILL.md`, `../math-coding/axioms/index.md`,
-  `../math-coding/VERSION`, `schemas/decision.json` и `lib/schema_embedded.ml`
-  относятся к дистрибутиву 3.7, и **в текущем checkout `../math-coding`
-  их нет**. Это не рабочие ссылки, и читать их нечего;
-* чтобы вести декларации в четвёртой версии, нужен отдельный `spec.json`
-  и `mathc` из `../math-coding`. Это решение владельца репозитория, а не
-  молчаливая миграция.
-
-Существующие решения и аттестации остаются как есть: они исторические,
-и их правка — не часть работы над четвёртой версией.
+1. [math-coding/adoption/SKILL.md](../math-coding/adoption/SKILL.md) — протокол
+   для проектов-адоптеров (совместим с `mathc@>=3.7.4`)
+2. [math-coding/axioms/index.md](../math-coding/axioms/index.md) — пять аксиом
+3. [`decisions/decision.yaml`](decisions/decision.yaml) — active policy
+   (что входит в scope, какие paths закрыты)
+4. [schemas/decision.json](schemas/decision.json) — JSON-schema,
+   валидируемая ядром
 
 ### Две версии — не путать
 
