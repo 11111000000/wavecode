@@ -457,7 +457,7 @@ type Meter = {
 /**
  * Module-level handle to the active recording's meter. The presentation
  * reads `getServerWhisperRmsLevel()` on a 10 Hz poll to render a live
- * RMS bar inside `RecordingPanel`. The handle is set in `start()` after
+ * RMS bar inside `SpeechInput`. The handle is set in `start()` after
  * the meter exists and cleared in the corresponding `release()`.
  *
  * Why a module-level ref instead of plumbing the meter through the

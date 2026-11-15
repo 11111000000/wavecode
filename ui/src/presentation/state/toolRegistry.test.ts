@@ -6,7 +6,7 @@ import {
   getTool,
 } from './toolRegistry';
 import { getActiveTab, getKindSnap, openKindSheet, closeKindSheet, setTab } from './uiState';
-import { closeInputDock, isInputDockOpen } from './inputMode';
+import { closeInputSheet, isInputSheetOpen } from './inputMode';
 
 /**
  * Реестр инструментов — единственный источник правды о навигации.
@@ -16,8 +16,23 @@ import { closeInputDock, isInputDockOpen } from './inputMode';
  * обязан открываться. Эти тесты — «заклёвочный гайд» для реестра.
  */
 describe('toolRegistry', () => {
-  it('держит четыре пункта рельса', () => {
-    expect(TIER1_TOOLS.map((t) => t.id)).toEqual(['score', 'step', 'ai', 'input']);
+  it('держит три пункта рельса', () => {
+    // wavecode-unified-input-entry: «Ввод» ушёл из рельса в tier 2.
+    // В рельсе рядом с «ИИ» он читался как второй способ получить
+    // музыку; теперь ввод открывает круглая кнопка «Ввод».
+    expect(TIER1_TOOLS.map((t) => t.id)).toEqual(['score', 'step', 'ai']);
+  });
+
+  it('держит «Ввод» во втором уровне', () => {
+    const input = getTool('input');
+    expect(input).toBeDefined();
+    expect(input?.tier).toBe(2);
+  });
+
+  it('не держит отдельного инструмента «Микрофон»', () => {
+    // Свист живёт вкладкой листа ввода. Отдельный инструмент «Микрофон»
+    // называл бы то же устройство во втором месте интерфейса.
+    expect(TOOLS.map((t) => t.id)).not.toContain('mic');
   });
 
   it('не содержит повторяющихся id', () => {
@@ -49,11 +64,11 @@ describe('toolRegistry', () => {
     expect(getKindSnap('mixer')).toBe('closed');
   });
 
-  it('открывает «Ввод» через входной док', () => {
-    closeInputDock();
+  it('открывает «Ввод» листом ввода', () => {
+    closeInputSheet();
     getTool('input')?.open();
-    expect(isInputDockOpen()).toBe(true);
-    closeInputDock();
+    expect(isInputSheetOpen()).toBe(true);
+    closeInputSheet();
   });
 
   it('находит инструмент по названию и по ключевому слову', () => {

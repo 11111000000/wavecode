@@ -286,7 +286,7 @@ let rmsPollTimer: number | null = null;
 /**
  * Begin polling the active STT meter. The server engine exposes a
  * live level through `getServerWhisperRmsLevel`; on the Web Speech
- * path that returns `null` and the signal stays null — `RecordingPanel`
+ * path that returns `null` and the signal stays null — `SpeechInput`
  * renders no bar in that case (see the wavecode-voice-rec-and-meter
  * decision's "meter-availability-is-server-only" outcome).
  */

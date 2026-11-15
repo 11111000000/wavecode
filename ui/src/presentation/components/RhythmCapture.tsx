@@ -1,5 +1,4 @@
 import { For, type JSX } from 'solid-js';
-import { CloseIcon } from '../icons';
 import {
   RHYTHM_COLUMNS,
   RHYTHM_STEPS,
@@ -13,12 +12,12 @@ import {
   rhythmTempoBpm,
   startRhythmTake,
   stopRhythmTake,
+  tapRhythmStep,
   toggleRhythmStep,
 } from '../state/rhythmStore';
-import { closeInputDock } from '../state/inputMode';
 
 /**
- * RhythmCapture — поверхность ритм-ввода внутри входного дока.
+ * RhythmCapture — вкладка «Ритм» листа ввода.
  *
  * Что здесь
  * ---------
@@ -31,17 +30,14 @@ import { closeInputDock } from '../state/inputMode';
  * ----------------
  * Take — это ПРОХОД по сетке: сначала отсчёт, потом указатель едет по
  * шестнадцатым со скоростью темпа, а палец отмечает шаги. Кнопка
- * ввода (единственная плавающая кнопка приложения) в режиме «Ритм»
- * делает ровно это — ставит отметку на текущем шаге. Сама клетка
- * сетки тоже кликается: так шаг можно поставить точно.
+ * «Отметить» ставит отметку на текущем шаге, а сама клетка сетки
+ * кликается — так шаг можно поставить точно.
  *
  * Чего здесь нет
  * --------------
- *   - микрофона: ритм — это пальцы, а не звук (микрофонная ветка
- *     `feat/rhythm-recorder` осталась отдельной идеей);
- *   - второго «Применить»-сценария: паттерн уходит в партитуру
- *     ровно одним действием — тем же путём `appendToTopStack` +
- *     `replaceScore`, что и микрофонный док.
+ *   - микрофона: ритм — это пальцы, а не звук;
+ *   - кнопки закрытия: лист ввода закрывается сам, и закрытие гасит
+ *     проход (часы не крутятся в фоне, пока листа нет).
  */
 
 const STEP_INDICES: readonly number[] = Array.from(
@@ -119,24 +115,29 @@ export function RhythmCapture(): JSX.Element {
           {rhythmRunning() ? 'Стоп' : 'Старт'}
         </button>
 
+        {/* wavecode-unified-input-entry: раньше тап по текущему шагу
+         * делала плавающая круглая кнопка — та же самая, что начинала
+         * запись голоса, только молча меняла смысл. Теперь у ритма
+         * своя кнопка рядом с кнопкой «Старт», и микрофон здесь не
+         * открывается НИКОГДА: ритм — это пальцы по сетке. */}
+        <button
+          type="button"
+          class="rhythm-capture__tap"
+          aria-label="Отметить текущий шаг"
+          title={
+            rhythmRunning()
+              ? 'Отметить текущий шаг'
+              : 'Сначала запустите проход по сетке'
+          }
+          disabled={!rhythmRunning()}
+          onClick={() => { tapRhythmStep(); }}
+        >
+          Отметить
+        </button>
+
         <span class="rhythm-capture__status" aria-live="polite">
           {statusText()}
         </span>
-
-        <button
-          type="button"
-          class="rhythm-capture__close"
-          aria-label="Закрыть панель ввода"
-          title="Закрыть"
-          onClick={() => {
-            // Закрытие панели = конец прохода: часы не должны крутиться
-            // в фоне, пока панели нет.
-            stopRhythmTake();
-            closeInputDock();
-          }}
-        >
-          <CloseIcon size={14} />
-        </button>
       </div>
 
       <div

@@ -359,51 +359,9 @@
    --radius-lg (скругления). Без свечений, градиентов и бесконечных
    анимаций — как и весь остальной zen-слой. */
 
-/* Переключатель режимов — сегмент в доке, а не отдельный экран. */
-.voice-recording-panel__modes {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2xs);
-  padding: var(--space-3xs);
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-}
-
-.voice-recording-panel__mode {
-  padding: var(--space-2xs) var(--space-sm);
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: var(--radius-lg);
-  color: var(--fg-dim);
-  font-family: var(--font-sans);
-  font-size: var(--fs-xs);
-  cursor: pointer;
-  transition: color var(--dur-xs) var(--ease),
-              background var(--dur-xs) var(--ease),
-              border-color var(--dur-xs) var(--ease);
-}
-
-.voice-recording-panel__mode:hover:not(:disabled) {
-  color: var(--fg);
-  background: var(--surface-3);
-}
-
-.voice-recording-panel__mode:focus-visible {
-  outline: 2px solid var(--primary);
-  outline-offset: 2px;
-}
-
-.voice-recording-panel__mode[data-active='true'] {
-  color: var(--primary);
-  background: var(--primary-soft);
-  border-color: var(--primary);
-}
-
-.voice-recording-panel__mode:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
+/* Вкладки листа ввода описаны в components.css (слой компонентов).
+   Переключатель «Голос | Ритм» в доке больше не существует: модальностей
+   стало три, и они живут вкладками. */
 
 /* Поверхность ритма. */
 .rhythm-capture {
@@ -502,29 +460,37 @@
   font-size: var(--fs-xs);
 }
 
-.rhythm-capture__close {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 26px;
-  height: 26px;
-  background: transparent;
-  border: 1px solid transparent;
+/* Тап по текущему шагу. Раньше это делала плавающая круглая кнопка —
+   та же, что начинала запись голоса, только молча менявшая смысл.
+   Теперь у ритма своя кнопка, и микрофон здесь не открывается. */
+.rhythm-capture__tap {
+  padding: var(--space-2xs) var(--space-sm);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
   border-radius: var(--radius-lg);
-  color: var(--fg-dim);
+  color: var(--fg);
+  font-family: var(--font-sans);
+  font-size: var(--fs-xs);
   cursor: pointer;
   transition: color var(--dur-xs) var(--ease),
-              border-color var(--dur-xs) var(--ease);
+              border-color var(--dur-xs) var(--ease),
+              background var(--dur-xs) var(--ease);
 }
 
-.rhythm-capture__close:hover {
-  color: var(--fg);
-  border-color: var(--border-strong);
+.rhythm-capture__tap:hover:not(:disabled) {
+  color: var(--cyan);
+  border-color: var(--cyan);
+  background: var(--cyan-soft);
 }
 
-.rhythm-capture__close:focus-visible {
+.rhythm-capture__tap:focus-visible {
   outline: 2px solid var(--primary);
   outline-offset: 1px;
+}
+
+.rhythm-capture__tap:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 
 /* Сетка: 4 колонки = 4 шага доли, 4 строки = такт. */
@@ -623,27 +589,10 @@
   border-color: color-mix(in oklab, var(--primary) 85%, var(--fg));
 }
 
-/* Та самая ОДНА плавающая кнопка — в режиме ритма. */
-.voice-mini-fab--rhythm {
-  color: var(--cyan);
-  border-color: var(--cyan);
-}
-
-.voice-mini-fab--rhythm[data-state='running'] {
-  background: var(--cyan-soft);
-  border-color: var(--cyan);
-}
-
-.voice-mini-fab--rhythm .voice-mini-fab__label {
-  color: var(--cyan);
-}
-
-.voice-mini-fab__tap-dot {
-  width: 14px;
-  height: 14px;
-  border-radius: var(--radius-full);
-  background: var(--cyan);
-}
+/* wavecode-unified-input-entry: у плавающей кнопки больше нет режима
+   ритма — она всегда открывает лист ввода. Поэтому исчезли и
+   `.voice-mini-fab--rhythm`, и точка тапа: тап теперь живёт своей
+   кнопкой внутри вкладки «Ритм». */
 
 /* ── FOCUS (фаза 2) ───────────────────────────────────────────────
  *
@@ -664,11 +613,26 @@
   .l-preset__play,
   .toast-item.toast-clickable,
   .share-url,
-  .voice-recording-panel__review-textarea,
+  .speech-input__review-textarea,
   .save-preset-bar input[type='text']
 ):focus-visible {
   outline: 2px solid var(--primary);
   outline-offset: 2px;
+}
+
+/* wavecode-unified-input-entry: у вкладок листа ввода и у кнопки
+   записи свой фокус — обе они новые контролы, и раньше правила для
+   них не было (терялись `.voice-recording-panel__mode:focus-visible`
+   и `.rhythm-capture__close:focus-visible` вместе с удалёнными
+   компонентами). */
+.input-tab:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 1px;
+}
+
+.speech-input__rec:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 1px;
 }
 
 /* ── ФАЗА 6: ТИШИНА ─────────────────────────────────────────────────

@@ -215,9 +215,9 @@ export const setLayout = (layout: Layout): void => {
 // Bottom Sheet (mobile-first)
 // =========================================================================
 
-export type SheetKind = 'ai' | 'mixer' | 'step' | 'piano' | 'status' | 'share' | 'record' | 'visualize' | 'mic' | 'gesture' | 'tools' | 'export' | null;
+export type SheetKind = 'ai' | 'mixer' | 'step' | 'piano' | 'status' | 'share' | 'record' | 'visualize' | 'input' | 'gesture' | 'tools' | 'export' | null;
 export type SheetSnap = 'closed' | 'peek' | 'half' | 'full';
-export type TabId = 'score' | 'step' | 'piano' | 'mixer' | 'chat' | 'status' | 'visualize' | 'mic';
+export type TabId = 'score' | 'step' | 'piano' | 'mixer' | 'chat' | 'status' | 'visualize';
 
 /** wavecode-mobile-split-pane — sheet height (in CSS px) on mobile.
  *  null = snap-only (snap decides height via CSS rules in sheets.css
@@ -347,7 +347,7 @@ export const snapTo = (snap: SheetSnap): void => {
 
 /** Snap per-kind — несколько sheet'ов могут быть открыты каждый со своим snap. */
 const [snapsByKind, setSnapsByKindRaw] = createSignal<Record<NonNullable<SheetKind>, SheetSnap>>({
-  ai: 'closed', mixer: 'closed', step: 'closed', piano: 'closed', status: 'closed', share: 'closed', record: 'closed', visualize: 'closed', mic: 'closed', gesture: 'closed', tools: 'closed', export: 'closed',
+  ai: 'closed', mixer: 'closed', step: 'closed', piano: 'closed', status: 'closed', share: 'closed', record: 'closed', visualize: 'closed', input: 'closed', gesture: 'closed', tools: 'closed', export: 'closed',
 });
 export const getSnapsByKind = snapsByKind;
 export const getKindSnap = (kind: NonNullable<SheetKind>): SheetSnap => snapsByKind()[kind];
@@ -406,10 +406,6 @@ export const setTab = (tab: TabId): void => {
     // Visualizer открывается на full — track overview + spectrum внизу
     // занимают много места; half обрезал бы spectrum до неюзабельных 50px.
     openKindSheet('visualize', 'full');
-  } else if (tab === 'mic') {
-    // Mic: brief interaction model (melody → preview → apply →
-    // close). half-snap leaves the editor visible above for context.
-    openKindSheet('mic', 'half');
   } else if (tab === 'score') {
     closeAllSheets();
   }

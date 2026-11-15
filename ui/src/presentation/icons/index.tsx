@@ -329,7 +329,7 @@ export const ToolsIcon = (p: Props): JSX.Element => (
   </svg>
 );
 
-/** Generic mic glyph for the VoiceAIMiniFAB. Same shape as
+/** Generic mic glyph for the InputFAB. Same shape as
  *  `TabMicIcon` but kept separate so the FAB styling can rotate
  *  through context (size 16/18/20) without affecting tab-bar
  *  metrics. */

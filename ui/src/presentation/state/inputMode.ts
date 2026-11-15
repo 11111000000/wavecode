@@ -1,41 +1,57 @@
 import { createSignal } from 'solid-js';
+import { closeKindSheet, getKindSnap, openKindSheet } from './uiState';
 
 /**
- * inputMode — режим входного дока.
+ * inputMode — три модальности ввода и единственная точка входа в них.
  *
- * wavecode-zen-minimal-ui (ревизия 2, пункт 10): голос и ритм — два
- * явных режима ОДНОГО входного дока. Переключатель «Голос | Ритм»
- * живёт в доке; плавающая кнопка одна и знает, в каком режиме она
- * находится.
+ * wavecode-unified-input-entry: раньше в приложении было ЧЕТЫРЕ
+ * кнопки ввода, разложенных по трём местам:
  *
- *   voice  — микрофон → распознавание речи → правка партитуры
- *   rhythm — счёт темпа и тап-сетка → ритмический паттерн
+ *   - плавающая круглая «Голос» — она же REC, она же тап-пад в ритме;
+ *   - пункт рельса «Ввод» — открывал тот же самый док;
+ *   - пункт листа «Инструменты» «Микрофон» — а это был свист;
+ *   - переключатель «Голос | Ритм» в доке.
  *
- * Отдельный store (а не поле в voiceAIStore), потому что режим ввода
- * шире голоса: оркестратор распознавания не должен знать про ритм.
+ * Пользователь не мог отличить «голос записывает мелодию» от
+ * «микрофон снимает высоту тона»: обе кнопки назывались устройством,
+ * а различались только местом в интерфейсе.
+ *
+ * Теперь:
+ *
+ *   speech  — микрофон → распознавание речи → текст → «→ В ИИ»
+ *   whistle — микрофон → определение высоты → MIDI-ноты и удары
+ *   rhythm  — простукивание сетки → ритмический паттерн
+ *
+ * Модальности называются по НАМЕРЕНИЮ («что я сейчас делаю»), а не по
+ * устройству («микрофон»): устройство одно, а смыслов два, и развести
+ * их по названию кнопки было невозможно в принципе.
+ *
+ * Лист ввода — единственная точка входа. Пункт «Ввод» ушёл из рельса
+ * в tier 2 (лист «Инструменты» + ⌘K), плавающая кнопка открывает
+ * лист ввода и всегда означает одно и то же: «открыть ввод».
  */
-export type InputMode = 'voice' | 'rhythm';
+export type InputMode = 'speech' | 'whistle' | 'rhythm';
 
-const [inputMode, setInputModeRaw] = createSignal<InputMode>('voice');
-const [inputDockOpen, setInputDockOpen] = createSignal(false);
+/** Порядок вкладок в листе ввода. */
+export const INPUT_MODES: readonly InputMode[] = ['speech', 'whistle', 'rhythm'];
+
+const [inputMode, setInputModeRaw] = createSignal<InputMode>('speech');
 
 export const getInputMode = inputMode;
-export const isInputDockOpen = inputDockOpen;
 
 export const setInputMode = (mode: InputMode): void => {
   setInputModeRaw(mode);
 };
 
-/** Открыть док ввода; без аргумента — в текущем режиме. */
-export const openInputDock = (mode?: InputMode): void => {
+/** Открыт ли лист ввода. */
+export const isInputSheetOpen = (): boolean => getKindSnap('input') !== 'closed';
+
+/** Открыть лист ввода; без аргумента — на текущей модальности. */
+export const openInputSheet = (mode?: InputMode): void => {
   if (mode) setInputModeRaw(mode);
-  setInputDockOpen(true);
+  openKindSheet('input', 'half');
 };
 
-export const closeInputDock = (): void => {
-  setInputDockOpen(false);
-};
-
-export const toggleInputDock = (): void => {
-  setInputDockOpen((v) => !v);
+export const closeInputSheet = (): void => {
+  closeKindSheet('input');
 };

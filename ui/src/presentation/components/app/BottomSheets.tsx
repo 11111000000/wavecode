@@ -3,13 +3,13 @@ import { BottomSheet } from '~/presentation/components/BottomSheet';
 import { MixerPanel } from '~/presentation/components/MixerPanel';
 import { StepGrid } from '~/presentation/components/StepGrid';
 import { PianoKeyboard } from '~/presentation/components/PianoKeyboard';
-import { MicPanel } from '~/presentation/components/MicPanel';
 import { HelloPanel } from '~/presentation/panels/HelloPanel';
 import { AIEditPanel } from '~/presentation/panels/AIEditPanel';
 import { VisualizerPanelLazy } from '~/presentation/panels/VisualizerPanelLazy';
 import { GesturePanelLazy } from '~/presentation/panels/GesturePanelLazy';
 import { ToolsSheet } from './ToolsSheet';
 import { ExportSheet } from './ExportSheet';
+import { InputSheet } from './InputSheet';
 
 export type BottomSheetsProps = Record<string, never>;
 
@@ -86,21 +86,11 @@ export function BottomSheets(_: BottomSheetsProps): JSX.Element {
         </BottomSheet>
       </Show>
 
-      {/* wavecode-mic-to-strudel: rendered on BOTH viewports
-          (unlike piano which is desktop-only because it coexists with
-          the editor). Mic is a brief interaction — user opens the
-          sheet, makes sounds, applies, closes — so covering the editor
-          is fine on both viewports. half-snap leaves the editor
-          visible above for context. */}
-      <BottomSheet
-        kind="mic"
-        title="Микрофон"
-        subtitle="микрофон → Strudel"
-      >
-        <div class="mic-sheet-body">
-          <MicPanel />
-        </div>
-      </BottomSheet>
+      {/* wavecode-unified-input-entry: ввод — один лист с тремя
+          вкладками (Речь | Свист | Ритм). Отдельного листа «Микрофон»
+          больше нет: свист живёт вкладкой, а круглая кнопка «Ввод» —
+          единственная точка входа во все три. */}
+      <InputSheet />
 
       {/* wavecode-hand-gesture-control: «управление руками». The panel is
           loaded lazily (the camera tracker must stay out of the cold-start
