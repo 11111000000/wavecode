@@ -164,7 +164,7 @@ export const enterMelodyEdit = (
     return {
       ok: false,
       reason:
-        'Edit mode requires a top-level melody call (note(…) or n(…)). Switch to Sketch to add a melody layer.',
+        'Режим правки требует верхнеуровневого мелодического вызова (note(…) или n(…)). Переключитесь на «Черновик», чтобы добавить мелодический слой.',
     };
   }
   const parsed = loadMelodyFromScoreInternal(score);

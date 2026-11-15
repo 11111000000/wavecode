@@ -17,7 +17,7 @@ import { setActive as setRuntimeHighlightActive, clearActive as clearRuntimeHigh
 
 // `wrapSuperdoughLoadBuffer` is imported lazily (inside ensureRepl) so
 // that test files which pull in `LiveAudioEngine` (e.g. audioActions.ts,
-// TransportPanel.test.tsx) do NOT eagerly load SampleLoader, which in
+// TransportBar.test.tsx) do NOT eagerly load SampleLoader, which in
 // turn pulls in `@strudel/webaudio` -> `@strudel/core` -> SalatRepl from
 // `@kabelsalat/web` (a CJS-only module that fails the Vitest ESM resolver).
 // The dynamic import is at the call site below (~20ms in production,

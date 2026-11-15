@@ -1,6 +1,5 @@
 import { type JSX } from 'solid-js';
 import type { MobileMode } from '~/presentation/state/uiState';
-import { getSampleStatus } from '~/presentation/state/uiState';
 import { ToolRail } from '~/presentation/components/app/ToolRail';
 import { Toast } from '~/presentation/components/Toast';
 import { ConsoleSheet } from '~/presentation/components/ConsoleSheet';
@@ -17,8 +16,6 @@ export type AppShellViewProps = {
   readonly ctxState: () => CtxState;
   readonly presetId: () => string;
   readonly mobileMode: () => MobileMode;
-  readonly showSavePreset: () => boolean;
-  readonly newPresetName: () => string;
   readonly chooseMobileMode: (m: MobileMode) => void;
   readonly onSavePreset: () => void;
   readonly onRollback: () => void;
@@ -29,10 +26,6 @@ export type AppShellViewProps = {
   readonly onResetAll: () => void;
   readonly onToggleLayout: () => void;
   readonly onOpenAdmin: () => void;
-  readonly onLoadPreset: (id: string) => void;
-  readonly onSetShowSavePreset: (v: boolean) => void;
-  readonly onSetNewPresetName: (v: string) => void;
-  readonly onSaveCustomPreset: () => void;
   readonly onPlay: () => void;
   readonly onStop: () => void;
 };
@@ -46,7 +39,6 @@ export const AppShellView = (props: AppShellViewProps): JSX.Element => (
       ctxState={props.ctxState}
       presetId={props.presetId()}
       mobileMode={props.mobileMode()}
-      sampleStatus={getSampleStatus()}
       chooseMobileMode={props.chooseMobileMode}
       onSavePreset={props.onSavePreset}
       onRollback={props.onRollback}
@@ -59,15 +51,8 @@ export const AppShellView = (props: AppShellViewProps): JSX.Element => (
       onOpenAdmin={props.onOpenAdmin}
     />
     <TransportBar
-      presetId={props.presetId()}
-      showSavePreset={props.showSavePreset()}
-      newPresetName={props.newPresetName()}
       audioRunning={props.audioRunning}
       audioStarting={props.audioStarting}
-      onLoadPreset={props.onLoadPreset}
-      onShowSavePreset={props.onSetShowSavePreset}
-      onNewPresetName={props.onSetNewPresetName}
-      onSavePreset={props.onSaveCustomPreset}
       onPlay={props.onPlay}
       onStop={props.onStop}
     />

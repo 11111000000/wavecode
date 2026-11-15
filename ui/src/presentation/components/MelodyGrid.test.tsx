@@ -184,13 +184,13 @@ describe('MelodyGrid — view mode (default)', () => {
     render(() => <MelodyGrid />);
     const labels = Array.from(document.querySelectorAll('.melody-grid-mode-btn'))
       .map((b) => b.textContent?.trim());
-    expect(labels).toEqual(['view', 'sketch', 'edit']);
+    expect(labels).toEqual(['просмотр', 'черновик', 'правка']);
   });
 
   it('view is the default mode on mount', () => {
     render(() => <MelodyGrid />);
     const viewBtn = Array.from(document.querySelectorAll('.melody-grid-mode-btn'))
-      .find((b) => b.textContent?.trim() === 'view') as HTMLButtonElement;
+      .find((b) => b.textContent?.trim() === 'просмотр') as HTMLButtonElement;
     expect(viewBtn.getAttribute('aria-pressed')).toBe('true');
     expect(getMelodyMode()).toBe('view');
   });
@@ -217,7 +217,7 @@ describe('MelodyGrid — view mode (default)', () => {
 describe('MelodyGrid — sketch mode', () => {
   it('switching to sketch reveals the ↑ commit button', () => {
     render(() => <MelodyGrid />);
-    clickPill('sketch');
+    clickPill('черновик');
     expect(getMelodyMode()).toBe('sketch');
     expect(
       document.querySelector('[data-testid="melody-grid-commit"]'),
@@ -317,9 +317,9 @@ describe('MelodyGrid — edit mode', () => {
     dispatch({ type: 'replaceScore', text: 's("hh")' });
     render(() => <MelodyGrid />);
     const editBtn = Array.from(document.querySelectorAll('.melody-grid-mode-btn'))
-      .find((b) => b.textContent?.trim() === 'edit') as HTMLButtonElement;
+      .find((b) => b.textContent?.trim() === 'правка') as HTMLButtonElement;
     expect(editBtn.disabled).toBe(true);
-    expect(editBtn.getAttribute('title')).toMatch(/Edit mode requires/);
+    expect(editBtn.getAttribute('title')).toMatch(/Режим правки требует/);
   });
 
   it('edit button enabled when score is stack(note(...), s(...))', () => {
@@ -329,7 +329,7 @@ describe('MelodyGrid — edit mode', () => {
     });
     render(() => <MelodyGrid />);
     const editBtn = Array.from(document.querySelectorAll('.melody-grid-mode-btn'))
-      .find((b) => b.textContent?.trim() === 'edit') as HTMLButtonElement;
+      .find((b) => b.textContent?.trim() === 'правка') as HTMLButtonElement;
     expect(editBtn.disabled).toBe(false);
   });
 

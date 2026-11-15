@@ -93,14 +93,14 @@ describe('MicPanel — empty state', () => {
   it('shows the "Tap START" instruction', () => {
     const { container } = render(() => <MicPanel />);
     expect(container.querySelector('.mic-ux-empty-title')?.textContent).toContain(
-      'Tap START',
+      'Нажмите START',
     );
   });
 
   it('shows a sub-instruction with example inputs', () => {
     const { container } = render(() => <MicPanel />);
     expect(container.querySelector('.mic-ux-empty-sub')?.textContent).toContain(
-      'beatbox',
+      'битбокс',
     );
   });
 
@@ -182,7 +182,7 @@ describe('MicPanel — row 1 (pill + instrument + slot)', () => {
     const opts = select?.querySelectorAll('option');
     expect(opts).toHaveLength(2);
     const labels = Array.from(opts ?? []).map((o) => o.textContent?.trim());
-    expect(labels).toEqual(['Add to end', 'At cursor']);
+    expect(labels).toEqual(['В конец', 'В курсор']);
     await w.stopMic();
   });
 
@@ -216,7 +216,7 @@ describe('MicPanel — row 1 (pill + instrument + slot)', () => {
     const pill = container.querySelector<HTMLSpanElement>('.mic-ux-pill');
     expect(pill).not.toBeNull();
     expect(pill?.getAttribute('data-empty')).toBe('true');
-    expect(pill?.textContent).toContain('no preview');
+    expect(pill?.textContent).toContain('нет превью');
     await w.stopMic();
   });
 });
@@ -247,7 +247,7 @@ describe('MicPanel — row 2 (CTAs)', () => {
     w.startMic();
     const { container } = render(() => <MicPanel />);
     const startBtn = container.querySelector<HTMLButtonElement>('[data-cta="start"]');
-    expect(startBtn?.textContent?.trim()).toContain('STOP');
+    expect(startBtn?.textContent?.trim()).toContain('СТОП');
     await w.stopMic();
   });
 
@@ -323,7 +323,7 @@ describe('MicPanel — row 3 (PianoRollPreview)', () => {
     w.startMic();
     const { container } = render(() => <MicPanel />);
     const header = container.querySelector('.mic-ux-roll-header')?.textContent ?? '';
-    expect(header.toLowerCase()).toContain('live timeline');
+    expect(header.toLowerCase()).toContain('живая лента');
     await w.stopMic();
   });
 

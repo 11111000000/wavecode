@@ -231,7 +231,7 @@ describe('PianoRollPreview — accessibility metadata', () => {
     ));
     const root = container.querySelector('.mic-ux-piano-roll');
     expect(root?.getAttribute('role')).toBe('img');
-    expect(root?.getAttribute('aria-label')).toBe('Piano roll preview: 3 notes, 2 onsets');
+    expect(root?.getAttribute('aria-label')).toBe('Предпрослушивание ленты нот: 3 нот, 2 атак');
   });
 
   it('data-note-count and data-drum-count match the inputs', () => {

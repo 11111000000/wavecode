@@ -885,14 +885,14 @@ export function Pianoroll(props: PianorollProps): JSX.Element {
     >
       <div class="pianoroll-toolbar">
         <span class="pianoroll-count">
-          {events().length} note{events().length === 1 ? '' : 's'}
-          {roll().hits.length > 0 ? ` · ${roll().hits.length} hit${roll().hits.length === 1 ? '' : 's'}` : ''}
-          {` · ${roll().layers.length} layer${roll().layers.length === 1 ? '' : 's'}`}
+          нот: {events().length}
+          {roll().hits.length > 0 ? ` · ударов: ${roll().hits.length}` : ''}
+          {` · слоёв: ${roll().layers.length}`}
         </span>
         <button
           type="button"
           class="pianoroll-zoom-btn"
-          aria-label="Zoom out"
+          aria-label="Отдалить"
           onClick={() => setZoom((z) => Math.max(0.25, z * 0.8))}
         >
           −
@@ -901,7 +901,7 @@ export function Pianoroll(props: PianorollProps): JSX.Element {
         <button
           type="button"
           class="pianoroll-zoom-btn"
-          aria-label="Zoom in"
+          aria-label="Приблизить"
           onClick={() => setZoom((z) => Math.min(8, z * 1.25))}
         >
           +
@@ -909,10 +909,10 @@ export function Pianoroll(props: PianorollProps): JSX.Element {
         <button
           type="button"
           class="pianoroll-zoom-btn"
-          aria-label="Reset zoom"
+          aria-label="Сбросить масштаб"
           onClick={() => batch(() => { setZoom(1); setPanX(0); setPanY(0); })}
         >
-          ⌂ reset
+          ⌂ сброс
         </button>
       </div>
       <div
@@ -933,12 +933,12 @@ export function Pianoroll(props: PianorollProps): JSX.Element {
           onWheel={handleWheel}
           onContextMenu={(e) => e.preventDefault()}
           data-testid="pianoroll-canvas"
-          aria-label="Piano roll — click to add notes, drag to move, Shift+click to delete"
+          aria-label="Лента нот — клик добавляет ноту, перетаскивание двигает, Shift+клик удаляет"
         />
         <Show when={isEmpty()}>
           <div class="pianoroll-empty" aria-hidden="true">
-            <p>Edit a <code>note(...)</code> to see events here</p>
-            <p>Click to add · Drag to move · Shift+click to delete · Ctrl+wheel to zoom</p>
+            <p>Отредактируйте <code>note(...)</code> — события появятся здесь</p>
+            <p>Клик — добавить · Перетаскивание — двигать · Shift+клик — удалить · Ctrl+колесо — масштаб</p>
           </div>
         </Show>
       </div>

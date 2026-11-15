@@ -1,12 +1,13 @@
 import { createSignal, createEffect, onMount, Show, untrack, type JSX } from 'solid-js';
-import { setTab, getActiveTab, getMobileMode, setMobileMode, type MobileMode } from './presentation/state/uiState';
-import { appStore, dispatch } from './presentation/state/appStore';
+import { setTab, getActiveTab, getMobileMode, setMobileMode, openKindSheet, type MobileMode } from './presentation/state/uiState';
+import { dispatch } from './presentation/state/appStore';
 import { installTypingTracker } from './presentation/state/editorTypingTracker';
 import { evalScore, stopAudio } from './presentation/state/audioActions';
 import { isGridEmptyState } from './presentation/state/gridState';
 import { syncGridFromScore } from './presentation/components/StepGrid';
-import { getPreset, saveCustomPreset, deleteCustomPreset, renameCustomPreset } from './presentation/state/presetsStore';
+import { getPreset, deleteCustomPreset, renameCustomPreset } from './presentation/state/presetsStore';
 import { getSelectedPresetId, setSelectedPresetPersist } from './presentation/state/selectedPreset';
+import { presetDraft } from './presentation/state/presetActions';
 import { useBootstrap } from './presentation/state/useBootstrap';
 import { useKeyboardShortcuts } from './presentation/state/useKeyboardShortcuts';
 import { useAudioStartIndicator } from './presentation/state/useAudioStartIndicator';
@@ -47,8 +48,6 @@ function AppShell(): JSX.Element {
   const audio = useBootstrap();
   const [audioStarting, setAudioStarting] = useAudioStartIndicator(audio.ctxState);
   const { onNew, onResetAll } = useRouteGuards();
-  const [showSavePreset, setShowSavePreset] = createSignal(false);
-  const [newPresetName, setNewPresetName] = createSignal('');
   const [mobileMode, setMobileModeSignal] = createSignal<MobileMode>(getMobileMode());
   const presetId = getSelectedPresetId;
 
@@ -85,22 +84,12 @@ function AppShell(): JSX.Element {
   };
   const onToggleLayout = (): void => { /* layout toggle удалён: ИИ теперь слой поверх холста */ };
   const chooseMobileMode = (m: MobileMode): void => { setMobileMode(m); setMobileModeSignal(m); };
-  const onLoadPreset = (id: string): void => {
-    const preset = getPreset(id);
-    if (!preset) return;
-    setSelectedPresetPersist(id);
-    dispatch({ type: 'switchPreset', id });
-    dispatch({ type: 'replaceScore', text: preset.score });
-    void evalScore();
-  };
-  const onSaveCustomPreset = (): void => {
-    const name = newPresetName().trim();
-    if (!name) return;
-    const preset = saveCustomPreset(name, appStore.score);
-    setSelectedPresetPersist(preset.id);
-    dispatch({ type: 'switchPreset', id: preset.id });
-    setShowSavePreset(false);
-    setNewPresetName('');
+  // wavecode-zen-ui-phases-6-7 (фаза 6): «Сохранить пресет» из меню
+  // «⋯» открывает лист «Инструменты» с полем для имени — операции
+  // над композициями живут в одном месте, а не в строке транспорта.
+  const onSavePreset = (): void => {
+    presetDraft.setOpen(true);
+    openKindSheet('tools', 'half');
   };
 
   useKeyboardShortcuts({
@@ -123,13 +112,11 @@ function AppShell(): JSX.Element {
   return (<>
     <AppShellView
       audioRunning={audio.audioRunning} audioStarting={audioStarting} ctxState={audio.ctxState}
-      presetId={presetId} mobileMode={mobileMode} showSavePreset={showSavePreset} newPresetName={newPresetName}
-      chooseMobileMode={chooseMobileMode} onSavePreset={() => setShowSavePreset((v) => !v)}
+      presetId={presetId} mobileMode={mobileMode}
+      chooseMobileMode={chooseMobileMode} onSavePreset={onSavePreset}
       onRollback={undo} onRedo={redo} onNew={onNew}
       onDeletePreset={onDeletePreset} onRenamePreset={onRenamePreset} onResetAll={onResetAll}
       onToggleLayout={onToggleLayout} onOpenAdmin={openAdmin}
-      onLoadPreset={onLoadPreset} onSetShowSavePreset={setShowSavePreset} onSetNewPresetName={setNewPresetName}
-      onSaveCustomPreset={onSaveCustomPreset}
       onPlay={() => { setAudioStarting(true); void evalScore(); }} onStop={() => { void stopAudio(); }}
     />
     <VoiceFAB />

@@ -160,7 +160,7 @@ describe('MiniNotationToolbar click (real EditorView + accessor)', () => {
         <MiniNotationToolbar editor={() => api} />
       ));
 
-      const btn = getByLabelText('Insert note function call') as HTMLButtonElement;
+      const btn = getByLabelText('Вставить вызов note') as HTMLButtonElement;
       fireEvent.click(btn);
 
       expect(view.state.doc.toString()).toContain('note(');
@@ -175,7 +175,7 @@ describe('MiniNotationToolbar click (real EditorView + accessor)', () => {
       <MiniNotationToolbar editor={() => undefined} />
     ));
 
-    const btn = getByLabelText('Insert note function call') as HTMLButtonElement;
+    const btn = getByLabelText('Вставить вызов note') as HTMLButtonElement;
     expect(() => fireEvent.click(btn)).not.toThrow();
   });
 
@@ -184,7 +184,7 @@ describe('MiniNotationToolbar click (real EditorView + accessor)', () => {
       <MiniNotationToolbar />
     ));
 
-    const btn = getByLabelText('Insert note function call') as HTMLButtonElement;
+    const btn = getByLabelText('Вставить вызов note') as HTMLButtonElement;
     expect(() => fireEvent.click(btn)).not.toThrow();
   });
 });

@@ -10,7 +10,7 @@ export function Architecture(): JSX.Element {
       <header class="l-section__head">
         <span class="l-section__kicker">04 · путь сигнала</span>
         <h2 class="l-section__title" id="arch-title">
-          Что происходит, когда ты нажал «Play».
+          Что происходит, когда ты нажал «Пуск».
         </h2>
         <p class="l-section__sub">
           Если интересно, как именно код становится звуком — вот
@@ -23,7 +23,7 @@ export function Architecture(): JSX.Element {
         <div class="l-arch__row">
           <div class="l-arch__node l-arch__node--src">ты пишешь текст</div>
           <span class="l-arch__arrow">→</span>
-          <div class="l-arch__node">AI понимает и пишет код</div>
+          <div class="l-arch__node">ИИ понимает и пишет код</div>
           <span class="l-arch__arrow">→</span>
           <div class="l-arch__node">код сохраняется</div>
         </div>

@@ -89,7 +89,7 @@ export type PianoSlot = 'append-stack' | 'replace-score' | 'at-cursor';
 export const pianoSlotLabel = (slot: PianoSlot): string => {
   switch (slot) {
     case 'append-stack': return 'конец стека';
-    case 'replace-score': return 'заменить score';
+    case 'replace-score': return 'заменить партитуру';
     case 'at-cursor': return 'в курсор';
   }
 };
@@ -97,9 +97,9 @@ export const pianoSlotLabel = (slot: PianoSlot): string => {
 /** Compact bullet for the segmented control buttons. */
 export const pianoSlotGlyph = (slot: PianoSlot): string => {
   switch (slot) {
-    case 'append-stack': return '↵ stack';
-    case 'replace-score': return '⟳ replace';
-    case 'at-cursor': return '⌖ cursor';
+    case 'append-stack': return '↵ стек';
+    case 'replace-score': return '⟳ замена';
+    case 'at-cursor': return '⌖ курсор';
   }
 };
 

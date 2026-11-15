@@ -25,10 +25,10 @@ import { AudioEngine } from '~/domain/services';
 import { AppLayer } from '~/infrastructure/composition';
 
 const ROW_LABELS: ReadonlyArray<{ sample: GridRowSample; label: string }> = [
-  { sample: 'bd', label: 'kick' },
-  { sample: 'sd', label: 'snare' },
-  { sample: 'hh', label: 'hihat' },
-  { sample: 'cp', label: 'clap' },
+  { sample: 'bd', label: 'бочка' },
+  { sample: 'sd', label: 'малый барабан' },
+  { sample: 'hh', label: 'хай-хэт' },
+  { sample: 'cp', label: 'хлоп' },
 ];
 
 /**
@@ -56,7 +56,7 @@ export function StepGrid() {
   const [confirmOpen, setConfirmOpen] = createSignal(false);
 
   // Sync playhead to AudioEngine.getCycleProgress() — same pattern as
-  // TransportPanel. We don't tick on our own clock; when audio is
+  // TransportBar. We don't tick on our own clock; when audio is
   // stopped, getCycleProgress returns 0, so beat() sticks to column 0
   // instead of lying about a phantom playhead position.
   let raf = 0;
@@ -90,7 +90,7 @@ export function StepGrid() {
       ok,
       reason: ok
         ? ''
-        : 'Edit mode requires top-level stack(...) with exactly 4 s("…") rows. Use Sketch to add a drum layer.',
+        : 'Режим правки требует верхнеуровневого stack(...) ровно с 4 строками s("…"). Добавь барабанный слой через «Черновик».',
     };
   });
 
@@ -169,18 +169,18 @@ export function StepGrid() {
   };
 
   return (
-    <div class="step-grid" role="grid" aria-label="Drum step sequencer 4×8">
+    <div class="step-grid" role="grid" aria-label="Пошаговый секвенсор ударных 4×8">
       <div class="step-grid-toolbar">
-        <div class="step-grid-mode-pill" role="group" aria-label="Tap mode">
+        <div class="step-grid-mode-pill" role="group" aria-label="Режим нажатий">
           <button
             type="button"
             class="step-grid-mode-btn"
             data-active={getMode() === 'view' ? 'true' : 'false'}
             aria-pressed={getMode() === 'view'}
             onClick={() => setMode('view')}
-            title="Read-only mirror of the score. Tap = preview only."
+            title="Только для чтения: зеркало партитуры. Нажатие — только прослушивание."
           >
-            view
+            просмотр
           </button>
           <button
             type="button"
@@ -188,9 +188,9 @@ export function StepGrid() {
             data-active={getMode() === 'sketch' ? 'true' : 'false'}
             aria-pressed={getMode() === 'sketch'}
             onClick={() => setMode('sketch')}
-            title="Ephemeral draft. Tap to toggle cells, then ↑ commit to write to score."
+            title="Черновик. Нажимайте ячейки, потом ↑ — записать в партитуру."
           >
-            sketch
+            черновик
           </button>
           <button
             type="button"
@@ -202,19 +202,19 @@ export function StepGrid() {
             disabled={!editGate().ok}
             onClick={() => setMode('edit')}
             title={editGate().ok
-              ? 'Direct in-place edit of 4 s("…") rows. Every tap is a commit.'
+              ? 'Правка на месте четырёх строк s("…"). Каждое нажатие — запись.'
               : editGate().reason}
           >
-            edit
+            правка
           </button>
         </div>
         <button
           type="button"
           class="step-grid-btn"
           onClick={onClear}
-          title="Reset grid from score in current mode"
+          title="Сбросить сетку из партитуры"
         >
-          ↻ reset
+          ↻ сброс
         </button>
         <Show when={getMode() === 'sketch'}>
           <button
@@ -224,19 +224,19 @@ export function StepGrid() {
             disabled={isDraftClean()}
             data-testid="step-grid-commit"
             title={isDraftClean()
-              ? 'No changes to commit'
-              : `Write draft to score (${dirtyCellCount()} cells changed)`}
+              ? 'Нет изменений для записи'
+              : `Записать черновик в партитуру (изменено ячеек: ${dirtyCellCount()})`}
           >
-            ↑ commit{!isDraftClean() ? ` (${dirtyCellCount()})` : ''}
+            ↑ записать{!isDraftClean() ? ` (${dirtyCellCount()})` : ''}
           </button>
         </Show>
         <span class="step-grid-hint" data-testid="step-grid-mode-hint">
-          {getMode() === 'view' && '4×8 drum pads — read-only mirror. Tap to preview a hit.'}
+          {getMode() === 'view' && '4×8 барабанных пэдов — только чтение. Нажатие — прослушивание.'}
           {getMode() === 'sketch' && (isDraftClean()
-            ? '4×8 drum pads — sketch a beat, then ↑ commit.'
-            : `4×8 drum pads — ${dirtyCellCount()} cell${dirtyCellCount() === 1 ? '' : 's'} unsaved.`)}
+            ? '4×8 барабанных пэдов — набросай бит, потом ↑ записать.'
+            : `4×8 барабанных пэдов — несохранено ячеек: ${dirtyCellCount()}.`)}
           {getMode() === 'edit' && (editGate().ok
-            ? '4×8 drum pads — every tap writes the s("…") row + re-evaluates the scheduler.'
+            ? '4×8 барабанных пэдов — каждое нажатие пишет строку s("…") и перезапускает планировщик.'
             : editGate().reason)}
         </span>
       </div>

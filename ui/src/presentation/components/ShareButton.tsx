@@ -103,7 +103,7 @@ export function ShareButton() {
   const onLoadShared = (): void => {
     const text = decodePendingShare();
     if (!text) {
-      setError('Shared snippet повреждён — не удалось декодировать');
+      setError('Сниппет повреждён — не удалось декодировать');
       return;
     }
     startLoadingShared();
@@ -184,8 +184,8 @@ export function ShareButton() {
                 <Show when={shareState.pendingEncoded() !== null && shareState.hasIdbScore()}>
                   <div class="share-modal-pending">
                     <div class="share-modal-pending-msg">
-                      В URL передан shared snippet, но у вас уже есть несохранённая локальная
-                      работа. Загрузить shared snippet? Текущая партитура будет заменена.
+                      В URL передан сниппет, но у вас уже есть несохранённая локальная
+                      работа. Загрузить сниппет? Текущая партитура будет заменена.
                     </div>
                     <button
                       type="button"
@@ -193,7 +193,7 @@ export function ShareButton() {
                       disabled={shareState.isLoadingShared()}
                       onClick={onLoadShared}
                     >
-                      📥 Загрузить shared snippet
+                      📥 Загрузить сниппет
                     </button>
                   </div>
                 </Show>

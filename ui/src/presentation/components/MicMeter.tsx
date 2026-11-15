@@ -78,7 +78,7 @@ export function MicMeter(): JSX.Element {
   });
 
   return (
-    <div class="mic-ux-row-meter" role="group" aria-label="Live mic meter">
+    <div class="mic-ux-row-meter" role="group" aria-label="Уровень микрофона">
       <div
         class="mic-ux-meter"
         data-listening={micListening()}

@@ -11,6 +11,7 @@ import {
   testBeep,
 } from '~/infrastructure/audio/LiveAudioEngine';
 import { logger } from '~/infrastructure/log';
+import { consoleStore } from '~/presentation/components/consoleStore';
 
 /**
  * Аудио-действия — общие для всех компонентов (header кнопки, etc).
@@ -111,6 +112,13 @@ export const evalScore = async (overrideScore?: string): Promise<void> => {
   const score = overrideScore ?? appStore.score;
   if (!score.trim()) {
     dispatch({ type: 'audioStatusChange', status: 'error', error: 'score is empty' });
+    consoleStore.pushToast({
+      severity: 'error',
+      title: 'Партитура пуста',
+      body: 'Нечего играть — введите код или выберите композицию.',
+      source: 'audio',
+      action: { label: 'Повторить', run: () => void evalScore(score) },
+    });
     return;
   }
   unlockAudioContext();
@@ -118,10 +126,21 @@ export const evalScore = async (overrideScore?: string): Promise<void> => {
   try {
     await runWrapAndEval(score, appStore.transportState, appStore.layerMix);
   } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
     dispatch({
       type: 'audioStatusChange',
       status: 'error',
-      error: err instanceof Error ? err.message : String(err),
+      error: message,
+    });
+    // wavecode-zen-ui-phases-6-7 (фаза 6): ошибка звука приходит в
+    // ЕДИНЫЙ регион ошибок внизу холста (ErrorRegion.tsx) вместе с
+    // честным «Повторить» — переоценкой той же партитуры.
+    consoleStore.pushToast({
+      severity: 'error',
+      title: 'Ошибка звука',
+      body: message,
+      source: 'audio',
+      action: { label: 'Повторить', run: () => void evalScore(score) },
     });
   }
 };

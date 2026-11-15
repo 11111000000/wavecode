@@ -1,57 +1,35 @@
 /**
- * Toast — стек popover-уведомлений в правом-верхнем углу (desktop)
- * или full-width strip сверху (mobile).
+ * Toast — ОДИН мимолётный тост.
  *
- * Один компонент «глобальный» — навешивается один раз в App.tsx; читает
- * состояние напрямую из consoleStore. Никаких props.
+ * wavecode-zen-ui-phases-6-7 (фаза 6, «Тишина»): раньше это был стек
+ * popover-уведомлений в правом-верхнем углу, где одновременно могло
+ * лежать четыре плашки. Сейчас тост максимум один (новый вытесняет
+ * старый), а всё, что требует внимания, ушло в регион ошибок
+ * (см. ErrorRegion.tsx).
  *
  * Семантика:
- *   - 'info' / 'warn'             — silent auto-dismiss (Toast всё равно
- *                                    показывает, но без цветовой агрессии).
- *   - 'error' / 'critical' / 'fatal' — кликабельный, открывает ConsoleSheet,
- *                                    severity иконка + цвет, на 'critical' /
- *                                    'fatal' — sticky (TTL=0).
+ *   - 'info' / 'warn'  — мимолётное сообщение, само исчезает;
+ *   - 'error' / 'critical' / 'fatal' — НЕ приходят сюда: их показывает
+ *     регион ошибок внизу холста, у него есть «Повторить».
  *
- * Severity icon (Phase-2 polish):
- *   Для color-blind accessibility severity кодируется двумя независимыми
- *   сигналами — цветом (border-left + background tint) И иконкой слева.
- *   Иконка рендерится как SVG с currentColor в видимом квадрате 20×20
- *   (стиль `.toast-icon`), наследует цвет от родителя (severity-tokens).
- *   'fatal' реиспользует `CriticalIcon` (один и тот же визуальный
- *   канал; color-blind users уже видят sticky + clickable + icon).
+ * Severity icon: для color-blind accessibility severity кодируется
+ * двумя независимыми сигналами — цветом (border-left + background
+ * tint) И иконкой слева. Иконка рендерится как SVG с currentColor в
+ * видимом квадрате 20×20 (стиль `.toast-icon`), наследует цвет от
+ * родителя (severity-tokens).
  *
- *   Layout: иконка — слева от .toast-body. На десктопе иконка и
- *   заголовок/тело стоят в одной flex-row; на мобильном (узкий
- *   viewport) layout сохраняется (стек вертикальный, иконка в
- *   top-left угла).
- *
- * Sample-load progress hook: подписывается на
- * `wavecode:sample-progress` и при `status: 'loaded'` пушит
- * info-toast «Сэмплы загружены (N/N)». Так как SampleLoader эмитит
- * 'loaded' на завершении КАЖДОГО банка (piano 21/21, drums 49/49,
- * synth 73/73), используется settle-таймер (TOAST_SAMPLE_SETTLE_MS):
- * каждый новый 'loaded' перезапускает таймер; тост пушится только
- * когда после последнего 'loaded' прошло 1500ms без новых. На
- * status='error' пушит warn-toast «Сэмплы загружены частично» (и
- * отменяет pending settle-таймер, чтобы не было race). 'loading'
- * события игнорируются — прогресс показывает SampleProgressBadge
- * в TabBar.
+ * Счётчик сэмплов раньше тоже приходил сюда («Сэмплы загружены»).
+ * Теперь он живёт в строке статуса верхней панели — в одном месте
+ * с индикатором офлайна (см. StatusStrip.tsx).
  */
 
-import { type JSX, For, Show, onCleanup, onMount, createMemo } from 'solid-js';
+import { type JSX, Show, onCleanup, onMount, createMemo } from 'solid-js';
 import { consoleStore, type Toast, type ToastSeverity } from './consoleStore';
 import {
   CloseIcon,
-  PinIcon,
   InfoIcon,
   WarnIcon,
-  ErrorIcon,
-  CriticalIcon,
 } from '../icons';
-import {
-  SAMPLE_PROGRESS_EVENT,
-  type SampleProgressEvent,
-} from '../../infrastructure/audio/sampleProgressEvent';
 
 const SEVERITY_TOKEN: Readonly<Record<ToastSeverity, string>> = {
   info: 'info',
@@ -62,35 +40,14 @@ const SEVERITY_TOKEN: Readonly<Record<ToastSeverity, string>> = {
 };
 
 const SEVERITY_ICON_JSX: Readonly<
-  Record<ToastSeverity, (size: number) => JSX.Element>
+  Record<'info' | 'warn', (size: number) => JSX.Element>
 > = {
   info: (size) => <InfoIcon size={size} />,
   warn: (size) => <WarnIcon size={size} />,
-  error: (size) => <ErrorIcon size={size} />,
-  critical: (size) => <CriticalIcon size={size} />,
-  fatal: (size) => <CriticalIcon size={size} />,
 };
 
 /** Размер иконки внутри .toast-icon (квадрат 20×20, отступ 2px). */
 const TOAST_ICON_SIZE = 16;
-
-/**
- * SampleLoader эмитит `wavecode:sample-progress` с status='loaded' на
- * завершении КАЖДОГО банка (piano: 21/21, drums: 49/49, synth: 73/73).
- * Чтобы юзер видел один тост «Сэмплы загружены» после загрузки
- * ВСЕХ банков, а не три подряд — дебаунсим: после первого 'loaded'
- * запускаем settle-таймер; если за TOAST_SAMPLE_SETTLE_MS приходит
- * ещё 'loaded', перезапускаем таймер с новыми данными. Финальный
- * тост содержит числа последнего завершённого банка (≈ cumulative
- * total самого «большого» банка).
- *
- * 1500ms выбрано потому что SampleLoader загружает банки
- * последовательно (см. `registerBank` → `await samples(manifestUrl)`
- * → `await preloadAllBuffers`) — между завершениями банков
- * обычно <100ms. 1500ms гарантированно перекрывает burst, но
- * остаётся визуально отзывчивым.
- */
-const TOAST_SAMPLE_SETTLE_MS = 1500;
 
 function severityToTone(s: ToastSeverity): string {
   return SEVERITY_TOKEN[s];
@@ -102,14 +59,9 @@ type ToastItemProps = {
 
 function ToastItem(props: ToastItemProps): JSX.Element {
   let timer: ReturnType<typeof setTimeout> | undefined;
-  const isSticky = (): boolean => props.toast.ttlMs === 0;
-  const isError = (): boolean =>
-    props.toast.severity === 'error' ||
-    props.toast.severity === 'critical' ||
-    props.toast.severity === 'fatal';
 
   onMount(() => {
-    if (!isSticky() && props.toast.ttlMs > 0) {
+    if (props.toast.ttlMs > 0) {
       timer = setTimeout(() => {
         consoleStore.dismissToast(props.toast.id);
       }, props.toast.ttlMs);
@@ -120,47 +72,33 @@ function ToastItem(props: ToastItemProps): JSX.Element {
     if (timer !== undefined) clearTimeout(timer);
   });
 
-  const onClick = (): void => {
-    if (!isError()) return;
-    consoleStore.dismissToast(props.toast.id);
-    consoleStore.setConsoleOpen(true);
-  };
+  const tone = (): 'info' | 'warn' => (
+    props.toast.severity === 'warn' ? 'warn' : 'info'
+  );
 
   return (
     <div
-      class={`toast-item toast-${severityToTone(props.toast.severity)} ${isError() ? 'toast-clickable' : ''}`}
-      role={isError() ? 'button' : 'status'}
-      tabindex={isError() ? 0 : undefined}
-      onClick={onClick}
-      onKeyDown={(e: KeyboardEvent) => {
-        if (isError() && (e.key === 'Enter' || e.key === ' ')) {
-          e.preventDefault();
-          onClick();
-        }
-      }}
+      class={`toast-item toast-${severityToTone(props.toast.severity)}`}
+      role="status"
       data-severity={props.toast.severity}
+      data-testid="toast-item"
     >
       <span class="toast-icon" aria-hidden="true">
-        {SEVERITY_ICON_JSX[props.toast.severity](TOAST_ICON_SIZE)}
+        {SEVERITY_ICON_JSX[tone()](TOAST_ICON_SIZE)}
       </span>
+      <Show when={props.toast.ttlMs === 0}>
+        <span class="toast-pin" aria-label="Не исчезает" title="Не исчезает" />
+      </Show>
       <span class="toast-body">
         <span class="toast-title">{props.toast.title}</span>
         <Show when={props.toast.body}>
           <span class="toast-message">{props.toast.body}</span>
         </Show>
-        <Show when={props.toast.source}>
-          <span class="toast-source">[{(props.toast.source as string)}]</span>
-        </Show>
       </span>
-      <Show when={isSticky()}>
-        <span class="toast-pin" aria-label="sticky">
-          <PinIcon size={12} />
-        </span>
-      </Show>
       <button
         type="button"
         class="toast-close"
-        aria-label="Dismiss notification"
+        aria-label="Закрыть уведомление"
         onClick={(e: MouseEvent) => {
           e.stopPropagation();
           consoleStore.dismissToast(props.toast.id);
@@ -173,46 +111,18 @@ function ToastItem(props: ToastItemProps): JSX.Element {
 }
 
 export function Toast(): JSX.Element {
-  const items = createMemo(() => consoleStore.toasts());
-  onMount(() => {
-    let settleTimer: ReturnType<typeof setTimeout> | undefined;
-    const onProgress = (e: Event): void => {
-      const detail = (e as CustomEvent<SampleProgressEvent>).detail;
-      if (!detail) return;
-      if (detail.status === 'loaded' && detail.total > 0) {
-        if (settleTimer !== undefined) clearTimeout(settleTimer);
-        settleTimer = setTimeout(() => {
-          settleTimer = undefined;
-          consoleStore.pushToast({
-            severity: 'info',
-            title: 'Сэмплы загружены',
-            body: `${detail.loaded}/${detail.total} готовы к воспроизведению`,
-            source: 'samples',
-          });
-        }, TOAST_SAMPLE_SETTLE_MS);
-      } else if (detail.status === 'error' && detail.total > 0) {
-        if (settleTimer !== undefined) {
-          clearTimeout(settleTimer);
-          settleTimer = undefined;
-        }
-        consoleStore.pushToast({
-          severity: 'warn',
-          title: 'Сэмплы загружены частично',
-          body: `${detail.loaded}/${detail.total} — некоторые банки пропущены`,
-          source: 'samples',
-        });
-      }
-      // 'loading' / 'idle' — no toast; progress lives in SampleProgressBadge.
-    };
-    window.addEventListener(SAMPLE_PROGRESS_EVENT, onProgress as EventListener);
-    onCleanup(() => {
-      window.removeEventListener(SAMPLE_PROGRESS_EVENT, onProgress as EventListener);
-      if (settleTimer !== undefined) clearTimeout(settleTimer);
-    });
+  // Стор помнит до четырёх мимолётных тостов (история нужна
+  // админке), но в интерфейсе виден только самый свежий: стек
+  // тостов — это шум.
+  const latest = createMemo(() => {
+    const list = consoleStore.toasts();
+    return list[list.length - 1];
   });
   return (
-    <div class="toast-stack" role="region" aria-label="Notifications">
-      <For each={items()}>{(t) => <ToastItem toast={t} />}</For>
+    <div class="toast-stack" role="region" aria-label="Уведомления">
+      <Show when={latest()}>
+        {(t) => <ToastItem toast={t()} />}
+      </Show>
     </div>
   );
 }

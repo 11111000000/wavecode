@@ -24,7 +24,7 @@ export function TopNav(): JSX.Element {
 
       <div class="l-topnav__nav">
         <a href="#snippet">Снипплет</a>
-        <a href="#features">Фичи</a>
+        <a href="#features">Возможности</a>
         <a href="#architecture">Архитектура</a>
         <a href="#tools">Инструменты</a>
         <a href="#start">Старт</a>

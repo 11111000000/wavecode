@@ -18,7 +18,7 @@ const SECTIONS: ReadonlyArray<{ title: string; links: ReadonlyArray<Link> }> = [
       { label: 'Открыть редактор',  href: '#/app',        route: true },
       { label: 'Пресеты',            href: '#snippet' },
       { label: 'Архитектура',        href: '#architecture' },
-      { label: 'Quick start',        href: '#start' },
+      { label: 'Быстрый старт',   href: '#start' },
       { label: 'Условия использования', href: '#terms', onClick: openTerms },
     ],
   },
@@ -53,7 +53,7 @@ export function Footer(): JSX.Element {
           </span>
           <span class="l-footer__brand-tag">
             Браузерный live-coding инструмент для музыки с
-            AI-агентом. Pure frontend, без backend, без аккаунтов.
+            ИИ-агентом. Чистый фронтенд, без бэкенда, без аккаунтов.
           </span>
         </div>
 

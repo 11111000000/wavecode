@@ -173,7 +173,7 @@ describe('Pianoroll — Creep preset integration', () => {
     tickRaf();
     const canvas = container.querySelector('[data-testid="pianoroll-canvas"]');
     expect(canvas).not.toBeNull();
-    expect(canvas?.getAttribute('aria-label')).toMatch(/click to add notes/i);
+    expect(canvas?.getAttribute('aria-label')).toMatch(/Лента нот/);
   });
 });
 
@@ -206,7 +206,7 @@ describe('Pianoroll — zoom controls', () => {
     fireEvent.click(plusBtn!);
     tickRaf();
     const resetBtn = Array.from(container.querySelectorAll('.pianoroll-zoom-btn'))
-      .find((b) => b.textContent?.trim().includes('reset')) as HTMLButtonElement;
+      .find((b) => b.textContent?.trim().includes('сброс')) as HTMLButtonElement;
     fireEvent.click(resetBtn!);
     tickRaf();
     expect(container.querySelector('.pianoroll-zoom-value')?.textContent).toMatch(/1\./);
@@ -339,9 +339,9 @@ describe('Pianoroll — the arrangement is visible', () => {
     await new Promise<void>((res) => setTimeout(res, 400));
     tickRaf();
     const count = container.querySelector('.pianoroll-count')?.textContent ?? '';
-    expect(count).toContain('1 note');
-    expect(count).toContain('1 hit');
-    expect(count).toContain('2 layers');
+    expect(count).toContain('нот: 1');
+    expect(count).toContain('ударов: 1');
+    expect(count).toContain('слоёв: 2');
     await flush();
   });
 });

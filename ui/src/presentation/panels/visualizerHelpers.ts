@@ -294,7 +294,7 @@ export const pickBarCount = (viewportWidth: number): number => {
 };
 
 /** Compute cps (cycles per second) from BPM. 1 cycle = 1 quarter note,
- *  so cps = BPM / 60. Mirrors `formatBpm` in TransportPanel. */
+ *  so cps = BPM / 60. Mirrors `formatBpm` in TransportBar. */
 export const cpsToBpm = (cps: number): number => {
   if (!Number.isFinite(cps) || cps <= 0) return 0;
   return Math.round(cps * 60);

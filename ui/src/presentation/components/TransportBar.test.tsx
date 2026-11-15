@@ -8,15 +8,8 @@ const renderBar = (
   overrides: Partial<Parameters<typeof TransportBar>[0]> = {},
 ): ReturnType<typeof render> => {
   const props = {
-    presetId: 'creep',
-    showSavePreset: false,
-    newPresetName: '',
     audioRunning: () => false,
     audioStarting: () => false,
-    onLoadPreset: vi.fn(),
-    onShowSavePreset: vi.fn(),
-    onNewPresetName: vi.fn(),
-    onSavePreset: vi.fn(),
     onPlay: vi.fn(),
     onStop: vi.fn(),
     ...overrides,
@@ -75,15 +68,12 @@ describe('TransportBar (decisions/wavecode-mobile-transport-bar.yaml)', () => {
     expect(toggle.getAttribute('aria-expanded')).toBe('false');
   });
 
-  it('default on desktop (matchMedia=false) → expanded: body visible, data-collapsed="false"', () => {
+  it('default on desktop → collapsed too (wavecode-zen-ui-phases-6-7: one line by default)', () => {
     setMatchMedia(false);
     const { container } = renderBar();
     const bar = container.querySelector('[data-testid="transport-bar"]') as HTMLElement;
-    expect(bar.getAttribute('data-collapsed')).toBe('false');
+    expect(bar.getAttribute('data-collapsed')).toBe('true');
     expect(bar.getAttribute('data-mobile')).toBe('false');
-    // body is rendered; jsdom doesn't apply @media so we just check
-    // data-collapsed="false" (the CSS hides body when data-collapsed
-    // is "true").
   });
 
   it('click toggle → body becomes visible, data-collapsed="false", aria-expanded="true"', async () => {
@@ -187,26 +177,26 @@ describe('TransportBar (decisions/wavecode-mobile-transport-bar.yaml)', () => {
     expect(onStop).toHaveBeenCalledTimes(1);
   });
 
-  it('preset <select> is ALWAYS reachable in the strip (user request 2026-10-14)', () => {
-    const onLoadPreset = vi.fn();
-    const { container } = renderBar({ onLoadPreset });
+  it('strip shows tempo and position, and they are NOT extra buttons', () => {
+    const { container } = renderBar();
+    const bpm = container.querySelector('[data-testid="transport-bpm"]');
+    const position = container.querySelector('[data-testid="transport-position"]');
 
-    const select = container.querySelector('[data-testid="preset-select"]') as HTMLSelectElement;
-    expect(select).toBeTruthy();
-    // Preset lives in the strip — not in the expandable body. So it's
-    // reachable WITHOUT clicking the toggle. Verify by selecting
-    // without expanding.
-    expect(select.closest('.app-transport-bar__body')).toBeNull();
-    expect(select.closest('.app-transport-bar__strip')).toBeTruthy();
-
-    // The select has the value "creep" (matches props.presetId); we
-    // dispatch a change event simulating a different selection.
-    select.value = 'fur-elise';
-    fireEvent.change(select);
-    expect(onLoadPreset).toHaveBeenCalled();
+    expect(bpm).toBeTruthy();
+    expect(bpm!.textContent).toContain('BPM');
+    expect(position).toBeTruthy();
+    // Темп и позиция — показания, а не кнопки: строка транспорта это
+    // «play · темп · позиция», лишних интерактивных регионов в ней нет.
+    expect(bpm!.tagName).not.toBe('BUTTON');
+    expect(position!.tagName).not.toBe('BUTTON');
   });
 
-  it('toggle body no longer contains preset (preset moved to strip)', () => {
+  it('preset <select> is NOT in the transport any more (moved to the tools sheet)', () => {
+    const { container } = renderBar();
+    expect(container.querySelector('[data-testid="preset-select"]')).toBeNull();
+  });
+
+  it('toggle body still holds no preset picker', () => {
     const { container } = renderBar();
     const toggle = container.querySelector(
       '[data-testid="transport-bar-toggle"]',
@@ -216,8 +206,7 @@ describe('TransportBar (decisions/wavecode-mobile-transport-bar.yaml)', () => {
     const body = container.querySelector(
       '[data-testid="transport-bar-body"]',
     ) as HTMLElement;
-    const selectInBody = body.querySelector('[data-testid="preset-select"]');
-    expect(selectInBody).toBeNull();
+    expect(body.querySelector('[data-testid="preset-select"]')).toBeNull();
   });
 
   it('renders without onPlay/onStop props (default noop) and does not throw', () => {

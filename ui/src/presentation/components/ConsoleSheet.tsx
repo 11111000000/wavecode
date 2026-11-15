@@ -33,6 +33,7 @@
 import {
   type JSX, createSignal, onMount, For, Show, createMemo,
 } from 'solid-js';
+import { LOG_LEVEL_LABEL, labelFor } from '~/presentation/state/labels';
 import { consoleStore } from './consoleStore';
 import { CloseIcon } from '../icons';
 import { installConsoleGlobals } from './consoleGlobals';
@@ -176,7 +177,7 @@ export function ConsoleSheet(): JSX.Element {
     <div class={`console-entry console-entry-${e.level}`}>
       <span class="console-entry-time">{formatTime(e.ts)}</span>
       <span class={`console-entry-level console-level-${e.level}`}>
-        {e.level}
+        {labelFor(LOG_LEVEL_LABEL, e.level)}
       </span>
       <span class="console-entry-source">[{e.source}]</span>
       <span class="console-entry-text">{e.text}</span>
@@ -189,7 +190,7 @@ export function ConsoleSheet(): JSX.Element {
         class="console-sheet"
         data-snap={snap()}
         role="dialog"
-        aria-label="Console"
+        aria-label="Консоль"
       >
         <div
           class="console-backdrop"
@@ -198,7 +199,7 @@ export function ConsoleSheet(): JSX.Element {
         />
         <div class="console-panel">
           <header class="console-header">
-            <h2 class="console-title">Console</h2>
+            <h2 class="console-title">Консоль</h2>
             <nav class="console-tabs" role="tablist">
               <button
                 type="button"
@@ -209,7 +210,7 @@ export function ConsoleSheet(): JSX.Element {
                 }`}
                 onClick={() => setActiveTab('errors')}
               >
-                Errors ({errorsOnly().length})
+                Ошибки ({errorsOnly().length})
               </button>
               <button
                 type="button"
@@ -220,7 +221,7 @@ export function ConsoleSheet(): JSX.Element {
                 }`}
                 onClick={() => setActiveTab('all')}
               >
-                All logs
+                Все логи
               </button>
               <button
                 type="button"
@@ -231,14 +232,14 @@ export function ConsoleSheet(): JSX.Element {
                 }`}
                 onClick={() => setActiveTab('by-source')}
               >
-                By source
+                По источникам
               </button>
             </nav>
             <button
               type="button"
               class="console-snap-btn"
               aria-label={
-                snap() === 'mid' ? 'Expand to full' : 'Collapse to mid'
+                snap() === 'mid' ? 'Развернуть' : 'Свернуть'
               }
               onClick={() => setSnap(snap() === 'mid' ? 'full' : 'mid')}
             >
@@ -247,7 +248,7 @@ export function ConsoleSheet(): JSX.Element {
             <button
               type="button"
               class="console-close-btn"
-              aria-label="Close console"
+              aria-label="Закрыть консоль"
               onClick={onClose}
             >
               <CloseIcon size={14} />
@@ -263,7 +264,7 @@ export function ConsoleSheet(): JSX.Element {
                     class="console-empty"
                     data-testid="console-empty"
                   >
-                    No errors.
+                    Ошибок нет.
                   </div>
                 }
               >
@@ -275,7 +276,7 @@ export function ConsoleSheet(): JSX.Element {
               <For
                 each={all().slice(0, 200)}
                 fallback={
-                  <div class="console-empty">No log entries yet.</div>
+                  <div class="console-empty">Записей пока нет.</div>
                 }
               >
                 {(e) => renderEntry(e)}
@@ -286,7 +287,7 @@ export function ConsoleSheet(): JSX.Element {
               <For
                 each={bySource()}
                 fallback={
-                  <div class="console-empty">No log entries yet.</div>
+                  <div class="console-empty">Записей пока нет.</div>
                 }
               >
                 {(group) => (
@@ -310,7 +311,7 @@ export function ConsoleSheet(): JSX.Element {
 
           <footer class="console-footer">
             <span class="console-counts">
-              {totals().total} entries · {totals().errors} errors
+              Записей: {totals().total} · Ошибок: {totals().errors}
             </span>
             <button
               type="button"
@@ -320,7 +321,7 @@ export function ConsoleSheet(): JSX.Element {
               data-testid="console-copy-btn"
               onClick={() => void onCopy()}
             >
-              Copy as text
+              Копировать текстом
             </button>
             <button
               type="button"
@@ -330,7 +331,7 @@ export function ConsoleSheet(): JSX.Element {
               data-testid="console-clear-btn"
               onClick={handleClear}
             >
-              Clear
+              Очистить
             </button>
           </footer>
         </div>

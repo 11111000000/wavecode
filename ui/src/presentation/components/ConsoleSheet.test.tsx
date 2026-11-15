@@ -49,9 +49,9 @@ describe('ConsoleSheet', () => {
   it('tabs switch active tab', () => {
     consoleStore.setConsoleOpen(true);
     const { container, getByText } = render(() => <ConsoleSheet />);
-    const errorsBtn = getByText(/^Errors \(/) as HTMLButtonElement;
-    const allBtn = getByText('All logs') as HTMLButtonElement;
-    const bySourceBtn = getByText('By source') as HTMLButtonElement;
+    const errorsBtn = getByText(/^Ошибки \(/) as HTMLButtonElement;
+    const allBtn = getByText('Все логи') as HTMLButtonElement;
+    const bySourceBtn = getByText('По источникам') as HTMLButtonElement;
 
     expect(errorsBtn.getAttribute('aria-selected')).toBe('true');
     expect(allBtn.getAttribute('aria-selected')).toBe('false');
@@ -64,8 +64,8 @@ describe('ConsoleSheet', () => {
     expect(bySourceBtn.getAttribute('aria-selected')).toBe('true');
     expect(allBtn.getAttribute('aria-selected')).toBe('false');
 
-    // count is shown as "0 entries · 0 errors" (fresh buffer)
-    expect(container.textContent).toMatch(/0 entries · 0 errors/);
+    // count is shown as "Записей: 0 · Ошибок: 0" (fresh buffer)
+    expect(container.textContent).toMatch(/Записей: 0 · Ошибок: 0/);
   });
 
   it('copy button writes empty string when buffer is empty', async () => {
@@ -92,7 +92,7 @@ describe('ConsoleSheet', () => {
     consoleStore.setConsoleOpen(true);
     const { queryByLabelText, getByTestId } = render(() => <ConsoleSheet />);
     expect(getByTestId('console-body')).toBeTruthy();
-    const close = queryByLabelText('Close console') as HTMLButtonElement;
+    const close = queryByLabelText('Закрыть консоль') as HTMLButtonElement;
     fireEvent.click(close);
     expect(consoleStore.consoleOpen()).toBe(false);
   });
@@ -138,7 +138,7 @@ describe('ConsoleSheet (graceful fallback: logger.getBuffer throws)', () => {
     const { container, getByTestId } = render(() => <ConsoleSheet />);
     expect(getByTestId('console-body')).toBeTruthy();
     // Empty fallback buffer → zero counts.
-    expect(container.textContent).toMatch(/0 entries · 0 errors/);
+    expect(container.textContent).toMatch(/Записей: 0 · Ошибок: 0/);
   });
 
   it('clear button does not propagate logger.clear errors', () => {
@@ -169,11 +169,11 @@ describe('ConsoleSheet (static import path: real logger, populated buffer)', () 
     consoleStore.setConsoleOpen(true);
     const { container, getByText } = render(() => <ConsoleSheet />);
 
-    // "Errors" tab is active by default and this entry is 'info', so it
-    // would not appear there. Switch to "All logs" to verify it shows up.
-    fireEvent.click(getByText('All logs'));
+    // Вкладка «Ошибки» активна по умолчанию, а эта запись — 'info',
+    // поэтому здесь её не видно. Переключаемся на «Все логи».
+    fireEvent.click(getByText('Все логи'));
     expect(container.textContent).toContain('hello from test');
-    expect(container.textContent).toMatch(/1 entries · 0 errors/);
+    expect(container.textContent).toMatch(/Записей: 1 · Ошибок: 0/);
   });
 
   it('errors filter surfaces error and warn levels, hides info', () => {
@@ -183,8 +183,8 @@ describe('ConsoleSheet (static import path: real logger, populated buffer)', () 
     consoleStore.setConsoleOpen(true);
     const { container } = render(() => <ConsoleSheet />);
 
-    // Errors tab is the default; counters should count all three.
-    expect(container.textContent).toMatch(/3 entries · 1 errors/);
+    // Активна вкладка «Ошибки»; счётчики считают все три записи.
+    expect(container.textContent).toMatch(/Записей: 3 · Ошибок: 1/);
     // Body should contain warn + error texts but not the info one.
     expect(container.textContent).toContain('careful');
     expect(container.textContent).toContain('boom');
@@ -205,6 +205,6 @@ describe('ConsoleSheet (static import path: real logger, populated buffer)', () 
     // synchronously inside pushEntry, sinkTick increments, the memo
     // re-runs on the next read, and the JSX reflects the new entry.
     logger.push('error', ['delayed'], 'app');
-    expect(container.textContent).toMatch(/1 entries · 1 errors/);
+    expect(container.textContent).toMatch(/Записей: 1 · Ошибок: 1/);
   });
 });

@@ -283,7 +283,7 @@ export function PianoKeyboard(props: PianoKeyboardProps = {}) {
       if (!access) { setMidiFailure(getMidiFailure()); return; }
       setMidiFailure(null);
       setMidiInputs(
-        Array.from(access.inputs.values()).map((i) => i.name ?? 'Unknown device'),
+        Array.from(access.inputs.values()).map((i) => i.name ?? 'Неизвестное устройство'),
       );
       unsub = onNote(access, (e) => {
         if (e.type === 'noteOn') playNote(e.note, e.source);
@@ -378,7 +378,7 @@ export function PianoKeyboard(props: PianoKeyboardProps = {}) {
     <div
       class={`piano-wrap piano-wrap--${props.variant ?? 'sheet'}`}
       role="group"
-      aria-label="Piano keyboard C3 to B4"
+      aria-label="Клавиатура пианино от C3 до B4"
       data-variant={props.variant ?? 'sheet'}
     >
       {/* Scoped style for the device-name chip in the status pill.
@@ -398,7 +398,7 @@ export function PianoKeyboard(props: PianoKeyboardProps = {}) {
 }
 `}</style>
       <div class="piano-toolbar">
-        <span class="piano-hint">2 octaves (C3–B4) — tap or use MIDI keyboard</span>
+        <span class="piano-hint">2 октавы (C3–B4) — нажимайте или играйте на MIDI-клавиатуре</span>
         <PianoToolbar
           midiStatus={midiStatus()}
         onRetryMidi={midiFailure() === 'denied' || midiFailure() === 'timeout' ? onRetryMidi : undefined}

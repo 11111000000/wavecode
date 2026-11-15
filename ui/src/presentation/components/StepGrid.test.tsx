@@ -135,13 +135,13 @@ describe('StepGrid — view mode (default)', () => {
     render(() => <StepGrid />);
     const labels = Array.from(document.querySelectorAll('.step-grid-mode-btn'))
       .map((b) => b.textContent?.trim());
-    expect(labels).toEqual(['view', 'sketch', 'edit']);
+    expect(labels).toEqual(['просмотр', 'черновик', 'правка']);
   });
 
   it('view mode is the default on mount', () => {
     render(() => <StepGrid />);
     const viewBtn = Array.from(document.querySelectorAll('.step-grid-mode-btn'))
-      .find((b) => b.textContent?.trim() === 'view') as HTMLButtonElement;
+      .find((b) => b.textContent?.trim() === 'просмотр') as HTMLButtonElement;
     expect(viewBtn.getAttribute('aria-pressed')).toBe('true');
     expect(getMode()).toBe('view');
   });
@@ -176,10 +176,10 @@ describe('StepGrid — view mode (default)', () => {
 describe('StepGrid — sketch mode', () => {
   it('switching to sketch: mode pill updates + commit button appears', () => {
     render(() => <StepGrid />);
-    clickPill('sketch');
+    clickPill('черновик');
     expect(getMode()).toBe('sketch');
     const sketchBtn = Array.from(document.querySelectorAll('.step-grid-mode-btn'))
-      .find((b) => b.textContent?.trim() === 'sketch') as HTMLButtonElement;
+      .find((b) => b.textContent?.trim() === 'черновик') as HTMLButtonElement;
     expect(sketchBtn.getAttribute('aria-pressed')).toBe('true');
     expect(document.querySelector('[data-testid="step-grid-commit"]')).toBeTruthy();
   });
@@ -259,9 +259,9 @@ describe('StepGrid — edit mode', () => {
     dispatch({ type: 'replaceScore', text: 'note("c4")' });
     render(() => <StepGrid />);
     const editBtn = Array.from(document.querySelectorAll('.step-grid-mode-btn'))
-      .find((b) => b.textContent?.trim() === 'edit') as HTMLButtonElement;
+      .find((b) => b.textContent?.trim() === 'правка') as HTMLButtonElement;
     expect(editBtn.disabled).toBe(true);
-    expect(editBtn.getAttribute('title')).toMatch(/Edit mode requires/);
+    expect(editBtn.getAttribute('title')).toMatch(/Режим правки требует/);
   });
 
   it('edit mode is enabled when score has 4 s-layers', () => {
@@ -271,7 +271,7 @@ describe('StepGrid — edit mode', () => {
     });
     render(() => <StepGrid />);
     const editBtn = Array.from(document.querySelectorAll('.step-grid-mode-btn'))
-      .find((b) => b.textContent?.trim() === 'edit') as HTMLButtonElement;
+      .find((b) => b.textContent?.trim() === 'правка') as HTMLButtonElement;
     expect(editBtn.disabled).toBe(false);
   });
 

@@ -9,7 +9,7 @@ type Stack = {
 
 const CORE: ReadonlyArray<Stack> = [
   { name: 'TypeScript',      note: 'строгая типизация',     tone: 'cyan'    },
-  { name: 'Solid.js',        note: 'быстрый UI',            tone: 'primary'   },
+  { name: 'Solid.js',        note: 'быстрый интерфейс',            tone: 'primary'   },
   { name: 'Effect-TS',       note: 'архитектура',           tone: 'magenta' },
   { name: 'CodeMirror 6',   note: 'редактор кода',         tone: 'cyan'    },
   { name: 'Strudel',         note: 'музыкальный движок',    tone: 'primary'   },
@@ -26,7 +26,7 @@ const QUALITY: ReadonlyArray<Stack> = [
 const DEPLOY: ReadonlyArray<Stack> = [
   { name: 'Vite 5',          note: 'сборка',               tone: 'cyan'    },
   { name: 'vite-plugin-pwa', note: 'кеш в браузере',       tone: 'primary'   },
-  { name: 'Caddy',           note: 'reverse proxy',        tone: 'silver'  },
+  { name: 'Caddy',           note: 'обратный прокси',        tone: 'silver'  },
   { name: 'NixOS',           note: 'хостинг',              tone: 'silver'  },
 ];
 
@@ -48,7 +48,7 @@ export function TechStack(): JSX.Element {
       <header class="l-section__head">
         <span class="l-section__kicker">06 · из чего сделано</span>
         <h2 class="l-section__title" id="stack-title">
-          Open source. Без своих серверов. Без vendor lock-in.
+          Открытый код. Без своих серверов. Без привязки к вендору.
         </h2>
         <p class="l-section__sub">
           Только открытые библиотеки. Никакой проприетарной магии.

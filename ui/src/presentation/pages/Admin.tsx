@@ -163,7 +163,7 @@ const Admin: Component = () => {
       <header class="admin-header">
         <h1 class="admin-title">wavecode <span class="admin-title-sub">/admin</span></h1>
         <p class="admin-sub">
-          Debug inspector — read-only view of internal state.
+          Отладчик — просмотр внутреннего состояния только на чтение.
         </p>
         <nav class="admin-nav">
           <a class="admin-nav-link" href="#/app">← /app</a>
@@ -171,7 +171,7 @@ const Admin: Component = () => {
         </nav>
       </header>
 
-      <Section id="logger" title="Logger ring buffer" count={filteredBuffer().length}>
+      <Section id="logger" title="Кольцевой буфер логгера" count={filteredBuffer().length}>
         <FilterBar
           filter={filter()}
           sources={uniqueSources()}
@@ -181,7 +181,7 @@ const Admin: Component = () => {
           <Show
             when={filteredBuffer().length > 0}
             fallback={
-              <li class="admin-empty">No log entries match the filter.</li>
+              <li class="admin-empty">По фильтру ничего не найдено.</li>
             }
           >
             <For each={filteredBuffer()}>
@@ -191,10 +191,15 @@ const Admin: Component = () => {
         </ul>
       </Section>
 
-      <Section id="console" title="Console store" count={consoleStore.toasts().length}>
+      <Section
+        id="console"
+        title="Стор консоли"
+        count={consoleStore.toasts().length + consoleStore.errors().length}
+      >
         <KeyValue
           rows={[
             { k: 'toasts', v: String(consoleStore.toasts().length) },
+            { k: 'errors', v: String(consoleStore.errors().length) },
             { k: 'unreadErrors', v: String(consoleStore.unreadErrors()) },
             { k: 'consoleOpen', v: consoleStore.consoleOpen() ? 'true' : 'false' },
           ]}
@@ -217,11 +222,32 @@ const Admin: Component = () => {
             </For>
           </ul>
         </Show>
+        {/* wavecode-zen-ui-phases-6-7 (фаза 6): ошибки живут в
+            отдельном канале стора — их показывает регион ошибок внизу
+            холста, а не тост. Админка показывает оба канала. */}
+        <Show when={consoleStore.errors().length > 0}>
+          <ul class="admin-toast-list" data-testid="console-error-list">
+            <For each={consoleStore.errors()}>
+              {(t) => (
+                <li class="admin-toast" data-severity={t.severity}>
+                  <span class={`admin-toast-sev admin-toast-sev-${t.severity}`}>
+                    {t.severity}
+                  </span>
+                  <span class="admin-toast-title">{t.title}</span>
+                  <Show when={t.body}>
+                      <span class="admin-toast-body">{t.body}</span>
+                    </Show>
+                  <span class="admin-toast-ts">{formatTime(t.createdAt)}</span>
+                </li>
+              )}
+            </For>
+          </ul>
+        </Show>
       </Section>
 
       <Section
         id="persisted"
-        title="Persisted errors (IDB)"
+        title="Сохранённые ошибки (IDB)"
         count={persisted().length}
       >
         <div class="admin-actions">
@@ -233,7 +259,7 @@ const Admin: Component = () => {
             data-testid="persisted-clear-btn"
             onClick={() => { void onClearPersisted(); }}
           >
-            Clear
+            Очистить
           </button>
           <button
             type="button"
@@ -243,7 +269,7 @@ const Admin: Component = () => {
             data-testid="persisted-refresh-btn"
             onClick={() => { void refreshPersisted(); }}
           >
-            Refresh
+            Обновить
           </button>
         </div>
         <ul class="admin-log-list" data-testid="persisted-list">
@@ -251,7 +277,7 @@ const Admin: Component = () => {
             when={persisted().length > 0}
             fallback={
               <li class="admin-empty">
-                No persisted errors. Errors above `warn` level are auto-saved.
+                Сохранённых ошибок нет. Ошибки выше уровня `warn` сохраняются автоматически.
               </li>
             }
           >
@@ -262,7 +288,7 @@ const Admin: Component = () => {
         </ul>
       </Section>
 
-      <Section id="audio" title="Audio context" count={audioState().state === 'none' ? 0 : 1}>
+      <Section id="audio" title="Аудиоконтекст" count={audioState().state === 'none' ? 0 : 1}>
         <KeyValue
           rows={[
             { k: 'state', v: audioState().state },
@@ -271,12 +297,12 @@ const Admin: Component = () => {
           ]}
         />
         <p class="admin-hint">
-          Polled at 4Hz. `none` means AudioContext is not yet created
+          Опрос 4 Гц. `none` означает, что AudioContext ещё не создан
           (unlockAudioContext runs on first Play).
         </p>
       </Section>
 
-      <Section id="samples" title="Sample cache" count={sampleProgress().total}>
+      <Section id="samples" title="Кэш сэмплов" count={sampleProgress().total}>
         <div class="admin-bank-grid" data-testid="sample-bank-grid">
           <For each={SAMPLE_BANKS}>
             {(bank) => {
@@ -300,26 +326,26 @@ const Admin: Component = () => {
         </div>
         <KeyValue
           rows={[
-            { k: 'total loaded', v: String(sampleProgress().loaded) },
-            { k: 'total expected', v: String(sampleProgress().total) },
+            { k: 'загружено', v: String(sampleProgress().loaded) },
+            { k: 'ожидается', v: String(sampleProgress().total) },
           ]}
         />
       </Section>
 
-      <Section id="piano" title="Piano state" count={piano().active}>
+      <Section id="piano" title="Состояние пианино" count={piano().active}>
         <KeyValue
           rows={[
-            { k: 'active notes', v: String(piano().active) },
+            { k: 'активные ноты', v: String(piano().active) },
             {
-              k: 'last MIDI source',
-              v: piano().source ?? (piano().active === 0 ? '—' : 'on-screen'),
+              k: 'последний MIDI-источник',
+              v: piano().source ?? (piano().active === 0 ? '—' : 'с клавиатуры'),
             },
           ]}
         />
         <p class="admin-hint">
-          PianoKeyboard — see decisions/wavecode-piano-input.yaml. Active notes & MIDI source
+          PianoKeyboard — см. decisions/wavecode-piano-input.yaml. Активные ноты и MIDI-источник
           are read from `window.__wavecodePiano` when exposed by that
-          component; until then we report zero / on-screen.
+          читаются из окна, если компонент его выставил; пока сообщаем ноль / с клавиатуры.
         </p>
       </Section>
     </div>
@@ -354,7 +380,7 @@ type FilterBarProps = {
 const FilterBar = (props: FilterBarProps): JSX.Element => (
   <div class="admin-filter" data-testid="logger-filter">
     <label class="admin-filter-label">
-      <span>level</span>
+      <span>уровень</span>
       <select
         class="admin-filter-select"
         data-testid="filter-level"
@@ -366,12 +392,12 @@ const FilterBar = (props: FilterBarProps): JSX.Element => (
           props.onChange({ level, source: props.filter.source });
         }}
       >
-        <option value="all">all</option>
+        <option value="all">все</option>
         <For each={LEVELS}>{(lvl) => <option value={lvl}>{lvl}</option>}</For>
       </select>
     </label>
     <label class="admin-filter-label">
-      <span>source</span>
+      <span>источник</span>
       <select
         class="admin-filter-select"
         data-testid="filter-source"
@@ -381,7 +407,7 @@ const FilterBar = (props: FilterBarProps): JSX.Element => (
           props.onChange({ level: props.filter.level, source: v });
         }}
       >
-        <option value="all">all</option>
+        <option value="all">все</option>
         <For each={props.sources}>{(s) => <option value={s}>{s}</option>}</For>
       </select>
     </label>

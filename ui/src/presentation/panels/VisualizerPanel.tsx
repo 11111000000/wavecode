@@ -295,9 +295,9 @@ export function VisualizerPanel(): JSX.Element {
       </section>
 
       <section class="visualizer-bands" aria-label="Уровни по диапазонам">
-        <BandMeter label="bass"   level={bandLevels().bass}   color="hsl(42 95% 60%)" />
-        <BandMeter label="mid"    level={bandLevels().mid}    color="hsl(252 75% 65%)" />
-        <BandMeter label="treble" level={bandLevels().treble} color="hsl(174 80% 55%)" />
+        <BandMeter label="бас"    level={bandLevels().bass}   color="hsl(42 95% 60%)" />
+        <BandMeter label="середина" level={bandLevels().mid}    color="hsl(252 75% 65%)" />
+        <BandMeter label="верх"   level={bandLevels().treble} color="hsl(174 80% 55%)" />
       </section>
 
       <footer class="visualizer-stats">
@@ -306,7 +306,7 @@ export function VisualizerPanel(): JSX.Element {
         <span>{mode() === 'spectrum' ? 'эквалайзер' : mode() === 'wave' ? 'осциллограмма' : mode() === 'radial' ? 'полярные бары' : 'пульс на bass'}</span>
         <Show when={analyserReady()}>
           <span class="visualizer-stats__sep">·</span>
-          <span class="visualizer-stats__live" data-live="true">live</span>
+          <span class="visualizer-stats__live" data-live="true">в сети</span>
         </Show>
       </footer>
     </div>
@@ -317,7 +317,7 @@ const MODE_LABELS: Record<Mode, string> = {
   spectrum: 'Эквалайзер',
   wave: 'Осциллограмма',
   radial: 'Полярные бары',
-  beat: 'Пульс на bass',
+  beat: 'Пульс на басу',
 };
 
 const ModeButton = (props: {

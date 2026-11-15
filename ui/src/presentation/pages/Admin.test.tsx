@@ -217,13 +217,15 @@ describe('Admin', () => {
     expect(getByTestId('persisted-list').textContent).not.toContain('to-be-cleared');
   });
 
-  it('console section reflects live toasts', () => {
+  it('console section reflects live toasts and errors', () => {
     consoleStore.pushToast({ severity: 'info', title: 'toast-A' });
     consoleStore.pushToast({ severity: 'error', title: 'toast-B' });
     const { getByTestId } = render(() => <Admin />);
+    // wavecode-zen-ui-phases-6-7 (фаза 6): ошибки лежат в отдельном
+    // канале стора — админка показывает оба канала.
     const list = getByTestId('console-toast-list');
     expect(list.textContent).toContain('toast-A');
-    expect(list.textContent).toContain('toast-B');
+    expect(getByTestId('console-error-list').textContent).toContain('toast-B');
     expect(getByTestId('admin-section-count-console').textContent).toBe('2');
   });
 

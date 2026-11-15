@@ -139,7 +139,7 @@ export const enterEdit = (score: string): { readonly ok: boolean; readonly reaso
     return {
       ok: false,
       reason:
-        'Edit mode requires a top-level stack(...) with exactly 4 s("…") rows. Switch to Sketch to add a drum layer.',
+        'Режим правки требует верхнеуровневого stack(...) ровно с 4 строками s("…"). Переключитесь на «Черновик», чтобы добавить барабанный слой.',
     };
   }
   const parsed = loadFromScoreInternal(score);
