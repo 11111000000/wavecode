@@ -7058,3 +7058,153 @@ textarea.ai-textarea:focus-visible {
   font-size: var(--fs-3xs);
   color: var(--fg-ghost);
 }
+
+/* --- row 6: term box (сетка 4×8, целевая длина, маппинг жест→строка) ------ */
+.gesture-term {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  padding: var(--space-sm) var(--space-md);
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+}
+.gesture-term[data-term-active='false'] { opacity: 0.72; }
+
+.gesture-term-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-xs);
+}
+.gesture-term-title {
+  font-family: var(--font-mono);
+  font-size: var(--fs-2xs);
+  letter-spacing: var(--ls-wide);
+  text-transform: uppercase;
+  color: var(--fg-ghost);
+}
+.gesture-term-progress {
+  font-family: var(--font-mono);
+  font-size: var(--fs-2xs);
+  color: var(--fg-dim);
+}
+.gesture-term-progress[data-complete='true'] { color: var(--ok); }
+
+/* --- legend: жест → строка сетки ----------------------------------------- */
+.gesture-term-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2xs);
+}
+.gesture-term-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2xs);
+  padding: 2px var(--space-xs);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  font-size: var(--fs-3xs);
+  color: var(--fg-ghost);
+}
+.gesture-term-chip[data-active='true'] {
+  border-color: var(--primary);
+  color: var(--fg);
+}
+.gesture-term-chip-gesture { color: var(--fg-dim); }
+.gesture-term-chip[data-active='true'] .gesture-term-chip-gesture { color: var(--primary); }
+.gesture-term-chip-arrow { opacity: 0.6; }
+
+/* --- target length (сколько ударов) --------------------------------------- */
+.gesture-term-target {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  flex-wrap: wrap;
+}
+.gesture-term-target-label,
+.gesture-term-target-hint {
+  font-size: var(--fs-3xs);
+  color: var(--fg-ghost);
+}
+.gesture-term-target-hint { margin-left: auto; }
+.gesture-term-target-btn {
+  min-height: var(--control-h-sm);
+  min-width: var(--control-h-lg);
+  padding: 0 var(--space-xs);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--fg-dim);
+  font-family: var(--font-mono);
+  font-size: var(--fs-2xs);
+  cursor: pointer;
+  transition:
+    background var(--dur-xs) var(--ease),
+    border-color var(--dur-xs) var(--ease),
+    color var(--dur-xs) var(--ease);
+}
+.gesture-term-target-btn:hover {
+  border-color: var(--border-strong);
+  color: var(--fg);
+}
+.gesture-term-target-btn[data-active='true'] {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: var(--fg-inverse);
+}
+
+/* --- the 4×8 grid ---------------------------------------------------------- */
+.gesture-term-grid {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2xs);
+}
+.gesture-term-row {
+  display: grid;
+  grid-template-columns: 56px repeat(8, minmax(0, 1fr));
+  gap: var(--space-2xs);
+  align-items: stretch;
+}
+.gesture-term-row-label {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  text-align: right;
+  padding-right: var(--space-xs);
+  line-height: 1.1;
+  min-width: 0;
+}
+.gesture-term-row-sample {
+  font-family: var(--font-mono);
+  font-size: var(--fs-2xs);
+  font-weight: var(--fw-semibold);
+  color: var(--primary);
+}
+.gesture-term-row-name {
+  font-size: var(--fs-3xs);
+  letter-spacing: var(--ls-wide);
+  text-transform: uppercase;
+  color: var(--fg-ghost);
+}
+.gesture-term-cell {
+  aspect-ratio: 1 / 1;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+.gesture-term-cell.active {
+  background: var(--primary);
+  border-color: var(--primary);
+}
+.gesture-term-cell.beat { border-color: var(--cyan); }
+
+/* --- actions --------------------------------------------------------------- */
+.gesture-term-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+}
+.gesture-term-actions .gesture-btn { flex: 1 1 auto; }
+

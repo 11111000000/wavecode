@@ -45,123 +45,103 @@ this section, but defer to the source of truth above.
 
 ---
 
-Этот репозиторий использует методологию
-[math-coding 3.7](../math-coding/adoption/SKILL.md) для документирования
-решений.
+Этот репозиторий фиксирует решения по методологии
+[math-coding v5](docs/math-coding-v5.md): активная запись решений —
+`spec.json` (`schema_version: 5`) в корне репозитория.
 
-Каждое не-тривиальное решение фиксируется YAML-файлом в
-`decisions/<id>.yaml` со схемой `math-coding/3.3`. Каждый файл
-валидируется ядром (`mathc validate`) и участвует в gate-gate
-(`mathc self-check`). Перед началом работы обязательно прочитать:
+Единица работы — **утверждение (claim)**, а не файл решения. Утверждение
+несёт: текст, предметную область (`scope`), ссылку на источник решения
+(`source` с дайджестом), условия подтверждения (`requirements`),
+**опровергатель** (`falsifier`), регистр (`fact`/`hypothesis`/`judgment`)
+и **отрицательный контроль** (`control`).
 
-1. [math-coding/adoption/SKILL.md](../math-coding/adoption/SKILL.md) — протокол
-   для проектов-адоптеров (совместим с `mathc@>=3.7.4`)
-2. [math-coding/axioms/index.md](../math-coding/axioms/index.md) — пять аксиом
-3. [`decisions/decision.yaml`](decisions/decision.yaml) — active policy
-   (что входит в scope, какие paths закрыты)
-4. [schemas/decision.json](schemas/decision.json) — JSON-schema,
-   валидируемая ядром
+`decisions/*.yaml` (133 файла) — исторический реестр ADR: он больше не
+пишется и не валидируется ядром, но остаётся источником мотивации для
+claim'ов. Правка такого решения переводит связанный claim в состояние
+`outdated` и требует `mathc review-source`.
 
-### Две версии — не путать
+Перед началом работы прочитать:
 
-| что | значение | где лежит |
-|---|---|---|
-| **версия ядра** | 3.7.4 (`mathc` — бинарь и методология) | `../math-coding/VERSION` |
-| **семейство схемы** | `math-coding/3.3` (формат файла решения) | `schema:` в каждом `decisions/*.yaml` |
-
-Ядро ушло на 3.7.x, а **формат decision-файла не менялся**: 3.7-ядро
-принимает семейства `3.0-alpha`, `3.2`, `3.3` — и только их
-(`lib/schema_embedded.ml` в math-coding). Upstream в дереве 3.7.4
-сам пишет `schema: math-coding/3.3` (118 решений) и `3.2` (127), а
-`mathc new-decision` до сих пор скеффолдит `math-coding/3.3`.
-
-**Поэтому `schema:` в `decisions/*.yaml` НЕ бампится на `3.7`.**
-Строка `math-coding/3.7` — это опечатка-ловушка: ядро её примет
-(enum не проверяется в YAML-форме), но она перестанет соответствовать
-`schemas/decision.json` и policy-решению `wavecode-bootstrap-math-coding-3.3`.
-Бампится **ядро**, не формат.
+1. [docs/math-coding-v5.md](docs/math-coding-v5.md) — что изменилось и почему
+2. [`spec.json`](spec.json) — цель и активные утверждения
+3. [`policy.json`](policy.json) — защищённые пути (`spec.json`, `decisions/`)
 
 ### Установка `mathc`
 
 ```bash
-curl -fsSL https://github.com/11111000000/math-coding/releases/download/edge/install.sh \
-  | sh -s --
-export PATH="$HOME/.local/bin:$PATH"
-(cd ../math-coding && mathc version)  # → "math-coding 3.7.4: bootstrap"
+# Ядро v5: готовый статический бинарь (linux-x86_64) + SHA256SUMS.
+MC_VERSION=v5.0.2
+base="https://github.com/11111000000/math-coding/releases/download/${MC_VERSION}"
+curl -fsSL "${base}/mathc-v${MC_VERSION}-linux-x86_64" -o /tmp/mathc
+curl -fsSL "${base}/SHA256SUMS" -o /tmp/SHA256SUMS
+(cd /tmp && grep "mathc-v${MC_VERSION}-linux-x86_64" SHA256SUMS | sha256sum -c -)
+chmod +x /tmp/mathc && sudo install -m 0755 /tmp/mathc /usr/local/bin/mathc
+mathc --version   # → mathc 5
 ```
 
-Edge release бинарь работает на NixOS angara-1 (glibc 2.40 совместим).
-Старая заметка "CLI сломан" — устарела (относится к pre-2026-10 setup,
-когда бинарь линковался на удалённый glibc).
+Старый edge-релиз (ядро 3.7) отдаёт 404, а его команды (`validate`,
+`self-check`, `rehash`, `new-decision`) в ядре 5 **не существуют**.
+Формат `decisions/*.yaml` ядро 5 не читает.
 
-`mathc version` читает номер из файла `VERSION` **относительно текущего
-каталога** (`bin/Mathc.ml::read_cli_version`), поэтому из корня wavecode
-он печатает fallback `math-coding math-coding: bootstrap`. Это не
-поломка — проверять версию надо из checkout'а math-coding.
-
-### Создание нового решения
-
-```bash
-mathc new-decision <id>          # печатает scaffold (id в kebab-case)
-# отредактировать decisions/<id>.yaml: intent, commitment, scope,
-# obligations[].acceptance.all[].verifier, outcomes, antithesis, counterexample
-mathc rehash decisions/<id>.yaml --write   # пересчитать body_sha/yaml_sha
-mathc validate decisions/<id>.yaml
-mathc self-check                  # exit 0 = ok, 1 = reject, 3 = unknown
-```
-
-**`mathc rehash --write` — обязательный шаг после правки тела
-решения.** `body_sha`/`yaml_sha` — это sha256 тела файла; ядро
-сверяет их с фактическим содержимым и режет решение как
-`MC-SHA-DIGEST-STALE` (severity: block), если содержимое менялось без
-пересчёта. Именно так был красным гейт wavecode до 2026-10-26: 102
-решения с устаревшим дайджестом.
-
-Полезные команды 3.7 (ядро):
+### Команды ядра 5
 
 | команда | что делает |
 |---|---|
-| `mathc rehash --write` | пересчитать `body_sha`/`yaml_sha` (проверяет fixed point) |
-| `mathc doctor --json` | диагностика установки/путей/решений/attestations |
-| `mathc verify FILE` | выполнить `acceptance.all[*].verifier` в песочнице |
-| `mathc attest-batch` | выпустить attestations по manifest'у |
-| `mathc decision-state <id> --state=...` | смена lifecycle-состояния решения |
-| `mathc explain-diagnostic MC-*` | расшифровка диагностики ядра |
+| `mathc init` | создаёт `spec.json` (только если его нет) |
+| `mathc goal "AIM" "SCOPE[,SCOPE]" "OWNER"` | задать цель |
+| `mathc add ID "TEXT" "SCOPE" "FALSIFIER" fact --requirement "verifier:CMD" --control "CMD" [--source ADR]` | объявить утверждение |
+| `mathc run` | исполнить проверки и контроли; 0 = green, 1 = red, 3 = unknown |
+| `mathc map` / `mathc next` / `mathc context` | карта покрытия и следующий шаг |
+| `mathc review-source ID --by WHO --reason "WHY"` | пересмотр источника после его правки |
+| `mathc authorize --by WHO --reason "WHY"` | разрешить изменение защищённых путей |
+| `mathc install` | переписать блок math-coding в `AGENTS.md` |
+| `mathc doctor` | диагностика установки (ничего не чинит) |
 
-### Миграция v1.0 → 3.7
+### Правило утверждения
+
+Утверждение становится зелёным только если у него есть **исполняемая
+проверка** И **отрицательный контроль**, который меняет предмет claim'а и
+ломает эту проверку. Проверка без контроля даёт `not-run` → `unknown`.
+
+Verifier исполняется в рабочем дереве, а контроль — в **изолированной
+копии** репозитория (`git clone` без `node_modules`). Поэтому verifier'ы
+wavecode не могут рассчитывать на установленные зависимости: все они
+живут в `scripts/check-invariants.mjs` (только stdlib Node) и проверяют
+архитектурные инварианты.
 
 ```bash
-python3 scripts/migrate-math-coding-3.7.py   # хвостовой `---`, дубли ключей, verifier-схемы
-mathc rehash --write                          # дайджесты
-mathc validate decisions/*.yaml               # ожидается parse-ok по всем файлам
+node scripts/check-invariants.mjs layering   # слои не тянут друг друга
+node scripts/check-invariants.mjs console    # нет глобального console в domain/application
+node scripts/check-invariants.mjs camera     # камера — только по явному действию
+node scripts/check-invariants.mjs deploy     # CI ничего не деплоит
+node scripts/check-invariants.mjs secrets    # в репозитории нет секретов
+node scripts/check-invariants.mjs decisions  # решения сохраняют свои ключи
+node scripts/check-invariants.mjs spec       # spec.json цел и связан с живыми файлами
+node scripts/check-invariants.mjs gate       # гейт использует ядро v5
+node scripts/check-invariants.mjs term       # термин-бокс раскладывает жесты по строкам
 ```
 
-Скрипт идемпотентен. Что он чинит:
+**Здоровье кода** (typecheck, lint, юнит-тесты, сборка, e2e) проверяет
+`.github/workflows/ci.yml`. Гейт math-coding проверяет **обоснованность**:
+инварианты, зафиксированные в `spec.json`, и связь каждого утверждения с
+живым источником.
 
-* **MC-UNPARSED-TAIL** — хвостовой `---` (второй маркер документа) в
-  92 файлах: 3.7-ядро читает front-matter между первым и вторым `---`
-  и всё, что после второго, считает непрочитанным хвостом.
-* **MC-DUPLICATE-KEY** — 175 дубликатов: генератор
-  `scripts/migrate-v1-packets.py` писал пару `counterexample:`/
-  `antithesis:` дважды; ядро читает первое вхождение, второе —
-  мёртвый контент. Генератор починен в этом же коммите.
-* **MC-VERIFIER-SCHEME-UNKNOWN** — переименованы два scheme
-  (`attestation-store-has-subject` → `mathc self-check`,
-  `mathc-validate` → `mathc validate`). Остальные 217 предупреждений —
-  идентификаторные метки (`vitest-run-*`, `pnpm-ui-*`, `playwright*`),
-  реальную команду которых из строки не восстановить без угадывания.
-  Этот долг зафиксирован follow-up-обязательством в
-  `decisions/wavecode-math-coding-3.7.yaml` (upstream несёт такой же
-  долг: 35 из 251 его решений).
+### Защищённые пути
 
-### Legacy `math/<name>/packet.md`
+`policy.json` закрывает `spec.json` и `decisions/`: незакоммиченная правка
+этих путей блокирует гейт — ядро требует явного разрешения.
 
-Каталог `math/` содержит **мигрированные** пакеты v1.0 (87 штук,
-commits до 2026-10-14). Они отображены в `decisions/<id>.yaml`
-через скрипт `scripts/migrate-v1-packets.py` и могут быть удалены
-после merge этой ветки (см. commit `chore: drop math/ legacy packets`).
-Старые пакеты — historical record, **не редактируются**; новые
-решения пишутся только в `decisions/`.
+```bash
+# порядок: правка → коммит → mathc authorize (если правка ещё в рабочем дереве)
+mathc authorize --by az --reason "почему меняется запись решений"
+```
+
+### Legacy
+
+Каталог `math/` (пакеты v1.0) удалён: все 87 пакетов отображены в
+`decisions/<id>.yaml` через `scripts/migrate-v1-packets.py`. Старые
+решения — historical record, **не редактируются** (кроме удаления
+секретов); новые утверждения пишутся только в `spec.json`.
 
 ## Структура репозитория
 
@@ -170,12 +150,15 @@ README.md         короткое описание
 AGENTS.md         этот файл
 .gitignore        стандартный для Node-проекта
 .gitverse/        GitVerse Actions — только math-coding gate (деплоя нет)
-math/<name>/      legacy пакеты решений math-coding v1.0 (будут удалены)
-decisions/        решения math-coding 3.7 (active source of truth;
-                  schema family файла — `math-coding/3.3`)
-attestations/     attestation store (kernel evidence для `mathc self-check`)
+spec.json         активная запись решений (math-coding v5, schema_version 5):
+                  цель + утверждения (claims) с verifier'ами и контролями
+policy.json       защищённые пути записи решений (`spec.json`, `decisions/`)
+decisions/        исторический реестр решений math-coding 3.3 (133 файла):
+                  источник мотивации для claim'ов; ядро 5 их не читает
+attestations/     attestation store 3.3 (kernel evidence для `mathc self-check`)
 schemas/          JSON-schema reference (kernel input 3.7, family 3.3)
-scripts/          утилиты (миграция v1→v3.7, проверка)
+scripts/          утилиты (проверка инвариантов, миграция v1→v3.3, пресеты)
+docs/             проектная документация (в т.ч. docs/math-coding-v5.md)
 ui/               браузерный SPA (TypeScript + Effect-TS + Solid.js)
 ```
 
@@ -292,3 +275,16 @@ git revert <bad-commit-sha>
 - angara-1 держит **только** этот и связанные репо для build'а.
   Production-data (IDB, messages) живёт в браузере юзера, не на
   сервере. Поэтому redeploy = «переписать статику», без миграций БД.
+<!-- math-coding:begin -->
+## math-coding in this project
+
+Wavecode остаётся beat-maker'ом, который нельзя сломать незаметно: архитектурные инварианты, камера, деплой, секреты и запись решений проверяются свежими воспроизводимыми проверками, а не договорённостями.
+
+9 claim(s).
+
+```sh
+mathc run
+```
+
+Every verb: mathc help mathc init mathc goal mathc add mathc run mathc map mathc next mathc context mathc waive mathc record mathc install mathc doctor mathc adopt mathc import-adr mathc import-junit mathc authorize mathc re-evaluate mathc review-source mathc mcp
+<!-- math-coding:end -->

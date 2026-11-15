@@ -6,8 +6,6 @@ import {
   SENSITIVITY_MIN,
   calibrateFar,
   calibrateNear,
-  clearGestureTermHits,
-  commitTermPattern,
   gestureActive,
   gestureAxes,
   gestureCalibrationState,
@@ -19,7 +17,6 @@ import {
   gestureSensitivity,
   gestureStatus,
   gestureStatusLabel,
-  gestureTermHits,
   gestureTermMode,
   gestureTwoHands,
   resetCalibration,
@@ -34,6 +31,7 @@ import {
   type GestureAxisConfig,
   type GestureCurve,
 } from '../state/gestureStore';
+import { TermBox } from '../components/TermBox';
 import type { ContinuousParam, Landmark } from '~/domain/gesture/types';
 
 /**
@@ -50,7 +48,9 @@ import type { ContinuousParam, Landmark } from '~/domain/gesture/types';
  *   row 2 — camera preview (video + landmark overlay) + gesture badge
  *   row 3 — axis list (parameter / invert / curve) + sensitivity slider
  *   row 4 — calibration («близко» / «далеко» / «сброс»)
- *   row 5 — «две руки» + «режим терминовки» + «готово» (commit the rhythm)
+ *   row 5 — «две руки» + «режим терминовки»
+ *   row 6 — термин-бокс: сетка 4×8, целевая длина, маппинг жест→строка
+ *           и действия «прослушать» / «готово» / «очистить»
  *
  * Accessibility: every control is a real `<button>`, `<input>` or `<select>`
  * with a label — no click handlers on `<div>`s, everything keyboard reachable.
@@ -431,30 +431,10 @@ export function GesturePanel(): JSX.Element {
           />
           <span>режим терминовки</span>
         </label>
-
-        <button
-          type="button"
-          class="gesture-btn gesture-btn--primary"
-          data-cta="term-commit"
-          aria-label="Готово — записать собранный ритм в сетку"
-          disabled={gestureTermHits().length === 0}
-          onClick={() => {
-            commitTermPattern();
-          }}
-        >
-          готово ({gestureTermHits().length})
-        </button>
-        <button
-          type="button"
-          class="gesture-btn"
-          data-cta="term-clear"
-          aria-label="Очистить собранный ритм"
-          disabled={gestureTermHits().length === 0}
-          onClick={() => clearGestureTermHits()}
-        >
-          очистить
-        </button>
       </div>
+
+      {/* ── row 6: the term box (grid, target length, legend, actions) ────── */}
+      <TermBox />
     </div>
   );
 }

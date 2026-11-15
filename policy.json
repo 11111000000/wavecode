@@ -1,0 +1,7 @@
+{
+  "protected_paths": [
+    "spec.json",
+    "decisions"
+  ],
+  "authorized_by": "az"
+}

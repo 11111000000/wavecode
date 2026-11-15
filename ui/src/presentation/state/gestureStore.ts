@@ -33,13 +33,18 @@ import { dispatch, appStore } from './appStore';
 import { appendGridToScore } from './gridState';
 import { editGridLayer } from '~/application/useCases/editGridLayer';
 import {
-  emptyGrid,
-  setCell,
   GRID_COLS,
   GRID_ROWS,
   type Grid,
   type GridRowSample,
 } from '~/domain/music/gridTypes';
+import {
+  buildTermGrid as buildTermGridFromHits,
+  isTermTarget,
+  termSampleForGesture,
+  TERM_TARGET_DEFAULT,
+  type TermHit,
+} from '~/domain/gesture/term';
 import { cps } from './transportState';
 import { logger } from '~/infrastructure/log';
 
@@ -175,19 +180,13 @@ export type GestureAxisConfig = {
   readonly curve: GestureCurve;
 };
 
-/** One recorded hit of the "терминовка" (term) mode. */
-export type GestureTermHit = {
-  /** Which drum row of the 4×8 grid the hit lands on. */
-  readonly sample: GridRowSample;
-  /** Column (0..7) of the 4×8 grid. */
-  readonly col: number;
-  /** Cycle index the hit was quantised to. */
-  readonly cycleIndex: number;
-  /** Offset inside the cycle (ms). */
-  readonly offsetMs: number;
-  /** Wall-clock timestamp of the raw gesture (ms). */
-  readonly tsMs: number;
-};
+/**
+ * One recorded hit of the "терминовка" (term) mode.
+ *
+ * The shape lives in the domain (`domain/gesture/term`) — the store only
+ * owns the signals; the alias keeps the store's public API stable.
+ */
+export type GestureTermHit = TermHit;
 
 /** Calibration bookkeeping exposed to the panel. */
 export type GestureCalibrationState = {
@@ -268,14 +267,6 @@ export const GESTURE_CURVE_OPTIONS: ReadonlyArray<GestureCurve> = [
   'exp',
 ];
 
-/** Which drum row a discrete gesture lands on in term mode. */
-const TERM_SAMPLE_BY_GESTURE: Partial<Record<GestureName, GridRowSample>> = {
-  pinch: 'bd',
-  openPalm: 'hh',
-  snap: 'cp',
-  fist: 'sd',
-};
-
 // ── signals ──────────────────────────────────────────────────────────────────
 
 /** Master toggle state (true = camera running). */
@@ -328,6 +319,14 @@ export const [gestureTwoHands, setGestureTwoHands] = createSignal(false);
 
 /** «Режим терминовки» — collect discrete hits into a rhythm. */
 export const [gestureTermMode, setGestureTermModeSignal] = createSignal(false);
+
+/**
+ * Target length of the term recording — the number of HITS the user
+ * intends to play (4 / 8 / 16). See `domain/gesture/term`.
+ */
+export const [gestureTermTarget, setGestureTermTargetSignal] = createSignal<number>(
+  TERM_TARGET_DEFAULT,
+);
 
 /** Hits collected in term mode. */
 export const [gestureTermHits, setGestureTermHits] = createSignal<
@@ -511,6 +510,13 @@ const createController = (opts: GestureControllerOptions): GestureController => 
    * `quantizeToCycle` returns the ABSOLUTE scheduled time (`timeMs`) and the
    * offset INSIDE the target cycle (`offsetMs`); the delay is therefore
    * `timeMs - nowMs`.
+   *
+   * WHICH sample sounds depends on the mode:
+   *   - in term mode the gesture's own row sounds (щипок → бочка, ладонь →
+   *     хай-хэт, кулак → малый барабан, щелчок → хлоп) — the mapping lives
+   *     in `domain/gesture/term`;
+   *   - outside term mode only the щипок keeps its percussive preview — the
+   *     behaviour the panel had before the term box existed.
    */
   const scheduleQuantizedHit = async (gesture: GestureName, tsMs: number): Promise<void> => {
     const nowMs = performance.now();
@@ -525,20 +531,28 @@ const createController = (opts: GestureControllerOptions): GestureController => 
 
     const delayMs = Math.max(0, quantized.timeMs - nowMs);
 
+    const sample = termSampleForGesture(gesture);
+    const termMode = gestureTermMode();
+
     // The one-shot itself is fired by `previewSample` (the shared drum
     // preview path). It plays immediately when it is called, so we call it
     // after the quantised delay and keep the exact grid position for the
     // term-mode buffer.
-    setTimeout(() => {
-      previewSample('bd');
-    }, delayMs);
+    const audible: GridRowSample | null = termMode
+      ? sample
+      : gesture === 'pinch'
+        ? 'bd'
+        : null;
+    if (audible !== null) {
+      setTimeout(() => {
+        previewSample(audible);
+      }, delayMs);
+    }
 
-    if (!gestureTermMode()) return;
+    if (!termMode) return;
+    if (sample === null) return;
 
     const cycleDurationMs = 1000 / Math.max(0.01, cps());
-    const sample = TERM_SAMPLE_BY_GESTURE[gesture];
-    if (sample === undefined) return;
-
     // `offsetMs` is the offset inside the target cycle → the grid column.
     const position = (quantized.offsetMs / cycleDurationMs) % 1;
     const col = Math.min(GRID_COLS - 1, Math.max(0, Math.floor(position * GRID_COLS)));
@@ -549,7 +563,12 @@ const createController = (opts: GestureControllerOptions): GestureController => 
       offsetMs: quantized.offsetMs,
       tsMs,
     };
-    setGestureTermHits((hits) => [...hits, hit]);
+    // The recording stops when the target length is reached — the box is
+    // complete and the user decides what to do with it («готово» / «очистить»).
+    setGestureTermHits((hits) => {
+      if (hits.length >= gestureTermTarget()) return hits;
+      return [...hits, hit];
+    });
   };
 
   // ── events ────────────────────────────────────────────────────────────────
@@ -567,7 +586,14 @@ const createController = (opts: GestureControllerOptions): GestureController => 
     setGestureActive(gesture);
     if (gesture === 'pinch') {
       triggerHaptic(PINCH_HAPTIC_MS);
-      void scheduleQuantizedHit(gesture, tsMs);
+    }
+    // Every rhythmic gesture writes into the term box (the mapping lives in
+    // `domain/gesture/term`). Outside term mode only the щипок keeps its
+    // percussive preview — the rest stay silent until the box is armed.
+    if (gesture === 'pinch' || gestureTermMode()) {
+      if (termSampleForGesture(gesture) !== null) {
+        void scheduleQuantizedHit(gesture, tsMs);
+      }
     }
     opts.onControlEvent?.({ kind: 'discrete', gesture, tsMs });
   };
@@ -929,22 +955,51 @@ export const setGestureTermMode = (enabled: boolean): void => {
   if (!enabled) setGestureTermHits([]);
 };
 
+/**
+ * Choose the target length of the recording — the number of hits the user
+ * intends to play (4 / 8 / 16). Values outside the offered set fall back to
+ * the default.
+ */
+export const setGestureTermTarget = (target: number): void => {
+  setGestureTermTargetSignal(isTermTarget(target) ? target : TERM_TARGET_DEFAULT);
+};
+
 /** Drop the collected hits without committing them. */
 export const clearGestureTermHits = (): void => {
   setGestureTermHits([]);
 };
 
-/** Build the 4×8 grid from the collected hits. */
+/** Build the 4×8 grid from the collected hits (see `domain/gesture/term`). */
 export const buildTermGrid = (
   hits: ReadonlyArray<GestureTermHit>,
-): Grid => {
-  let grid = emptyGrid();
-  for (const hit of hits) {
-    const row = GRID_ROWS.indexOf(hit.sample);
-    if (row < 0) continue;
-    grid = setCell(grid, row, hit.col, true);
+): Grid => buildTermGridFromHits(hits);
+
+/**
+ * Play the recorded rhythm back — one cycle of the collected grid.
+ *
+ * Every active cell of the 4×8 grid sounds at its own position in the
+ * cycle, so the user hears exactly what «готово» will write into the score.
+ *
+ * @returns `false` when there is nothing recorded yet.
+ */
+export const previewTermPattern = (): boolean => {
+  const hits = gestureTermHits();
+  if (hits.length === 0) return false;
+  const grid = buildTermGridFromHits(hits);
+  const cycleMs = 1000 / Math.max(0.01, cps());
+  for (let row = 0; row < GRID_ROWS.length; row += 1) {
+    const sample = GRID_ROWS[row];
+    if (sample === undefined) continue;
+    const cells = grid[row] ?? [];
+    for (let col = 0; col < GRID_COLS; col += 1) {
+      if (cells[col] !== true) continue;
+      const delayMs = (col / GRID_COLS) * cycleMs;
+      setTimeout(() => {
+        previewSample(sample);
+      }, delayMs);
+    }
   }
-  return grid;
+  return true;
 };
 
 /**
