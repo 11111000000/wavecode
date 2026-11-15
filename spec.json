@@ -118,7 +118,7 @@
     {
       "id": "no-secrets-in-repo",
       "text": "No secret value is committed: the LLM proxy key lives in the gitignored ui/.env.local, and no tracked file carries a key, token or private key.",
-      "scope": [ "ui/src", "bin", "scripts", "decisions" ],
+      "scope": [ "ui/src", "scripts", "decisions", "spec.json", "bin", ".github/workflows", ".gitverse/workflows" ],
       "source": {
         "kind": "specification",
         "path": "docs/math-coding-v5.md",
@@ -138,7 +138,7 @@
       ],
       "falsifier": "A tracked file contains a key or token value — anybody with read access to the repository could use it.",
       "register": "fact",
-      "control": "printf '\\nOPENAI_API_KEY=sk-abcdefghijklmnopqrstuvwxyz0123456789\\n' >> ui/src/domain/types.ts",
+      "control": "printf '\\nOPENAI_API_KEY=sk-%s\\n' \"abcdefghijklmnopqrstuvwxyz0123456789\" >> ui/src/domain/types.ts",
       "waiver": null
     },
     {
@@ -190,7 +190,7 @@
       ],
       "falsifier": "A claim loses its verifier or its control, or points at a source that no longer exists — the claim could no longer be proved or refuted.",
       "register": "fact",
-      "control": "sed -i \"s|\"path\": \"decisions/|\"path\": \"decisions/missing-|\" spec.json",
+      "control": "sed -i 's|\"path\": \"decisions/|\"path\": \"decisions/missing-|' spec.json",
       "waiver": null
     },
     {
