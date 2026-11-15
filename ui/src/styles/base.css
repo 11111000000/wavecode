@@ -76,7 +76,8 @@ body {
   outline: 2px solid var(--cyan);
   outline-offset: 2px;
   border-radius: var(--radius-sm);
-  box-shadow: var(--shadow-glow-cyan);
+  /* flat ring, not a glow — the outline already carries the state */
+  box-shadow: 0 0 0 3px var(--cyan-soft);
 }
 
 /* CodeMirror owns its own caret/focus visuals (selection ring inside
@@ -182,6 +183,9 @@ code, pre, .mono { font-family: var(--font-mono); }
   *,
   *::before,
   *::after {
+    /* Every keyframe animation is disabled outright (not merely shortened),
+       so no element can keep looping under reduced motion. */
+    animation-name: none !important;
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;

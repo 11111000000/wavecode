@@ -27,7 +27,7 @@
  *     полностью съеден components.css, файл удалён
  */
 
-@layer tokens, base, components, sheets, icons, landing;
+@layer tokens, base, components, sheets, icons, landing, zen;
 
 @import './styles/tokens.css' layer(tokens);
 @import './styles/base.css' layer(base);
@@ -35,3 +35,6 @@
 @import './styles/sheets.css' layer(sheets);
 @import './styles/icons.css' layer(icons);
 @import './styles/landing.css' layer(landing);
+/* Zen v1 — рельс, лист «Инструменты», палитра команд. Последний слой:
+   новая навигация не спорит с компонентными правилами. */
+@import './styles/zen.css' layer(zen);

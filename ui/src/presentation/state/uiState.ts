@@ -1,4 +1,5 @@
 import { createSignal, createEffect, onCleanup, createRoot } from 'solid-js';
+import { getMode, dirtyCellCount } from './gridState';
 
 const KEY = 'wavecode-ui-state-v1';
 const MOBILE_MODE_KEY = 'wavecode-mobile-default';
@@ -186,7 +187,13 @@ export const toggleScore = (): void => {
 };
 
 export const toggleAI = (): void => {
-  setUiState((s) => ({ ...s, aiOpen: !s.aiOpen }));
+  // wavecode-zen-minimal-ui (ревизия 2): ИИ больше не панель рядом с
+  // холстом — это слой поверх него (на десктопе — правый drawer, на
+  // мобиле — лист). Один surface вместо двух.
+  const open = getKindSnap('ai') !== 'closed';
+  if (open) closeKindSheet('ai');
+  else openKindSheet('ai', 'half');
+  setUiState((s) => ({ ...s, aiOpen: !open }));
 };
 
 export const toggleStatus = (): void => {
@@ -208,7 +215,7 @@ export const setLayout = (layout: Layout): void => {
 // Bottom Sheet (mobile-first)
 // =========================================================================
 
-export type SheetKind = 'ai' | 'mixer' | 'step' | 'piano' | 'status' | 'share' | 'record' | 'visualize' | 'mic' | 'gesture' | null;
+export type SheetKind = 'ai' | 'mixer' | 'step' | 'piano' | 'status' | 'share' | 'record' | 'visualize' | 'mic' | 'gesture' | 'tools' | 'export' | null;
 export type SheetSnap = 'closed' | 'peek' | 'half' | 'full';
 export type TabId = 'score' | 'step' | 'piano' | 'mixer' | 'chat' | 'status' | 'visualize' | 'mic';
 
@@ -340,7 +347,7 @@ export const snapTo = (snap: SheetSnap): void => {
 
 /** Snap per-kind — несколько sheet'ов могут быть открыты каждый со своим snap. */
 const [snapsByKind, setSnapsByKindRaw] = createSignal<Record<NonNullable<SheetKind>, SheetSnap>>({
-  ai: 'closed', mixer: 'closed', step: 'closed', piano: 'closed', status: 'closed', share: 'closed', record: 'closed', visualize: 'closed', mic: 'closed', gesture: 'closed',
+  ai: 'closed', mixer: 'closed', step: 'closed', piano: 'closed', status: 'closed', share: 'closed', record: 'closed', visualize: 'closed', mic: 'closed', gesture: 'closed', tools: 'closed', export: 'closed',
 });
 export const getSnapsByKind = snapsByKind;
 export const getKindSnap = (kind: NonNullable<SheetKind>): SheetSnap => snapsByKind()[kind];
@@ -362,6 +369,14 @@ export const openKindSheet = (kind: NonNullable<SheetKind>, snap: SheetSnap = 'h
   }
 };
 export const closeKindSheet = (kind: NonNullable<SheetKind>): void => {
+  // wavecode-zen-minimal-ui (ревизия 2, фаза 5): закрытие селектора с
+  // несохранённым черновиком больше не молча выбрасывает работу.
+  if (kind === 'step' && getMode() === 'sketch' && dirtyCellCount() > 0) {
+    const keep = window.confirm(
+      'В селекторе есть несохранённый черновик.\nЗакрыть без сохранения?',
+    );
+    if (!keep) return;
+  }
   setSnapsByKindRaw((m) => ({ ...m, [kind]: 'closed' }));
   if (snapsByKind()[kind] === 'closed' && getActiveSheet() === kind) {
     setActiveSheetRaw(null);
@@ -377,6 +392,7 @@ export const setTab = (tab: TabId): void => {
     // wavecode-editor-max-sheet-half: open at half (50vh) so editor
     // остаётся виден. Раньше был 'full' — sheet 65vh, editor 105px.
     openKindSheet('ai', 'half');
+    setUiState((s) => ({ ...s, aiOpen: true }));
   } else if (tab === 'mixer') {
     openKindSheet('mixer', 'half');
   } else if (tab === 'status') {

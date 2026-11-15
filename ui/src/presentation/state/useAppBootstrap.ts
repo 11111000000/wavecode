@@ -21,6 +21,10 @@ import {
 } from './gridState';
 import { consumePendingNew } from './pendingNewComposition';
 import { createNewComposition } from './useRouteGuards';
+import { appStore } from './appStore';
+import { getLLMSettings } from './llmSettings';
+import { applyEdit } from '~/application/useCases/llmEdit';
+import { AudioEngine } from '~/domain/services';
 
 export type AudioRuntime = {
   readonly ctxState: () => { state: string; sampleRate: number | null };
@@ -67,11 +71,47 @@ const restoreFromIdbOrShare = (): void => {
  * иначе любая правка перезатрёт только что созданную композицию
  * на старую.
  */
+/**
+ * Инструкция с лендинга — это текст для ИИ, а не код.
+ *
+ * wavecode-zen-minimal-ui (ревизия 2, фаза 5): раньше промпт
+ * дословно подставлялся в поле партитуры, и результат не мог играть
+ * («сделай бит спокойнее» — это не Strudel-код). Теперь: стартуем с
+ * валидной композиции и отправляем текст тем же путём, что и кнопка
+ * «Применить» в панели ИИ.
+ */
+const runPromptAsEdit = (prompt: string): void => {
+  const settings = getLLMSettings();
+  dispatch({ type: 'userMessage', text: prompt });
+  void Effect.runPromise(
+    Effect.gen(function* () {
+      const score = yield* applyEdit(
+        appStore.score,
+        prompt,
+        [],
+        { status: appStore.audio.status },
+        { model: settings.model, thinking: settings.thinking },
+      );
+      dispatch({ type: 'replaceScore', text: score });
+      dispatch({ type: 'assistantMessage', text: score });
+      const audio = yield* AudioEngine;
+      yield* audio.eval(score);
+      dispatch({ type: 'audioStatusChange', status: 'playing' });
+    }).pipe(Effect.provide(AppLayer)),
+  ).catch((err: unknown) => {
+    const msg = err instanceof Error ? err.message : String(err);
+    dispatch({ type: 'assistantMessage', text: `Не удалось применить инструкцию: ${msg}` });
+    dispatch({ type: 'audioStatusChange', status: 'error', error: msg });
+  });
+};
+
 const consumePendingNewComposition = (): boolean => {
   const pending = consumePendingNew();
   if (pending === null) return false;
-  createNewComposition(pending.prompt);
+  createNewComposition();
   markIdbHasScore(true);
+  const prompt = pending.prompt?.trim();
+  if (prompt) runPromptAsEdit(prompt);
   return true;
 };
 

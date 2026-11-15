@@ -14,10 +14,14 @@
  *
  * Usage:
  *   node scripts/check-zen-ui.mjs [--root REPO_ROOT] [--json] [--no-baseline]
+ *   node scripts/check-zen-ui.mjs --targets        # zen v1 gate
+ *   node scripts/check-zen-ui.mjs --write-baseline # re-record the floor
  *
  * Exit codes:
- *   0 — no regression against the recorded baseline
- *   1 — regression detected (or dangling token reference)
+ *   0 — no regression against the recorded baseline (and, with --targets,
+ *       the zen v1 targets are met)
+ *   1 — regression detected (or dangling token reference, or a missed
+ *       zen v1 target)
  *   2 — bad invocation / unreadable inputs
  */
 
@@ -61,12 +65,14 @@ function lineOf(text, index) {
   return text.slice(0, index).split('\n').length;
 }
 
-const cssFiles = existsSync(STYLES_DIR)
-  ? [INDEX_CSS, ...readdirSync(STYLES_DIR).filter((f) => f.endsWith('.css')).map((f) => join(STYLES_DIR, f))]
-  : [];
+// Every stylesheet the app actually loads lives under ui/src — including
+// page-local ones (ui/src/presentation/pages/admin.css) that are imported
+// from a component rather than from ui/src/index.css. Scanning only
+// ui/src/styles would miss a dangling var() there.
+const cssFiles = existsSync(UI_SRC) ? walk(UI_SRC).filter((f) => f.endsWith('.css')).sort() : [];
 
 if (cssFiles.length === 0) {
-  console.error('check-zen-ui: no stylesheet found under ui/src/styles');
+  console.error('check-zen-ui: no stylesheet found under ui/src');
   process.exit(2);
 }
 
@@ -228,6 +234,30 @@ const report = {
 
 const STRICT = process.argv.includes('--strict');
 const WRITE_BASELINE = process.argv.includes('--write-baseline');
+const TARGETS = process.argv.includes('--targets');
+
+// ------------------------------------------------------------- targets
+// Phase 1 of the zen redesign ("Zen v1") reached three concrete goals.
+// `--targets` turns them into a gate: it is the check that says the
+// foundation is clean, independently of what the baseline floor is.
+//
+//   danglingRefs     == 0   every var(--token) resolves (no silently
+//                            dropped visual property)
+//   hardcodedColors  == 0   no colour literals outside tokens.css
+//   infiniteAnimations <= 1 the one loop left is the functional
+//                            loading spinner
+const targetViolations = [];
+if (TARGETS) {
+  if (metrics.danglingRefs > 0) {
+    targetViolations.push(`danglingRefs: ${metrics.danglingRefs} (target 0)`);
+  }
+  if (metrics.hardcodedColors > 0) {
+    targetViolations.push(`hardcodedColors: ${metrics.hardcodedColors} (target 0)`);
+  }
+  if (metrics.infiniteAnimations > 1) {
+    targetViolations.push(`infiniteAnimations: ${metrics.infiniteAnimations} (target <= 1)`);
+  }
+}
 
 if (WRITE_BASELINE) {
   const payload = {
@@ -242,7 +272,7 @@ if (WRITE_BASELINE) {
 }
 
 if (AS_JSON) {
-  console.log(JSON.stringify(report, null, 2));
+  console.log(JSON.stringify({ ...report, targetViolations }, null, 2));
 } else {
   console.log('check-zen-ui — минимальный zen-интерфейс: метрики');
   console.log('---------------------------------------------------');
@@ -253,6 +283,12 @@ if (AS_JSON) {
   } else {
     console.log('\nНеопределённых токенов нет.');
   }
+  if (targetViolations.length) {
+    console.log('\nЦЕЛИ ZEN v1 НЕ ДОСТИГНУТЫ:');
+    for (const t of targetViolations) console.log(`  ${t}`);
+  } else if (TARGETS) {
+    console.log('\nЦели zen v1 достигнуты: danglingRefs=0, hardcodedColors=0, infiniteAnimations<=1.');
+  }
   if (regressions.length) {
     console.log('\nРЕГРЕССИИ против базовой линии:');
     for (const r of regressions) console.log(`  ${r}`);
@@ -261,5 +297,6 @@ if (AS_JSON) {
   }
 }
 
-const failed = regressions.length > 0 || (STRICT && dangling.length > 0);
+const failed =
+  regressions.length > 0 || (STRICT && dangling.length > 0) || targetViolations.length > 0;
 process.exit(failed ? 1 : 0);

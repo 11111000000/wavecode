@@ -58,6 +58,7 @@ export function BottomSheet(props: Props): JSX.Element {
   let startTime = 0;
   let startSheetH = 0;
   let contentRef: HTMLDivElement | undefined;
+  let sheetRef: HTMLDivElement | undefined;
   let didDrag = false;
   /** Last snap target the drag crossed — used to fire haptic only
    *  when the pointer position crosses a snap threshold (not on
@@ -211,6 +212,53 @@ export function BottomSheet(props: Props): JSX.Element {
     onCleanup(() => document.removeEventListener('keydown', onKey));
   });
 
+  // wavecode-zen-minimal-ui (ревизия 2, фаза 2): лист — это модальное
+  // окно, поэтому внутри него фокус не должен уезжать, а после
+  // закрытия — возвращаться на то, что его открыло.
+  const FOCUSABLE_SELECTOR = [
+    'a[href]',
+    'button:not([disabled])',
+    'input:not([disabled])',
+    'select:not([disabled])',
+    'textarea:not([disabled])',
+    '[tabindex]:not([tabindex="-1"])',
+  ].join(',');
+
+  const focusableNodes = (): HTMLElement[] => {
+    if (!sheetRef) return [];
+    return Array.from(sheetRef.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR))
+      .filter((el) => el.offsetWidth > 0 || el.offsetHeight > 0 || el === document.activeElement);
+  };
+
+  const onSheetKeyDown = (e: KeyboardEvent): void => {
+    if (e.key !== 'Tab') return;
+    const nodes = focusableNodes();
+    if (nodes.length === 0) return;
+    const first = nodes[0];
+    const last = nodes[nodes.length - 1];
+    if (!first || !last) return;
+    if (e.shiftKey && document.activeElement === first) {
+      e.preventDefault();
+      last.focus();
+    } else if (!e.shiftKey && document.activeElement === last) {
+      e.preventDefault();
+      first.focus();
+    }
+  };
+
+  let restoreFocusTo: HTMLElement | null = null;
+
+  onMount(() => {
+    restoreFocusTo = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    // Фокус на самом листе: скринридер объявляет заголовок, дальше
+    // Tab уходит внутрь по порядку.
+    window.setTimeout(() => sheetRef?.focus({ preventScroll: true }), 0);
+    onCleanup(() => {
+      restoreFocusTo?.focus({ preventScroll: true });
+      restoreFocusTo = null;
+    });
+  });
+
   const style = (): JSX.CSSProperties | undefined => {
     if (!dragging()) return undefined;
     return { transform: `translateY(${dragDelta()}px)`, transition: 'none' };
@@ -246,6 +294,9 @@ export function BottomSheet(props: Props): JSX.Element {
         data-snap-target={snapTarget() ?? ''}
         data-kind={props.kind}
         style={style()}
+        ref={sheetRef}
+        onKeyDown={onSheetKeyDown}
+        tabindex="-1"
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}

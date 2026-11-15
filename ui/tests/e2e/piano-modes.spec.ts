@@ -105,7 +105,7 @@ test('REC + apply: tap C4 → ↑ apply → editor score contains note("c4")', a
   await page.waitForTimeout(300);
 
   // Switch to the score/sheet tab so the editor view is active.
-  // The tab is identified by `.wc-tab[data-active='true']` text.
+  // The rail item is identified by `.wc-rail__item[data-active='true']` text.
   // For simplicity we just locate the .cm-content globally.
   const cmContent = page.locator('.cm-content').first();
   await expect(cmContent).toContainText('note("c4")');

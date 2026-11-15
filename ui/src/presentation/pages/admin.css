@@ -61,7 +61,7 @@
   transition: background var(--dur-xs) var(--ease);
 }
 .admin-nav-link:hover {
-  background: var(--cyan-glow);
+  background: var(--cyan-soft);
   border-color: var(--cyan);
 }
 

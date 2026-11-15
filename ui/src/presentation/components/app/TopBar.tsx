@@ -1,9 +1,10 @@
 import { Show, onCleanup, type JSX } from 'solid-js';
 import { appStore } from '~/presentation/state/appStore';
 import type { MobileMode } from '~/presentation/state/uiState';
+import { openKindSheet } from '~/presentation/state/uiState';
 import {
   UndoIcon, RedoIcon, NewIcon,
-  LayoutSwapIcon, WavecodeLogo,
+  WavecodeLogo, ToolsIcon,
 } from '~/presentation/icons';
 import { ShareButton } from '~/presentation/components/ShareButton';
 import { ConsoleButton } from '~/presentation/components/ConsoleButton';
@@ -119,16 +120,19 @@ export function TopBar(props: TopBarProps): JSX.Element {
         </button>
         <ShareButton />
         <ConsoleButton />
+        {/* wavecode-zen-minimal-ui (ревизия 2): на мобиле нижний ряд
+            остаётся четырёхпунктным, поэтому вход в лист «Инструменты»
+            живёт здесь. Кнопка переключения layout (ИИ ↔ код) убрана:
+            ИИ теперь слой поверх холста, переключать нечего. */}
         <button
           type="button"
           class="wc-icon-btn"
           data-tone="ghost"
-          onClick={props.onToggleLayout}
-          aria-label="Переключить layout"
-          aria-pressed={props.audioRunning}
-          title="AI ↔ Код"
+          onClick={() => openKindSheet('tools', 'half')}
+          aria-label="Инструменты"
+          title="Инструменты (⌘K)"
         >
-          <LayoutSwapIcon size={18} />
+          <ToolsIcon size={18} />
         </button>
         <OverflowMenu
           presetId={props.presetId}

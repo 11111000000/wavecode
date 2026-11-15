@@ -91,6 +91,9 @@ export function CodeMirrorEditor(props: Props) {
           autocapitalize: 'off',
           spellcheck: 'false',
           inputmode: 'text',
+          // wavecode-zen-minimal-ui (ревизия 2, фаза 2): у редактора
+          // не было программной метки — скринридер читал «text box».
+          'aria-label': 'Партитура — редактор кода',
         }),
         EditorView.updateListener.of((u) => {
           if (u.docChanged) untrack(() => props.onChange(u.state.doc.toString()));

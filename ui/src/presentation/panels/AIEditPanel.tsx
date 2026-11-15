@@ -385,7 +385,14 @@ export function AIEditPanel() {
 
   return (
     <div class="ai-edit-panel-inner">
-      <div class="ai-messages" ref={messagesRef}>
+      <div
+        class="ai-messages"
+        ref={messagesRef}
+        role="log"
+        aria-live="polite"
+        aria-relevant="additions text"
+        aria-label="Диалог с ИИ"
+      >
         <Show
           when={activeMessages().length > 0}
           fallback={

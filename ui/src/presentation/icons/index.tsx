@@ -317,6 +317,18 @@ export const TabMicIcon = (p: Props): JSX.Element => (
   </svg>
 );
 
+/** Tools — 2×2 grid of squares: the "everything else" affordance.
+ *  Used by the rail's bottom button and by the top bar on mobile,
+ *  where the bottom row stays four items long. */
+export const ToolsIcon = (p: Props): JSX.Element => (
+  <svg {...base(p.size ?? 20)} class={`wc-icon ${p.class ?? ''}`}>
+    <rect x="2.5" y="2.5" width="4.5" height="4.5" rx="1" />
+    <rect x="9" y="2.5" width="4.5" height="4.5" rx="1" />
+    <rect x="2.5" y="9" width="4.5" height="4.5" rx="1" />
+    <rect x="9" y="9" width="4.5" height="4.5" rx="1" />
+  </svg>
+);
+
 /** Generic mic glyph for the VoiceAIMiniFAB. Same shape as
  *  `TabMicIcon` but kept separate so the FAB styling can rotate
  *  through context (size 16/18/20) without affecting tab-bar

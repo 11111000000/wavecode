@@ -1,6 +1,7 @@
 import { Show, createSignal } from 'solid-js';
 import { Portal } from 'solid-js/web';
 import { appStore, dispatch } from '../state/appStore';
+import { ShareIcon } from '../icons';
 import {
   shareState,
   openShareModal,
@@ -125,8 +126,9 @@ export function ShareButton() {
         class="preset-btn"
         onClick={onOpen}
         title="Поделиться текущей партитурой через URL"
+        aria-label="Поделиться партитурой"
       >
-        🔗
+        <ShareIcon size={16} />
       </button>
 
       <Show when={open() && (shareState.shareUrl() !== null || tooLarge())}>
@@ -145,13 +147,14 @@ export function ShareButton() {
               onKeyDown={onKeyDown}
             >
               <div class="share-modal-inner">
-                <h3 class="share-modal-title">🔗 Поделиться партитурой</h3>
+                <h3 class="share-modal-title">Поделиться партитурой</h3>
 
                 <Show when={!tooLarge()}>
                   <input
                     type="text"
                     class="share-url"
                     readonly
+                    aria-label="Ссылка на партитуру"
                     value={shareState.shareUrl() ?? ''}
                     onFocus={(e) => e.currentTarget.select()}
                   />
@@ -164,7 +167,7 @@ export function ShareButton() {
                       class="share-modal-btn share-modal-copy"
                       onClick={() => void onCopy()}
                     >
-                      {copied() ? '✓ Скопировано' : '📋 Copy URL'}
+                      {copied() ? '✓ Скопировано' : 'Скопировать ссылку'}
                     </button>
                   </div>
                 </Show>
@@ -174,7 +177,7 @@ export function ShareButton() {
                     ⚠ Партитура слишком длинная ({formatBytes(shareState.shareSize())} &gt;{' '}
                     {formatBytes(shareState.shareSizeLimit())}). URL такого размера обрезают
                     прокси и CDN. Лучше экспортируй партитуру в <code>.strudel.txt</code>{' '}
-                    через «📤 Текст» в панели партитуры и перешли файлом.
+                    через «Инструменты → Экспорт» и перешли файлом.
                   </div>
                 </Show>
 

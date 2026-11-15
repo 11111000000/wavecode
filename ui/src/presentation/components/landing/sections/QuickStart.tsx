@@ -60,13 +60,13 @@ export function QuickStart(): JSX.Element {
           <h3 class="l-step__title">Нажми «Play»</h3>
           <p class="l-step__body">
             Кнопка <span style={{ color: 'var(--primary)' }}>▶</span>{' '}
-            внизу справа. Через секунду зазвучит. Громкость, пауза,
-            перемотка — всё там же.
+            в транспортной панели — та закреплена сверху, под шапкой.
+            Через секунду зазвучит. Рядом с ней выбор композиции и темп.
           </p>
           <pre class="l-step__cmd">
             <span class="prompt">→</span>{' '}
             <span style={{ color: 'var(--primary)' }}>▶</span>
-            <span style={{ color: 'var(--fg-dim)' }}>{' '}кнопка снизу справа</span>
+            <span style={{ color: 'var(--fg-dim)' }}>{' '}кнопка сверху, слева</span>
           </pre>
         </article>
 

@@ -9,7 +9,9 @@ import {
   cancelVoiceAIInFlight,
   voiceAIFlushing,
 } from '../state/voiceAIStore';
-import { MicIcon } from '../icons';
+import { getInputMode, openInputDock } from '../state/inputMode';
+import { rhythmRunning, tapRhythmStep } from '../state/rhythmStore';
+import { MicIcon, StepIcon } from '../icons';
 import { consoleStore } from './consoleStore';
 import { primeMicAudioContext } from '~/infrastructure/audio/micAudioContext';
 import type { MicBusyError } from '~/domain/audio/MicChannel';
@@ -134,6 +136,19 @@ const runEffectSafely = async (
  * the text lands in the panel's editable field, and nothing reaches
  * the LLM until the user presses «→ В ИИ» (see
  * `decisions/wavecode-voice-confirm-before-send`).
+ *
+ * One button, two modes
+ * ---------------------
+ * wavecode-zen-minimal-ui (ревизия 2, пункт 10): плавающая кнопка в
+ * приложении ОДНА, и она знает, в каком режиме ввода находится:
+ *
+ *   голос  — как раньше: нажатие начинает/останавливает запись;
+ *   ритм   — нажатие отмечает текущий шаг сетки (микрофон НЕ
+ *            открывается: ритм простукивается пальцем).
+ *
+ * Отдельной кнопки «Ритм» нет: в ветке `feat/rhythm-recorder` она
+ * была третьей кнопкой в кластере, и это ровно то размножение
+ * входов, которое zen-решение убирает.
  */
 export function VoiceAIMiniFAB(props: Props): JSX.Element {
   const phase = (): Phase => {
@@ -149,7 +164,18 @@ export function VoiceAIMiniFAB(props: Props): JSX.Element {
 
   const isRecording = (): boolean => phase() === 'recording';
 
+  /** Режим ввода, в котором сейчас находится кнопка. */
+  const isRhythm = (): boolean => getInputMode() === 'rhythm';
+
   const onToggle = (): void => {
+    // Режим «Ритм»: кнопка — тап по текущему шагу сетки. Микрофон
+    // здесь не открывается НИКОГДА, поэтому и разрешение на запись
+    // не спрашивается: браузер без микрофона в ритме работает.
+    if (isRhythm()) {
+      openInputDock('rhythm');
+      tapRhythmStep();
+      return;
+    }
     const p = phase();
     if (p === 'blocked') return;
     if (p === 'recording') {
@@ -184,6 +210,11 @@ export function VoiceAIMiniFAB(props: Props): JSX.Element {
   };
 
   const titleText = (): string => {
+    if (isRhythm()) {
+      return rhythmRunning()
+        ? 'Ритм: идёт проход по сетке — нажмите, чтобы отметить шаг'
+        : 'Ритм: нажмите, чтобы начать запись ритма';
+    }
     if (!voiceAISupported()) {
       return 'Открой в Chrome для голосового управления';
     }
@@ -194,32 +225,71 @@ export function VoiceAIMiniFAB(props: Props): JSX.Element {
       : 'Голос → ИИ (нажми, чтобы записать; нажми ещё раз, чтобы остановить)';
   };
 
+  const ariaLabel = (): string => {
+    if (isRhythm()) {
+      return rhythmRunning()
+        ? 'Ритм: отметить текущий шаг'
+        : 'Ритм: начать запись ритма';
+    }
+    return isRecording() ? 'Остановить запись' : 'Начать запись';
+  };
+
   return (
     <button
       type="button"
-      class="voice-mini-fab voice-mini-fab--ai"
-      data-state={voiceAIState().tag}
-      data-rec-state={isRecording() ? 'on' : 'off'}
-      data-permission-blocked={isPermissionBlocked() ? 'true' : 'false'}
-      disabled={!voiceAISupported()}
-      aria-pressed={isRecording() ? 'true' : 'false'}
-      aria-label={isRecording() ? 'Остановить запись' : 'Начать запись'}
+      class={
+        isRhythm()
+          ? 'voice-mini-fab voice-mini-fab--ai voice-mini-fab--rhythm'
+          : 'voice-mini-fab voice-mini-fab--ai'
+      }
+      data-mode={isRhythm() ? 'rhythm' : 'voice'}
+      data-state={
+        isRhythm()
+          ? (rhythmRunning() ? 'running' : 'idle')
+          : voiceAIState().tag
+      }
+      data-rec-state={
+        isRhythm() ? 'off' : (isRecording() ? 'on' : 'off')
+      }
+      data-permission-blocked={
+        isRhythm()
+          ? 'false'
+          : (isPermissionBlocked() ? 'true' : 'false')
+      }
+      disabled={isRhythm() ? false : !voiceAISupported()}
+      aria-pressed={
+        isRhythm()
+          ? (rhythmRunning() ? 'true' : 'false')
+          : (isRecording() ? 'true' : 'false')
+      }
+      aria-label={ariaLabel()}
       title={titleText()}
       onClick={onToggle}
     >
       <Show
-        when={isRecording()}
-        fallback={<MicIcon size={18} />}
+        when={isRhythm()}
+        fallback={
+          <Show
+            when={isRecording()}
+            fallback={<MicIcon size={18} />}
+          >
+            {/* While recording the button IS the REC button: the mic
+             * glyph is replaced by the blinking dot, so the state is
+             * readable at a glance and not only from the dock. */}
+            <span class="voice-mini-fab__rec-dot" aria-hidden="true" />
+          </Show>
+        }
       >
-        {/* While recording the button IS the REC button: the mic
-         * glyph is replaced by the blinking dot, so the state is
-         * readable at a glance and not only from the dock. */}
-        <span class="voice-mini-fab__rec-dot" aria-hidden="true" />
+        <Show when={rhythmRunning()} fallback={<StepIcon size={18} />}>
+          {/* In rhythm mode the button is a pad: the grid glyph turns
+           * into a solid mark while the pass over the grid runs. */}
+          <span class="voice-mini-fab__tap-dot" aria-hidden="true" />
+        </Show>
       </Show>
       <span class="voice-mini-fab__label" aria-hidden="true">
-        {isRecording() ? 'REC' : 'Голос'}
+        {isRhythm() ? 'Ритм' : (isRecording() ? 'REC' : 'Голос')}
       </span>
-      <Show when={isPermissionBlocked()}>
+      <Show when={!isRhythm() && isPermissionBlocked()}>
         <span class="voice-mini-fab__badge" aria-hidden="true" title="Браузер блокирует микрофон">
           !
         </span>

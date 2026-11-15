@@ -1,12 +1,13 @@
 import { type JSX } from 'solid-js';
 import type { MobileMode } from '~/presentation/state/uiState';
 import { getSampleStatus } from '~/presentation/state/uiState';
-import { TabBar } from '~/presentation/components/TabBar';
+import { ToolRail } from '~/presentation/components/app/ToolRail';
 import { Toast } from '~/presentation/components/Toast';
 import { ConsoleSheet } from '~/presentation/components/ConsoleSheet';
 import { TopBar } from '~/presentation/components/app/TopBar';
 import { TransportBar } from '~/presentation/components/TransportBar';
 import { PanelsLayout } from '~/presentation/components/app/PanelsLayout';
+import { CommandPalette } from '~/presentation/components/app/CommandPalette';
 
 type CtxState = { state: string; sampleRate: number | null };
 
@@ -71,7 +72,8 @@ export const AppShellView = (props: AppShellViewProps): JSX.Element => (
       onStop={props.onStop}
     />
     <PanelsLayout />
-    <TabBar />
+    <ToolRail />
     <ConsoleSheet />
+    <CommandPalette />
   </main>
 );

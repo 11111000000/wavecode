@@ -2,30 +2,30 @@ import { test, expect, type Page } from '@playwright/test';
 import { APP_URL } from './support/appUrl';
 
 /**
- * Mobile sheet → TabBar overlap regression (2026-10-15 bug).
+ * Mobile sheet → Rail overlap regression (2026-10-15 bug).
  *
  * The AI «Применить» (submit) button is the only submit-style
  * action in the messenger. It must remain reachable on every
  * viewport because there's no Cmd/Ctrl+Enter fallback that works
  * on touch keyboards. Before the fix, the BottomSheet on mobile
- * extended down to the viewport bottom while the fixed .wc-tabbar
+ * extended down to the viewport bottom while the fixed .wc-rail
  * overlaid the same area — the submit button sat at sheet_bottom
- * − 16px and got visually clipped behind the TabBar.
+ * − 16px and got visually clipped behind the Rail.
  *
  * Two assertions here:
  *
  *   1. **Bounds check.** Open the AI sheet on a 412×900 mobile
  *      viewport. Read the bounding rects of `.ai-apply-btn` and
- *      `.wc-tabbar`. The button's bottom edge must be ≤ the
- *      TabBar's top edge. If a regression flips the order, the
- *      button is partially behind the TabBar.
+ *      `.wc-rail`. The button's bottom edge must be ≤ the
+ *      Rail's top edge. If a regression flips the order, the
+ *      button is partially behind the Rail.
  *
  *   2. **Visibility / clickability.** The button is in the
  *      viewport (Playwright's `toBeVisible` considers an element
  *      hidden if it's fully covered by another element with a
  *      higher z-index — which is what was happening here). Plus
  *      a real `.click()` round-trips through the engine; a
- *      half-occluded button would either hit-test the TabBar
+ *      half-occluded button would either hit-test the Rail
  *      (no click registers) or throw "intercepts pointer events".
  */
 
@@ -36,20 +36,20 @@ async function bootApp(page: Page): Promise<void> {
   await page.waitForTimeout(1500);
 }
 
-test.describe('AI submit button above TabBar (412×900)', () => {
+test.describe('AI submit button above Rail (412×900)', () => {
   test.use({ viewport: { width: 412, height: 900 } });
 
-  test('Apply button bottom edge is above the TabBar top edge', { tag: '@smoke' }, async ({ page }) => {
+  test('Apply button bottom edge is above the Rail top edge', { tag: '@smoke' }, async ({ page }) => {
     await bootApp(page);
 
     // Open AI sheet (chat tab in BottomNav).
-    await page.locator('.wc-tab[aria-label="AI"]').click();
+    await page.locator('.wc-rail__item[aria-label="ИИ"]').click();
     await page.waitForTimeout(300);
 
     const applyBtn = page.locator('.ai-apply-btn').first();
     await expect(applyBtn).toBeAttached();
 
-    const tabbar = page.locator('.wc-tabbar').first();
+    const tabbar = page.locator('.wc-rail').first();
     await expect(tabbar).toBeVisible();
 
     const btnBox = await applyBtn.boundingBox();
@@ -57,7 +57,7 @@ test.describe('AI submit button above TabBar (412×900)', () => {
     expect(btnBox).not.toBeNull();
     expect(tabBox).not.toBeNull();
 
-    // The button's bottom must be at or above the TabBar's top.
+    // The button's bottom must be at or above the Rail's top.
     // wavecode-ai-apply-above-tabbar reserves tabbar-h + safe-bottom
     // of padding under the footer, so this gap is >= tabbar-h
     // (~60px on a non-notch device).
@@ -69,7 +69,7 @@ test.describe('AI submit button above TabBar (412×900)', () => {
 
     // Sanity: the button is the last interactive element of the
     // messenger — there should be no other visible UI between
-    // it and the TabBar that would obscure it.
+    // it and the Rail that would obscure it.
     const bottomInsideSheet = await applyBtn.evaluate((el) => {
       const sheet = el.closest('.wc-sheet');
       if (!sheet) return false;
@@ -82,10 +82,10 @@ test.describe('AI submit button above TabBar (412×900)', () => {
     expect(bottomInsideSheet).toBe(true);
   });
 
-  test('Apply button is clickable (not covered by TabBar)', { tag: '@smoke' }, async ({ page }) => {
+  test('Apply button is clickable (not covered by Rail)', { tag: '@smoke' }, async ({ page }) => {
     await bootApp(page);
 
-    await page.locator('.wc-tab[aria-label="AI"]').click();
+    await page.locator('.wc-rail__item[aria-label="ИИ"]').click();
     await page.waitForTimeout(300);
 
     // Type something so the button isn't disabled (it gates on
@@ -96,9 +96,9 @@ test.describe('AI submit button above TabBar (412×900)', () => {
     await expect(applyBtn).toBeVisible();
     await expect(applyBtn).toBeEnabled();
 
-    // If the button is occluded by the TabBar, Playwright's click
+    // If the button is occluded by the Rail, Playwright's click
     // throws "intercepts pointer events". The previous failure
-    // mode was the TabBar (z-index higher than sheet) receiving
+    // mode was the Rail (z-index higher than sheet) receiving
     // the click instead of the button.
     await applyBtn.click({ timeout: 2000 });
 

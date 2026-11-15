@@ -53,7 +53,7 @@
 
 **Стек:** TypeScript (strict) · Solid.js 1.8 · Effect-TS 3.x · CodeMirror 6 · `@strudel/webaudio` · `idb-keyval` · `fetch` к OpenAI-compatible LLM API. Тесты: vitest + Playwright.
 
-**Подробнее:** [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — 4 слоя (domain / application / infrastructure / presentation), Effect-Layer DI, почему не React/Monaco/Tidal+SuperDirt, как работает Strudel в main thread, agent loop, tool-calling.
+**Подробнее:** [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — 4 слоя (domain / application / infrastructure / presentation), Effect-Layer DI, почему не React/Monaco/Tidal+SuperDirt, как работает Strudel в main thread, как AI правит score.
 
 ---
 
@@ -96,13 +96,13 @@ npm run build               # → ui/dist/
 ## Возможности
 
 - 🎵 **Strudel mini-notation** — 15 встроенных пресетов (Creep, EDM 4-on-floor, Hip-hop boom-bap, Jazz ii-V-I, Ambient drone, Bossa Nova, Trap Atlanta, Reggaetón, Step Grid demo, Piano ballad, 808 classic, Analog bass, 808 king, Retro lead, Toms funk) + свои через UI
-- 🤖 **AI-агент** — multi-turn чат, tool-calling (`edit_score`, `eval_snippet`, `undo_score`, `read_score`), 2 модели (smart / fast)
+- 🤖 **AI-агент** — multi-turn чат: пишешь инструкцию по-русски, модель возвращает новый score и сразу играет; 2 модели (smart / fast)
 - 🎹 **Piano keyboard** с WebMIDI — полифония, параллельная запись, sustain pedal
 - 🥁 **Step sequencer** — grid-редактор (view/sketch/edit modes), live eval при правке score
 - 🎚️ **Track mixer** — mute / solo / gain per track, live updates без перезапуска
-- 🎙️ **Audio recording** — экспорт в WAV, счётчик тактов
+- 🎙️ **Mic-запись** — голос и удары превращаются в ноты и попадают в score; экспорта в WAV в UI пока нет (рендер живёт в движке)
 - 🌐 **URL sharing** — `?s=…` кодирует весь score + messages, восстанавливается в новой сессии
-- 📡 **PWA** — offline-готов, Workbox auto-update, отдельный кеш для Strudel-vendor
+- 📡 **PWA** — Workbox auto-update, отдельный кеш для Strudel-vendor; ассеты кешируются, но без сети сама страница не открывается
 - ⌨️ **Hotkeys** — `Ctrl/⌘+\`` toggle Console, `Ctrl/⌘+Z/Y` undo/redo, focus AI/score
 - 🔍 **Console UX** — bottom-sheet с тремя вкладками (Errors / All / By source), throttle 5/1s, IDB-персистентность последних 100 ошибок, ring buffer 500 записей
 - 🔗 **URL state** — `#/`, `#/app`, `#/admin` (debug inspector)

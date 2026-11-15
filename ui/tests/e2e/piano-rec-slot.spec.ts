@@ -268,16 +268,18 @@ test('inline-piano on desktop ≥1024px: piano-toggle visible; mobile: hidden', 
 test.describe('mobile BottomSheet-piano', () => {
   test.use({ viewport: { width: 412, height: 900 } });
 
-  test('mobile: inline-piano toggle absent; TabBar Piano opens BottomSheet', { tag: '@smoke' }, async ({ page }) => {
+  test('mobile: inline-piano toggle absent; Инструменты sheet opens piano', { tag: '@smoke' }, async ({ page }) => {
     await bootApp(page);
 
     // On mobile (<1024px), the inline toggle should NOT render.
     await expect(page.locator('.piano-toggle')).toHaveCount(0);
 
-    // The TabBar Piano tab opens the BottomSheet (instead of the
-    // dead-on-desktop fallback we shipped in the polish).
-    const tab = page.locator('.wc-tab[aria-label="Piano"]').first();
-    await tab.click();
+    // Piano lives in the «Инструменты» sheet (wavecode-zen-minimal-ui,
+    // revision 2): the rail keeps four items, everything else is one
+    // sheet away. On mobile the sheet is opened from the top bar.
+    await page.locator('.wc-topbar [aria-label="Инструменты"]').first().click();
+    await page.waitForTimeout(300);
+    await page.locator('.wc-tool-card', { hasText: 'Пианино' }).first().click();
     await page.waitForTimeout(300);
 
     // BottomSheet-piano body should be visible.

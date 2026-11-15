@@ -126,7 +126,7 @@ export function Hero(): JSX.Element {
             <span class="ico">◇</span> Без своих серверов
           </li>
           <li class="l-hero__meta-item">
-            <span class="ico">◇</span> Работает офлайн после загрузки
+            <span class="ico">◇</span> Твоя композиция сохраняется в браузере
           </li>
         </ul>
       </div>
