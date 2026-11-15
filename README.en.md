@@ -100,7 +100,7 @@ npm run build               # → ui/dist/
 - 🎹 **Piano keyboard** with WebMIDI — polyphony, parallel recording, sustain pedal
 - 🥁 **Step sequencer** — grid editor (view/sketch/edit modes), live eval on score edit
 - 🎚️ **Track mixer** — mute / solo / gain per track, live updates without restart
-- 🎙️ **Audio recording** — WAV export, bar counter
+- 🎙️ **Input** — one round "Ввод" button opens a sheet with three tabs: **Speech** (text becomes a track), **Whistle** (whistling or any instrument becomes notes) and **Rhythm** (tapping becomes a grid); no WAV export in the UI yet (the renderer lives in the engine)
 - 🌐 **URL sharing** — `?s=…` encodes the full score + messages, restored in a new session
 - 📡 **PWA** — offline-ready, Workbox auto-update, dedicated cache for Strudel-vendor
 - ⌨️ **Hotkeys** — `Ctrl/⌘+\`` toggles Console, `Ctrl/⌘+Z/Y` undo/redo, focus AI/score

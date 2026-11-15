@@ -196,20 +196,9 @@
     + var(--safe-bottom)
     + var(--voice-fab-stack-h)
   );
-  /* Ceiling for a floating voice panel's height. The panel is
-   *  bottom-anchored, so without this a long transcript grew it
-   *  upward until it slid under the fixed TopBar + transport bar.
-   *  The spare --space-lg is the visual gap to the transport bar.
-   *  Uses the EXPANDED transport height, which is the desktop default
-   *  and the worst case; the mobile media query swaps in the
-   *  collapsed height, which is the mobile default. */
-  --voice-panel-max-h: calc(
-    100vh
-    - var(--header-h)
-    - var(--app-transport-h-expanded)
-    - var(--voice-fab-cluster-h)
-    - var(--space-lg)
-  );
+  /* wavecode-unified-input-entry: плавающая панель голоса исчезла —
+     ввод живёт в листе, у которого своя геометрия. Токен потолка
+     высоты (`--voice-panel-max-h`) вместе с ней осиротел. */
 
   /* ── MOTION ───────────────────────────────────────────────── */
   --dur-2xs:  60ms;
@@ -248,34 +237,9 @@
   color-scheme: dark;
 }
 
-/* wavecode-voice-ux-fixes: on mobile (≤720px) the transport bar starts
- * COLLAPSED (--app-transport-h-collapsed = 48px), while the base
- * --voice-panel-max-h conservatively subtracts the expanded height
- * (108px). Swapping in the real mobile height hands the panel the 60px
- * it was giving away.
- *
- * Two placement rules, both load-bearing:
- *   1. It must be OUTSIDE the `:root { }` block above. Nested inside,
- *      `:root` becomes a descendant selector (`:root :root`) and
- *      silently matches nothing — the override would parse fine and
- *      never apply.
- *   2. It must live in THIS file, not in components.css. index.css
- *      imports both into named layers (`@layer tokens, base,
- *      components, …`), and a later layer outranks an earlier one
- *      regardless of specificity, so the identical `:root` selector
- *      written in components.css would win on desktop too and
- *      re-open the transport-bar overlap the ceiling exists to close. */
-@media (max-width: 720px) {
-  :root {
-    --voice-panel-max-h: calc(
-      100vh
-      - var(--header-h)
-      - var(--app-transport-h-collapsed)
-      - var(--voice-fab-cluster-h)
-      - var(--space-lg)
-    );
-  }
-}
+/* wavecode-unified-input-entry: мобильный переопределитель
+ * `--voice-panel-max-h` ушёл вместе с плавающей панелью голоса —
+ * токен больше не существует. */
 
 /* Reduced motion: убираем transitions, но не states. */
 @media (prefers-reduced-motion: reduce) {

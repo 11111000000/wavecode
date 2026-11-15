@@ -1,0 +1,263 @@
+---
+schema: math-coding/3.3
+id: wavecode-unified-input-entry
+revision: 1
+state: active
+body_sha: "sha256:c096d53eeb50a49ee128367d89265dc82384bdf28db334e0941e8fd39f7388af"
+yaml_sha: "sha256:c096d53eeb50a49ee128367d89265dc82384bdf28db334e0941e8fd39f7388af"
+
+intent: |
+  Ввод в wavecode был размазан по четырём местам, и все четыре назывались
+  почти одинаково:
+
+    * круглая кнопка «Голос» (она же REC, она же тап-пад в ритме);
+    * пункт рельса «Ввод» — открывал тот же самый док голоса;
+    * пункт листа «Инструменты» «Микрофон» — а это уже свист (микрофон →
+      высота тона → MIDI-ноты);
+    * переключатель «Голос | Ритм» внутри дока.
+
+  Владелец сформулировал путаницу прямо: «зачем нам и ассистент отдельно
+  от ввода внизу непонятно» и «как вообще сделать так, чтобы у юзера
+  вообще не было путаницы, что он сейчас голос записывает мелодию или
+  там ритм».
+
+  Причина путаницы — не в количестве функций, а в том, как они названы и
+  где лежат:
+
+    1. **Два входа в одно.** «Ввод» в рельсе и «Голос» — кнопка вели в
+       один и тот же док. Второй вход ничего не добавлял.
+    2. **Два разных действия названы по одному устройству.** «Голос» —
+       это распознавание речи, «Микрофон» — это высота тона. Устройство
+       одно (микрофон), а смысл разный; называть их по устройству —
+       значит просить пользователя угадывать.
+    3. **Одна кнопка — два поведения с молча меняющейся подписью.** FAB
+       назывался «Голос», а в ритме подпись молча менялась на «Ритм» и
+       кнопка становилась тап-падом. Пользователь не мог знать, что
+       нажмёт.
+    4. **Разные категории стояли рядом.** «ИИ» и «Ввод» в рельсе
+       читались как два равных способа получить музыку, хотя ИИ — это
+       адресат, а Ввод — способ захвата.
+
+  Это решение фиксирует перестройку информационной архитектуры ввода:
+  одна круглая кнопка с одним значением, один лист с тремя вкладками,
+  названными по намерению, и рельс из трёх пунктов.
+
+commitment: |
+  1. **Одна кнопка — одно значение.** Круглая кнопка «Ввод»
+     (`InputFAB`, `.voice-mini-fab[aria-label="Ввод"]`) ВСЕГДА открывает
+     лист ввода. Она никогда не начинает запись и никогда не меняет
+     подпись. Записью занимается кнопка внутри вкладки «Речь», тапом
+     ритма — кнопка «Отметить» внутри вкладки «Ритм».
+  2. **Один лист, три вкладки.** `InputSheet` (`kind="input"`,
+     `.wc-sheet[data-kind="input"]`) с полосой вкладок
+     (`role="tablist"`): **Речь | Свист | Ритм**. Названия — по
+     намерению, а не по устройству: устройство одно, смыслов три.
+  3. **Каждая вкладка отвечает на вопрос «что я сейчас делаю».**
+     Вкладка «Речь» — кнопка записи + строка статуса с глаголом
+     («Готов к записи…», «Слушаю…», «Распознаю…») + композер; «Свист» —
+     панель микрофона по высоте тона; «Ритм» — темп, сетка 4×8 и кнопка
+     «Отметить». Подпись вкладки, глагол в статусе и кнопка действия
+     лежат рядом всегда — разойтись им негде.
+  4. **Рельс — три пункта.** «Нотная | Шаги | ИИ». «Ввод» ушёл в
+     tier 2 (лист «Инструменты» + `⌘K`), потому что ИИ и Ввод — разные
+     категории, а в рельсе они читались как два равных способа получить
+     музыку.
+  5. **Отдельного «Микрофона» в листе инструментов больше нет.** Свист
+     живёт вкладкой «Свист»: устройство не должно называться в двух
+     местах.
+  6. **Переключение вкладки освобождает микрофон прежней модальности.**
+     «Речь» и «Свист» делят один физический микрофон; закрытие листа
+     гасит всё (в режиме `review` текст сохраняется, незавершённая
+     запись отбрасывается).
+  7. **Старый код удалён, а не спрятан.** `VoiceFAB`,
+     `VoiceAIMiniFAB` и `RecordingPanel` вместе с тестами удалены из
+     репозитория; класс `.voice-recording-panel` переименован в
+     `.speech-input`, потому что плавающей панели голоса больше нет.
+  8. **Клавиатура дотягивается до всех вкладок.** Полоса вкладок —
+     настоящий `tablist` с бегущим `tabindex`, поэтому стрелки
+     (`←`/`→`/`Home`/`End`) переключают вкладку и уводят на неё фокус;
+     без этого две вкладки из трёх были бы недостижимы с клавиатуры.
+  9. **Слои починены.** Правый ящик на десктопе начинается ПОД строкой
+     транспорта, а не под ней: заголовок листа («Ввод», «ИИ-ассистент»)
+     больше не срезан транспортом, а его кнопка закрытия — доступна.
+axiom_link:
+  - A1
+scope:
+  paths:
+    - ui/src/presentation
+    - ui/src/styles
+    - ui/src/App.tsx
+    - ui/tests/e2e
+    - ui/tests/baseline
+    - decisions/wavecode-unified-input-entry.yaml
+  capabilities:
+    - ui-information-architecture
+    - ui-visual-language
+    - ui-content-truthfulness
+  exclusions:
+    - ui/src/domain
+    - ui/src/application
+    - ui/src/infrastructure
+outcomes:
+  - id: wavecode-unified-input-entry-outcome-one-entry
+    statement: |
+      В приложении есть ровно одна кнопка ввода — круглая «Ввод», и она
+      всегда открывает лист ввода. Вторых входов в запись не осталось:
+      в рельсе «Ввода» нет, отдельного инструмента «Микрофон» нет, у
+      FAB нет режима записи.
+  - id: wavecode-unified-input-entry-outcome-three-tabs
+    statement: |
+      Ввод различает три модальности — Речь, Свист, Ритм — вкладками в
+      одном листе. Пользователь не должен угадывать, что он сейчас
+      записывает: подпись вкладки, глагол в статусной строке и кнопка
+      действия стоят рядом и всегда описывают одно и то же.
+  - id: wavecode-unified-input-entry-outcome-rail-three
+    statement: |
+      Рельс держит три пункта — Нотная, Шаги, ИИ — и не смешивает
+      адресата (ИИ) со способом захвата (Ввод).
+  - id: wavecode-unified-input-entry-outcome-sheet-header
+    statement: |
+      Заголовок правого ящика на десктопе не перекрывается строкой
+      транспорта: лист начинается под ней, и кнопка закрытия доступна.
+obligations:
+  - id: wavecode-unified-input-entry-guard-targets
+    claim: |
+      The zen guard reports the phase-1 targets met and no regression
+      against the recorded baseline: no dangling token reference, no
+      hardcoded colour outside the token file, at most one infinite
+      animation, and no growth of the sheet-surface count — the input
+      sheet replaces the microphone sheet, it does not add a surface.
+    acceptance:
+      all:
+        - verifier: "node scripts/check-zen-ui.mjs --targets"
+          result: pass
+  - id: wavecode-unified-input-entry-quality-gate
+    claim: |
+      The repository quality gate is green: typecheck, unit tests,
+      console lint and preset validation.
+    acceptance:
+      all:
+        - verifier: "cd ui && npm run test:precommit"
+          result: pass
+  - id: wavecode-unified-input-entry-input-entry-e2e
+    claim: |
+      The e2e suite pins the new information architecture: the rail has
+      exactly three items, the round button opens the input sheet, the
+      sheet has exactly three tabs, each tab shows its own body and its
+      own action button, and the old entries are gone.
+    acceptance:
+      all:
+        - verifier: "cd ui && npx playwright test tests/e2e/input-entry.spec.ts tests/e2e/tool-reachability.spec.ts"
+          result: pass
+  - id: wavecode-unified-input-entry-keyboard-tabs
+    claim: |
+      The tab strip is reachable from the keyboard: arrow keys, Home and
+      End switch the tab and move the focus onto it.
+    acceptance:
+      all:
+        - verifier: "cd ui && npx vitest run src/presentation/components/app/InputSheet.test.tsx"
+          result: pass
+  - id: wavecode-unified-input-entry-baseline-present
+    claim: |
+      The visual baseline of the default editor view exists in the
+      repository for both a desktop and a mobile viewport and reflects
+      the three-item rail.
+    acceptance:
+      all:
+        - verifier: "node scripts/capture-baseline.mjs --check"
+          result: pass
+  - id: wavecode-unified-input-entry-kernel-validates
+    claim: |
+      The decision file is structurally valid under the math-coding 3.3
+      schema.
+    acceptance:
+      all:
+        - verifier: "mathc validate"
+          result: pass
+negative_control: |
+  The e2e check has teeth in both directions. If the rail grew back to
+  four items, `toHaveCount(3)` fails; if a second round input button
+  appeared, `toHaveCount(1)` on `.voice-mini-fab` fails. If the tab
+  strip were replaced by a two-way switch, `toHaveCount(3)` on
+  `.input-tab` fails — and so does the unit test that counts the tabs by
+  their labels («Речь», «Свист», «Ритм»). The keyboard check has teeth
+  too: with the roving `tabindex` and no arrow handling, the two
+  inactive tabs are unreachable, and the unit test that asserts
+  `document.activeElement` moved to the next tab fails. The guard's
+  `sheetClasses` metric has teeth in the same way: if the input sheet
+  had been a NEW surface next to the microphone sheet, the count would
+  have grown past the baseline and `--targets` would have failed.
+counterexample: |
+  The strongest objection is that this removes a shortcut. The old FAB
+  started the recording with one click — the sheet added a second click
+  and a tab choice before every take. For a user who records the same
+  thing a hundred times a day, that is friction, and the argument "one
+  button, one meaning" is worth less than the seconds it costs. The
+  objection is accepted for the power user and mitigated in two ways:
+  the sheet remembers the last used tab, and the FAB keeps a single
+  click path to the recording (it opens the sheet on the «Речь» tab,
+  which is where the recording button is one click away). The
+  alternative — leaving a second, hidden recording shortcut — was
+  rejected precisely because it is the thing that made the old FAB
+  ambiguous.
+antithesis: |
+  The coherent alternative was to keep the rail at four items and rename
+  the old FAB. It was rejected because the names were not the problem:
+  whatever the FAB was called, the user still had two buttons that led
+  to the same dock and a third that meant something else entirely. The
+  second alternative — a dock with a switcher («Голос | Ритм») — was
+  rejected because the modality count grew from two to three, and a
+  two-way switch cannot show three ways at once: the user would have to
+  guess whether "Свист" is inside "Голос" or beside it. A tab strip
+  shows all three at once, which is what makes the question "am I
+  recording a melody or a rhythm?" answerable without clicking.
+assumptions:
+  - id: wavecode-unified-input-entry-assumption-three-modalities
+    state: assumed
+    statement: |
+      Three modalities are the complete set of ways to capture material
+      into wavecode: speech, whistle (or any pitched sound) and rhythm.
+      A fourth way would need a fourth tab, and the strip stays readable
+      only while it fits.
+    owner: human:operator
+    consequence_if_false: |
+      If a new capture mode appears, it becomes a fourth tab and the
+      strip must be re-measured; if the modes grow to five, the strip
+      turns into a menu and the decision has to be reworked.
+  - id: wavecode-unified-input-entry-assumption-speech-online
+    state: assumed
+    statement: |
+      The speech path stays a network call to the STT service. The sheet
+      says so honestly: «Речь» promises a round trip, «Свист» and
+      «Ритм» are local and instant.
+    owner: human:operator
+    consequence_if_false: |
+      If a local recogniser appears, the difference in latency between
+      the tabs disappears and the tab names may need to shift from
+      "modality" to "pipeline".
+risk:
+  declared_triggers:
+    - input-ambiguity-report
+    - sheet-header-clipped
+    - rail-density-regression
+    - capture-latency-regression
+  owner: human:operator
+reversal:
+  - signal: |
+      Users report that the second click (FAB → sheet) makes recording
+      slower than the old one-click FAB, and that they keep opening the
+      sheet to record speech.
+    action: rework
+  - signal: |
+      A right drawer is again covered by the transport bar, or a sheet
+      title is clipped.
+    action: review
+  - signal: |
+      The tab strip stops fitting on a narrow viewport and the labels
+      wrap or truncate.
+    action: rework
+relations:
+  implements:
+    - wavecode-zen-ui-implementation@1
+  refines:
+    - wavecode-zen-minimal-ui@2

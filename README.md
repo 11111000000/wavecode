@@ -100,7 +100,7 @@ npm run build               # → ui/dist/
 - 🎹 **Piano keyboard** с WebMIDI — полифония, параллельная запись, sustain pedal
 - 🥁 **Step sequencer** — grid-редактор (view/sketch/edit modes), live eval при правке score
 - 🎚️ **Track mixer** — mute / solo / gain per track, live updates без перезапуска
-- 🎙️ **Mic-запись** — голос и удары превращаются в ноты и попадают в score; экспорта в WAV в UI пока нет (рендер живёт в движке)
+- 🎙️ **Ввод** — одна круглая кнопка «Ввод» открывает лист с тремя вкладками: **Речь** (текст превращается в трек), **Свист** (свист или любой инструмент — в ноты) и **Ритм** (постукивание — в сетку); экспорта в WAV в UI пока нет (рендер живёт в движке)
 - 🌐 **URL sharing** — `?s=…` кодирует весь score + messages, восстанавливается в новой сессии
 - 📡 **PWA** — Workbox auto-update, отдельный кеш для Strudel-vendor; ассеты кешируются, но без сети сама страница не открывается
 - ⌨️ **Hotkeys** — `Ctrl/⌘+\`` toggle Console, `Ctrl/⌘+Z/Y` undo/redo, focus AI/score

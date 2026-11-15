@@ -6,11 +6,14 @@ import { APP_URL } from './support/appUrl';
  *
  * End-to-end assertions covering the mobile-only push-mode layout.
  * Navigation moved on with wavecode-zen-minimal-ui: the eight-tab
- * TabBar is replaced by a four-item rail (`.wc-rail__item`) plus one
+ * TabBar is replaced by a three-item rail (`.wc-rail__item`) plus one
  * «Инструменты» sheet (`.wc-tool-card`) for everything else. On
  * mobile the sheet is opened from the top-bar button
  * `.wc-topbar [aria-label="Инструменты"]` — the bottom rail stays
- * four items wide.
+ * three items wide.
+ *
+ * wavecode-unified-input-entry убрала из рельса «Ввод»: он стал
+ * вторым уровнем, а вход в него — круглая кнопка «Ввод».
  *
  *   1. **Sheet push-mode exists.** Mobile viewport (412×900) — open the
  *      «Микшер» tool → its sheet opens. Both ScorePanel (top) and the
@@ -48,7 +51,7 @@ async function bootApp(page: Page): Promise<void> {
 /**
  * Открыть инструмент второго уровня через лист «Инструменты».
  * На мобиле вход в лист — кнопка в верхней панели: нижний рельс
- * держит только четыре пункта (Нотная / Шаги / ИИ / Ввод).
+ * держит только три пункта (Нотная / Шаги / ИИ).
  */
 async function openTool(page: Page, name: string): Promise<void> {
   await page.locator('.wc-topbar [aria-label="Инструменты"]').first().click();
@@ -64,7 +67,7 @@ test.describe('mobile split-pane (412×900)', () => {
     await bootApp(page);
 
     // Before: sheet is closed. The «Инструменты» entry point lives in
-    // the top bar — the bottom rail keeps only the four permanent items.
+    // the top bar — the bottom rail keeps only the three permanent items.
     const toolsBtn = page.locator('.wc-topbar [aria-label="Инструменты"]').first();
     await expect(toolsBtn).toBeVisible();
     await openTool(page, 'Микшер');

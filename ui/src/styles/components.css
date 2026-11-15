@@ -2895,7 +2895,22 @@ button:not([disabled]):not(.no-shrink):active {
   overflow-y: auto;
   overflow-x: hidden;
   position: relative;
-  z-index: 0;
+  /* wavecode-unified-input-entry: `z-index: 0` here made .app-body a
+   * stacking context, and EVERY sheet inside it (`.wc-sheet`, z-sheet+13)
+   * was trapped below the fixed transport bar (z-sheet+12) — the bar is
+   * a sibling of .app-body, so it lives one level higher in the tree and
+   * won regardless of the sheet's own z-index. On desktop the drawer
+   * starts exactly at `top: var(--header-h)`, i.e. under the bar, so the
+   * sheet's title («Ввод», «ИИ-ассистент») was cut in half and its close
+   * button could not be clicked.
+   *
+   * `position: relative` with `z-index: auto` does not create a stacking
+   * context, so the sheet's z-index is now compared with the transport's
+   * directly: sheet (53) above bar (52). Nothing inside .app-body relies
+   * on the old isolation — the only children with a high z-index are the
+   * step/melody confirm dialogs (999/1000), which now correctly sit
+   * above the toast layer instead of below the transport. */
+  z-index: auto;
   /* wavecode-transport-always-visible: leave room for fixed
    * .app-transport-bar (Play/Stop + cps/swing) so content doesn't
    * slide under the transport.
@@ -4689,12 +4704,9 @@ textarea.ai-textarea:focus-visible {
   flex-wrap: wrap;
 }
 
-/* mic-sheet-body — container inside the Mic BottomSheet.
- *  The MicPanel itself is mostly self-contained (flex-wrap), so
- *  the wrapper just provides sane padding inside the sheet. */
-.mic-sheet-body {
-  padding: var(--space-xs) var(--space-md) var(--space-md);
-}
+/* wavecode-unified-input-entry: отдельного листа «Микрофон» больше
+   нет — свист живёт вкладкой листа ввода, и отступы задаёт
+   `.input-sheet__mic`. */
 
 .mic-panel {
   display: flex;
@@ -6138,67 +6150,13 @@ textarea.ai-textarea:focus-visible {
   border-color: var(--primary);
 }
 
-/* Working states. A quiet tint, not a glow — the dock's status line
- * says what is happening in words, the button only has to look
- * different from idle. */
-.voice-mini-fab--ai[data-state='listening'],
-.voice-mini-fab--ai[data-state='transcribing'],
-.voice-mini-fab--ai[data-state='applying'],
-.voice-mini-fab--ai[data-state='requesting'] {
+/* wavecode-unified-input-entry: кнопка больше не пишет звук, поэтому
+   у неё нет состояний записи и «REC»-точки. Осталось одно состояние
+   смысловое — «лист ввода открыт»: тихая подсветка говорит, что
+   ввод уже на экране. */
+.voice-mini-fab--ai[data-state='open'] {
   background: var(--primary-soft);
   border-color: var(--primary);
-}
-.voice-mini-fab--ai[data-state='errored'] {
-  color: var(--err);
-  border-color: var(--err);
-  background: var(--err-soft);
-}
-
-/* REC state — the mini-FAB IS the record button while a take is
- * running. The icon is replaced by a blinking dot, the chip reads
- * «REC» and the button turns red, so "the microphone is open" is
- * readable from the button alone and not only from the dock. The
- * rule sits AFTER the per-mode colouring above so it wins over the
- * voice tint (both are the same specificity — one class + one
- * attribute — and this one comes later). */
-.voice-mini-fab[data-rec-state='on'] {
-  color: var(--err);
-  border-color: var(--err);
-  background: var(--err-soft);
-}
-
-/* The one animation in the whole voice cluster, and it is a signal:
- * the microphone is live. */
-.voice-mini-fab__rec-dot {
-  width: 14px;
-  height: 14px;
-  border-radius: var(--radius-full);
-  background: var(--err);
-}
-
-/* Inline permission-blocked badge — a small "!" pill that surfaces
- * on the VoiceAIMiniFAB when STT / mic access is denied by the
- * browser. Pinpoints the cluster as the broken element (vs.
- * silently deading buttons) without forcing another toast. */
-.voice-mini-fab__badge {
-  position: absolute;
-  top: -4px;
-  right: -4px;
-  width: 18px;
-  height: 18px;
-  border-radius: var(--radius-full);
-  background: var(--err);
-  color: var(--fg-inverse);
-  font-size: var(--fs-3xs);
-  font-weight: var(--fw-bold);
-  line-height: 18px;
-  text-align: center;
-  pointer-events: none;
-}
-.voice-mini-fab--ai[data-permission-blocked='true'] {
-  border-color: var(--err);
-  color: var(--err);
-  background: color-mix(in oklab, var(--err) 8%, var(--surface-2));
 }
 
 /* Inline label chip — always visible short name ("Голос"), so the
@@ -6222,78 +6180,175 @@ textarea.ai-textarea:focus-visible {
 .voice-mini-fab--ai .voice-mini-fab__label { color: var(--primary); }
 
 /* =========================================================================
- *  VOICE DOCK — the status panel visible while voice-AI is active.
+ *  ВВОД — лист с тремя вкладками (Речь | Свист | Ритм).
  *
- *  Three rows, nothing else:
- *    row 1 — what the machine is doing (spinner, phrase, level bar,
- *            discard, close)
- *    row 2 — the composer: always present, always editable
- *    row 3 — the one action that follows the text
- *
- *  There is no header row any more: the title «Голос» was noise
- *  (the user pressed the mic button and knows what it does) and the
- *  «⚠ ошибка» pill said what the status line already says.
+ *  wavecode-unified-input-entry: вкладки названы по намерению, а не по
+ *  устройству. Пользователь видит все три варианта сразу и выбирает
+ *  осознанно — раньше «микрофон» и «голос» называли одно устройство и
+ *  означали разные вещи, и отличить их можно было только по месту
+ *  в интерфейсе.
  * ========================================================================= */
-.voice-recording-panel {
-  position: fixed;
-  left: 50%;
-  bottom: var(--voice-fab-cluster-h);
-  /* Cap the height so a long transcript scrolls inside the dock
-   * instead of growing it upward into the fixed transport bar. */
-  max-height: var(--voice-panel-max-h);
-  overflow-y: auto;
-  transform: translateX(-50%);
-  width: min(540px, calc(100vw - 32px));
+.input-sheet {
   display: flex;
   flex-direction: column;
   gap: var(--space-sm);
-  padding: var(--space-md);
-  background: var(--surface-1);
+  min-height: 0;
+}
+/* Имена детей листа не повторяют слово «sheet» намеренно: полоса
+   вкладок, тело и обёртка свиста — это части ОДНОЙ поверхности, а не
+   новые поверхности. Метрика `sheetClasses` в scripts/check-zen-ui.mjs
+   считает классы по слову «sheet», и BEM-хвост одной поверхности
+   раздувал бы её счётчик. */
+.input-tabs {
+  display: flex;
+  align-items: stretch;
+  gap: var(--space-2xs);
+  padding: 2px;
+  background: var(--surface-2);
   border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-md);
+}
+.input-tab {
+  flex: 1 1 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 34px;
+  padding: 0 var(--space-sm);
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--fg-dim);
+  font-family: var(--font-sans);
+  font-size: var(--fs-sm);
+  cursor: pointer;
+  transition: color var(--dur-2xs) var(--ease),
+              background var(--dur-2xs) var(--ease);
+}
+.input-tab:hover { color: var(--fg); }
+.input-tab[data-active='true'] {
+  background: var(--surface-1);
+  border-color: var(--border-strong);
+  color: var(--fg);
+}
+.input-body {
+  min-height: 0;
+  overflow-y: auto;
+}
+.input-mic {
+  display: flex;
+  flex-direction: column;
+  padding: var(--space-xs) var(--space-md) var(--space-md);
+}
+
+/* =========================================================================
+ *  РЕЧЬ — тело вкладки.
+ *
+ *  Три строки:
+ *    строка 1 — кнопка записи + что делает машина (спиннер, фраза,
+ *               уровень) + удалить;
+ *    строка 2 — композер: всегда на месте, всегда редактируемый;
+ *    строка 3 — одно действие, которое следует за текстом.
+ *
+ *  Отдельной плавающей панели больше нет: всё живёт внутри листа
+ *  ввода, поэтому кнопка записи и строка статуса всегда рядом и не
+ *  могут разойтись.
+ * ========================================================================= */
+.speech-input {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
   color: var(--fg);
   font-family: var(--font-sans);
   font-size: var(--fs-sm);
-  box-shadow: var(--shadow-pop);
-  z-index: calc(var(--z-sheet) + 4);
-  animation: voice-recording-panel-in var(--dur-xs) var(--ease-out);
 }
-.voice-recording-panel[data-mode='voice-ai'] {
-  border-color: var(--border-strong);
+.speech-input[data-state='errored'] .speech-input__status-text {
+  color: var(--err);
 }
-.voice-recording-panel[data-state='errored'] {
-  border-color: var(--err);
-}
-@keyframes voice-recording-panel-in {
-  from { opacity: 0; transform: translate(-50%, 8px); }
-  to   { opacity: 1; transform: translate(-50%, 0); }
+.speech-input[data-state='review'] .speech-input__status-text,
+.speech-input[data-state='sent'] .speech-input__status-text {
+  color: var(--fg);
 }
 
-/* Row 1 — the status line. */
-.voice-recording-panel__status {
+/* Row 1 — кнопка записи и статус. */
+.speech-input__head {
   display: flex;
   align-items: center;
   gap: var(--space-sm);
   min-height: var(--control-h);
 }
-.voice-recording-panel__status-text {
+.speech-input__rec {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2xs);
+  flex: 0 0 auto;
+  min-height: var(--control-h);
+  padding: 0 var(--space-sm);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  background: var(--surface-1);
+  color: var(--fg);
+  font-family: var(--font-sans);
+  font-size: var(--fs-sm);
+  cursor: pointer;
+  transition: border-color var(--dur-2xs) var(--ease),
+              background var(--dur-2xs) var(--ease);
+}
+.speech-input__rec:hover:not(:disabled) {
+  border-color: var(--primary);
+}
+.speech-input__rec:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.speech-input__rec[data-rec-state='on'] {
+  border-color: var(--err);
+  color: var(--err);
+}
+.speech-input__rec-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--err);
+}
+/* Точка записи не пульсирует. Zen-цель допускает одну бесконечную
+   анимацию — и это функциональный спиннер ожидания; пульсирующая
+   точка была бы второй «вечной» анимацией ради украшения. Запись и
+   так опознаётся: кнопка краснеет, подпись «Стоп», полоса уровня
+   живая. */
+.speech-input__rec-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--err);
+  color: var(--fg-inverse);
+  font-size: 10px;
+  line-height: 1;
+}
+
+/* Row 1 — сама статусная строка. */
+.speech-input__status {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.speech-input__status-text {
   font-size: var(--fs-xs);
   color: var(--fg-dim);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.voice-recording-panel[data-state='errored'] .voice-recording-panel__status-text {
-  color: var(--err);
-}
-.voice-recording-panel[data-state='review'] .voice-recording-panel__status-text,
-.voice-recording-panel[data-state='sent'] .voice-recording-panel__status-text {
-  color: var(--fg);
-}
 
 /* The level bar — only while the mic is open. Its presence says
  * "the device is live" more honestly than any label. */
-.voice-recording-panel__status .voice-recording-panel__rms {
+.speech-input__status .speech-input__rms {
   flex: 1 1 auto;
   min-width: 32px;
   max-width: 120px;
@@ -6302,7 +6357,7 @@ textarea.ai-textarea:focus-visible {
   background: var(--surface-3);
   overflow: hidden;
 }
-.voice-recording-panel__rms-fill {
+.speech-input__rms-fill {
   display: block;
   height: 100%;
   background: var(--err);
@@ -6310,24 +6365,22 @@ textarea.ai-textarea:focus-visible {
 }
 
 /* The spinner — only while the MACHINE is the one working. */
-.voice-recording-panel__spinner {
+.speech-input__spinner {
   width: 11px;
   height: 11px;
   flex-shrink: 0;
   border: 1.5px solid var(--border-strong);
   border-top-color: var(--primary);
   border-radius: var(--radius-full);
-  animation: voice-recording-panel-spin 0.8s linear infinite;
+  animation: speech-input-spin 0.8s linear infinite;
 }
-@keyframes voice-recording-panel-spin {
+@keyframes speech-input-spin {
   to { transform: rotate(360deg); }
 }
 
-/* Icon buttons in the status row: discard the audio, close the dock.
- * `margin-left: auto` on the first one pushes both to the right edge
- * — the level bar sits next to the phrase, where it belongs. */
-.voice-recording-panel__delete,
-.voice-recording-panel__close {
+/* Icon button in the status row: discard the audio. The close button is
+ * gone — лист закрывается сам, и закрытие гасит запись. */
+.speech-input__delete {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -6344,28 +6397,17 @@ textarea.ai-textarea:focus-visible {
     color var(--dur-2xs) var(--ease),
     border-color var(--dur-2xs) var(--ease);
 }
-.voice-recording-panel__delete { margin-left: auto; }
-/* When there is no trash button the ✕ takes its place at the right
- * edge. With one, the trash already owns the auto margin and the ✕
- * sits right next to it — otherwise the free space would be split
- * between the two and they would drift apart. */
-.voice-recording-panel__close { margin-left: auto; }
-.voice-recording-panel__delete + .voice-recording-panel__close {
-  margin-left: 0;
-}
-.voice-recording-panel__delete:hover,
-.voice-recording-panel__close:hover {
-  color: var(--fg);
+.speech-input__delete:hover {
+  color: var(--err);
   border-color: var(--border-strong);
 }
-.voice-recording-panel__delete:hover { color: var(--err); }
 
 /* Row 2 — the composer. Always there, always editable. */
-.voice-recording-panel__composer {
+.speech-input__composer {
   display: flex;
   flex-direction: column;
 }
-.voice-recording-panel__review-textarea {
+.speech-input__review-textarea {
   width: 100%;
   min-height: 56px;
   max-height: 96px;
@@ -6379,22 +6421,22 @@ textarea.ai-textarea:focus-visible {
   line-height: var(--lh-base);
   resize: vertical;
 }
-.voice-recording-panel__review-textarea::placeholder {
+.speech-input__review-textarea::placeholder {
   color: var(--fg-ghost);
 }
-.voice-recording-panel__review-textarea:focus {
+.speech-input__review-textarea:focus {
   outline: none;
   border-color: var(--primary);
 }
 
 /* Row 3 — the one action. */
-.voice-recording-panel__actions {
+.speech-input__actions {
   display: flex;
   align-items: center;
   justify-content: flex-end;
   gap: var(--space-sm);
 }
-.voice-recording-panel__btn {
+.speech-input__btn {
   display: inline-flex;
   align-items: center;
   gap: var(--space-2xs);
@@ -6413,36 +6455,33 @@ textarea.ai-textarea:focus-visible {
     border-color var(--dur-2xs) var(--ease),
     opacity var(--dur-2xs) var(--ease);
 }
-.voice-recording-panel__btn:hover:not(:disabled) {
+.speech-input__btn:hover:not(:disabled) {
   border-color: var(--primary);
 }
-.voice-recording-panel__btn:disabled {
+.speech-input__btn:disabled {
   opacity: 0.4;
   cursor: not-allowed;
 }
-.voice-recording-panel__btn--primary {
+.speech-input__btn--primary {
   background: var(--primary);
   border-color: var(--primary);
   color: var(--fg-inverse);
 }
-.voice-recording-panel__btn--primary:hover:not(:disabled) {
+.speech-input__btn--primary:hover:not(:disabled) {
   background: color-mix(in oklab, var(--primary) 85%, var(--fg));
   border-color: color-mix(in oklab, var(--primary) 85%, var(--fg));
 }
-.voice-recording-panel__btn--cancel {
+.speech-input__btn--cancel {
   color: var(--err);
   border-color: var(--err);
   background: var(--err-soft);
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .voice-recording-panel {
+  .speech-input__rec-dot {
     animation: none;
   }
-  .voice-mini-fab__rec-dot {
-    animation: none;
-  }
-  .voice-recording-panel__spinner {
+  .speech-input__spinner {
     animation: none;
   }
 }

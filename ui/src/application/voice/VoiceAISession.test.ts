@@ -286,7 +286,7 @@ describe('createVoiceAISession — happy-path FSM transitions', () => {
   });
 
   it('persists state through the queue; auto-review is the terminal auto-path tag', async () => {
-    // The stream API is what `RecordingPanel` binds to; this test
+    // The stream API is what `SpeechInput` binds to; this test
     // pins the public observable: the FSM tags transit through the
     // auto-review path, NOT through `requesting` / `applying`. If a
     // future refactor wires auto-commit back through the stream, the

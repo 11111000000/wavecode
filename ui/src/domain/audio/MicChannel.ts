@@ -14,8 +14,8 @@
  * Owner kinds
  * -----------
  * The owner kind says WHO holds the channel, not which button:
- *   - `voice-ai`      → VoiceAIMiniFAB (STT path)
- *   - `whistle`       → the mic→notes path (the Mic sheet)
+ *   - `voice-ai`      → вкладка «Речь» листа ввода (STT path)
+ *   - `whistle`       → вкладка «Свист» листа ввода (микрофон → ноты)
  *   - `loop-recorder` → the loop recorder (mic to loop; draft)
  *   - `midi-learn`    → MIDI learn-assign (mic-triggered mapping)
  *

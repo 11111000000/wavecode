@@ -43,7 +43,21 @@
   bottom: calc(var(--tabbar-h) + var(--safe-bottom));
   width: 100%;
   max-width: 100vw;
-  z-index: calc(var(--z-sheet) + 1);
+  /* Above the transport bar (z-sheet + 12).
+   *
+   * wavecode-unified-input-entry: on desktop the sheet is a right-side
+   * drawer that starts at `top: var(--header-h)` — exactly where the
+   * fixed full-width transport bar begins. At z-sheet + 1 the bar
+   * swallowed the drawer's header: the title («Ввод», «ИИ-ассистент»)
+   * was cut in half and the sheet's close button was unreachable. The
+   * console drawer had already been lifted past the bar for exactly
+   * this reason (z-sheet + 20); the generic sheet was simply never
+   * fixed.
+   *
+   * +13 keeps the sheet above the transport (52) but below the toast
+   * (80) and the modal layer (60), so a dialog opened on top of the
+   * sheet is still on top of it. */
+  z-index: calc(var(--z-sheet) + 13);
   background: var(--surface-1);
   border-top: 1px solid var(--border-strong);
   border-radius: var(--radius-sheet);
@@ -68,13 +82,31 @@
     width: 480px;
     right: 0;
     bottom: 0;
-    top: var(--header-h);
+    /* Below the transport bar, not under it.
+     *
+     * wavecode-unified-input-entry: the transport bar is a fixed,
+     * full-width strip pinned to the top. A drawer starting at
+     * `top: var(--header-h)` therefore began *inside* that strip: its
+     * header was covered, so the sheet's title («Ввод», «ИИ-ассистент»)
+     * was cut in half and the close button was unreachable. The rail
+     * had solved the same problem the same way — it starts below the
+     * transport (zen.css), so the drawer does the same: the transport's
+     * own controls stay visible and clickable while a drawer is open.
+     *
+     * The transport has two heights; both are already tokens, and the
+     * collapsed one is the default (45px rendered, 48px reserved). */
+    top: calc(var(--header-h) + var(--app-transport-h-collapsed));
     max-height: none;
-    height: calc(100vh - var(--header-h));
+    height: calc(100vh - var(--header-h) - var(--app-transport-h-collapsed));
     border-radius: var(--radius-lg) 0 0 var(--radius-lg);
     border-top: none;
     border-left: 1px solid var(--border-strong);
     transform: translateX(100%);
+  }
+  /* Transport expanded → the drawer starts lower. */
+  .app-body[data-transport-collapsed='false'] .wc-sheet {
+    top: calc(var(--header-h) + var(--app-transport-h-expanded));
+    height: calc(100vh - var(--header-h) - var(--app-transport-h-expanded));
   }
   .wc-sheet[data-snap='closed'] { transform: translateX(100%); }
   .wc-sheet[data-snap='peek']   { transform: translateX(0);    }

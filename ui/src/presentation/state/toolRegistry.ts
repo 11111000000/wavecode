@@ -6,7 +6,7 @@ import {
   openKindSheet,
   getKindSnap,
 } from './uiState';
-import { openInputDock, isInputDockOpen } from './inputMode';
+import { openInputSheet, isInputSheetOpen } from './inputMode';
 import {
   TabScoreIcon,
   TabStepIcon,
@@ -14,7 +14,6 @@ import {
   MicIcon,
   TabPianoIcon,
   TabMixerIcon,
-  TabMicIcon,
   TabVisualizeIcon,
   ConsoleIcon,
   SaveIcon,
@@ -39,7 +38,6 @@ export type ToolId =
   | 'input'
   | 'piano'
   | 'mixer'
-  | 'mic'
   | 'visualize'
   | 'console'
   | 'export';
@@ -93,14 +91,20 @@ export const TOOLS: readonly ToolEntry[] = [
     open: () => setTab('chat'),
   },
   {
+    // wavecode-unified-input-entry: «Ввод» ушёл из рельса в tier 2.
+    // В рельсе рядом с «ИИ» он читался как второй способ получить
+    // музыку, хотя это разные категории: ИИ — адресат (куда уходит
+    // материал), Ввод — способ захвата (откуда берётся). Теперь ввод
+    // открывает круглая кнопка «Ввод», а из рельса он доступен через
+    // лист «Инструменты» и ⌘K.
     id: 'input',
     label: 'Ввод',
     short: 'Ввод',
-    description: 'Голос или ритм → партитура',
-    tier: 1,
+    description: 'Речь, свист или ритм → партитура',
+    tier: 2,
     icon: MicIcon,
-    keywords: ['ввод', 'голос', 'микрофон', 'ритм', 'voice', 'mic'],
-    open: () => openInputDock(),
+    keywords: ['ввод', 'речь', 'голос', 'микрофон', 'свист', 'ритм', 'voice', 'mic', 'whistle'],
+    open: () => openInputSheet(),
   },
   {
     id: 'piano',
@@ -123,16 +127,10 @@ export const TOOLS: readonly ToolEntry[] = [
     open: () => setTab('mixer'),
   },
   {
-    id: 'mic',
-    label: 'Микрофон',
-    short: 'Мик',
-    description: 'Запись звука в Strudel',
-    tier: 2,
-    icon: TabMicIcon,
-    keywords: ['микрофон', 'запись', 'сэмпл', 'mic', 'record'],
-    open: () => setTab('mic'),
-  },
-  {
+    // wavecode-unified-input-entry: отдельного инструмента «Микрофон»
+    // (и «Свист») больше нет — свист живёт вкладкой «Свист» листа
+    // ввода. Иначе одно и то же устройство называлось бы в двух
+    // местах интерфейса, и пользователь не знал бы, куда нажать.
     id: 'visualize',
     label: 'Визуализация',
     short: 'Визуал',
@@ -180,13 +178,11 @@ export const isToolActive = (id: ToolId): boolean => {
     case 'ai':
       return getActiveTab() === 'chat';
     case 'input':
-      return isInputDockOpen();
+      return isInputSheetOpen();
     case 'piano':
       return getActiveTab() === 'piano';
     case 'mixer':
       return getActiveTab() === 'mixer';
-    case 'mic':
-      return getActiveTab() === 'mic';
     case 'visualize':
       return getActiveTab() === 'visualize';
     case 'export':

@@ -20,7 +20,7 @@ import { Landing } from './presentation/components/landing/Landing';
 import { WelcomeTour } from './presentation/components/tour/WelcomeTour';
 import { DisclaimerGate } from './presentation/components/DisclaimerGate';
 import { useConsentGate } from './presentation/state/consentGate';
-import { VoiceFAB } from './presentation/components/VoiceFAB';
+import { InputFAB } from './presentation/components/InputFAB';
 import { initVoiceAI } from './presentation/state/voiceAIStore';
 import { selectSttLayer } from './infrastructure/stt/selectSttLayer';
 
@@ -119,6 +119,6 @@ function AppShell(): JSX.Element {
       onToggleLayout={onToggleLayout} onOpenAdmin={openAdmin}
       onPlay={() => { setAudioStarting(true); void evalScore(); }} onStop={() => { void stopAudio(); }}
     />
-    <VoiceFAB />
+    <InputFAB />
   </>);
 }

@@ -16,6 +16,11 @@ import { test, expect } from '@playwright/test';
  *
  * This test does NOT exercise the 4-row full layout itself — that
  * requires a working mic device or programmatic preview injection.
+ *
+ * wavecode-unified-input-entry moved the panel: it is no longer a
+ * separate «Микрофон» tool in the «Инструменты» sheet, but the
+ * «Свист» tab of the input sheet. The path below follows the new
+ * route — FAB «Ввод» → tab «Свист».
  */
 
 const DEPLOYED_URL = 'https://wavecode.kosov.online/#/app';
@@ -31,12 +36,12 @@ test.describe('Mic panel — UX redesign (empty state + structural presence)', (
     await page.waitForSelector('main.app', { timeout: 15_000 });
     await page.waitForTimeout(1500);
 
-    // Микрофон — инструмент второго уровня: на desktop лист
-    // «Инструменты» открывается кнопкой «Ещё» в рельсе
-    // (wavecode-zen-minimal-ui, ревизия 2, пункт 9).
-    await page.locator('.wc-rail__more').first().click();
+    // Свист — вкладка листа ввода, а не отдельный инструмент.
+    // Отдельного «Микрофона» в листе «Инструменты» больше нет:
+    // одно устройство не должно называться в двух местах.
+    await page.locator('.voice-mini-fab[aria-label="Ввод"]').first().click();
     await page.waitForTimeout(400);
-    await page.locator('.wc-tool-card', { hasText: 'Микрофон' }).first().click();
+    await page.locator('.input-tab', { hasText: 'Свист' }).first().click();
     await page.waitForTimeout(400);
 
     // 1. Old mode-row must NOT exist (the headline UX win).
