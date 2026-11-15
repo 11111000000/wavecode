@@ -1,0 +1,225 @@
+---
+schema: math-coding/3.3
+id: fix-composition-switch-silence
+revision: 1
+state: active
+body_sha: "sha256:3c5873e54c315c72a2209fbfa854d9b375b9e22723446f5f8f002339da92453f"
+yaml_sha: "sha256:3c5873e54c315c72a2209fbfa854d9b375b9e22723446f5f8f002339da92453f"
+
+intent: |
+  Жалоба юзера: при выборе другой композиции из списка продолжает
+  звучать ПРЕДЫДУЩАЯ; и при создании новой композиции во время Play
+  тоже слышна прежняя. Требование: переключение = полная смена звука,
+  предыдущая композиция не должна звучать вообще.
+
+  Причина — не в списке пресетов и не в редакторе. `repl.stop()`
+  останавливает только ПЛАНИРОВЩИК Strudel (`Cyclist.stop()` →
+  `clock.stop()` → clearInterval + `lastEnd = 0`). WebAudio-ноды, которые
+  superdough уже создал и передал в аудио-граф, продолжают звучать до
+  конца своих огибающих: у `ambient-drone` это `.attack(2).release(4)`,
+  то есть 4–6 секунд старой композиции поверх новой.
+
+  Вторая, более неприятная половина: `AudioContext.suspend()`
+  замораживает `currentTime`. Огибающие замерших голосов замирают на
+  полпути и оживают при следующем `resume()` — то есть старая
+  композиция возвращается уже во время Play новой. Именно это
+  наблюдал юзер в сценарии «Новая композиция → Play»: новая партитура
+  пустая, а звучит прежняя.
+
+  Замер (headless Chromium, реальный движок superdough):
+  - до фикса: после «Новая» в suspended-контексте оставалось 16
+    живых голосов со stop-временами 6.78…10.28 с; после Play
+    (resume) RMS анализатора = 0.0698–0.0853 — громкость прежней
+    композиции;
+  - после фикса: живых голосов 0, RMS = 0.005 (тишина новой
+    пустой композиции).
+
+  Решение — сделать тишину явной, а не побочным эффектом:
+  (1) **Реестр живых голосов.** Осцилляторы и семплы регистрируются
+  в патче `AudioContext.prototype.createOscillator` /
+  `createBufferSource` (патч `createOscillator` в движке уже был —
+  для debug-счётчика), worklet-голоса (`s("supersaw")`,
+  `s("wavetable")` — у них нет `stop()`) — через патч глобального
+  конструктора `window.AudioWorkletNode`.
+  (2) **Master-gate** — GainNode между анализатором и destination
+  (`source → analyser → gate → destination`). Одним `gain` глушится
+  всё, что уже звучит: сначала тихий fade-out (anti-click), потом —
+  жёсткая остановка нод.
+  (3) **`silence()`** = планировщик остановлен → гейт закрыт fade-ом →
+  живые голоса убиты (`stop()` + `disconnect()`). Контекст при этом
+  НЕ замораживается: `suspend()` в eval-пути означал бы
+  замороженные огибающие и iOS-проблему «resume() вне user-gesture
+  отклоняется».
+  (4) **`eval()`** (любая смена партитуры: выбор пресета, AI-правка,
+  re-eval транспорта) начинается с `await silence()` и заканчивается
+  открытием гейта — старый звук гарантированно мёртв к моменту, когда
+  новый паттерн уже запланирован.
+  (5) **`stop()`** (кнопка «Стоп») — сначала `silence()`, потом
+  `suspend()`. Порядок load-bearing: состояние контекста — это
+  состояние транспорта в UI (кнопка Play/Stop), поэтому контекст
+  замораживать по-прежнему нужно, но только ПОСЛЕ того, как голоса
+  убиты.
+
+  App-слой менять не пришлось: `onLoadPreset` уже делает
+  `replaceScore` + `evalScore`, а `evalScore` ведёт в `audio.eval`,
+  где теперь стоит `silence()`.
+commitment: |
+  Один коммит + decision + e2e-регрессия. Поведение, которое меняется
+  осознанно: при смене композиции теперь есть короткая (~25 мс +
+  транспиляция) пауза между старым и новым звуком — раньше старый хвост
+  накладывался на новый, теперь его нет. Кнопка «Стоп» по-прежнему
+  замораживает AudioContext (это состояние транспорта в UI), но тишина
+  теперь честная: голоса убиты до заморозки, поэтому ничего не
+  «оживает» при следующем Play.
+
+  Не меняется: hot-swap микшера (`setLayerMix`) и горячая замена
+  партитуры в StepGrid (`setScore`) — они по-прежнему подменяют
+  паттерн без остановки планировщика, без аудио-разрыва и без убийства
+  голосов (это отдельный, осознанный трейд-офф).
+counterexample: |
+  Сильнейшее возражение к этому решению: «убивать ноды вручную —
+  хрупко, superdough всё равно владеет жизненным циклом голосов; если
+  он начнёт переиспользовать источники (буфер-пул), наш `stop()` убьёт
+  ноду, которую superdough отдаст следующему хапу».
+  Ответ: (1) реестр пополняется на КАЖДЫЙ вызов
+  `createOscillator`/`createBufferSource`, то есть на каждый новый
+  голос — переиспользования источника в superdough 1.3.0 нет
+  (`AudioBufferSourceNode` одноразовый по спецификации); (2) если
+  такое переиспользование появится, симптом будет «тишина после
+  переключения», а не «старая музыка поверх новой» — регрессионный
+  e2e это поймает.
+antithesis: |
+  (1) «Не трогать ноды — просто не suspend-ить контекст, тогда старые
+  голоса доиграют естественно». Возражение: это чинит только
+  «оживание» после suspend, но не хвост: 4–6 секунд ambient-drone
+  поверх новой композиции — ровно то, что юзер и описал.
+  (2) «Сделать отдельный AudioContext на каждую композицию —
+  старый закрыть, новый создать». Возражение: superdough, загрузчик
+  семплов и визуализатор привязаны к одному контексту; это рефакторинг
+  размером с сам фикс и с риском для iOS-пути.
+  (3) «Оставить один AudioContext, но глушить старый паттерн через
+  `repl.setPattern(silence)` вместо kill нод». Возражение: планировщик
+  перестаёт играть, но уже созданные ноды продолжают звучать — хвост
+  остаётся, это и есть исходный баг.
+  (4) «Просто чинить список пресетов». Возражение: список не виноват —
+  выбор пресета корректно доезжает до `audio.eval`; виноват audio-слой.
+axiom_link:
+  - A0
+  - A3
+scope:
+  paths:
+    - ui/src/infrastructure/audio/LiveAudioEngine.ts
+    - ui/tests/e2e/preset-switch-silence.spec.mjs
+    - decisions/fix-composition-switch-silence.yaml
+outcomes:
+  - id: fix-composition-switch-silence-outcome-1
+    statement: |
+      Выбор другой композиции из списка полностью глушит предыдущую:
+      старых голосов в реестре не остаётся, RMS анализатора после
+      переключения на пустую композицию < 0.01.
+  - id: fix-composition-switch-silence-outcome-2
+    statement: |
+      «Новая композиция» + Play не воскрешает предыдущую: контекст
+      замораживается ПОСЛЕ убийства голосов, поэтому при следующем
+      `resume()` оживать нечему — слышна тишина новой (пустой)
+      композиции.
+  - id: fix-composition-switch-silence-outcome-3
+    statement: |
+      Кнопка «Стоп» по-прежнему переводит AudioContext в suspended
+      (состояние контекста = состояние транспорта в UI), но тишина
+      теперь абсолютная: ни один голос не переживает заморозку.
+obligations:
+  - id: fix-composition-switch-silence-kernel-validates
+    claim: |
+      The decision file is structurally valid under the
+      math-coding 3.3 schema; `mathc validate decisions/<id>.yaml`
+      exits 0.
+    acceptance:
+      all:
+        - verifier: "mathc validate"
+          result: pass
+  - id: fix-composition-switch-silence-e2e-regression
+    claim: |
+      Переключение композиции глушит предыдущую полностью, и новая
+      (пустая) композиция не воскрешает старую при Play.
+    acceptance:
+      all:
+        - verifier: "npm --prefix ui exec playwright test tests/e2e/preset-switch-silence.spec.mjs"
+          result: pass
+  - id: fix-composition-switch-silence-typecheck
+    claim: |
+      Изменения в audio-engine типобезопасны.
+    acceptance:
+      all:
+        - verifier: "npm --prefix ui exec tsc --noEmit"
+          result: pass
+  - id: fix-composition-switch-silence-unit-regression
+    claim: |
+      Существующие юнит-тесты остаются зелёными — нет регрессии в
+      плеере, микшере и транспорте.
+    acceptance:
+      all:
+        - verifier: "npm --prefix ui run test:precommit"
+          result: pass
+assumptions:
+  - id: fix-composition-switch-silence-assumption-1
+    state: proven
+    statement: |
+      "`repl.stop()` останавливает только планировщик; уже созданные
+      WebAudio-голоса продолжают звучать до конца огибающей" Evidence:
+      "node_modules/@strudel/core/dist/index.mjs — `Cyclist.stop()` →
+      `clock.stop()` (clearInterval) + `lastEnd = 0`; ноды при этом
+      уже созданы superdough (`createOscillator`/`createBufferSource`)
+      и живут по своей огибающей. Замер: после остановки планировщика
+      в реестре оставалось 30 живых голосов ambient-drone."
+    owner: human:operator
+  - id: fix-composition-switch-silence-assumption-2
+    state: proven
+    statement: |
+      "`AudioContext.suspend()` замораживает `currentTime`, и огибающие
+      замерших голосов оживают при `resume()`" Evidence: "замер в
+      headless Chromium: контекст ушёл в suspended на 4.95 с, 16
+      голосов со stop-временами 6.78…10.28 с остались pending; после
+      Play (resume) RMS = 0.0853 при пустой новой композиции — то есть
+      звучала именно прежняя."
+    owner: human:operator
+  - id: fix-composition-switch-silence-assumption-3
+    state: proven
+    statement: |
+      "Состояние AudioContext — это состояние транспорта в UI" Evidence:
+      "ui/src/presentation/state/useAppBootstrap.ts:167-171 — опрос
+      `getAudioContextState()` каждые 500 мс, `audioRunning = state ===
+      'running'`; ui/src/presentation/components/TransportBar.tsx:199-210
+      — от `audioRunning()` зависят иконка, aria-label и поведение
+      кнопки Play/Stop."
+    owner: human:operator
+  - id: fix-composition-switch-silence-assumption-4
+    state: proven
+    statement: |
+      "Worklet-голоса superdough (`s(\"supersaw\")`, `s(\"wavetable\")`)
+      создаются глобальным конструктором и не имеют `stop()`" Evidence:
+      "node_modules/superdough/dist/index.mjs — `we(\"supersaw\", () =>
+      new AudioWorkletNode(o, \"supersaw-oscillator\", ...))`;
+      ui/src/domain/presets.ts:107,121 — `s(\"supersaw\")` используется в
+      поставляемых пресетах."
+    owner: human:operator
+risk:
+  declared_triggers:
+    - silence-after-switch
+    - piano-preview-muted-after-stop
+  owner: human:operator
+reversal:
+  - signal: "после переключения композиции звука нет вообще — приложение молчит целиком"
+    condition: "Проверить master-gate: он открывается в stop() сразу после silence() и в eval() после планирования нового паттерна; если гейт «залип» на нуле, симптом и есть полная тишина. Диагностика: window.__wavecodeMasterGate.gain.value."
+    action: rework
+  - signal: "после Stop превью сэмплов (пиано) перестало звучать"
+    condition: "Проверить, что гейт открыт (window.__wavecodeMasterGate.gain.value === 1) и что killLiveVoices не отключил ноды, созданные уже после тишины."
+    action: rework
+  - signal: "после переключения композиции слышны тона старой — kill не сработал"
+    condition: "Проверить, что killLiveVoices вызывается ДО планирования нового паттерна, и сузить реестр: вероятен конфликт с будущим пулом источников superdough (см. counterexample)."
+    action: review
+relations:
+  addresses:
+    - wavecode-play-in-control@1
+    - wavecode-mixer-live-update@1
+    - wavecode-track-mixer@1
