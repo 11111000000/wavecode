@@ -60,9 +60,28 @@ import {
   gestureEnabled,
   gestureLiveValues,
   gestureTermHits,
+  gestureTermTarget,
   setGestureTermMode,
+  setGestureTermTarget,
+  previewTermPattern,
+  commitTermPattern,
   type GestureController,
 } from './gestureStore';
+import { appStore } from './appStore';
+
+/**
+ * The REAL setTimeout — captured while the module is loaded, i.e. BEFORE the
+ * fake timers of `beforeEach` are installed. The gesture de-duplication
+ * window (60 ms) is measured against `performance.now()`, which the fake
+ * timers do not touch — so a repeated gesture needs REAL time to pass.
+ */
+const realSetTimeout = globalThis.setTimeout;
+
+/** Wait for `ms` of real time (not fake-clock time). */
+const sleepReal = (ms: number): Promise<void> =>
+  new Promise((resolve) => {
+    realSetTimeout(resolve, ms);
+  });
 
 /** Options the mocked capture was called with — the frame sink of the test. */
 let captureOptions: GestureCaptureOptions | null = null;
@@ -136,6 +155,9 @@ describe('gestureStore', () => {
     vi.clearAllMocks();
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
     captureOptions = null;
+    // The term box is module state — reset it between the tests.
+    setGestureTermMode(false);
+    setGestureTermTarget(8);
     mocks.startGestureCapture.mockImplementation(async (options: GestureCaptureOptions) => {
       captureOptions = options;
       return { stop: vi.fn(), status: () => 'running' as const };
@@ -260,5 +282,142 @@ describe('gestureStore', () => {
 
     expect(gestureStatus()).toBe('error');
     expect(gestureEnabled()).toBe(false);
+  });
+
+  // ── термин-бокс ───────────────────────────────────────────────────────────
+
+  it('records the mapped row of every rhythmic gesture, not only the pinch', async () => {
+    setGestureTermMode(true);
+    await controller.enable();
+
+    // Каждый жест приходится держать два кадра: 1 € фильтр сглаживает
+    // признаки, и детектор видит жест только когда сигнал «устоялся».
+    pushFrame(makeHand({ extension: 0.1, pinch: false, tsMs: 1000 })); // fist
+    await flush();
+    pushFrame(makeHand({ extension: 0.1, pinch: false, tsMs: 1200 }));
+    await flush();
+
+    pushFrame(makeHand({ extension: 1.0, pinch: false, tsMs: 1400 })); // open palm
+    await flush();
+    pushFrame(makeHand({ extension: 1.0, pinch: false, tsMs: 1600 }));
+    await flush();
+
+    pushFrame(makeHand({ extension: 0.5, pinch: true, tsMs: 1800 })); // pinch
+    await flush();
+    pushFrame(makeHand({ extension: 0.5, pinch: true, tsMs: 2000 }));
+    await flush();
+
+    expect(gestureTermHits().map((hit) => hit.sample)).toEqual(['sd', 'hh', 'bd']);
+  });
+
+  it('sounds the mapped row of the gesture in term mode', async () => {
+    setGestureTermMode(true);
+    await controller.enable();
+
+    pushFrame(makeHand({ extension: 0.1, pinch: false, tsMs: 1000 })); // fist → sd
+    await flush();
+    pushFrame(makeHand({ extension: 0.1, pinch: false, tsMs: 1200 }));
+    await flush();
+
+    await vi.advanceTimersByTimeAsync(2500);
+
+    expect(mocks.previewSample).toHaveBeenCalledWith('sd');
+  });
+
+  it('stays silent for the non-rhythmic gestures outside term mode', async () => {
+    await controller.enable();
+
+    pushFrame(makeHand({ extension: 0.1, pinch: false, tsMs: 1000 })); // fist
+    await flush();
+    pushFrame(makeHand({ extension: 0.1, pinch: false, tsMs: 1200 }));
+    await flush();
+
+    await vi.advanceTimersByTimeAsync(2500);
+
+    expect(mocks.previewSample).not.toHaveBeenCalled();
+    expect(gestureTermHits()).toHaveLength(0);
+  });
+
+  it('stops the recording when the target length is reached', async () => {
+    setGestureTermTarget(4);
+    setGestureTermMode(true);
+    await controller.enable();
+
+    pushFrame(makeHand({ extension: 0.1, pinch: false, tsMs: 1000 })); // fist → sd
+    await flush();
+    pushFrame(makeHand({ extension: 0.1, pinch: false, tsMs: 1200 }));
+    await flush();
+
+    pushFrame(makeHand({ extension: 1.0, pinch: false, tsMs: 1400 })); // palm → hh
+    await flush();
+    pushFrame(makeHand({ extension: 1.0, pinch: false, tsMs: 1600 }));
+    await flush();
+
+    pushFrame(makeHand({ extension: 0.5, pinch: true, tsMs: 1800 })); // pinch → bd
+    await flush();
+    pushFrame(makeHand({ extension: 0.5, pinch: true, tsMs: 2000 }));
+    await flush();
+
+    // Тот же жест снова — но де-дупликация (60 мс) мерит реальное время.
+    await sleepReal(80);
+
+    pushFrame(makeHand({ extension: 0.1, pinch: false, tsMs: 2200 })); // palm again
+    await flush();
+    pushFrame(makeHand({ extension: 1.0, pinch: false, tsMs: 2400 }));
+    await flush();
+    pushFrame(makeHand({ extension: 1.0, pinch: false, tsMs: 2600 }));
+    await flush();
+
+    expect(gestureTermHits()).toHaveLength(4);
+
+    // Цель достигнута — следующий жест уже не пишется в бокс.
+    await sleepReal(80);
+    pushFrame(makeHand({ extension: 0.1, pinch: false, tsMs: 2800 }));
+    await flush();
+    pushFrame(makeHand({ extension: 1.0, pinch: false, tsMs: 3000 }));
+    await flush();
+    pushFrame(makeHand({ extension: 1.0, pinch: false, tsMs: 3200 }));
+    await flush();
+
+    expect(gestureTermHits()).toHaveLength(4);
+    expect(gestureTermTarget()).toBe(4);
+  });
+
+  it('plays the recorded rhythm back one cycle long', async () => {
+    setGestureTermMode(true);
+    await controller.enable();
+
+    pushFrame(makeHand({ extension: 0.1, pinch: false, tsMs: 1000 })); // fist → sd
+    await flush();
+    pushFrame(makeHand({ extension: 0.1, pinch: false, tsMs: 1200 }));
+    await flush();
+
+    // Сначала дожидаемся звука самого попадания (оно играет по кванту).
+    await vi.advanceTimersByTimeAsync(2500);
+
+    mocks.previewSample.mockClear();
+    expect(previewTermPattern()).toBe(true);
+
+    await vi.advanceTimersByTimeAsync(2500);
+
+    // Один удар — один вызов; позиция в цикле задаёт задержку.
+    expect(mocks.previewSample).toHaveBeenCalledTimes(1);
+    expect(mocks.previewSample).toHaveBeenCalledWith('sd');
+  });
+
+  it('commits the recorded rhythm into the score', async () => {
+    setGestureTermMode(true);
+    await controller.enable();
+
+    pushFrame(makeHand({ extension: 0.1, pinch: false, tsMs: 1000 })); // fist → sd
+    await flush();
+    pushFrame(makeHand({ extension: 0.1, pinch: false, tsMs: 1200 }));
+    await flush();
+
+    expect(commitTermPattern()).toBe(true);
+
+    // Хит записан в сетку и бокс очищен.
+    expect(gestureTermHits()).toHaveLength(0);
+    expect(appStore.score).toContain('sd');
   });
 });
