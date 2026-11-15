@@ -4,7 +4,12 @@ import {
   type SampleProgressEvent,
 } from '~/infrastructure/audio/sampleProgressEvent';
 import { netStatus } from '~/presentation/state/netStatus';
-import { CTX_STATE_LABEL, labelFor } from '~/presentation/state/labels';
+import { appStore } from '~/presentation/state/appStore';
+import {
+  AUDIO_STATUS_LABEL,
+  CTX_STATE_LABEL,
+  labelFor,
+} from '~/presentation/state/labels';
 
 /**
  * StatusStrip — ЕДИНОЕ место, где живёт состояние приложения.
@@ -14,7 +19,7 @@ import { CTX_STATE_LABEL, labelFor } from '~/presentation/state/labels';
  * «♪ samples» в верхней панели и «⚠» на `/admin`. Теперь всё в
  * одной строке:
  *
- *   [● играет] [12/143] [офлайн]
+ *   [▶ играет] [12/143] [офлайн]
  *
  * Правила:
  *   - состояние аудио видно всегда (это ответ на «звучит ли?»);
@@ -22,14 +27,30 @@ import { CTX_STATE_LABEL, labelFor } from '~/presentation/state/labels';
  *     исчезает, чтобы не занимать место);
  *   - «офлайн» — только когда сеть действительно пропала.
  *
- * Компонент ничего не знает про остальной UI: он читает событие
- * прогресса сэмплов и netStatus, а состояние аудио получает
- * пропсами от верхней панели.
+ * Про состояние AudioContext: строка показывает `audio.status`
+ * («играет» / «ошибка» / «остановлен»), а НЕ состояние контекста.
+ * Контекст остаётся `running` и после нажатия «Стоп» — по нему нельзя
+ * понять, звучит ли музыка. Состояние контекста уходит в подсказку,
+ * где оно и belongs: «Звук: остановлен (контекст: работает)».
  */
 
 export type StatusStripProps = {
-  audioRunning: boolean;
   ctxState: () => string;
+};
+
+type Tone = 'running' | 'idle' | 'err';
+
+type AudioView = { tone: Tone; glyph: string; label: string };
+
+const audioView = (): AudioView => {
+  const status = appStore.audio.status;
+  if (status === 'playing') {
+    return { tone: 'running', glyph: '▶', label: labelFor(AUDIO_STATUS_LABEL, status) };
+  }
+  if (status === 'error') {
+    return { tone: 'err', glyph: '⚠', label: labelFor(AUDIO_STATUS_LABEL, status) };
+  }
+  return { tone: 'idle', glyph: '●', label: labelFor(AUDIO_STATUS_LABEL, status) };
 };
 
 export function StatusStrip(props: StatusStripProps): JSX.Element {
@@ -62,12 +83,12 @@ export function StatusStrip(props: StatusStripProps): JSX.Element {
     <div class="wc-status" data-testid="status-strip">
       <span
         class="wc-status__led"
-        data-tone={props.audioRunning ? 'running' : 'idle'}
+        data-tone={audioView().tone}
         data-testid="status-audio"
-        title={props.audioRunning ? 'Звучит' : 'Звука нет'}
+        title={`Звук: ${audioView().label} (контекст: ${ctxLabel()})`}
       >
-        <span class="wc-led" data-tone={props.audioRunning ? 'running' : 'idle'}>
-          {props.audioRunning ? '▶' : '●'} {ctxLabel()}
+        <span class="wc-led" data-tone={audioView().tone}>
+          {audioView().glyph} {audioView().label}
         </span>
       </span>
       <Show when={samples().status === 'loading'}>

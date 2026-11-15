@@ -28,7 +28,6 @@ import { AudioEngine } from '~/domain/services';
 
 export type AudioRuntime = {
   readonly ctxState: () => { state: string; sampleRate: number | null };
-  readonly audioRunning: () => boolean;
 };
 
 const restoreFromIdbOrShare = (): void => {
@@ -163,7 +162,6 @@ const installAudioPreloadOnFirstGesture = (): void => {
  */
 export const useAppBootstrap = (): AudioRuntime => {
   const [ctxStateSig, setCtxState] = createSignal(getAudioContextState());
-  const [audioRunningSig, setAudioRunning] = createSignal(false);
 
   onMount(() => {
     installTransportAudioSync();
@@ -205,12 +203,10 @@ if (!consumePendingNewComposition()) {
     installAudioPreloadOnFirstGesture();
 
     const pollId = window.setInterval(() => {
-      const s = getAudioContextState();
-      setCtxState(s);
-      setAudioRunning(s.state === 'running');
+      setCtxState(getAudioContextState());
     }, 500);
     onCleanup(() => window.clearInterval(pollId));
   });
 
-  return { ctxState: ctxStateSig, audioRunning: audioRunningSig };
+  return { ctxState: ctxStateSig };
 };

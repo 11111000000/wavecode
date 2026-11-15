@@ -34,8 +34,6 @@ export const AppShellView = (props: AppShellViewProps): JSX.Element => (
   <main class="app wc-app">
     <Toast />
     <TopBar
-      audioRunning={props.audioRunning()}
-      audioStarting={props.audioStarting()}
       ctxState={props.ctxState}
       presetId={props.presetId()}
       mobileMode={props.mobileMode()}

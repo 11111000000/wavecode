@@ -3,6 +3,7 @@ import { dispatch, appStore } from './appStore';
 import { getPreset, saveCustomPreset } from './presetsStore';
 import { getSelectedPresetId, setSelectedPresetPersist } from './selectedPreset';
 import { evalScore } from './audioActions';
+import { closeKindSheet } from './uiState';
 
 /**
  * presetActions — операции над композициями в ОДНОМ месте.
@@ -42,6 +43,10 @@ export const loadPresetById = (id: string): void => {
   dispatch({ type: 'switchPreset', id });
   dispatch({ type: 'replaceScore', text: preset.score });
   void evalScore();
+  // Выбрал композицию — вернись к редактору: лист «Инструменты»
+  // перекрывает холст, а пользователь хочет видеть и слышать то,
+  // что выбрал.
+  closeKindSheet('tools');
 };
 
 /**

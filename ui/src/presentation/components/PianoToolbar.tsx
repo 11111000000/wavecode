@@ -309,6 +309,12 @@ export const PianoToolbar = (props: PianoToolbarProps): JSX.Element => {
               return slot.titleEnabled;
             };
             return (
+              // `preventDefault` на mousedown: клик по слоту не должен
+              // забирать фокус у редактора. Иначе редактор блюрит,
+              // слот «⌖ курсор» тут же блокируется (он живым зависит
+              // от фокуса) — и кнопка успевает заблокироваться ДО
+              // того, как браузер доставит click. Слот не включался
+              // вообще никогда.
               <button
                 type="button"
                 class="piano-slot-btn"
@@ -318,6 +324,7 @@ export const PianoToolbar = (props: PianoToolbarProps): JSX.Element => {
                 title={title()}
                 aria-label={slot.ariaLabel}
                 aria-pressed={isActive()}
+                onMouseDown={(e) => e.preventDefault()}
                 onClick={() => setPianoSlot(slot.id)}
               >
                 {pianoSlotGlyph(slot.id)}

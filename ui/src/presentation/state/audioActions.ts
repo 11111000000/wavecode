@@ -108,6 +108,19 @@ export const scheduleMixLive = (
   }, MIX_DEBOUNCE_MS);
 };
 
+/**
+ * Идёт ли музыка СЕЙЧАС — по статусу приложения, а НЕ по состоянию
+ * AudioContext.
+ *
+ * wavecode-zen-ui-phases-6-7 (фаза 6, «Тишина»): контекст остаётся
+ * `running` и после «Стоп», а его состояние обновляется раз в полсекунды.
+ * Кнопка play/stop, построенная на нём, показывала «Стоп» вместо
+ * «Запуск» и наоборот — а в гонке с опросом контекста нажатие «Запуск»
+ * могло превратиться в «Стоп». Статус приложения — честный источник
+ * правды: он меняется ровно тогда, когда меняется воспроизведение.
+ */
+export const audioRunning = (): boolean => appStore.audio.status === 'playing';
+
 export const evalScore = async (overrideScore?: string): Promise<void> => {
   const score = overrideScore ?? appStore.score;
   if (!score.trim()) {

@@ -143,7 +143,13 @@ export function ScorePanel() {
   // wavecode-zen-ui-phases-6-7 (фаза 6): сниппеты, переключатель вида
   // и отладка — за одним раскрытием, по умолчанию закрытым.
   const [extraOpen, setExtraOpen] = createSignal(readExtraOpen());
-  let editorApi: CodeMirrorEditorApi | undefined;
+  // editorApi — СИГНАЛ, а не обычная переменная: `createEffect` ниже
+  // подписывается на него и переподключает слушатели фокуса, когда
+  // ленивый чанк CodeMirror догружается. С обычной переменной эффект
+  // отрабатывал один раз (api ещё undefined), слушатели фокуса не
+  // вешались — и слот «⌖ курсор» в пианино оставался вечно
+  // заблокированным, хотя подпись обещала «Тапните в редактор».
+  const [editorApi, setEditorApi] = createSignal<CodeMirrorEditorApi | undefined>();
 
   const switchView = (next: ScoreViewMode): void => {
     if (viewMode() === next) return;
@@ -175,7 +181,7 @@ export function ScorePanel() {
   // `editorApi` is reassigned (lazy CodeMirror chunk finishes loading),
   // so the listeners always point at the current EditorView.
   createEffect(() => {
-    const api = editorApi;
+    const api = editorApi();
     if (!api) {
       setPianoEditorApi(undefined);
       setEditorFocused(false);
@@ -280,7 +286,7 @@ export function ScorePanel() {
             value={appStore.score}
             onChange={(v) => dispatch({ type: 'replaceScore', text: v })}
             onReady={(api) => {
-              editorApi = api;
+              setEditorApi(api);
             }}
           />
         </Show>
@@ -335,7 +341,7 @@ export function ScorePanel() {
               </button>
             </div>
 
-            <MiniNotationToolbar editor={() => editorApi} />
+            <MiniNotationToolbar editor={() => editorApi()} />
 
             <div class="score-debug">
               <span>триггеры: <strong>{debug().triggers}</strong></span>

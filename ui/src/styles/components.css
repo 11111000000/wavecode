@@ -2738,7 +2738,6 @@ button:not([disabled]):not(.no-shrink):active {
   font-family: var(--font-mono);
   font-size: var(--fs-2xs);
   font-weight: var(--fw-regular);
-  text-transform: lowercase;
   letter-spacing: var(--ls-tight);
   opacity: 0.7;
 }
@@ -2748,7 +2747,6 @@ button:not([disabled]):not(.no-shrink):active {
   font-size: var(--fs-2xs);
   color: var(--fg-dim);
   letter-spacing: var(--ls-wide);
-  text-transform: lowercase;
   margin-left: 2px;
 }
 

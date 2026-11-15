@@ -2,7 +2,7 @@ import { createSignal, createEffect, onMount, Show, untrack, type JSX } from 'so
 import { setTab, getActiveTab, getMobileMode, setMobileMode, openKindSheet, type MobileMode } from './presentation/state/uiState';
 import { dispatch } from './presentation/state/appStore';
 import { installTypingTracker } from './presentation/state/editorTypingTracker';
-import { evalScore, stopAudio } from './presentation/state/audioActions';
+import { evalScore, stopAudio, audioRunning } from './presentation/state/audioActions';
 import { isGridEmptyState } from './presentation/state/gridState';
 import { syncGridFromScore } from './presentation/components/StepGrid';
 import { getPreset, deleteCustomPreset, renameCustomPreset } from './presentation/state/presetsStore';
@@ -111,7 +111,7 @@ function AppShell(): JSX.Element {
 
   return (<>
     <AppShellView
-      audioRunning={audio.audioRunning} audioStarting={audioStarting} ctxState={audio.ctxState}
+      audioRunning={audioRunning} audioStarting={audioStarting} ctxState={audio.ctxState}
       presetId={presetId} mobileMode={mobileMode}
       chooseMobileMode={chooseMobileMode} onSavePreset={onSavePreset}
       onRollback={undo} onRedo={redo} onNew={onNew}

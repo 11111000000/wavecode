@@ -14,8 +14,6 @@ import { StatusStrip } from './StatusStrip';
 type CtxState = { state: string; sampleRate: number | null };
 
 export type TopBarProps = {
-  audioRunning: boolean;
-  audioStarting: boolean;
   ctxState: () => CtxState;
   presetId: string;
   mobileMode: MobileMode;
@@ -71,10 +69,7 @@ export function TopBar(props: TopBarProps): JSX.Element {
           счётчик сэмплов и индикатор офлайна живут в ОДНОМ кластере
           (StatusStrip). Отдельная плашка «♪ samples» была мёртвым
           кодом — sampleStatus никогда не становился 'loading'. */}
-      <StatusStrip
-        audioRunning={props.audioRunning}
-        ctxState={() => props.ctxState().state}
-      />
+      <StatusStrip ctxState={() => props.ctxState().state} />
       <div class="wc-topbar__actions">
         <button
           type="button"
