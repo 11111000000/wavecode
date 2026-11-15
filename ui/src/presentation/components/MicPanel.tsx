@@ -18,6 +18,7 @@ import {
   type MicSlot,
 } from '../state/micStore';
 import { evalScore, stopAudio } from '../state/audioActions';
+import { openKindSheet } from '../state/uiState';
 import { micSnippetFromBuffers } from '~/domain/audio/micSnippet';
 import { MELODIC_SOUNDS, DRUMS_ONLY_ID } from '~/domain/sounds';
 import { PianoRollPreview } from './PianoRollPreview';
@@ -269,6 +270,16 @@ export function MicPanel(): JSX.Element {
           onClick={onTogglePreview}
         >
           {previewing() ? '■ stop preview' : '👁 preview'}
+        </button>
+        <button
+          type="button"
+          class="mic-ux-cta-sm"
+          data-cta="gesture"
+          aria-label="Open the hand-gesture control panel"
+          title="Control the music with your hands — the camera is only asked for when you enable it"
+          onClick={() => openKindSheet('gesture', 'half')}
+        >
+          ✋ руки
         </button>
       </div>
 

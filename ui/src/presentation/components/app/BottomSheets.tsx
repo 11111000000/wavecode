@@ -7,6 +7,7 @@ import { MicPanel } from '~/presentation/components/MicPanel';
 import { HelloPanel } from '~/presentation/panels/HelloPanel';
 import { AIEditPanel } from '~/presentation/panels/AIEditPanel';
 import { VisualizerPanelLazy } from '~/presentation/panels/VisualizerPanelLazy';
+import { GesturePanelLazy } from '~/presentation/panels/GesturePanelLazy';
 
 export type BottomSheetsProps = Record<string, never>;
 
@@ -97,6 +98,21 @@ export function BottomSheets(_: BottomSheetsProps): JSX.Element {
         <div class="mic-sheet-body">
           <MicPanel />
         </div>
+      </BottomSheet>
+
+      {/* wavecode-hand-gesture-control: «управление руками». The panel is
+          loaded lazily (the camera tracker must stay out of the cold-start
+          bundle) and the camera itself only starts when the user flips the
+          «Управление руками» toggle INSIDE the panel — opening the sheet
+          never asks for a permission. */}
+      <BottomSheet
+        kind="gesture"
+        title="Руки"
+        subtitle="жесты → музыка"
+      >
+        <Suspense fallback={<div class="gesture-panel gesture-panel--loading" />}>
+          <GesturePanelLazy />
+        </Suspense>
       </BottomSheet>
     </>
   );
