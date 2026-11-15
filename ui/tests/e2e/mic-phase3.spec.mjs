@@ -23,7 +23,7 @@ const DEPLOYED_URL = 'https://wavecode.kosov.online/#/app';
 test.describe('Mic panel — UX redesign (empty state + structural presence)', () => {
   test.use({ viewport: { width: 1280, height: 800 } });
 
-  test('empty state by default; no mode-row; shows Demo + Learn more', async ({ page }) => {
+  test('empty state by default; no mode-row; shows the Learn more button', async ({ page }) => {
     const errors = [];
     page.on('pageerror', (e) => errors.push(`[pageerror] ${e.message}`));
 
@@ -31,9 +31,12 @@ test.describe('Mic panel — UX redesign (empty state + structural presence)', (
     await page.waitForSelector('main.app', { timeout: 15_000 });
     await page.waitForTimeout(1500);
 
-    const micTab = page.locator('.wc-tab[aria-label="Mic"]');
-    await expect(micTab).toBeVisible();
-    await micTab.click();
+    // Микрофон — инструмент второго уровня: на desktop лист
+    // «Инструменты» открывается кнопкой «Ещё» в рельсе
+    // (wavecode-zen-minimal-ui, ревизия 2, пункт 9).
+    await page.locator('.wc-rail__more').first().click();
+    await page.waitForTimeout(400);
+    await page.locator('.wc-tool-card', { hasText: 'Микрофон' }).first().click();
     await page.waitForTimeout(400);
 
     // 1. Old mode-row must NOT exist (the headline UX win).
@@ -43,10 +46,18 @@ test.describe('Mic panel — UX redesign (empty state + structural presence)', (
     // 2. Empty state visible.
     await expect(page.locator('.mic-ux-empty')).toBeVisible();
 
-    // 3. Empty-state copy (instructions + Demo + Learn more).
+    // 3. Empty-state copy (instructions + Learn more).
     await expect(page.locator('.mic-ux-empty-title')).toContainText(/START/);
-    await expect(page.locator('.mic-ux-empty-demo')).toBeVisible();
     await expect(page.locator('.mic-ux-empty-help')).toBeVisible();
+    // The Demo button was dropped in commit 76c5ea1
+    // («refactor(mic): drop demo + replace-score, unify snippet
+    // generation») — the empty state has no demo entry point anymore.
+    await expect(page.locator('.mic-ux-empty-demo')).toHaveCount(0);
+
+    // 4. «Learn more» раскрывает пояснение — это единственная
+    //    интерактивная кнопка пустого состояния.
+    await page.locator('.mic-ux-empty-help').click();
+    await expect(page.locator('.mic-ux-empty-help-text')).toBeVisible();
 
     expect(errors).toEqual([]);
 
@@ -81,7 +92,7 @@ test.describe('Mic panel — UX redesign (empty state + structural presence)', (
       'mic-ux-piano-roll',
       'mic-ux-meter',
       'mic-ux-empty',
-      'mic-ux-empty-demo',
+      'mic-ux-empty-help',
       'mic-ux-inst-btn',
       'mic-ux-slot-select',
       'mic-ux-cta',
