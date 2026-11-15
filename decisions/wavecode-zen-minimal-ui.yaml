@@ -1,0 +1,209 @@
+---
+schema: math-coding/3.3
+id: wavecode-zen-minimal-ui
+revision: 1
+state: active
+body_sha: "sha256:9b7b74b35ca034f9ceed9dd4cc52a353a0d2e132e1c09aa1c4d1b42a277c9ee6"
+yaml_sha: "sha256:9b7b74b35ca034f9ceed9dd4cc52a353a0d2e132e1c09aa1c4d1b42a277c9ee6"
+
+intent: |
+  Решение владельца (2026-11-15): весь интерфейс wavecode переводится
+  в минималистичный «дзенский» режим. Воздух управляет структурой,
+  лишнего нет, но всё необходимое остаётся: каждый реализованный
+  инструмент должен быть виден в интерфейсе и достижим за один шаг,
+  без перегрузки экрана.
+
+  Аудит (docs/2026-11-15-zen-ui-audit.md) показал, что сегодня
+  направление разъехалось с кодом и с корпусом решений:
+
+  * `docs/design.md:3-5` описывает «phosphor-amber REPL / CRT»,
+    тогда как `ui/src/styles/tokens.css:1-12` уже несёт «Chroma
+    Indigo Spectrum» (violet primary, cyan live, magenta record);
+    документация описывает несуществующий интерфейс;
+  * код использует безаномалию и скруглённые радиусы (8-12px),
+    glow и бесконечные анимации — визуальный шум, прямо
+    противоречащий «дзенской» цели;
+  * 25 обращений к `var(--x)` указывают на несуществующие токены
+    (`--amber`, `--fg-muted`, `--z-popover`, `--shadow-modal` и
+    ещё семь имён) — визуальные свойства молча теряются;
+  * корпус решений содержит два несовместимых активных контракта
+    навигации: `wavecode-bottom-bar-unified@1` (6 табов, без
+    overflow-меню) и `wavecode-ui-minimal-pass-phase-2@1` (3 таба);
+    и два несовместимых голосовых: `wavecode-voice-fab@1`
+    (1 большой + 2 мини-FAB) и `wavecode-voice-minimal-dock@1`
+    (одна кнопка, один док);
+  * 129 hover-правил против 13 `:focus-visible` — интерфейс
+    рассчитан на мышь, а не на клавиатуру и не на сенсор.
+
+  Направление фиксируется здесь; конкретные правки — фазами
+  (см. план в аудите), каждая фаза — отдельным решением.
+commitment: |
+  1. **Пустота несущая.** Разделение и отступы задаются шкалой
+     `--space-*`; декоративные тени, glow, scanline и градиентные
+     подложки не добавляются без отдельного решения. Радиусы
+     сводятся к двум ступеням (0 для управляющих элементов,
+     `--radius-sm` для поверхностей).
+  2. **Полнота без перегрузки.** Ни один реализованный инструмент
+     не исчезает из интерфейса. Если экран перегружен, инструмент
+     уходит в раскрываемый слой (sheet/drawer), но не за хоткей,
+     спрятанный в справке.
+  3. **Один навигационный контракт.** Ровно один активный способ
+     добраться до каждого инструмента: нижняя панель или маршрут
+     листов. Дублирующиеся ряды вкладок и плавающие кнопки,
+     повторяющие уже доступный инструмент, удаляются.
+  4. **Токены — единственный источник цвета.** Новых литералов
+     цвета вне `ui/src/styles/tokens.css` не появляется; висящие
+     `var(--x)` обнуляются.
+  5. **Доступность — пол, а не украшение.** Контраст текста
+     ≥ 4.5:1, нетекстовых элементов ≥ 3:1, цели ≥ 24×24 CSS px,
+     каждая интерактивная кнопка имеет видимый фокус, все
+     бесконечные анимации уважают `prefers-reduced-motion`.
+  6. **Документация соответствует коду.** `docs/design.md`
+     описывает фактически выпущенную визуальную систему.
+  7. **Регрессии измеримы.** `scripts/check-zen-ui.mjs` падает при
+     росте доли шума и при падении покрытия фокусом;
+     `scripts/zen-ui-baseline.json` фиксирует текущий уровень.
+axiom_link:
+  - A1
+scope:
+  paths:
+    - ui/src/styles
+    - ui/src/presentation
+    - docs/design.md
+    - docs/2026-11-15-zen-ui-audit.md
+    - scripts/check-zen-ui.mjs
+    - scripts/zen-ui-baseline.json
+  capabilities:
+    - ui-visual-language
+    - ui-information-architecture
+    - ui-accessibility
+  exclusions:
+    - ui/src/domain
+    - ui/src/application
+outcomes:
+  - id: wavecode-zen-minimal-ui-outcome-language
+    statement: |
+      У интерфейса есть один описанный визуальный язык (в текущем
+      коде — Chroma Indigo Spectrum), и `docs/design.md` совпадает
+      с ним; отдельного «phosphor/CRT»-описания в документации нет.
+  - id: wavecode-zen-minimal-ui-outcome-reachability
+    statement: |
+      Каждый реализованный инструмент (score, step grid, piano,
+      mixer, AI, voice, presets, console, share) достижим из
+      состояния покоя не более чем за одно действие и не зависит
+      от знания скрытых хоткеев.
+  - id: wavecode-zen-minimal-ui-outcome-no-dangling-tokens
+    statement: |
+      Число обращений к несуществующим токенам в `ui/src/styles`
+      равно нулю (`node scripts/check-zen-ui.mjs --strict`).
+  - id: wavecode-zen-minimal-ui-outcome-a11y-floor
+    statement: |
+      Интерактивные цели не меньше 24×24 CSS px, у каждой есть
+      видимый `:focus-visible`, контраст текста ≥ 4.5:1.
+obligations:
+  - id: wavecode-zen-minimal-ui-kernel-validates
+    claim: |
+      The decision file is structurally valid under the math-coding 3.3
+      schema; `mathc validate` exits 0 for `decisions/<id>.yaml` at HEAD.
+    acceptance:
+      all:
+        - verifier: "mathc validate"
+          result: pass
+  - id: wavecode-zen-minimal-ui-guard-green
+    claim: |
+      The zen-UI guard reports no regression against the recorded
+      baseline: no growth in dangling tokens, hardcoded colors,
+      `outline: none`, infinite animations, sheet/fab/overlay
+      selectors or CSS lines, and no loss of `:focus-visible` rules.
+    acceptance:
+      all:
+        - verifier: "node scripts/check-zen-ui.mjs"
+          result: pass
+  - id: wavecode-zen-minimal-ui-audit-exists
+    claim: |
+      The audit that grounds this decision is committed and names the
+      measured evidence (token inventory, surface map, journey map).
+    acceptance:
+      all:
+        - verifier: "test -f docs/2026-11-15-zen-ui-audit.md"
+          result: pass
+  - id: wavecode-zen-minimal-ui-quality-gate
+    claim: |
+      The repository quality gate stays green after the change:
+      typecheck, unit tests, domain lint and preset validation.
+    acceptance:
+      all:
+        - verifier: "cd ui && npm run test:precommit"
+          result: pass
+negative_control: |
+  `node scripts/check-zen-ui.mjs` has teeth: removing a single token
+  definition (`--space-md`) from `ui/src/styles/tokens.css` in a
+  scratch copy of the tree raises `danglingRefs` from 25 to 193 and
+  the guard exits 1 with `danglingRefs: 193 > baseline 25`. The same
+  holds for the focus-floor rule: deleting `:focus-visible` rules
+  drops `focusVisibleSelectors` below the recorded floor and the
+  guard fails.
+counterexample: |
+  The strongest objection is that a "zen" interface without visible
+  chrome hides exactly the affordances a newcomer needs, and that the
+  reachable-by-one-action guarantee is a promise the current mobile
+  layout cannot keep without turning into a dock of icons — the very
+  clutter this decision claims to remove. The objection is
+  acknowledged but does not survive the evidence: the corpus already
+  contains two incompatible navigation contracts, which means the
+  present cost is duplication, not minimalism; and NN/g's
+  progressive-disclosure guidance caps disclosure at two levels, so
+  a tool sheet reached in one action satisfies both the reachability
+  guarantee and the depth limit.
+antithesis: |
+  The coherent counter-position is to keep the expressive,
+  high-density "synthwave terminal" language and simply prune the
+  obviously broken parts (dangling tokens, missing focus rings,
+  duplicated tabs), treating visual restraint as a matter of taste
+  rather than a commitment. It was considered and rejected because
+  it leaves the two active contradictory navigation contracts in
+  force and because the measured gaps are not aesthetic preferences:
+  25 silently dropped visual properties, 129 hover rules against 13
+  focus rules, and 15 `outline: none` declarations mean parts of the
+  interface are currently broken for keyboard and touch users rather
+  than merely loud.
+assumptions:
+  - id: wavecode-zen-minimal-ui-assumption-touch-primary
+    state: assumed
+    statement: |
+      The primary use context is a phone or tablet held in one hand,
+      so a one-action reach rule must hold for touch, not only for
+      mouse and keyboard.
+    owner: human:operator
+    consequence_if_false: |
+      If the primary context is a desktop monitor, the dock may
+      become a persistent left rail with deeper disclosure.
+risk:
+  declared_triggers:
+    - tool-reachability-regression
+    - focus-visibility-regression
+    - visual-language-drift
+    - navigation-contract-ambiguity
+  owner: human:operator
+reversal:
+  - signal: |
+      Reachability tests fail for a shipped tool, or users report
+      that a tool "disappeared" from the interface.
+    action: rework
+  - signal: |
+      Time-to-first-sound or task completion in the usability pass
+      gets worse against the pre-change baseline.
+    action: review
+relations:
+  supersedes:
+    - wavecode-modern-mobile-redesign@1
+    - wavecode-bottom-bar-unified@1
+    - wavecode-voice-fab@1
+  refines:
+    - wavecode-ui-minimal-pass@1
+    - wavecode-ui-minimal-pass-phase-2@1
+    - wavecode-voice-minimal-dock@1
+    - wavecode-palette-rebalance@1
+    - wavecode-transport-always-visible@1
+  addresses:
+    - wavecode-bootstrap-math-coding-3.3@1

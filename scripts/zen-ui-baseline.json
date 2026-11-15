@@ -1,0 +1,150 @@
+{
+  "recordedAt": "2026-11-15T11:01:22.883Z",
+  "note": "Baseline of the minimal/zen UI guard. Metrics listed as MAX must not grow; MIN must not shrink.",
+  "metrics": {
+    "tokensDefined": 144,
+    "tokensUsed": 133,
+    "danglingRefs": 25,
+    "hardcodedColors": 14,
+    "hoverSelectors": 129,
+    "focusVisibleSelectors": 13,
+    "outlineNone": 15,
+    "infiniteAnimations": 25,
+    "keyframes": 31,
+    "surfaceClasses": 91,
+    "sheetClasses": 15,
+    "drawerClasses": 2,
+    "modalClasses": 28,
+    "fabClasses": 10,
+    "panelClasses": 36,
+    "cssFiles": 7,
+    "cssLines": 9752
+  },
+  "dangling": [
+    {
+      "token": "--amber",
+      "file": "ui/src/styles/components.css",
+      "line": 982
+    },
+    {
+      "token": "--amber",
+      "file": "ui/src/styles/components.css",
+      "line": 984
+    },
+    {
+      "token": "--shadow-modal",
+      "file": "ui/src/styles/components.css",
+      "line": 1009
+    },
+    {
+      "token": "--cyan-tint",
+      "file": "ui/src/styles/components.css",
+      "line": 1188
+    },
+    {
+      "token": "--amber",
+      "file": "ui/src/styles/components.css",
+      "line": 1244
+    },
+    {
+      "token": "--amber",
+      "file": "ui/src/styles/components.css",
+      "line": 1246
+    },
+    {
+      "token": "--shadow-modal",
+      "file": "ui/src/styles/components.css",
+      "line": 1289
+    },
+    {
+      "token": "--err-glow",
+      "file": "ui/src/styles/components.css",
+      "line": 2182
+    },
+    {
+      "token": "--z-popover",
+      "file": "ui/src/styles/components.css",
+      "line": 2540
+    },
+    {
+      "token": "--fg-muted",
+      "file": "ui/src/styles/components.css",
+      "line": 2598
+    },
+    {
+      "token": "--fg-muted",
+      "file": "ui/src/styles/components.css",
+      "line": 2631
+    },
+    {
+      "token": "--z-popover",
+      "file": "ui/src/styles/components.css",
+      "line": 2657
+    },
+    {
+      "token": "--fg-muted",
+      "file": "ui/src/styles/components.css",
+      "line": 2672
+    },
+    {
+      "token": "--lh-snug",
+      "file": "ui/src/styles/components.css",
+      "line": 2678
+    },
+    {
+      "token": "--fg-muted",
+      "file": "ui/src/styles/components.css",
+      "line": 2821
+    },
+    {
+      "token": "--fg-muted",
+      "file": "ui/src/styles/components.css",
+      "line": 2913
+    },
+    {
+      "token": "--dur-base",
+      "file": "ui/src/styles/components.css",
+      "line": 4226
+    },
+    {
+      "token": "--ls-wider",
+      "file": "ui/src/styles/components.css",
+      "line": 4861
+    },
+    {
+      "token": "--amber",
+      "file": "ui/src/styles/components.css",
+      "line": 5058
+    },
+    {
+      "token": "--amber",
+      "file": "ui/src/styles/components.css",
+      "line": 5059
+    },
+    {
+      "token": "--amber",
+      "file": "ui/src/styles/components.css",
+      "line": 5060
+    },
+    {
+      "token": "--fg-muted",
+      "file": "ui/src/styles/components.css",
+      "line": 5165
+    },
+    {
+      "token": "--dur-fast",
+      "file": "ui/src/styles/components.css",
+      "line": 6165
+    },
+    {
+      "token": "--bg",
+      "file": "ui/src/styles/components.css",
+      "line": 6214
+    },
+    {
+      "token": "--dur-fast",
+      "file": "ui/src/styles/components.css",
+      "line": 6264
+    }
+  ]
+}
