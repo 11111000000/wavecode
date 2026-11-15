@@ -506,6 +506,14 @@ describe('pianoRecStore — applyToScore at-cursor slot', () => {
         effects: unknown;
       }) => void;
       destroyed: boolean;
+      /**
+       * `flashRange` schedules a timer that reads `view.dom.isConnected`
+       * — real `EditorView` always has `dom`, so the mock must too.
+       * Without it the timer throws an unhandled TypeError AFTER the
+       * test file has finished, and Vitest then blames whichever test
+       * file happens to be running at that moment.
+       */
+      dom: { isConnected: boolean };
     };
     dispatches: Array<{
       changes: { from: number; to: number; insert: string };
@@ -534,6 +542,7 @@ describe('pianoRecStore — applyToScore at-cursor slot', () => {
         dispatches.push(tr);
       },
       destroyed: false,
+      dom: { isConnected: true },
     };
     return { view, dispatches };
   };
@@ -595,6 +604,34 @@ describe('pianoRecStore — applyToScore at-cursor slot', () => {
     const tr = dispatches[0]!;
     expect(tr.changes.from).toBe(5);
     expect(tr.changes.to).toBe(12);
+  });
+
+  /**
+   * Regression: `flashRange` clears the flash highlight from a
+   * `setTimeout` (FLASH_DURATION_MS = 1200 ms). The timer reads
+   * `view.dom.isConnected` — a real `EditorView` always has `dom`,
+   * but a mock without it throws an UNHANDLED TypeError long after
+   * this test file has finished. Vitest then attributes the crash to
+   * whichever test file happens to be running at that moment, which
+   * made the whole suite fail with a misleading "unrelated" file.
+   *
+   * The test waits past the timer so the callback really fires.
+   */
+  it('flash-clear timer fires and dispatches the clear effect', async () => {
+    const s = await importStore();
+    s.setPianoSlot('at-cursor');
+    s.appendNote(60, 0, 100);
+    const { view, dispatches } = makeMockView(10);
+    s.setPianoEditorApi({ getView: () => view as never });
+    s.applyToScore();
+    // The flash effect was dispatched synchronously.
+    expect(dispatches.length).toBeGreaterThanOrEqual(1);
+    const before = dispatches.length;
+    // Wait past FLASH_DURATION_MS so the clear-timer fires inside the
+    // test — an exception here would fail THIS file, not another one.
+    await new Promise((r) => setTimeout(r, 1300));
+    // The timer cleared the highlight with one more dispatch.
+    expect(dispatches.length).toBe(before + 1);
   });
 });
 

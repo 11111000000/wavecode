@@ -342,6 +342,10 @@ describe('PianoToolbar — slot selector (wavecode-piano-rec-clarity)', () => {
         dispatches.push(tr);
       },
       destroyed: false,
+      // `flashRange` reads `view.dom.isConnected` from a timer that
+      // fires after the test file ends — real `EditorView` always has
+      // `dom`, so the mock must too (otherwise: unhandled TypeError).
+      dom: { isConnected: true },
     };
     rec.setPianoEditorApi({ getView: () => fakeView as never });
     rec.setEditorFocused(true);
