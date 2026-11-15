@@ -1,0 +1,246 @@
+---
+schema: math-coding/3.3
+id: wavecode-zen-ui-phases-6-7
+revision: 1
+state: active
+body_sha: "sha256:fba27759b6a96e2d4696fac9b93b516b9cf511b1ac7f9aac0af08cd55231d38c"
+yaml_sha: "sha256:fba27759b6a96e2d4696fac9b93b516b9cf511b1ac7f9aac0af08cd55231d38c"
+
+intent: |
+  Фазы 6 («Тишина по умолчанию») и 7 («Замер») плана
+  `docs/2026-11-15-zen-ui-plan.md` — последние две фазы редизайна,
+  закрывающие его целиком.
+
+  Фаза 6 убирает шум из интерфейса. К моменту её начала три вещи
+  кричали о себе без необходимости:
+    * ошибка уходила в админку (`⚠` → `/admin`) или терялась в молчаливом
+      сэмпле — пользователь не знал, что сломалось;
+    * состояние приложения было размазано: счётчик сэмплов в верхней
+      панели, индикатор офлайна где-то ещё, LED аудио отдельно;
+    * транспортная строка показывала CPS, swing и пресеты темпа сразу —
+      шесть интерактивных регионов там, где нужен один play;
+    * мини-нотация (14 кнопок) и отладочная строка висели в партитуре
+      постоянно;
+    * интерфейс был двуязычным: русские подписи рядом с английскими.
+
+  Фаза 7 измеряет результат. После шести фаз структурных изменений
+  «выглядит хорошо» — не аргумент: нужен снимок эталона и число,
+  которое можно ухудшить.
+
+  Это решение фиксирует ЧТО именно реализовано в фазах 6–7 и чем
+  это проверяется.
+commitment: |
+  1. **Один регион ошибок.** Ошибки больше не живут в тостах и не
+     ведут в админку: под холстом появляется `ErrorRegion`
+     (`data-testid="error-region"`) с текстом ошибки, действием
+     «Повторить» и ссылкой «Подробнее». Тост — только мимолётные
+     сообщения, и в интерфейсе он один (последний по времени).
+  2. **Одно место состояния.** `StatusStrip` (`data-testid="status-strip"`)
+     в верхней панели показывает состояние аудио, счётчик сэмплов и
+     индикатор офлайна. Показывается честный `audio.status`
+     («играет» / «ошибка» / «остановлен»), а не состояние AudioContext:
+     контекст остаётся `running` и после «Стоп», и по нему нельзя
+     понять, звучит ли музыка. **Кнопка play/stop читает тот же
+     статус.** Раньше она считала «играет ли» по состоянию
+     AudioContext, которое обновляется раз в полсекунды: кнопка
+     успевала показать «Стоп» вместо «Запуск», а нажатие «Запуск» в
+     гонке с опросом превращалось в «Стоп» и выключало только что
+     запущенную музыку.
+  3. **Транспорт — «play · темп · позиция».** Ровно три показания и
+     одна кнопка play в строке. CPS, свинг и готовые темпы — за
+     раскрытием «▼ Темп». Выбор композиции уехал в лист «Инструменты».
+     Раньше строка транспорта дублировала `TransportPanel` — дубль
+     удалён.
+  4. **Диагностика и мини-нотация — за раскрытием.** Переключатель
+     вида, 14 кнопок мини-нотации и отладочная строка живут под
+     «⋯ Ещё» под партитурой; раскрытие закрыто по умолчанию на всех
+     экранах.
+  5. **Один язык интерфейса.** Пользовательские подписи — на русском.
+     Служебные перечисления не переименовываются (их значения участвуют
+     в логах и фильтрах), но на экран выводятся через `labels.ts`.
+     Имена пресетов и артистов — имена собственные, они не переводятся.
+  6. **Baseline в репозитории.** `ui/tests/baseline/desktop-1440.png`
+     и `ui/tests/baseline/mobile-390.png` снимаются скриптом
+     `scripts/capture-baseline.mjs` и лежат в репозитории.
+  7. **Время до первого звука измеряется.** `first-sound.spec.mjs`
+     проходит путь «лендинг → Создать → Запуск» и замеряет появление
+     сигнала в миксе (RMS анализатора), потолок — 30 секунд.
+  8. **Контролы обещают то, что делают.** Полный e2e-прогон фазы 6
+     вскрыл две поломки, которые пользователю обещали работу, а её
+     не было: слот «⌖ курсор» в пианино нельзя было включить никогда
+     (`editorApi` была обычной переменной, и `createEffect` на неё не
+     подписывался — слушатели фокуса редактора не подключались), а
+     выбор слота забирал фокус у редактора, из-за чего слот
+     блокировался ещё до доставки `click`.
+axiom_link:
+  - A1
+scope:
+  paths:
+    - ui/src/presentation
+    - ui/src/styles
+    - ui/src/App.tsx
+    - ui/tests/e2e
+    - ui/tests/baseline
+    - scripts/capture-baseline.mjs
+    - scripts/zen-ui-baseline.json
+  capabilities:
+    - ui-visual-language
+    - ui-information-architecture
+    - ui-content-truthfulness
+    - ui-observability
+  exclusions:
+    - ui/src/domain
+    - ui/src/application
+outcomes:
+  - id: wavecode-zen-ui-phases-6-7-outcome-errors
+    statement: |
+      У пользователя один адрес для ошибок — регион под холстом: с
+      текстом ошибки, действием «Повторить» и ссылкой «Подробнее» на
+      консоль. Ссылка «⚠» на `/admin` из верхней панели убрана,
+      молчаливый сэмпл больше не остаётся без реакции.
+  - id: wavecode-zen-ui-phases-6-7-outcome-status
+    statement: |
+      Состояние аудио, загрузка сэмплов и офлайн читаются из одной
+      строки в верхней панели. Строка показывает, звучит ли музыка
+      сейчас, а не состояние аудиоконтекста; кнопка play/stop
+      показывает и переключает то же самое.
+  - id: wavecode-zen-ui-phases-6-7-outcome-quiet
+    statement: |
+      В дефолтном виде транспорт — это «play · темп · позиция», а
+      14 кнопок мини-нотации и отладочная строка спрятаны под
+      раскрытием «⋯ Ещё».
+  - id: wavecode-zen-ui-phases-6-7-outcome-language
+    statement: |
+      Пользовательские подписи интерфейса — на русском; английские
+      слова остались только в именах собственных (пресеты, артисты) и
+      в служебных значениях, которые на экран не выводятся напрямую.
+  - id: wavecode-zen-ui-phases-6-7-outcome-measured
+    statement: |
+      В репозитории лежат baseline-скриншоты дефолтного вида на двух
+      размерах экрана, а время до первого звука с лендинга измеряется
+      e2e-сценарием и укладывается в 30 секунд.
+obligations:
+  - id: wavecode-zen-ui-phases-6-7-guard-targets
+    claim: |
+      The zen guard reports the phase-1 targets met and no regression
+      against the re-recorded baseline: no dangling token reference, no
+      hardcoded colour outside the token file, at most one infinite
+      animation.
+    acceptance:
+      all:
+        - verifier: "node scripts/check-zen-ui.mjs --targets"
+          result: pass
+  - id: wavecode-zen-ui-phases-6-7-quality-gate
+    claim: |
+      The repository quality gate is green: typecheck, unit tests,
+      console lint and preset validation.
+    acceptance:
+      all:
+        - verifier: "cd ui && npm run test:precommit"
+          result: pass
+  - id: wavecode-zen-ui-phases-6-7-error-region
+    claim: |
+      An unhandled promise rejection reaches the user as an entry in the
+      error region below the canvas, not as a toast and not as a silent
+      log line.
+    acceptance:
+      all:
+        - verifier: "cd ui && npx playwright test tests/e2e/console.spec.ts"
+          result: pass
+  - id: wavecode-zen-ui-phases-6-7-first-sound
+    claim: |
+      The time from landing page load to the first audible signal is
+      measured and stays within thirty seconds.
+    acceptance:
+      all:
+        - verifier: "cd ui && npx playwright test tests/e2e/first-sound.spec.mjs"
+          result: pass
+  - id: wavecode-zen-ui-phases-6-7-baseline-present
+    claim: |
+      The visual baseline of the default editor view exists in the
+      repository for both a desktop and a mobile viewport.
+    acceptance:
+      all:
+        - verifier: "node scripts/capture-baseline.mjs --check"
+          result: pass
+  - id: wavecode-zen-ui-phases-6-7-transport-toggle
+    claim: |
+      The transport play/stop control follows the application's audio
+      status: it reads «Стоп» while `audio.status` is `playing` and
+      «Запуск» otherwise, so a press on «Запуск» starts playback
+      instead of stopping what is already playing.
+    acceptance:
+      all:
+        - verifier: "cd ui && npx vitest run src/presentation/state/audioActions.test.ts src/presentation/components/app/StatusStrip.test.tsx"
+          result: pass
+  - id: wavecode-zen-ui-phases-6-7-kernel-validates
+    claim: |
+      The decision file is structurally valid under the math-coding 3.3
+      schema.
+    acceptance:
+      all:
+        - verifier: "mathc validate"
+          result: pass
+negative_control: |
+  `scripts/capture-baseline.mjs --check` has teeth: removing either PNG
+  from `ui/tests/baseline/` (or replacing it with a file under 10 KB)
+  makes the check exit 1. The error-region e2e has teeth as well: an
+  unhandled rejection that only reached the logger would leave
+  `[data-testid="error-region"]` empty, and the assertion on
+  «Необработанный отказ промиса» would fail. The transport-toggle
+  check has teeth in the same way: if `audioRunning()` went back to
+  reading the AudioContext, the unit test that maps
+  `audio.status → running` would fail for the `stopped` and `error`
+  cases.
+counterexample: |
+  The strongest objection is that the error region adds a permanent
+  surface below the canvas, and a separate Russian translation of the
+  whole interface doubles the maintenance cost of every future label
+  while breaking links, screenshots and e2e expectations that were
+  written against the English wording. The objection is acknowledged for
+  the translation: it is accepted as the cost of one language — the
+  product is Russian-speaking, and a mixed interface is a defect, not a
+  neutral choice. The error region, however, is conditional: it renders
+  nothing at all until something actually fails, so in the resting view
+  it costs zero pixels.
+antithesis: |
+  The coherent alternative was to keep errors inside the toast channel
+  and just translate the visible strings. It was rejected because the
+  toast is a disappearing notification for transient information: a user
+  who missed it loses the error permanently, and the action «Повторить»
+  needs a stable anchor. Errors and transient messages are different
+  kinds of information and get different lifecycles.
+assumptions:
+  - id: wavecode-zen-ui-phases-6-7-assumption-russian
+    state: assumed
+    statement: |
+      The audience is Russian-speaking; a single-language interface is
+      worth the re-translation cost, and English is reserved for proper
+      names and technical identifiers.
+    owner: human:operator
+    consequence_if_false: |
+      If the product goes international, the translation table in
+      `labels.ts` becomes the seam for a real i18n layer instead of a
+      Russian-only map.
+risk:
+  declared_triggers:
+    - error-region-ignored
+    - time-to-first-sound-regression
+    - translation-drift
+    - transport-density-regression
+  owner: human:operator
+reversal:
+  - signal: |
+      Users report that the error region went unnoticed, or that
+      transient toasts are missed because the error region steals the
+      attention.
+    action: rework
+  - signal: |
+      Time to first sound grows beyond the thirty-second budget on the
+      production deployment.
+    action: review
+relations:
+  implements:
+    - wavecode-zen-ui-implementation@1
+  refines:
+    - wavecode-zen-minimal-ui@2
