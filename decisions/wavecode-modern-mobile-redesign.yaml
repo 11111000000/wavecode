@@ -2,9 +2,9 @@
 schema: math-coding/3.3
 id: wavecode-modern-mobile-redesign
 revision: 1
-state: active
-body_sha: "sha256:e2df868835f189ebc213ff241b7afef7ce155a65a5c8aa1a6dc59972ce7dab38"
-yaml_sha: "sha256:e2df868835f189ebc213ff241b7afef7ce155a65a5c8aa1a6dc59972ce7dab38"
+state: superseded
+body_sha: "sha256:0959e38580014d4f287ddfaf19f3f64e7df1401d2179c5b7c955e4e3e814bd6c"
+yaml_sha: "sha256:0959e38580014d4f287ddfaf19f3f64e7df1401d2179c5b7c955e4e3e814bd6c"
 
 intent: |
   Визуальный язык wavecode — «Synthwave Modern Terminal»: mobile-first
@@ -83,3 +83,5 @@ risk:
 relations:
   addresses:
     - wavecode-bootstrap-math-coding-3.3@1
+  superseded_by:
+    - wavecode-zen-minimal-ui@1

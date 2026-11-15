@@ -2,9 +2,9 @@
 schema: math-coding/3.3
 id: wavecode-bottom-bar-unified
 revision: 1
-state: active
-body_sha: "sha256:7a8a438d42550a678cbedf293a482fc226b3b5afb7eecba7ff5b77b97c291064"
-yaml_sha: "sha256:7a8a438d42550a678cbedf293a482fc226b3b5afb7eecba7ff5b77b97c291064"
+state: superseded
+body_sha: "sha256:69ae68748931238855c159559dcb1fc1fa861d239e638ce2ec2895ab96502bd3"
+yaml_sha: "sha256:69ae68748931238855c159559dcb1fc1fa861d239e638ce2ec2895ab96502bd3"
 
 intent: |
   BottomToolstrip (отдельный fixed-bar над TabBar с 3 кнопками
@@ -87,3 +87,5 @@ risk:
 relations:
   addresses:
     - wavecode-bootstrap-math-coding-3.3@1
+  superseded_by:
+    - wavecode-zen-minimal-ui@1

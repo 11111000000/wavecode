@@ -3,8 +3,8 @@ schema: math-coding/3.3
 id: wavecode-voice-minimal-dock
 revision: 1
 state: active
-body_sha: "sha256:7fd47880aa30046df68e93eb34c04ac3b3241d443ebbb7735d281c0be3b96ef5"
-yaml_sha: "sha256:7fd47880aa30046df68e93eb34c04ac3b3241d443ebbb7735d281c0be3b96ef5"
+body_sha: "sha256:244b9d8ecd87e9919ad1b7c8c59cb17464d9250271012192e990a27ebf6dd53b"
+yaml_sha: "sha256:244b9d8ecd87e9919ad1b7c8c59cb17464d9250271012192e990a27ebf6dd53b"
 
 intent: |
   Голосовой ввод был размазан по ЧЕТЫРЁМ поверхностям, и три из них
@@ -228,7 +228,7 @@ obligations:
       есть в том же `@layer tokens`, что и базовое значение.
     acceptance:
       all:
-        - verifier: shell-grep ui/src/styles/tokens.css max-width: 720px
+        - verifier: "shell-grep ui/src/styles/tokens.css max-width: 720px"
   - id: no-pulse-keyframes-in-voice-cluster
     claim: |
       В голосовом блоке `ui/src/styles/components.css` нет
