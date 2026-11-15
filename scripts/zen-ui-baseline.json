@@ -1,12 +1,12 @@
 {
-  "recordedAt": "2026-11-15T13:26:38.156Z",
+  "recordedAt": "2026-11-15T15:11:29.147Z",
   "note": "Baseline of the minimal/zen UI guard. Metrics listed as MAX must not grow; MIN must not shrink.",
   "metrics": {
     "tokensDefined": 136,
     "tokensUsed": 117,
     "danglingRefs": 0,
     "hardcodedColors": 0,
-    "hoverSelectors": 144,
+    "hoverSelectors": 147,
     "focusVisibleSelectors": 27,
     "outlineNone": 15,
     "infiniteAnimations": 1,
@@ -18,7 +18,7 @@
     "fabClasses": 12,
     "panelClasses": 41,
     "cssFiles": 9,
-    "cssLines": 10916
+    "cssLines": 11082
   },
   "dangling": []
 }

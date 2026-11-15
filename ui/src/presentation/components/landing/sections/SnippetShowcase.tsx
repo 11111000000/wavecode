@@ -12,7 +12,7 @@ type PresetItem = {
 };
 
 const PRESETS: ReadonlyArray<PresetItem> = [
-  { id: 'creep',          name: 'Creep',           genre: 'Индie-рок · Radiohead',   tone: 'primary'   },
+  { id: 'creep',          name: 'Creep',           genre: 'Инди-рок · Radiohead',   tone: 'primary'   },
   { id: 'edm-house',      name: 'EDM 4-on-floor',   genre: 'Хаус · 128 BPM',           tone: 'cyan'    },
   { id: 'hiphop-boombap', name: 'Хип-хоп',          genre: '90-е · Нью-Йорк',          tone: 'magenta' },
   { id: 'jazz-ii-v-i',    name: 'Джаз ii-V-I',      genre: 'Бибоп · ходячий бас',     tone: 'primary'   },

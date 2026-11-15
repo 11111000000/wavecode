@@ -1923,28 +1923,6 @@ button:not([disabled]):not(.no-shrink):active {
 }
 
 /* =========================================================================
- *  AUDIO LOADING PILL — sample-bank preload progress indicator.
- *  Показывается в TopBar пока registerBank() не завершил все три банка
- *  (piano / drums / synth). CSS-only pulse, не зависит от JS animation.
- * ========================================================================= */
-
-.audio-loading-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2xs);
-  padding: 2px var(--space-xs);
-  background: var(--primary-soft);
-  color: var(--primary);
-  border: 1px solid var(--primary);
-  border-radius: var(--radius-pill);
-  font-family: var(--font-mono);
-  font-size: var(--fs-2xs);
-  font-weight: var(--fw-semibold);
-  letter-spacing: var(--ls-wide);
-  text-transform: lowercase;
-}
-
-/* =========================================================================
  *  CONSOLE UI — Toast stack + ConsoleButton + ConsoleSheet
  *  (replaces the old DebugPanel; see math/wavecode-debug-console/packet.md)
  * ========================================================================= */
@@ -2456,23 +2434,6 @@ button:not([disabled]):not(.no-shrink):active {
   border-radius: var(--radius-pill);
 }
 
-/* ── /admin contextual warn badge (only when appStore.audio.lastError) ── */
-
-.wc-admin-warn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 22px;
-  height: 22px;
-  border-radius: var(--radius-full);
-  background: var(--magenta-soft);
-  color: var(--magenta);
-  border: 1px solid var(--magenta);
-  font-family: var(--font-mono);
-  font-size: var(--fs-sm);
-  text-decoration: none;
-}
-
 /* ── TopBar overflow menu (⋯) ─────────────────────────────────────────── */
 
 .wc-overflow-menu {
@@ -2777,36 +2738,15 @@ button:not([disabled]):not(.no-shrink):active {
   font-family: var(--font-mono);
   font-size: var(--fs-2xs);
   font-weight: var(--fw-regular);
-  text-transform: lowercase;
   letter-spacing: var(--ls-tight);
   opacity: 0.7;
 }
 .cps-preset-btn:hover { color: var(--primary); border-color: var(--primary); opacity: 1; }
 
-.bpm-indicator {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 2px;
-  padding: 0 var(--space-md);
-  height: 32px;
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-pill);
-  font-family: var(--font-mono);
-  font-size: var(--fs-sm);
-  color: var(--fg);
-  white-space: nowrap;
-}
-.bpm-indicator strong {
-  font-weight: var(--fw-semibold);
-  color: var(--cyan);
-  font-size: var(--fs-sm);
-}
 .bpm-suffix {
   font-size: var(--fs-2xs);
   color: var(--fg-dim);
   letter-spacing: var(--ls-wide);
-  text-transform: lowercase;
   margin-left: 2px;
 }
 
@@ -2874,12 +2814,11 @@ button:not([disabled]):not(.no-shrink):active {
 .swing-divisor:hover { opacity: 1; color: var(--primary); border-bottom-color: var(--primary); }
 
 @media (max-width: 720px) {
-  /* На мобиле сворачиваем TransportPanel в компактный чип:
-   *   play · cps · bpm. Swing и CPS-пресеты прячем — они нужны
-   *   только при тонком тюнинге, и при включённой AI-панели они
-   *   "раздувают" PresetRow до 3 строк, выдавливая редактор.
-   *   Скрытие деталей, а не функциональности: swing/пресеты
-   *   живут в keyboard shortcuts / persistent state.
+  /* На мобиле транспорт — одна строка «play · темп · позиция».
+   *   Swing и готовые темпы прячем: они нужны только при тонком
+   *   тюнинге, а строка должна остаться строкой, а не панелью
+   *   управления. Скрытие деталей, а не функциональности: свинг
+   *   и пресеты живут за раскрытием «▼ Темп».
    */
   .swing-control,
   .cps-presets,
@@ -3008,13 +2947,6 @@ button:not([disabled]):not(.no-shrink):active {
   overflow: hidden;
 }
 .score-panel-inner > .cm-host { flex: 1 1 auto; min-height: 140px; height: auto; }
-.score-panel-inner > .score-debug {
-  flex-shrink: 0;
-  padding: var(--space-sm) var(--space-md);
-  border-top: 1px solid var(--border);
-  background: var(--surface-1);
-}
-
 .ai-panel {
   background: var(--surface-0);
   display: flex;
@@ -3445,27 +3377,6 @@ textarea.ai-textarea:focus-visible {
   min-width: 0;
 }
 
-/* Preset select fills the strip horizontally between Play and toggle.
- * Preset must be ALWAYS visible (user request 2026-10-14: «композиция
- * должна быть всегда видна»), BPM slider is the expandable one. */
-.app-transport-bar__strip .app-transport-bar__preset {
-  flex: 1 1 auto;
-  min-width: 0;
-  display: flex;
-}
-.app-transport-bar__strip .app-transport-bar__preset .preset-select {
-  flex: 1 1 auto;
-  min-width: 0;
-  width: 100%;
-}
-
-/* bpm-indicator when inside the body: same pill style as the strip
- * version, but stacked above the cps slider for context. */
-.bpm-indicator--in-body {
-  align-self: flex-start;
-  margin-bottom: var(--space-2xs);
-}
-
 .app-transport-bar__toggle {
   display: inline-flex;
   align-items: center;
@@ -3514,18 +3425,6 @@ textarea.ai-textarea:focus-visible {
   border-top: 1px solid var(--border);
   padding-top: var(--space-xs);
   background: rgba(0, 0, 0, 0.18);
-}
-
-.app-transport-bar__preset {
-  display: flex;
-  gap: var(--space-xs);
-  align-items: center;
-  flex-wrap: wrap;
-}
-
-.app-transport-bar__preset .preset-select {
-  flex: 1 1 200px;
-  min-width: 0;
 }
 
 /* Back-compat: legacy class names (kept for any straggler refs). */
@@ -3801,10 +3700,12 @@ textarea.ai-textarea:focus-visible {
 .status-suspended  { color: var(--warn); }
 .status-closed     { color: var(--err); }
 
+/* wavecode-zen-ui-phases-6-7 (фаза 6): отладочная строка живёт за
+ * раскрытием «⋯ Ещё» под партитурой. */
 .score-debug {
   display: flex;
   gap: var(--space-lg);
-  margin-top: var(--space-sm);
+  padding: var(--space-2xs) 0;
   font-size: var(--fs-xs);
   color: var(--fg-dim);
   font-family: var(--font-mono);
@@ -3812,38 +3713,6 @@ textarea.ai-textarea:focus-visible {
   align-items: center;
 }
 .score-debug .debug-err { color: var(--err); word-break: break-word; }
-
-/* wavecode-toast-overhead-and-toolbar-toggle: маленькая кнопка
- * в score-debug row для toggle MiniNotationToolbar. Compact chip
- * style — height 28px (ниже touch-target floor 44, но это
- * secondary control рядом с debug-info, не primary action).
- * data-active=true → cyan outline (toolbar открыт). */
-.snippet-toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2xs);
-  height: 28px;
-  padding: 0 var(--space-sm);
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-pill);
-  color: var(--fg-dim);
-  font-family: var(--font-mono);
-  font-size: var(--fs-2xs);
-  cursor: pointer;
-  user-select: none;
-  -webkit-tap-highlight-color: transparent;
-  transition:
-    color var(--dur-2xs) var(--ease),
-    border-color var(--dur-2xs) var(--ease),
-    background var(--dur-2xs) var(--ease);
-}
-.snippet-toggle:hover { color: var(--fg); border-color: var(--fg-dim); }
-.snippet-toggle[data-active='true'] {
-  color: var(--cyan);
-  border-color: var(--cyan);
-  background: var(--cyan-soft);
-}
 
 /* =========================================================================
  *  MIDI I/O BAR

@@ -2,6 +2,7 @@ import { createSignal, For, Show, type JSX } from 'solid-js';
 import { BottomSheet } from '~/presentation/components/BottomSheet';
 import { searchTools, type ToolEntry } from '~/presentation/state/toolRegistry';
 import { closeKindSheet } from '~/presentation/state/uiState';
+import { PresetPicker } from './PresetPicker';
 
 /**
  * ToolsSheet — один лист со всем, что не поместилось в рельс.
@@ -10,6 +11,11 @@ import { closeKindSheet } from '~/presentation/state/uiState';
  * больше не восемь вкладок внизу экрана, а сетка карточек в одном
  * листе с поиском. Глубина раскрытия остаётся ≤ 2: рельс → лист →
  * действие.
+ *
+ * wavecode-zen-ui-phases-6-7 (фаза 6): первым блоком листа идёт
+ * выбор композиции — раньше он стоял в транспортной строке и делал
+ * её втрое шире нужного. Строка транспорта теперь это ровно
+ * «play · темп · позиция».
  *
  * Список не дублируется вручную: карточки строятся из реестра
  * инструментов (см. state/toolRegistry.ts).
@@ -26,6 +32,7 @@ export function ToolsSheet(): JSX.Element {
   return (
     <BottomSheet kind="tools" title="Инструменты" subtitle="всё, что не в рельсе">
       <div class="wc-tools-sheet">
+        <PresetPicker />
         <label class="wc-tools-sheet__search">
           <span class="wc-visually-hidden">Поиск инструмента</span>
           <input

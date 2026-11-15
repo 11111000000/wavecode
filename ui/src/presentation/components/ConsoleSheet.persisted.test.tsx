@@ -131,7 +131,7 @@ describe('ConsoleSheet (persisted-errors restore)', () => {
     const { container, getByTestId } = render(() => <CS />);
     await waitFor(() => {
       const counts = container.querySelector('.console-counts')?.textContent ?? '';
-      expect(counts).toMatch(/2 entries · 2 errors/);
+      expect(counts).toMatch(/Записей: 2 · Ошибок: 2/);
     });
 
     const errorEntries = container.querySelectorAll('.console-entry-error');
@@ -151,7 +151,7 @@ describe('ConsoleSheet (persisted-errors restore)', () => {
     store.setConsoleOpen(true);
     const { container } = render(() => <CS />);
     await new Promise((r) => setTimeout(r, 20));
-    expect(container.textContent).toMatch(/0 entries · 0 errors/);
+    expect(container.textContent).toMatch(/Записей: 0 · Ошибок: 0/);
     expect(mockState.entries).toHaveLength(0);
   });
 
@@ -164,7 +164,7 @@ describe('ConsoleSheet (persisted-errors restore)', () => {
     const { container } = render(() => <CS />);
     await new Promise((r) => setTimeout(r, 20));
     expect(container.querySelector('[data-testid="console-body"]')).toBeTruthy();
-    expect(container.textContent).toMatch(/0 entries · 0 errors/);
+    expect(container.textContent).toMatch(/Записей: 0 · Ошибок: 0/);
     expect(store.consoleOpen()).toBe(true);
     expect(mockState.entries).toHaveLength(0);
   });

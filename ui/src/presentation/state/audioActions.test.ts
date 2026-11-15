@@ -343,3 +343,34 @@ describe('previewPreset / stopPreview — landing-page preset preview', () => {
     expect(runPromiseCount).toBe(3); // no late eval — timer was cleared
   });
 });
+
+/**
+ * `audioRunning` — единственный источник правды для кнопки play/stop.
+ *
+ * wavecode-zen-ui-phases-6-7 (фаза 6): раньше кнопка считала «играет
+ * ли» по состоянию AudioContext, которое обновляется раз в полсекунды
+ * и остаётся `running` после «Стоп». Теперь источник — статус
+ * приложения.
+ */
+describe('audioRunning — по статусу приложения, а не по AudioContext', () => {
+  it('false, пока статус stopped', async () => {
+    const { audioRunning } = await import('./audioActions');
+    const { dispatch } = await import('./appStore');
+    dispatch({ type: 'audioStatusChange', status: 'stopped' });
+    expect(audioRunning()).toBe(false);
+  });
+
+  it('true, когда статус playing', async () => {
+    const { audioRunning } = await import('./audioActions');
+    const { dispatch } = await import('./appStore');
+    dispatch({ type: 'audioStatusChange', status: 'playing' });
+    expect(audioRunning()).toBe(true);
+  });
+
+  it('false при ошибке — кнопка должна предлагать запустить заново', async () => {
+    const { audioRunning } = await import('./audioActions');
+    const { dispatch } = await import('./appStore');
+    dispatch({ type: 'audioStatusChange', status: 'error', error: 'boom' });
+    expect(audioRunning()).toBe(false);
+  });
+});

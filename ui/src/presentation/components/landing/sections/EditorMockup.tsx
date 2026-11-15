@@ -33,7 +33,7 @@ export function EditorMockup(): JSX.Element {
             <span class="l-mockup__spacer" />
             <span class="l-mockup__led">
               <span class="dot" />
-              <span>▶ running · 44.1 kHz</span>
+              <span>▶ играет · 44,1 кГц</span>
             </span>
             <div class="l-mockup__icons" aria-hidden="true">
               <span class="ico">↺</span>
@@ -55,7 +55,7 @@ export function EditorMockup(): JSX.Element {
 
           <div class="l-mockup__body">
             <div class="l-mockup__panel">
-              <div class="l-mockup__panel-head">score · creep.strudel</div>
+              <div class="l-mockup__panel-head">партитура · creep.strudel</div>
               <pre class="l-mockup__code" aria-hidden="true">
 {`// Creep (Radiohead) — G → B → C → Cm, ~92 BPM
 cat(
@@ -76,12 +76,12 @@ cat(
             </div>
 
             <div class="l-mockup__panel">
-              <div class="l-mockup__panel-head">chat · agent</div>
+              <div class="l-mockup__panel-head">чат · агент</div>
               <div class="l-mockup__chat">
                 <div class="l-mockup__msg l-mockup__msg-user">
                   <span class="l-mockup__msg-role">U</span>
                   <span class="l-mockup__msg-text">
-                    Сделай bass чуть глубже и добавь swing 16ths
+                    Сделай бас чуть глубже и добавь свинг на 16-х
                   </span>
                 </div>
                 <div class="l-mockup__msg l-mockup__msg-ai">
@@ -89,14 +89,14 @@ cat(
                   <span class="l-mockup__msg-text">
                     <div>edit_score(oldText: ".gain(0.4).lpf(300),", newText: ".gain(0.45).lpf(220).swing(0.4),")</div>
                     <div style={{ opacity: 0.5, 'font-size': '11px', 'margin-top': '4px' }}>
-                      Tool call · applied · audio re-eval
+                      Вызов инструмента · применено · звук пересобран
                     </div>
                   </span>
                 </div>
                 <div class="l-mockup__msg l-mockup__msg-ai">
                   <span class="l-mockup__msg-role">A</span>
                   <span class="l-mockup__msg-text">
-                    Готово. Bass стал 220 Hz на низком срезе, swing 0.4
+                    Готово. Бас стал 220 Гц на низком срезе, свинг 0.4
                     с 1/16 делает звук живее. Проверь сцену: stack
                     теперь дышит <span style={{ color: 'var(--primary)' }}>★</span>
                   </span>

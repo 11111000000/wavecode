@@ -64,7 +64,7 @@ const formatErrorEvent = (e: ErrorEvent): { title: string; body: string } => {
   if (e.filename) body += `@ ${e.filename}`;
   if (typeof e.lineno === 'number') body += `:${e.lineno}`;
   if (!body && e.error instanceof Error) body = e.error.stack ?? '';
-  return { title: 'JS error', body: `${message}${body ? '\n' + body : ''}` };
+  return { title: 'Ошибка JS', body: `${message}${body ? '\n' + body : ''}` };
 };
 
 const formatRejection = (
@@ -72,9 +72,9 @@ const formatRejection = (
 ): { title: string; body: string } => {
   const r = e.reason;
   if (r instanceof Error) {
-    return { title: 'Unhandled rejection', body: `${r.message}\n${r.stack ?? ''}` };
+    return { title: 'Необработанный отказ промиса', body: `${r.message}\n${r.stack ?? ''}` };
   }
-  return { title: 'Unhandled rejection', body: String(r) };
+  return { title: 'Необработанный отказ промиса', body: String(r) };
 };
 
 const pushIfFresh = (title: string, body: string): void => {

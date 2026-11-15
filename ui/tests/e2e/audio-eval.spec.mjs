@@ -12,17 +12,20 @@ test('Eval button plays audio without errors', { tag: '@smoke' }, async ({ page 
   // Solid mount.
   await page.waitForSelector('main.app', { timeout: 15000 });
 
-  // Initial status read.
-  const initialStatus = await page.locator('dl.status-grid dd').allTextContents();
+  // Initial status read (фаза 6: статус — в статус-кластере панели).
+  const initialStatus = await page
+    .locator('[data-testid="status-audio"]')
+    .textContent();
   console.log('initial:', JSON.stringify(initialStatus));
 
   // Click Eval (play).
   await page.locator('button[aria-label="Запуск"]').click();
   await page.waitForTimeout(2000);
 
-  const audioStatus = await page.locator('dl.status-grid dd').nth(1).textContent();
+  const audioStatus = (await page.locator('[data-testid="status-audio"]').textContent()) ?? '';
 
   expect(errors).toHaveLength(0);
-  // After Eval, status should be either playing or error (if Strudel failed to load).
-  expect(['playing', 'error']).toContain(audioStatus);
+  // After Eval, status should be either «играет» or «ошибка»
+  // (if Strudel failed to load). Статусы переведены (фаза 6).
+  expect(['▶ играет', '⚠ ошибка']).toContain(audioStatus.trim());
 });

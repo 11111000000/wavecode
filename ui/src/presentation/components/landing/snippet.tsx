@@ -32,7 +32,7 @@ export const HERO_SNIPPET: ReadonlyArray<SnippetLine> = [
   ],
   [
     { t: 'code', text: '  ' },
-    { t: 'comment', text: '// ===== VERSE (4 bars) — clean arpeggio + bass, no drums =====' },
+    { t: 'comment', text: '// ===== КУПЛЕТ (4 такта) — чистое арпеджио + бас, без ударных =====' },
   ],
   [
     { t: 'code', text: '  stack(' },
@@ -55,7 +55,7 @@ export const HERO_SNIPPET: ReadonlyArray<SnippetLine> = [
   ],
   [
     { t: 'code', text: '  ' },
-    { t: 'comment', text: '// ===== CHORUS (4 bars) — distorted triads + full kit =====' },
+    { t: 'comment', text: '// ===== ПРИПЕВ (4 такта) — перегруженные трезвучия + полный комплект =====' },
   ],
   [
     { t: 'code', text: '  stack(' },

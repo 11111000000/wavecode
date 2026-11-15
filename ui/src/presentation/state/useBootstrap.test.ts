@@ -1,6 +1,15 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook } from '@solidjs/testing-library';
 
+/**
+ * useBootstrap — композиция useAppBootstrap + useAutoSave.
+ *
+ * wavecode-zen-ui-phases-6-7 (фаза 6): из контракта убран
+ * `audioRunning` — производный от состояния AudioContext. Кнопка
+ * play/stop и строка состояния читают честный `appStore.audio.status`
+ * (см. `audioRunning` в audioActions.ts), а состояние контекста
+ * осталось телеметрией в подсказке.
+ */
 describe('useBootstrap — composes useAppBootstrap + useAutoSave', () => {
   beforeEach(() => {
     vi.resetModules();
@@ -14,7 +23,6 @@ describe('useBootstrap — composes useAppBootstrap + useAutoSave', () => {
     vi.doMock('./useAppBootstrap', () => ({
       useAppBootstrap: () => ({
         ctxState: () => ({ state: 'uninitialized', sampleRate: null }),
-        audioRunning: () => false,
       }),
     }));
     vi.doMock('./useAutoSave', () => ({ useAutoSave: () => undefined }));
@@ -22,14 +30,12 @@ describe('useBootstrap — composes useAppBootstrap + useAutoSave', () => {
     const { result } = renderHook(() => useBootstrap());
     expect(typeof result.ctxState).toBe('function');
     expect(result.ctxState()).toEqual({ state: 'uninitialized', sampleRate: null });
-    expect(result.audioRunning()).toBe(false);
   });
 
-  it('returns ctxState + audioRunning from useAppBootstrap when ctx is suspended', async () => {
+  it('returns ctxState from useAppBootstrap when ctx is suspended', async () => {
     vi.doMock('./useAppBootstrap', () => ({
       useAppBootstrap: () => ({
         ctxState: () => ({ state: 'suspended', sampleRate: 44100 }),
-        audioRunning: () => false,
       }),
     }));
     vi.doMock('./useAutoSave', () => ({ useAutoSave: () => undefined }));
@@ -37,21 +43,18 @@ describe('useBootstrap — composes useAppBootstrap + useAutoSave', () => {
     const { result } = renderHook(() => useBootstrap());
     expect(result.ctxState().state).toBe('suspended');
     expect(result.ctxState().sampleRate).toBe(44100);
-    expect(result.audioRunning()).toBe(false);
   });
 
-  it('returns ctxState + audioRunning from useAppBootstrap when ctx is running', async () => {
+  it('returns ctxState from useAppBootstrap when ctx is running', async () => {
     vi.doMock('./useAppBootstrap', () => ({
       useAppBootstrap: () => ({
         ctxState: () => ({ state: 'running', sampleRate: 48000 }),
-        audioRunning: () => true,
       }),
     }));
     vi.doMock('./useAutoSave', () => ({ useAutoSave: () => undefined }));
     const { useBootstrap } = await import('./useBootstrap');
     const { result } = renderHook(() => useBootstrap());
     expect(result.ctxState().state).toBe('running');
-    expect(result.audioRunning()).toBe(true);
   });
 
   it('invokes useAutoSave on each mount', async () => {
@@ -60,7 +63,6 @@ describe('useBootstrap — composes useAppBootstrap + useAutoSave', () => {
     vi.doMock('./useAppBootstrap', () => ({
       useAppBootstrap: () => ({
         ctxState: () => ({ state: 'uninitialized', sampleRate: null }),
-        audioRunning: () => false,
       }),
     }));
     const { useBootstrap } = await import('./useBootstrap');
@@ -74,7 +76,6 @@ describe('useBootstrap — composes useAppBootstrap + useAutoSave', () => {
     vi.doMock('./useAppBootstrap', () => ({
       useAppBootstrap: () => ({
         ctxState: () => ({ state: 'uninitialized', sampleRate: null }),
-        audioRunning: () => false,
       }),
     }));
     const { useBootstrap } = await import('./useBootstrap');

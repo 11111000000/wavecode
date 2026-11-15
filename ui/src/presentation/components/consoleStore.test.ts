@@ -4,6 +4,10 @@ import { consoleStore, toastError } from './consoleStore';
 /**
  * store tests run against the live module-level signal. We reset before
  * each test via consoleStore.reset() so toasts/console state don't leak.
+ *
+ * wavecode-zen-ui-phases-6-7 (фаза 6): у стор два канала —
+ * `toasts()` (мимолётные info/warn) и `errors()` (ошибки, которые
+ * показывает регион ошибок внизу холста).
  */
 
 describe('consoleStore', () => {
@@ -13,6 +17,7 @@ describe('consoleStore', () => {
 
   it('starts empty', () => {
     expect(consoleStore.toasts()).toEqual([]);
+    expect(consoleStore.errors()).toEqual([]);
     expect(consoleStore.consoleOpen()).toBe(false);
     expect(consoleStore.unreadErrors()).toBe(0);
   });
@@ -45,9 +50,9 @@ describe('consoleStore', () => {
   });
 
   it('caps by dropping sticky only as last resort', () => {
-    // First two are sticky (critical ttl=0), next three are info.
-    consoleStore.pushToast({ severity: 'critical', title: 'sticky-1' });
-    consoleStore.pushToast({ severity: 'critical', title: 'sticky-2' });
+    // First two are sticky (ttlMs=0), next three are info.
+    consoleStore.pushToast({ severity: 'info', title: 'sticky-1', ttlMs: 0 });
+    consoleStore.pushToast({ severity: 'info', title: 'sticky-2', ttlMs: 0 });
     consoleStore.pushToast({ severity: 'info', title: 'i-1' });
     consoleStore.pushToast({ severity: 'info', title: 'i-2' });
     // 4 toasts already (2 sticky + 2 info), next info should evict 'i-1'.
@@ -112,9 +117,10 @@ describe('consoleStore', () => {
     expect(consoleStore.unreadErrors()).toBe(1);
   });
 
-  it('toastError convenience pushes an error toast', () => {
+  it('toastError convenience pushes into the ERROR channel, not the toast channel', () => {
     toastError({ title: 'boom', source: 'test' });
-    const list = consoleStore.toasts();
+    expect(consoleStore.toasts()).toHaveLength(0);
+    const list = consoleStore.errors();
     expect(list).toHaveLength(1);
     const t0 = list[0]!;
     expect(t0.severity).toBe('error');
@@ -123,19 +129,37 @@ describe('consoleStore', () => {
     expect(consoleStore.unreadErrors()).toBe(1);
   });
 
-  it('default TTL by severity (info=4000, warn=6000, error=8000, critical=0)', () => {
+  it('errors keep their action so the region can offer «Повторить»', () => {
+    const run = (): void => undefined;
+    toastError({ title: 'retry me', action: { label: 'Повторить', run } });
+    const err = consoleStore.errors()[0]!;
+    expect(err.action?.label).toBe('Повторить');
+    expect(err.action?.run).toBe(run);
+  });
+
+  it('the same error twice does not pile up — it replaces the previous one', () => {
+    toastError({ title: 'same', body: 'text', source: 'audio' });
+    toastError({ title: 'same', body: 'text', source: 'audio' });
+    expect(consoleStore.errors()).toHaveLength(1);
+    toastError({ title: 'other', body: 'text', source: 'audio' });
+    expect(consoleStore.errors()).toHaveLength(2);
+  });
+
+  it('default TTL by severity (info=4000, warn=6000, error=0, critical=0)', () => {
     const info = consoleStore.pushToast({ severity: 'info', title: 'i' });
     const warn = consoleStore.pushToast({ severity: 'warn', title: 'w' });
     const err = consoleStore.pushToast({ severity: 'error', title: 'e' });
     const crit = consoleStore.pushToast({ severity: 'critical', title: 'c' });
     const get = (id: string): number => {
-      const t = consoleStore.toasts().find((t) => t.id === id);
+      const t = [...consoleStore.toasts(), ...consoleStore.errors()]
+        .find((t) => t.id === id);
       if (!t) throw new Error(`toast ${id} not found`);
       return t.ttlMs;
     };
     expect(get(info)).toBe(4000);
     expect(get(warn)).toBe(6000);
-    expect(get(err)).toBe(8000);
+    // Ошибка в регионе не исчезает сама.
+    expect(get(err)).toBe(0);
     expect(get(crit)).toBe(0);
   });
 

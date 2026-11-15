@@ -13,7 +13,7 @@ type Panel = {
 
 const PANELS: ReadonlyArray<Panel> = [
   {
-    name: 'Play / Stop',
+    name: 'Воспроизведение / Стоп',
     body: 'Запустить и остановить. Транспортная панель закреплена сверху, под шапкой.',
     tone: 'primary',
     Icon: TransportIcon,
@@ -38,7 +38,7 @@ const PANELS: ReadonlyArray<Panel> = [
   },
   {
     name: 'Запись',
-    body: 'Спой, постучи или прогуди в микрофон — ноты и удары попадут прямо в score.',
+    body: 'Спой, постучи или прогуди в микрофон — ноты и удары попадут прямо в партитуру.',
     tone: 'cyan',
     Icon: RecordIcon24,
   },
@@ -77,7 +77,7 @@ export function Panels(): JSX.Element {
         </h2>
         <p class="l-section__sub">
           Транспорт — сверху, остальные инструменты — в панелях. Не нужно
-          изучать всё сразу — начни с кнопки Play и пресетов.
+          изучать всё сразу — начни с кнопки «Пуск» и пресетов.
         </p>
       </header>
 

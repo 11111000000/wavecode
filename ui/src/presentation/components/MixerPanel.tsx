@@ -75,9 +75,9 @@ export function MixerPanel() {
   });
 
   return (
-    <div class="mixer-panel" role="group" aria-label="Mixer">
+    <div class="mixer-panel" role="group" aria-label="Микшер">
       <div class="mixer-summary">
-        Mixer · {layers().length} слоёв
+        Микшер · слоёв: {layers().length}
         <Show when={sectionCount() > 1}>
           <span class="mixer-sections-hint"> · {sectionCount()} секции</span>
         </Show>
@@ -132,7 +132,7 @@ function LayerRows(props: { rows: ReadonlyArray<LayerDescriptor> }) {
                 class="mixer-btn mixer-mute"
                 classList={{ 'is-active': muted() }}
                 aria-pressed={muted()}
-                title={`Mute layer ${layer.index}`}
+                title={`Снять звук со слоя ${layer.index}`}
                 onClick={() => {
                   dispatch({ type: 'toggleLayerMute', index: layer.index });
                   scheduleMixLive(appStore.layerMix);
@@ -145,7 +145,7 @@ function LayerRows(props: { rows: ReadonlyArray<LayerDescriptor> }) {
                 class="mixer-btn mixer-solo"
                 classList={{ 'is-active': soloed() }}
                 aria-pressed={soloed()}
-                title={`Solo layer ${layer.index}`}
+                title={`Соло слоя ${layer.index}`}
                 onClick={() => {
                   dispatch({ type: 'toggleLayerSolo', index: layer.index });
                   scheduleMixLive(appStore.layerMix);
@@ -163,7 +163,7 @@ function LayerRows(props: { rows: ReadonlyArray<LayerDescriptor> }) {
                 max="1.5"
                 step="0.01"
                 value={gain()}
-                aria-label={`Gain for layer ${layer.index}`}
+                aria-label={`Громкость слоя ${layer.index}`}
                 onInput={(e) => {
                   dispatch({
                     type: 'setLayerGain',

@@ -99,7 +99,7 @@ describe('PianoToolbar — REC button', () => {
     if (rec.recEnabled()) rec.toggleRec();
     const { container } = render(() => <PianoToolbar />);
     const btn = container.querySelector<HTMLButtonElement>('.piano-rec-btn')!;
-    expect(btn.getAttribute('title')).toBe('Rec OFF — играю параллельно');
+    expect(btn.getAttribute('title')).toBe('Запись ВЫКЛ — играю параллельно');
     expect(btn.getAttribute('aria-pressed')).toBe('false');
     expect(btn.getAttribute('aria-label')).toBe('Запись');
     expect(btn.getAttribute('data-active')).toBe('false');
@@ -114,7 +114,7 @@ describe('PianoToolbar — REC button', () => {
     expect(rec.recEnabled()).toBe(true);
     expect(btn.getAttribute('aria-pressed')).toBe('true');
     expect(btn.getAttribute('data-active')).toBe('true');
-    expect(btn.getAttribute('title')).toBe('Rec ON — нажатия пишутся в score');
+    expect(btn.getAttribute('title')).toBe('Запись ВКЛ — нажатия пишутся в партитуру');
   });
 
   it('clicking again toggles back to off', async () => {
@@ -230,8 +230,8 @@ describe('PianoToolbar — ↑ apply button (wavecode-piano-modes-and-gain)', ()
     const { container } = render(() => <PianoToolbar />);
     const apply = container.querySelector<HTMLButtonElement>('.piano-apply-btn');
     expect(apply).toBeTruthy();
-    expect(apply!.getAttribute('aria-label')).toBe('Применить записанные ноты к score');
-    expect(apply!.textContent).toContain('apply');
+    expect(apply!.getAttribute('aria-label')).toBe('Применить записанные ноты к партитуре');
+    expect(apply!.textContent).toContain('применить');
   });
 
   it('clicking apply dispatches replaceScore via applyToScore (orchestrator)', async () => {
@@ -260,7 +260,7 @@ describe('PianoToolbar — slot selector (wavecode-piano-rec-clarity)', () => {
     expect(slots[1]!.getAttribute('data-slot')).toBe('replace-score');
     expect(slots[2]!.getAttribute('data-slot')).toBe('at-cursor');
     expect(slots[0]!.getAttribute('aria-label')).toMatch(/конец стека/);
-    expect(slots[1]!.getAttribute('aria-label')).toMatch(/заменить score/);
+    expect(slots[1]!.getAttribute('aria-label')).toMatch(/заменить партитуру/);
     expect(slots[2]!.getAttribute('aria-label')).toMatch(/курсор/);
   });
 
@@ -275,7 +275,7 @@ describe('PianoToolbar — slot selector (wavecode-piano-rec-clarity)', () => {
   it('clicking a slot flips data-active', async () => {
     const rec = await import('../state/pianoRecStore');
     const { container, getByLabelText } = render(() => <PianoToolbar />);
-    fireEvent.click(getByLabelText(/заменить score/) as HTMLButtonElement);
+    fireEvent.click(getByLabelText(/заменить партитуру/) as HTMLButtonElement);
     expect(rec.pianoSlot()).toBe('replace-score');
     const slots = container.querySelectorAll<HTMLButtonElement>('.piano-slot-btn');
     expect(slots[1]!.getAttribute('data-active')).toBe('true');
@@ -382,7 +382,7 @@ describe('PianoToolbar — preview-pill (wavecode-piano-rec-clarity)', () => {
     const { container } = render(() => <PianoToolbar />);
     const pill = container.querySelector<HTMLSpanElement>('.piano-rec-pill');
     expect(pill).toBeTruthy();
-    expect(pill!.textContent).toContain('REC');
+    expect(pill!.textContent).toContain('ЗАПИСЬ');
     expect(pill!.textContent).toContain('2');
     expect(pill!.textContent).toContain('C4');
     expect(pill!.textContent).toContain('E4');
@@ -398,7 +398,7 @@ describe('PianoToolbar — preview-pill (wavecode-piano-rec-clarity)', () => {
     rec.setPianoSlot('replace-score');
     const { container } = render(() => <PianoToolbar />);
     const pill = container.querySelector<HTMLSpanElement>('.piano-rec-pill');
-    expect(pill!.textContent).toContain('заменить score');
+    expect(pill!.textContent).toContain('заменить партитуру');
     expect(pill!.getAttribute('data-slot')).toBe('replace-score');
   });
 

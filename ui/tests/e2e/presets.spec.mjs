@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { APP_URL } from './support/appUrl';
+import { selectPreset, ensurePlaying } from './support/toolsSheet';
 
 test('Selecting the Creep preset loads its score and plays audio', async ({ page }) => {
   const consoleLogs = [];
@@ -12,9 +13,10 @@ test('Selecting the Creep preset loads its score and plays audio', async ({ page
   await page.waitForTimeout(2000);
 
   console.log('=== selecting Creep preset ===');
-  const presetSelect = page.locator('select.preset-select');
-  await expect(presetSelect).toBeVisible();
-  await presetSelect.selectOption('creep');
+  // Фаза 6: выбор композиции живёт в листе «Инструменты» и САМ
+  // запускает воспроизведение — поэтому «Запуск» жмём только если
+  // музыка не пошла.
+  await selectPreset(page, 'creep');
 
   // CodeMirror renders the score inside .cm-content.
   // The Creep preset's score begins with the comment marker from BUILTIN_PRESETS.
@@ -23,11 +25,12 @@ test('Selecting the Creep preset loads its score and plays audio', async ({ page
   console.log((editorText || '').slice(0, 200));
   expect(editorText || '').toContain('Creep (Radiohead)');
 
-  console.log('=== clicking Eval ===');
-  await page.locator('button[aria-label="Запуск"]').click();
-  await page.waitForTimeout(5000);
+  console.log('=== waiting for audio ===');
+  await ensurePlaying(page);
+  await page.waitForTimeout(3000);
 
-  const audioStatus = await page.locator('dl.status-grid dd').nth(1).textContent();
+  const audioStatus =
+    (await page.locator('[data-testid="status-audio"]').textContent()) ?? '';
   console.log('audio status:', audioStatus);
 
   console.log('=== console logs ===');
@@ -36,10 +39,10 @@ test('Selecting the Creep preset loads its score and plays audio', async ({ page
   errors.forEach((e) => console.log(e));
 
   await page.screenshot({
-    path: '/home/az/.paseo/worktrees/refactor-wavecode-restore-strudel/ui/tests/e2e/screenshots/presets-creep.png',
+    path: 'test-results/presets-creep.png',
     fullPage: true,
   });
 
   expect(errors).toHaveLength(0);
-  expect(audioStatus).toBe('playing');
+  expect(audioStatus).toContain('играет');
 });

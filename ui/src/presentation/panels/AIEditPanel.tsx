@@ -400,7 +400,7 @@ export function AIEditPanel() {
               Здесь будет диалог с ИИ для выбранной композиции. Напиши инструкцию внизу — например:
               «сделай быстрее в два раза», «добавь басов», «сделай техно-бит».
               <br />
-              <small>Подсказка: выдели фрагмент в score (например, один ряд стека) и нажми Ctrl/Cmd+Shift+L — ИИ увидит только выделенное.</small>
+              <small>Подсказка: выдели фрагмент в партитуре (например, один ряд стека) и нажми Ctrl/Cmd+Shift+L — ИИ увидит только выделенное.</small>
             </div>
           }
         >
@@ -468,7 +468,7 @@ export function AIEditPanel() {
             }
           >
             <span class="ai-focus-glyph" aria-hidden="true">📍</span>
-            <span class="ai-focus-label">Focus: {focusedLabel()}</span>
+            <span class="ai-focus-label">Фокус: {focusedLabel()}</span>
             <Show when={applyToSelection()}>
               <span class="ai-focus-tag">применю к выделенному</span>
             </Show>

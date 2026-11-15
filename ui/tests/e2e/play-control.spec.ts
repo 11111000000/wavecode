@@ -76,12 +76,10 @@ test('play button lives in PresetRow, click toggles to Stop, and AI-textarea sta
   const fabCount = await page.locator('.wc-fab').count();
   expect(fabCount, 'FAB must be removed from the DOM').toBe(0);
 
-  // 3. The AI-textarea must be visible. Open the chat tab if needed.
-  const chatTab = page.locator('[data-tab="chat"], button:has-text("AI"), button:has-text("Чат")').first();
-  if (await chatTab.count() > 0 && await chatTab.isVisible().catch(() => false)) {
-    await chatTab.click();
-    await page.waitForTimeout(200);
-  }
+  // 3. The AI-textarea must be visible. ИИ живёт в листе поверх холста
+  //    (фаза 3), а не в отдельной вкладке: открываем его пунктом
+  //    рельса «ИИ».
+  await page.locator('.wc-rail__item[aria-label="ИИ"]').first().click();
   const aiTextarea = page.locator('[data-ai-textarea]');
   await expect(aiTextarea).toBeVisible({ timeout: 5000 });
 

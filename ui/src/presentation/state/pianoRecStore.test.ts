@@ -412,15 +412,15 @@ describe('pianoRecStore — pianoSlot selector', () => {
   it('pianoSlotLabel returns human-readable Russian labels', async () => {
     const s = await importStore();
     expect(s.pianoSlotLabel('append-stack')).toBe('конец стека');
-    expect(s.pianoSlotLabel('replace-score')).toBe('заменить score');
+    expect(s.pianoSlotLabel('replace-score')).toBe('заменить партитуру');
     expect(s.pianoSlotLabel('at-cursor')).toBe('в курсор');
   });
 
   it('pianoSlotGlyph returns compact segmented-control labels', async () => {
     const s = await importStore();
-    expect(s.pianoSlotGlyph('append-stack')).toBe('↵ stack');
-    expect(s.pianoSlotGlyph('replace-score')).toBe('⟳ replace');
-    expect(s.pianoSlotGlyph('at-cursor')).toBe('⌖ cursor');
+    expect(s.pianoSlotGlyph('append-stack')).toBe('↵ стек');
+    expect(s.pianoSlotGlyph('replace-score')).toBe('⟳ замена');
+    expect(s.pianoSlotGlyph('at-cursor')).toBe('⌖ курсор');
   });
 });
 

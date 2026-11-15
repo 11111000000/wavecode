@@ -11,6 +11,7 @@ import {
   testBeep,
 } from '~/infrastructure/audio/LiveAudioEngine';
 import { logger } from '~/infrastructure/log';
+import { consoleStore } from '~/presentation/components/consoleStore';
 
 /**
  * Аудио-действия — общие для всех компонентов (header кнопки, etc).
@@ -107,10 +108,30 @@ export const scheduleMixLive = (
   }, MIX_DEBOUNCE_MS);
 };
 
+/**
+ * Идёт ли музыка СЕЙЧАС — по статусу приложения, а НЕ по состоянию
+ * AudioContext.
+ *
+ * wavecode-zen-ui-phases-6-7 (фаза 6, «Тишина»): контекст остаётся
+ * `running` и после «Стоп», а его состояние обновляется раз в полсекунды.
+ * Кнопка play/stop, построенная на нём, показывала «Стоп» вместо
+ * «Запуск» и наоборот — а в гонке с опросом контекста нажатие «Запуск»
+ * могло превратиться в «Стоп». Статус приложения — честный источник
+ * правды: он меняется ровно тогда, когда меняется воспроизведение.
+ */
+export const audioRunning = (): boolean => appStore.audio.status === 'playing';
+
 export const evalScore = async (overrideScore?: string): Promise<void> => {
   const score = overrideScore ?? appStore.score;
   if (!score.trim()) {
     dispatch({ type: 'audioStatusChange', status: 'error', error: 'score is empty' });
+    consoleStore.pushToast({
+      severity: 'error',
+      title: 'Партитура пуста',
+      body: 'Нечего играть — введите код или выберите композицию.',
+      source: 'audio',
+      action: { label: 'Повторить', run: () => void evalScore(score) },
+    });
     return;
   }
   unlockAudioContext();
@@ -118,10 +139,21 @@ export const evalScore = async (overrideScore?: string): Promise<void> => {
   try {
     await runWrapAndEval(score, appStore.transportState, appStore.layerMix);
   } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
     dispatch({
       type: 'audioStatusChange',
       status: 'error',
-      error: err instanceof Error ? err.message : String(err),
+      error: message,
+    });
+    // wavecode-zen-ui-phases-6-7 (фаза 6): ошибка звука приходит в
+    // ЕДИНЫЙ регион ошибок внизу холста (ErrorRegion.tsx) вместе с
+    // честным «Повторить» — переоценкой той же партитуры.
+    consoleStore.pushToast({
+      severity: 'error',
+      title: 'Ошибка звука',
+      body: message,
+      source: 'audio',
+      action: { label: 'Повторить', run: () => void evalScore(score) },
     });
   }
 };

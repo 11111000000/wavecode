@@ -2,7 +2,6 @@ import { For, type JSX } from 'solid-js';
 import { TIER1_TOOLS, isToolActive } from '~/presentation/state/toolRegistry';
 import { openKindSheet } from '~/presentation/state/uiState';
 import { ToolsIcon } from '~/presentation/icons';
-import { SampleProgressBadge } from '~/presentation/components/SampleProgressBadge';
 
 /**
  * ToolRail — постоянная навигация из четырёх инструментов.
@@ -48,7 +47,6 @@ export function ToolRail(): JSX.Element {
         <ToolsIcon size={20} />
         <span class="wc-rail__label">Ещё</span>
       </button>
-      <SampleProgressBadge />
     </nav>
   );
 }

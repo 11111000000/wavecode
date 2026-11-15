@@ -2,14 +2,13 @@ import { test, expect } from '@playwright/test';
 import { APP_URL } from './support/appUrl';
 
 /**
- * Mini-notation toolbar — mobile-only sticky strip of snippet buttons
- * (note(, s(, stack(, <, >, etc.). Inserts the snippet at the cursor
- * via CodeMirror's view.dispatch and parks the cursor right after.
+ * Mini-notation toolbar — полоса кнопок вставки сниппетов
+ * (note(, s(, stack(, <, >, etc.). Вставляет сниппет в позицию курсора
+ * через CodeMirror's view.dispatch и оставляет курсор сразу за ним.
  *
- * The strip used to be mobile-only (hidden on desktop via CSS). It is
- * now part of the score panel on every viewport — `.mini-toolbar` has
- * an unconditional `display: flex` — so the desktop case asserts that
- * it is present rather than that it is hidden.
+ * wavecode-zen-ui-phases-6-7 (фаза 6, «Тишина»): мини-нотация убрана
+ * под раскрытие «⋯ Ещё» под партитурой — 14 кнопок не должны кричать
+ * о себе в покое. Раскрытие закрыто по умолчанию на всех экранах.
  */
 test('mobile (375×667): mini-toolbar is visible and tapping `note(` inserts the snippet into the editor', async ({ page }) => {
   await page.setViewportSize({ width: 375, height: 667 });
@@ -19,9 +18,8 @@ test('mobile (375×667): mini-toolbar is visible and tapping `note(` inserts the
   // CodeMirror mounts async; give it a moment to render and for onReady to fire.
   await page.waitForSelector('.cm-content', { timeout: 15000 });
 
-  // On mobile the strip is closed by default (wavecode-toast-overhead-
-  // and-toolbar-toggle): it lives behind the `✎ snippet` disclosure.
-  const toggle = page.locator('.snippet-toggle');
+  // Полоса закрыта по умолчанию: живёт под раскрытием «⋯ Ещё».
+  const toggle = page.locator('[data-testid="score-extra-toggle"]');
   await expect(toggle).toBeVisible();
   await toggle.click();
 
@@ -47,15 +45,18 @@ test('mobile (375×667): mini-toolbar is visible and tapping `note(` inserts the
   await expect(page.locator('.cm-content')).toContainText('note(');
 });
 
-test('desktop (1280): mini-toolbar is available too', async ({ page }) => {
+test('desktop (1280): mini-toolbar is behind the same disclosure', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
 
   await page.goto(APP_URL, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('main.app', { timeout: 15000 });
   await page.waitForSelector('.cm-content', { timeout: 15000 });
 
-  // The toolbar is no longer desktop-hidden — it ships in the score
-  // panel on every viewport.
+  // На десктопе полоса тоже за раскрытием — тишина одинакова везде.
+  const toggle = page.locator('[data-testid="score-extra-toggle"]');
+  await expect(toggle).toBeVisible();
+  await toggle.click();
+
   const toolbar = page.locator('.mini-toolbar');
   await expect(toolbar).toBeVisible();
   await expect(toolbar.locator('button.mini-toolbar-btn').first()).toBeVisible();

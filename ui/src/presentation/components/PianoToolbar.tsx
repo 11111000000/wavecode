@@ -44,11 +44,11 @@ import { MELODIC_SOUNDS } from '~/domain/sounds';
  *      and lights up the piano keys whose MIDI numbers are currently
  *      in the scheduler. Audition / REC / FOLLOW compose orthogonally.
  *   3. Slot segmented control (wavecode-piano-rec-clarity) — three
- *      buttons: `↵ stack` (append at end of stack), `⟳ replace`
- *      (destructive replace of the whole score), `⌖ cursor` (insert
- *      at the editor cursor). `⌖ cursor` is disabled when the
+ *      buttons: `↵ стек` (append at end of stack), `⟳ замена`
+ *      (destructive replace of the whole score), `⌖ курсор` (insert
+ *      at the editor cursor). `⌖ курсор` is disabled when the
  *      editor is not focused; tooltip explains how to enable.
- *   4. ↑ apply button — visible only when REC is on AND the buffer is
+ *   4. ↑ применить button — visible only when REC is on AND the buffer is
  *      non-empty. Calls `applyToScore()` which reads `pianoSlot()`
  *      and dispatches accordingly. After successful apply, the pill
  *      flashes "✓ Применено" for 1.5s before clearing (buffer is
@@ -58,7 +58,7 @@ import { MELODIC_SOUNDS } from '~/domain/sounds';
  *      committed and to which slot, BEFORE apply. Visible whenever
  *      the buffer is non-empty. Critical for the mobile BottomSheet
  *      case where the editor is hidden under the sheet.
- *   6. 🎼 transcribe + BPM input (wavecode-piano-transcribe) — when
+ *   6. 🎼 расшифровать + BPM input (wavecode-piano-transcribe) — when
  *      the buffer is non-empty, this button populates
  *      `transcribePreview` with a Strudel-score fragment derived from
  *      the buffer via the pure `pianoTranscribe` use-case. The preview
@@ -119,7 +119,7 @@ const INSTRUMENT_LABEL: Record<string, string> = Object.fromEntries(
 const INSTRUMENT_TITLE: Record<string, string> = Object.fromEntries(
   MELODIC_SOUNDS.map((sound) => [
     sound.id,
-    `${sound.label} (REC пишет s("${sound.id}"))`,
+    `${sound.label} (запись пишет s("${sound.id}"))`,
   ]),
 );
 
@@ -137,8 +137,8 @@ const SLOTS: ReadonlyArray<{
   },
   {
     id: 'replace-score',
-    ariaLabel: 'Слот: заменить score — перезаписать весь score целиком (⌘Z для отмены)',
-    titleEnabled: 'Заменит весь score. ⌘Z для отмены',
+    ariaLabel: 'Слот: заменить партитуру — перезаписать её целиком (⌘Z для отмены)',
+    titleEnabled: 'Заменит всю партитуру. ⌘Z для отмены',
     titleDisabled: undefined,
   },
   {
@@ -278,23 +278,23 @@ export const PianoToolbar = (props: PianoToolbarProps): JSX.Element => {
         class="piano-rec-btn"
         data-active={recEnabled() ? 'true' : 'false'}
         onClick={() => toggleRec()}
-        title={recEnabled() ? 'Rec ON — нажатия пишутся в score' : 'Rec OFF — играю параллельно'}
+        title={recEnabled() ? 'Запись ВКЛ — нажатия пишутся в партитуру' : 'Запись ВЫКЛ — играю параллельно'}
         aria-label="Запись"
         aria-pressed={recEnabled()}
       >
         <RecordIcon size={14} />
-        REC
+        ЗАПИСЬ
       </button>
       <button
         type="button"
         class="piano-follow-btn"
         data-active={followEnabled() ? 'true' : 'false'}
         onClick={() => toggleFollow()}
-        title={followEnabled() ? 'FOLLOW ON — клавиши подсвечиваются от scheduler' : 'FOLLOW OFF — только мои нажатия'}
+        title={followEnabled() ? 'СЛЕДОВАНИЕ ВКЛ — клавиши подсвечивает планировщик' : 'СЛЕДОВАНИЕ ВЫКЛ — только мои нажатия'}
         aria-label="Подсветка от scheduler"
         aria-pressed={followEnabled()}
       >
-        FOLLOW
+        ПОДСВЕТКА
       </button>
       <div class="piano-slot-selector" role="group" aria-label="Куда применить записанные ноты">
         <For each={SLOTS}>
@@ -309,6 +309,12 @@ export const PianoToolbar = (props: PianoToolbarProps): JSX.Element => {
               return slot.titleEnabled;
             };
             return (
+              // `preventDefault` на mousedown: клик по слоту не должен
+              // забирать фокус у редактора. Иначе редактор блюрит,
+              // слот «⌖ курсор» тут же блокируется (он живым зависит
+              // от фокуса) — и кнопка успевает заблокироваться ДО
+              // того, как браузер доставит click. Слот не включался
+              // вообще никогда.
               <button
                 type="button"
                 class="piano-slot-btn"
@@ -318,6 +324,7 @@ export const PianoToolbar = (props: PianoToolbarProps): JSX.Element => {
                 title={title()}
                 aria-label={slot.ariaLabel}
                 aria-pressed={isActive()}
+                onMouseDown={(e) => e.preventDefault()}
                 onClick={() => setPianoSlot(slot.id)}
               >
                 {pianoSlotGlyph(slot.id)}
@@ -331,10 +338,10 @@ export const PianoToolbar = (props: PianoToolbarProps): JSX.Element => {
           type="button"
           class="piano-apply-btn"
           onClick={handleApply}
-          title="Применить записанные ноты к score"
-          aria-label="Применить записанные ноты к score"
+          title="Применить записанные ноты к партитуре"
+          aria-label="Применить записанные ноты к партитуре"
         >
-          ↑ apply
+          ↑ применить
         </button>
       </Show>
       <Show when={canTranscribe()}>
@@ -366,7 +373,7 @@ export const PianoToolbar = (props: PianoToolbarProps): JSX.Element => {
           aria-label="Транскрибировать записанные ноты в Strudel-score"
           aria-pressed={preview() !== null}
         >
-          🎼 transcribe
+          🎼 расшифровать
         </button>
       </Show>
       <Show when={applyFlash() || (recEnabled() && pillPayload() !== null)}>
@@ -383,7 +390,7 @@ export const PianoToolbar = (props: PianoToolbarProps): JSX.Element => {
                 >
                   <span class="piano-rec-pill__dot" aria-hidden="true" />
                   <span class="piano-rec-pill__count">
-                    REC: {payload().count} н{payload().count === 1 ? 'ота' : 'от'}
+                    ЗАПИСЬ: {payload().count} н{payload().count === 1 ? 'ота' : 'от'}
                   </span>
                   <span class="piano-rec-pill__notes">
                     {payload().firstNames.join(' ')}
@@ -472,10 +479,10 @@ export const PianoToolbar = (props: PianoToolbarProps): JSX.Element => {
               type="button"
               class="piano-transcribe-preview__apply"
               onClick={() => applyTranscription()}
-              title="Заменить score этой транскрипцией"
+              title="Заменить партитуру этой расшифровкой"
               aria-label="Применить транскрипцию"
             >
-              ✓ Apply
+              ✓ Применить
             </button>
             <button
               type="button"
@@ -484,7 +491,7 @@ export const PianoToolbar = (props: PianoToolbarProps): JSX.Element => {
               title="Отменить транскрипцию"
               aria-label="Отменить транскрипцию"
             >
-              ✗ Cancel
+              ✗ Отмена
             </button>
           </div>
         </div>

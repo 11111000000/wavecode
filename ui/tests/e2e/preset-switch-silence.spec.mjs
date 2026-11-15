@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { APP_URL } from './support/appUrl';
+import { selectPreset } from './support/toolsSheet';
 
 /**
  * Переключение композиции = ПОЛНАЯ смена звука.
@@ -59,17 +60,15 @@ test.describe('переключение композиции', () => {
     await page.waitForTimeout(500);
 
     // Длинный хвост: attack 2 / release 4 — идеальный донор «хвоста».
-    await page.locator('select.preset-select').selectOption('ambient-drone');
+    await selectPreset(page, 'ambient-drone');
     await page.waitForTimeout(3000);
 
     const playing = await readRms(page);
     expect(playing, 'ambient-drone должен звучать').toBeGreaterThan(0.02);
 
     // Переключаемся на пустую композицию — старая обязана замолчать.
-    await page.locator('select.preset-select').selectOption(SILENT_PRESET.id);
+    await selectPreset(page, SILENT_PRESET.id);
     await page.waitForTimeout(1500);
-
-    expect(await page.locator('select.preset-select').inputValue()).toBe(SILENT_PRESET.id);
     const afterSwitch = await readRms(page);
     expect(afterSwitch, 'предыдущая композиция не должна звучать').toBeLessThan(0.01);
   });
@@ -82,7 +81,7 @@ test.describe('переключение композиции', () => {
     await page.locator('button[aria-label="Запуск"]').click();
     await page.waitForTimeout(500);
 
-    await page.locator('select.preset-select').selectOption('ambient-drone');
+    await selectPreset(page, 'ambient-drone');
     await page.waitForTimeout(3000);
     expect(await readRms(page)).toBeGreaterThan(0.02);
 
@@ -91,7 +90,19 @@ test.describe('переключение композиции', () => {
     await page.locator('button[aria-label="Новая"]').click();
     await page.waitForTimeout(1000);
 
-    // Play на новой (пустой) композиции — предыдущая не должна вернуться.
+    // Новая композиция — не пустая: с фазы 5 её шаблон играбельный
+    // (барабанный паттерн), и «Новая» сразу звучит. Чтобы проверить
+    // именно «старая не воскресает», оставляем в партитуре только
+    // комментарий: строка непустая, eval проходит, контекст
+    // возобновляется — и анализатор отдаёт ЖИВОЙ сигнал, а не
+    // замороженный буфер остановленного контекста.
+    const cmScroller = page.locator('.cm-scroller').first();
+    await cmScroller.click();
+    await page.keyboard.press('Control+a');
+    await page.keyboard.type('// тишина');
+    await page.waitForTimeout(300);
+
+    // Play на новой (бесшумной) композиции — предыдущая не должна вернуться.
     await page.locator('button[aria-label="Запуск"]').click();
     await page.waitForTimeout(1500);
 

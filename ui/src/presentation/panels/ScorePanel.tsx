@@ -55,7 +55,7 @@ import {
  */
 
 const PIANO_COLLAPSE_KEY = 'wavecode-piano-collapse-v1';
-const MINI_TOOLBAR_KEY = 'wavecode-mini-toolbar-v1';
+const SCORE_EXTRA_KEY = 'wavecode-score-extra-v1';
 const SCORE_VIEW_KEY = 'wavecode-score-view-mode-v1';
 const DESKTOP_QUERY = '(min-width: 1024px)';
 
@@ -104,25 +104,26 @@ const writeStoredCollapsed = (v: boolean): void => {
 };
 
 /**
- * wavecode-toast-overhead-and-toolbar-toggle: на mobile snippet
- * toolbar (14 кнопок × 2 ряда = ~110px) ест 12% viewport'а и
- * сжимает cm-host до 1-2 видимых строк. Default = скрыт на
- * mobile, открыт на desktop. localStorage override.
+ * wavecode-zen-ui-phases-6-7 (фаза 6): под партитурой было три шумные
+ * полосы — 14 кнопок мини-нотации, переключатель вида (text/roll) и
+ * отладочная строка (триггеры / cps / ошибки). Теперь всё это живёт за
+ * ОДНИМ раскрытием «⋯ Ещё», которое по умолчанию закрыто: в покое под
+ * редактором пусто.
  */
-const readMiniToolbarOpen = (defaultOpen: boolean): boolean => {
+const readExtraOpen = (): boolean => {
   try {
-    const v = localStorage.getItem(MINI_TOOLBAR_KEY);
+    const v = localStorage.getItem(SCORE_EXTRA_KEY);
     if (v === 'true') return true;
     if (v === 'false') return false;
   } catch {
     /* localStorage unavailable — silently use default */
   }
-  return defaultOpen;
+  return false;
 };
 
-const writeMiniToolbarOpen = (v: boolean): void => {
+const writeExtraOpen = (v: boolean): void => {
   try {
-    localStorage.setItem(MINI_TOOLBAR_KEY, String(v));
+    localStorage.setItem(SCORE_EXTRA_KEY, String(v));
   } catch {
     /* localStorage unavailable — silently no-op */
   }
@@ -139,12 +140,16 @@ export function ScorePanel() {
   const [isDesktop, setIsDesktop] = createSignal(readDesktopMatch());
   // wavecode-pianoroll: text vs roll view toggle (default = text).
   const [viewMode, setViewMode] = createSignal<ScoreViewMode>(readStoredView());
-  // wavecode-toast-overhead-and-toolbar-toggle: mobile default = closed,
-  // desktop default = open. localStorage wins.
-  const [miniToolbarOpen, setMiniToolbarOpen] = createSignal(
-    readMiniToolbarOpen(readDesktopMatch()),
-  );
-  let editorApi: CodeMirrorEditorApi | undefined;
+  // wavecode-zen-ui-phases-6-7 (фаза 6): сниппеты, переключатель вида
+  // и отладка — за одним раскрытием, по умолчанию закрытым.
+  const [extraOpen, setExtraOpen] = createSignal(readExtraOpen());
+  // editorApi — СИГНАЛ, а не обычная переменная: `createEffect` ниже
+  // подписывается на него и переподключает слушатели фокуса, когда
+  // ленивый чанк CodeMirror догружается. С обычной переменной эффект
+  // отрабатывал один раз (api ещё undefined), слушатели фокуса не
+  // вешались — и слот «⌖ курсор» в пианино оставался вечно
+  // заблокированным, хотя подпись обещала «Тапните в редактор».
+  const [editorApi, setEditorApi] = createSignal<CodeMirrorEditorApi | undefined>();
 
   const switchView = (next: ScoreViewMode): void => {
     if (viewMode() === next) return;
@@ -160,33 +165,23 @@ export function ScorePanel() {
     setPianoCollapsed(readStoredCollapsed());
     const mql = window.matchMedia(DESKTOP_QUERY);
     const onChange = (e: MediaQueryListEvent): void => {
-      const wasDesktop = isDesktop();
       setIsDesktop(e.matches);
-      // Cross-breakpoint: re-init mini-toolbar default if localStorage
-      // didn't pin a value. Keeps "mobile=closed, desktop=open" until
-      // user explicitly toggles.
-      if (wasDesktop !== e.matches) {
-        const stored = localStorage.getItem(MINI_TOOLBAR_KEY);
-        if (stored !== 'true' && stored !== 'false') {
-          setMiniToolbarOpen(e.matches);
-        }
-      }
     };
     mql.addEventListener('change', onChange);
     onCleanup(() => mql.removeEventListener('change', onChange));
   });
 
-  const toggleMiniToolbar = (): void => {
-    const next = !miniToolbarOpen();
-    setMiniToolbarOpen(next);
-    writeMiniToolbarOpen(next);
+  const toggleExtra = (): void => {
+    const next = !extraOpen();
+    setExtraOpen(next);
+    writeExtraOpen(next);
   };
 
   // Wire the editor API + focus state into pianoRecStore. Re-runs if
   // `editorApi` is reassigned (lazy CodeMirror chunk finishes loading),
   // so the listeners always point at the current EditorView.
   createEffect(() => {
-    const api = editorApi;
+    const api = editorApi();
     if (!api) {
       setPianoEditorApi(undefined);
       setEditorFocused(false);
@@ -256,10 +251,10 @@ export function ScorePanel() {
     <div class="score-panel-inner">
       <Show when={appStore.score.trim().length === 0}>
         <div class="score-empty-state" role="note" aria-label="Подсказки для старта">
-          <p>Нажми ▶ чтобы запустить шаблон</p>
-          <p>Открой ▼ Piano → tap для звука</p>
-          <p>Тапни 🎤 Mic внизу → пой, свисти, играй мелодию</p>
-          <p>Или напиши ИИ: "сделай бит"</p>
+          <p>Нажми ▶ — заиграет шаблон</p>
+          <p>Пианино и микрофон — в меню «Инструменты»</p>
+          <p>Голос и ритм — в доке «Ввод»</p>
+          <p>Или напиши ИИ: «сделай бит»</p>
         </div>
       </Show>
       <Show when={isDesktop()}>
@@ -276,7 +271,7 @@ export function ScorePanel() {
             <span class="piano-toggle__caret" aria-hidden="true">
               {pianoCollapsed() ? '▶' : '▼'}
             </span>
-            <span class="piano-toggle__label">Piano</span>
+            <span class="piano-toggle__label">Пианино</span>
           </button>
         </div>
         <Show when={!pianoCollapsed()}>
@@ -291,7 +286,7 @@ export function ScorePanel() {
             value={appStore.score}
             onChange={(v) => dispatch({ type: 'replaceScore', text: v })}
             onReady={(api) => {
-              editorApi = api;
+              setEditorApi(api);
             }}
           />
         </Show>
@@ -305,57 +300,65 @@ export function ScorePanel() {
         </Show>
       </Suspense>
 
-      <div class="pianoroll-view-toggle" role="group" aria-label="View mode">
+      <div class="score-extra">
         <button
           type="button"
-          class="pianoroll-view-toggle-btn"
-          data-active={viewMode() === 'text' ? 'true' : 'false'}
-          aria-pressed={viewMode() === 'text'}
-          onClick={() => switchView('text')}
-          title="Code editor (default — source of truth)"
+          class="score-extra__toggle"
+          data-testid="score-extra-toggle"
+          data-active={extraOpen() ? 'true' : 'false'}
+          aria-expanded={extraOpen()}
+          aria-controls="score-extra-body"
+          aria-label={extraOpen() ? 'Скрыть сниппеты и отладку' : 'Показать сниппеты и отладку'}
+          onClick={toggleExtra}
+          title={extraOpen() ? 'Скрыть' : 'Сниппеты, вид и отладка'}
         >
-          text
+          <span aria-hidden="true">⋯</span>
+          <span class="score-extra__toggle-label">Ещё</span>
         </button>
-        <button
-          type="button"
-          class="pianoroll-view-toggle-btn"
-          data-active={viewMode() === 'roll' ? 'true' : 'false'}
-          aria-pressed={viewMode() === 'roll'}
-          onClick={() => switchView('roll')}
-          title="Piano roll timeline (read + edit notes visually)"
-        >
-          🎹 roll
-        </button>
-      </div>
 
-      <div class="score-debug">
-        <span>триггеры: <strong>{debug().triggers}</strong></span>
-        <span>cps: <strong>{debug().cps}</strong></span>
-        <Show when={debug().replErr}>
-          <span class="debug-err">repl: {debug().replErr}</span>
-        </Show>
-        <Show when={debug().lastEvalErr}>
-          <span class="debug-err">eval: {debug().lastEvalErr}</span>
-        </Show>
-        <Show when={debug().superdoughErr}>
-          <span class="debug-err">super: {debug().superdoughErr}</span>
-        </Show>
-        <button
-          type="button"
-          class="snippet-toggle"
-          data-active={miniToolbarOpen() ? 'true' : 'false'}
-          aria-label={miniToolbarOpen() ? 'Скрыть snippet-клавиатуру' : 'Показать snippet-клавиатуру'}
-          aria-pressed={miniToolbarOpen()}
-          onClick={toggleMiniToolbar}
-          title={miniToolbarOpen() ? 'Скрыть клавиатуру снипов' : 'Показать клавиатуру снипов'}
-        >
-          ✎ snippet
-        </button>
-      </div>
+        <Show when={extraOpen()}>
+          <div id="score-extra-body" class="score-extra__body" data-testid="score-extra-body">
+            <div class="pianoroll-view-toggle" role="group" aria-label="Вид партитуры">
+              <button
+                type="button"
+                class="pianoroll-view-toggle-btn"
+                data-active={viewMode() === 'text' ? 'true' : 'false'}
+                aria-pressed={viewMode() === 'text'}
+                onClick={() => switchView('text')}
+                title="Редактор кода — источник истины"
+              >
+                Код
+              </button>
+              <button
+                type="button"
+                class="pianoroll-view-toggle-btn"
+                data-active={viewMode() === 'roll' ? 'true' : 'false'}
+                aria-pressed={viewMode() === 'roll'}
+                onClick={() => switchView('roll')}
+                title="Лента нот — читать и править ноты визуально"
+              >
+                Ролл
+              </button>
+            </div>
 
-      <Show when={miniToolbarOpen()}>
-        <MiniNotationToolbar editor={() => editorApi} />
-      </Show>
+            <MiniNotationToolbar editor={() => editorApi()} />
+
+            <div class="score-debug">
+              <span>триггеры: <strong>{debug().triggers}</strong></span>
+              <span>темп: <strong>{debug().cps}</strong></span>
+              <Show when={debug().replErr}>
+                <span class="debug-err">repl: {debug().replErr}</span>
+              </Show>
+              <Show when={debug().lastEvalErr}>
+                <span class="debug-err">eval: {debug().lastEvalErr}</span>
+              </Show>
+              <Show when={debug().superdoughErr}>
+                <span class="debug-err">super: {debug().superdoughErr}</span>
+              </Show>
+            </div>
+          </div>
+        </Show>
+      </div>
     </div>
   );
 }

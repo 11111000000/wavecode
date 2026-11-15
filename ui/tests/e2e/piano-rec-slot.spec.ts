@@ -169,13 +169,16 @@ test('at-cursor + apply: focus editor → ⌖ cursor enabled → tap → ↑ app
   await clearEditor(page);
 
   // Pre-populate with one anchor line so cursor position is meaningful.
-  const cmContent = page.locator('.cm-content').first();
-  await cmContent.click();
+  // Кликаем по .cm-scroller, а не по .cm-content: контент выше своего
+  // обрезанного вьюпорта, и Playwright целится в его середину — мимо
+  // редактора (та же причина, что и в clearEditor выше).
+  const cmScroller = page.locator('.cm-scroller').first();
+  await cmScroller.click();
   await page.keyboard.type('note("e4")');
   await page.waitForTimeout(150);
 
   // Click in the editor to gain focus.
-  await cmContent.click();
+  await cmScroller.click();
   await page.waitForTimeout(100);
 
   // The ⌖ cursor slot should now be enabled (was disabled without focus).

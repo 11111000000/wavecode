@@ -181,7 +181,7 @@ export function PianoRollPreview(props: PianoRollPreviewProps): JSX.Element {
       data-note-count={props.notes.length}
       data-drum-count={props.transients.length}
       role="img"
-      aria-label={`Piano roll preview: ${props.notes.length} note${props.notes.length === 1 ? '' : 's'}, ${props.transients.length} onset${props.transients.length === 1 ? '' : 's'}`}
+      aria-label={`Предпрослушивание ленты нот: ${props.notes.length} нот, ${props.transients.length} атак`}
     >
       <Show when={isEmpty()}>
         <div class="mic-ux-piano-roll-empty" aria-hidden="true">

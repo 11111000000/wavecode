@@ -57,7 +57,7 @@ import { AppLayer } from '~/infrastructure/composition';
  * The mode pill (3-segment toggle) is the ONLY way to switch
  * modes (mirrors `StepGrid`). The playhead column highlight
  * is driven by `AudioEngine.getCycleProgress()` — same pattern
- * as the drum StepGrid and `TransportPanel`.
+ * as the drum StepGrid and `TransportBar`.
  *
  * Drum + melody grids are deliberately separate components and
  * separate state slices — they target different AST subtrees and
@@ -147,7 +147,7 @@ export function MelodyGrid() {
       ok,
       reason: ok
         ? ''
-        : 'Edit mode requires a top-level note(…) or n(…) call. Use Sketch to add a melody layer.',
+        : 'Режим правки требует верхнеуровневого вызова note(…) или n(…). Добавь мелодический слой через «Черновик».',
     };
   });
 
@@ -220,18 +220,18 @@ export function MelodyGrid() {
   });
 
   return (
-    <div class="melody-grid" role="grid" aria-label="Melody step sequencer 16×36">
+    <div class="melody-grid" role="grid" aria-label="Пошаговый секвенсор мелодии 16×36">
       <div class="melody-grid-toolbar">
-        <div class="melody-grid-mode-pill" role="group" aria-label="Tap mode">
+        <div class="melody-grid-mode-pill" role="group" aria-label="Режим нажатий">
           <button
             type="button"
             class="melody-grid-mode-btn"
             data-active={getMelodyMode() === 'view' ? 'true' : 'false'}
             aria-pressed={getMelodyMode() === 'view'}
             onClick={() => setMode('view')}
-            title="Read-only mirror of the score's melody. Tap to preview a note."
+            title="Только для чтения: зеркало мелодии. Нажмите, чтобы услышать ноту."
           >
-            view
+            просмотр
           </button>
           <button
             type="button"
@@ -239,9 +239,9 @@ export function MelodyGrid() {
             data-active={getMelodyMode() === 'sketch' ? 'true' : 'false'}
             aria-pressed={getMelodyMode() === 'sketch'}
             onClick={() => setMode('sketch')}
-            title="Ephemeral draft. Tap to toggle cells, then ↑ commit to write to score."
+            title="Черновик. Нажимайте ячейки, потом ↑ — записать в партитуру."
           >
-            sketch
+            черновик
           </button>
           <button
             type="button"
@@ -253,19 +253,19 @@ export function MelodyGrid() {
             disabled={!editGate().ok}
             onClick={() => setMode('edit')}
             title={editGate().ok
-              ? 'Direct in-place edit of the first note(…) / n(…) call. Every tap is a commit.'
+              ? 'Правка на месте первого вызова note(…) / n(…). Каждое нажатие — запись.'
               : editGate().reason}
           >
-            edit
+            правка
           </button>
         </div>
         <button
           type="button"
           class="melody-grid-btn"
           onClick={onClear}
-          title="Reset grid from score in current mode"
+          title="Сбросить сетку из партитуры"
         >
-          ↻ reset
+          ↻ сброс
         </button>
         <Show when={getMelodyMode() === 'sketch'}>
           <button
@@ -275,10 +275,10 @@ export function MelodyGrid() {
             disabled={isMelodyDraftClean()}
             data-testid="melody-grid-commit"
             title={isMelodyDraftClean()
-              ? 'No changes to commit'
-              : `Write draft to score (${dirtyMelodyCount()} cells changed)`}
+              ? 'Нет изменений для записи'
+              : `Записать черновик в партитуру (изменено ячеек: ${dirtyMelodyCount()})`}
           >
-            ↑ commit
+            ↑ записать
             {!isMelodyDraftClean() ? ` (${dirtyMelodyCount()})` : ''}
           </button>
         </Show>
@@ -288,14 +288,14 @@ export function MelodyGrid() {
           aria-live="polite"
         >
           {getMelodyMode() === 'view' &&
-            `16-step × 36-pitch piano-roll — read-only mirror of the score's first note(…) call. Tap to preview.`}
+            `16 шагов × 36 высот — зеркало первого вызова note(…) из партитуры. Нажмите, чтобы прослушать.`}
           {getMelodyMode() === 'sketch' &&
             (isMelodyDraftClean()
-              ? 'Piano-roll sketch — tap cells, then ↑ commit.'
-              : `Piano-roll sketch — ${dirtyMelodyCount()} cell${dirtyMelodyCount() === 1 ? '' : 's'} unsaved.`)}
+              ? 'Черновик в ленте нот — нажимайте ячейки, потом ↑ записать.'
+              : `Черновик в ленте нот — несохранено ячеек: ${dirtyMelodyCount()}.`)}
           {getMelodyMode() === 'edit' &&
             (editGate().ok
-              ? 'Piano-roll edit — every tap splices note(…) in place + hot-swaps scheduler.'
+              ? 'Правка в ленте нот — каждое нажатие вставляет note(…) на месте и перезапускает планировщик.'
               : editGate().reason)}
         </span>
         <span class="melody-grid-bpm" data-testid="melody-grid-bpm">
@@ -312,7 +312,7 @@ export function MelodyGrid() {
         {/* Header row: beat numbers 1..16. */}
         <div class="melody-grid-row melody-grid-row-header" aria-hidden="true">
           <div class="melody-grid-row-label melody-grid-row-label-header">
-            pitch
+            высота
           </div>
           <For each={Array.from({ length: MELODY_COLS })}>
             {(_, colIdx) => {

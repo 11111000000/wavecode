@@ -10,7 +10,7 @@ import { APP_URL } from './support/appUrl';
  *   - .piano-wrap                                 outer wrapper
  *   - .piano-toolbar                              toolbar div
  *   - .piano-toolbar-row                           inner row (RecBtn + Instr + MIDI pill)
- *   - .piano-hint                                 "2 octaves (C3–B4) …" hint
+ *   - .piano-hint                                 "2 октавы (C3–B4) …" hint
  *   - .piano-rec-btn                              REC toggle (data-active + aria-pressed)
  *   - .piano-inst-btn                             4 instrument buttons (triangle/sine/sawtooth/square)
  *   - .piano-instrument-selector                  group wrapper around the 4 buttons
@@ -171,16 +171,16 @@ test('polyphony: pressing D4 + E4 simultaneously marks both keys .active', async
   expect(realErrors, `polyphony tap emitted errors: ${JSON.stringify(realErrors)}`).toHaveLength(0);
 });
 
-test('piano hint renders "2 octaves (C3–B4)"', async ({ page }) => {
+test('piano hint renders "2 октавы (C3–B4)"', async ({ page }) => {
   await bootApp(page);
   await openPiano(page);
 
   const hint = page.locator('.piano-hint');
   await expect(hint).toBeVisible();
-  // The hint string is "2 octaves (C3–B4) — tap or use MIDI keyboard"
-  // (en-dash U+2013 between C3 and B4). toContainText is permissive
-  // about whitespace.
-  await expect(hint).toContainText('2 octaves (C3–B4)');
+  // The hint string is "2 октавы (C3–B4) — нажимайте или играйте на
+  // MIDI-клавиатуре" (en-dash U+2013 between C3 and B4). Фаза 6
+  // перевела интерфейс на один язык — подпись тоже.
+  await expect(hint).toContainText('2 октавы (C3–B4)');
 });
 
 test('rec button is clickable and toggles aria-pressed', async ({ page }) => {

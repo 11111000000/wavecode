@@ -57,7 +57,7 @@ export function QuickStart(): JSX.Element {
 
         <article class="l-step">
           <span class="l-step__num">2</span>
-          <h3 class="l-step__title">Нажми «Play»</h3>
+          <h3 class="l-step__title">Нажми «Пуск»</h3>
           <p class="l-step__body">
             Кнопка <span style={{ color: 'var(--primary)' }}>▶</span>{' '}
             в транспортной панели — та закреплена сверху, под шапкой.
@@ -74,7 +74,7 @@ export function QuickStart(): JSX.Element {
           <span class="l-step__num">3</span>
           <h3 class="l-step__title">Меняй как хочешь</h3>
           <p class="l-step__body">
-            Пиши в AI-чат «сделай быстрее» или «добавь басов».
+            Пиши в ИИ-чат «сделай быстрее» или «добавь басов».
             Или правь код руками — музыка меняется мгновенно.
           </p>
           <pre class="l-step__cmd">

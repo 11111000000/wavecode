@@ -44,14 +44,14 @@ const detectMacPlatform = (): boolean => {
 
 const IS_MAC = detectMacPlatform();
 const MODIFIER_LABEL = IS_MAC ? 'Cmd' : 'Ctrl';
-const CONSOLE_BUTTON_TITLE = `Console (${MODIFIER_LABEL}+\`)`;
+const CONSOLE_BUTTON_TITLE = `Консоль (${MODIFIER_LABEL}+\`)`;
 
 export function ConsoleButton(): JSX.Element {
   return (
     <button
       type="button"
       class={`wc-icon-btn console-btn ${consoleStore.unreadErrors() > 0 ? 'has-errors' : ''}`}
-      aria-label="Open console"
+      aria-label="Открыть консоль"
       title={CONSOLE_BUTTON_TITLE}
       data-testid="console-btn"
       onClick={() => consoleStore.setConsoleOpen(true)}
@@ -61,7 +61,7 @@ export function ConsoleButton(): JSX.Element {
         <span
           class="console-btn-badge"
           data-testid="console-btn-badge"
-          aria-label={`${consoleStore.unreadErrors()} unread errors`}
+          aria-label={`${consoleStore.unreadErrors()} непрочитанных ошибок`}
         >
           {consoleStore.unreadErrors() > 99 ? '99+' : consoleStore.unreadErrors()}
         </span>

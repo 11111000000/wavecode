@@ -9,20 +9,20 @@ export type Snippet = {
 };
 
 export const SNIPPETS: ReadonlyArray<Snippet> = [
-  { label: 'note(', insert: 'note(', ariaLabel: 'Insert note function call' },
-  { label: 's(', insert: 's(', ariaLabel: 'Insert sound function call' },
-  { label: 'stack(', insert: 'stack(', ariaLabel: 'Insert stack function call' },
-  { label: 'n(', insert: 'n(', ariaLabel: 'Insert note-call syntax' },
-  { label: '<', insert: '<', ariaLabel: 'Insert slow group opener' },
-  { label: '>', insert: '>', ariaLabel: 'Insert slow group closer' },
-  { label: '[', insert: '[', ariaLabel: 'Insert step bracket opener' },
-  { label: ']', insert: ']', ariaLabel: 'Insert step bracket closer' },
-  { label: '*', insert: '*', ariaLabel: 'Insert repeat operator' },
-  { label: '?', insert: '?', ariaLabel: 'Insert randomize operator' },
-  { label: '.gain(', insert: '.gain(', ariaLabel: 'Insert gain effect' },
-  { label: '.lpf(', insert: '.lpf(', ariaLabel: 'Insert low-pass filter' },
-  { label: ',', insert: ',', ariaLabel: 'Insert comma separator' },
-  { label: '␣', insert: ' ', ariaLabel: 'Insert space' },
+  { label: 'note(', insert: 'note(', ariaLabel: 'Вставить вызов note' },
+  { label: 's(', insert: 's(', ariaLabel: 'Вставить вызов s' },
+  { label: 'stack(', insert: 'stack(', ariaLabel: 'Вставить вызов stack' },
+  { label: 'n(', insert: 'n(', ariaLabel: 'Вставить синтаксис n' },
+  { label: '<', insert: '<', ariaLabel: 'Вставить начало медленной группы' },
+  { label: '>', insert: '>', ariaLabel: 'Вставить конец медленной группы' },
+  { label: '[', insert: '[', ariaLabel: 'Вставить открывающую скобку шага' },
+  { label: ']', insert: ']', ariaLabel: 'Вставить закрывающую скобку шага' },
+  { label: '*', insert: '*', ariaLabel: 'Вставить оператор повтора' },
+  { label: '?', insert: '?', ariaLabel: 'Вставить оператор случайности' },
+  { label: '.gain(', insert: '.gain(', ariaLabel: 'Вставить эффект gain' },
+  { label: '.lpf(', insert: '.lpf(', ariaLabel: 'Вставить фильтр нижних частот' },
+  { label: ',', insert: ',', ariaLabel: 'Вставить запятую' },
+  { label: '␣', insert: ' ', ariaLabel: 'Вставить пробел' },
 ];
 
 type Props = {
@@ -98,7 +98,7 @@ export function MiniNotationToolbar(props: Props) {
     <div
       class="mini-toolbar"
       role="toolbar"
-      aria-label="Strudel mini-notation insert toolbar"
+      aria-label="Панель вставки мини-нотации Strudel"
       data-vkb-visible={vkbOpen() ? 'true' : 'false'}
     >
       <For each={SNIPPETS}>

@@ -1,4 +1,4 @@
-import { Show, onCleanup, type JSX } from 'solid-js';
+import { onCleanup, type JSX } from 'solid-js';
 import { appStore } from '~/presentation/state/appStore';
 import type { MobileMode } from '~/presentation/state/uiState';
 import { openKindSheet } from '~/presentation/state/uiState';
@@ -9,12 +9,11 @@ import {
 import { ShareButton } from '~/presentation/components/ShareButton';
 import { ConsoleButton } from '~/presentation/components/ConsoleButton';
 import { OverflowMenu } from './OverflowMenu';
+import { StatusStrip } from './StatusStrip';
 
 type CtxState = { state: string; sampleRate: number | null };
 
 export type TopBarProps = {
-  audioRunning: boolean;
-  audioStarting: boolean;
   ctxState: () => CtxState;
   presetId: string;
   mobileMode: MobileMode;
@@ -28,7 +27,6 @@ export type TopBarProps = {
   onResetAll: () => void;
   onToggleLayout: () => void;
   onOpenAdmin: () => void;
-  sampleStatus: 'idle' | 'loading' | 'ready';
 };
 
 const LONG_PRESS_MS = 3000;
@@ -67,24 +65,11 @@ export function TopBar(props: TopBarProps): JSX.Element {
         <WavecodeLogo size={22} />
       </span>
       <h1 class="wc-topbar__title">wavecode</h1>
-      <Show when={props.sampleStatus === 'loading'}>
-        <span class="audio-loading-pill" title="Sample banks loading…">♪ samples</span>
-      </Show>
-      <span class="wc-topbar__led" data-tone={props.audioRunning ? 'running' : 'idle'}>
-        <span class="wc-led" data-tone={props.audioRunning ? 'running' : 'idle'}>
-          {props.audioRunning ? `▶ ${props.ctxState().state}` : `● ${props.ctxState().state}`}
-        </span>
-      </span>
-      <Show when={appStore.audio.lastError}>
-        <a
-          class="wc-admin-warn"
-          href="#/admin"
-          aria-label="Открыть админку: ошибка аудио"
-          title="Аудио-ошибка — открыть админку"
-        >
-          ⚠
-        </a>
-      </Show>
+      {/* wavecode-zen-ui-phases-6-7 (фаза 6): состояние аудио,
+          счётчик сэмплов и индикатор офлайна живут в ОДНОМ кластере
+          (StatusStrip). Отдельная плашка «♪ samples» была мёртвым
+          кодом — sampleStatus никогда не становился 'loading'. */}
+      <StatusStrip ctxState={() => props.ctxState().state} />
       <div class="wc-topbar__actions">
         <button
           type="button"

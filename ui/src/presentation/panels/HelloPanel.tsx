@@ -1,5 +1,6 @@
 import { Show } from 'solid-js';
 import { appStore } from '../state/appStore';
+import { AGENT_STATUS_LABEL, AUDIO_STATUS_LABEL, labelFor } from '../state/labels';
 
 const statusClass = (s: string): string => `status-${s}`;
 
@@ -8,9 +9,13 @@ export function HelloPanel() {
     <div>
       <dl class="status-grid">
         <dt>агент</dt>
-        <dd class={statusClass(appStore.agent.status)}>{appStore.agent.status}</dd>
+        <dd class={statusClass(appStore.agent.status)}>
+          {labelFor(AGENT_STATUS_LABEL, appStore.agent.status)}
+        </dd>
         <dt>аудио</dt>
-        <dd class={statusClass(appStore.audio.status)}>{appStore.audio.status}</dd>
+        <dd class={statusClass(appStore.audio.status)}>
+          {labelFor(AUDIO_STATUS_LABEL, appStore.audio.status)}
+        </dd>
         <dt>партитура</dt>
         <dd>{appStore.score.length} симв.</dd>
         <dt>сообщения</dt>

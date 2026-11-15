@@ -9,15 +9,15 @@ import { APP_URL } from './support/appUrl';
  * Actual selectors (verified against current source — Phase 3):
  *   - [data-testid="console-btn"]                fixed FAB
  *   - [data-testid="console-btn-badge"]          count chip (hidden when 0)
- *   - role="dialog" aria-label="Console"        the sheet itself
+ *   - role="dialog" aria-label="Консоль"         the sheet itself
  *   - [data-testid="console-body"]               scrollable body
- *   - [data-testid="console-empty"]              "No errors." fallback
+ *   - [data-testid="console-empty"]              "Ошибок нет." fallback
  *   - nav[role="tablist"] button[role="tab"]     3 tabs (errors / all / by-source)
  *   - [data-testid="console-clear-btn"]          Clear button
  *   - button.console-close-btn                   Close X
  *   - .console-entry.console-entry-error         per-line styling
- *   - .toast-stack                                toast container
- *   - .toast-item[data-severity="error"]         clickable error toast
+ *   - [data-testid="error-region"]                ЕДИНЫЙ регион ошибок
+ *                                                  (фаза 6; раньше тост)
  *
  * Test strategy (5 tests):
  *   1. `console.error('test')` from the page is captured by the
@@ -25,18 +25,19 @@ import { APP_URL } from './support/appUrl';
  *      the logger doesn't bump unreadErrors; only window.onerror /
  *      unhandledrejection do).
  *   2. An unhandled rejection DOES bump the badge (consoleGlobals
- *      listens to those two event sources and pushes a toast).
+ *      listens to those two event sources and pushes an error into
+ *      the error region).
  *   3. Opening the sheet via the button clears the badge (markAllRead
  *      fires as a side-effect of setConsoleOpen(true)).
  *   4. Cmd/Ctrl+` hotkey toggles the sheet.
  *   5. The Clear button empties the buffer (Errors tab shows the
- *      "No errors." fallback).
+ *      "Ошибок нет." fallback).
  *
  * Why the original stub is wrong:
  *   The original test (Subagent 5 / commit 02f2f49) asserted that
  *   `console.error('E2E TEST CONSOLE ERROR — synthwave lives')`
  *   increments the badge. That premise is false — the badge counts
- *   TOASTS, and toasts come only from window.onerror /
+ *   ERRORS, and they come only from window.onerror /
  *   unhandledrejection, never from direct console.* calls. Direct
  *   console.* still hit the ring buffer (logger.install patches
  *   console.log/info/warn/error) and DO show up in the Errors tab,
@@ -94,7 +95,7 @@ test('console.error("test") from page surfaces in Errors tab (no badge — logge
 
   // Open the sheet via the button. Errors tab is default.
   await page.locator('[data-testid="console-btn"]').click();
-  const sheet = page.locator('[role="dialog"][aria-label="Console"]');
+  const sheet = page.locator('[role="dialog"][aria-label="Консоль"]');
   await expect(sheet).toBeVisible({ timeout: 3000 });
 
   const body = page.locator('[data-testid="console-body"]');
@@ -121,7 +122,7 @@ test('console.error("test") from page surfaces in Errors tab (no badge — logge
   expect(realErrors, `unexpected pageerrors: ${JSON.stringify(realErrors)}`).toHaveLength(0);
 });
 
-test('unhandled rejection pushes error toast and bumps the badge', async ({ page }) => {
+test('unhandled rejection lands in the error region and bumps the badge', async ({ page }) => {
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(`[pageerror] ${e.message}`));
 
@@ -138,10 +139,11 @@ test('unhandled rejection pushes error toast and bumps the badge', async ({ page
     Promise.reject(err);
   });
 
-  // Wait for the toast to render.
-  const toast = page.locator('.toast-stack .toast-item[data-severity="error"]');
-  await expect(toast).toBeVisible({ timeout: 3000 });
-  await expect(toast).toContainText(/Unhandled rejection/);
+  // Фаза 6: ошибка живёт в регионе ошибок под холстом, а не в тосте.
+  // Тост — только для мимолётных сообщений.
+  const region = page.locator('[data-testid="error-region"]');
+  await expect(region).toBeVisible({ timeout: 3000 });
+  await expect(region).toContainText('Необработанный отказ промиса');
 
   // Badge must now show a positive count.
   const badgeText = await getBadgeText(page);
@@ -191,7 +193,7 @@ test('opening the console clears the badge (markAllRead side-effect of setConsol
 
   // Open the sheet — setConsoleOpen(true) auto-fires markAllRead.
   await page.locator('[data-testid="console-btn"]').click();
-  const sheet = page.locator('[role="dialog"][aria-label="Console"]');
+  const sheet = page.locator('[role="dialog"][aria-label="Консоль"]');
   await expect(sheet).toBeVisible({ timeout: 3000 });
 
   // Badge element must be gone (Show hides it when count == 0).
@@ -220,7 +222,7 @@ test('Cmd/Ctrl+` hotkey toggles the console sheet', { tag: '@smoke' }, async ({ 
   // Use the keyboard.down/up sequence so Playwright registers the
   // modifier flag on the keydown event. press('Control+`') can drop
   // the modifier depending on the browser, so explicit down is safer.
-  const dialog = page.locator('[role="dialog"][aria-label="Console"]');
+  const dialog = page.locator('[role="dialog"][aria-label="Консоль"]');
   await expect(dialog).toHaveCount(0);
 
   await page.keyboard.down('Control');
@@ -235,7 +237,7 @@ test('Cmd/Ctrl+` hotkey toggles the console sheet', { tag: '@smoke' }, async ({ 
   await expect(dialog).toHaveCount(0);
 });
 
-test('clear button empties the buffer (Errors tab shows "No errors.")', async ({ page }) => {
+test('clear button empties the buffer (Errors tab shows "Ошибок нет.")', async ({ page }) => {
   await bootApp(page);
 
   // Seed the buffer with a unique marker.
@@ -261,8 +263,8 @@ test('clear button empties the buffer (Errors tab shows "No errors.")', async ({
   // Errors tab now shows the empty-state fallback.
   const empty = page.locator('[data-testid="console-empty"]');
   await expect(empty).toBeVisible({ timeout: 2000 });
-  await expect(empty).toContainText('No errors');
+  await expect(empty).toContainText('Ошибок нет');
 
-  // Footer counts reset to "0 entries · 0 errors".
-  await expect(page.locator('.console-counts')).toContainText(/0 entries.*0 errors/);
+  // Счётчики в подвале обнуляются: «Записей: 0 · Ошибок: 0».
+  await expect(page.locator('.console-counts')).toContainText(/Записей: 0.*Ошибок: 0/);
 });

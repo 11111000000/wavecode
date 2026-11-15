@@ -1,12 +1,16 @@
 /**
- * consoleStore — сигнал-стор для UI-консоли wavecode.
+ * consoleStore — сигнал-стор для уведомлений и ошибок wavecode.
  *
- * Три независимых сигнала:
- *   - toasts()      — массив текущих popovers (FIFO, capped at MAX_TOASTS).
- *   - consoleOpen() — открыт ли bottom-sheet с логами.
- *   - unreadErrors()— счётчик ошибок, накопленных с момента последнего
- *                     `markAllRead` (используется для красной пульсации
- *                     кнопки ConsoleButton).
+ * wavecode-zen-ui-phases-6-7 (фаза 6, «Тишина»): уведомления
+ * разведены по двум каналам.
+ *
+ *   - toasts()  — мимолётные сообщения (severity 'info' / 'warn').
+ *                 В интерфейсе виден ОДИН — самый свежий: стек
+ *                 тостов это шум, а не информация. Стор хранит до
+ *                 четырёх (как раньше) — админка показывает историю.
+ *   - errors()  — ошибки (severity 'error' / 'critical' / 'fatal').
+ *                 Живут до явного закрытия, показываются ОДНИМ
+ *                 регионом внизу холста (см. ErrorRegion.tsx).
  *
  * ВАЖНО: информационные 'info' / 'warn' тосты НЕ увеличивают
  * `unreadErrors`. Только `severity ∈ {'error', 'critical', 'fatal'}` —
@@ -16,17 +20,27 @@
  * (see decisions/wavecode-logger-enhancements.yaml):
  * - LogLevel-union расширен в `infrastructure/log/logger.ts`.
  * - Treat 'fatal' as equal-to 'critical' here: sticky TTL, increments
- *   unreadErrors, clickable to open the sheet. `pushToast({ severity: 'fatal' })`
- *   уже валиден по типу.
+ *   unreadErrors. `pushToast({ severity: 'fatal' })` уже валиден по типу.
  *
  * setConsoleOpen(true) побочно вызывает markAllRead — удобно для UI,
  * которому достаточно одного вызова при открытии sheet'а.
+ *
+ * ДЕЙСТВИЕ «ПОВТОРИТЬ»: у ошибки может быть поле `action` — подпись и
+ * функция. Регион ошибок рисует из неё кнопку. Это единственный
+ * честный способ предложить повтор: ошибка сама знает, что именно
+ * сломалось (см. audioActions.ts — перезапуск оценки партитуры).
  */
 
 import { nanoid } from 'nanoid';
 import { createSignal } from 'solid-js';
 
 export type ToastSeverity = 'info' | 'warn' | 'error' | 'critical' | 'fatal';
+
+/** Действие, которое регион ошибок превращает в кнопку «Повторить». */
+export type ToastAction = {
+  readonly label: string;
+  readonly run: () => void;
+};
 
 export type Toast = {
   readonly id: string;
@@ -36,28 +50,47 @@ export type Toast = {
   readonly source?: string;
   readonly createdAt: number;
   readonly ttlMs: number;
+  readonly action?: ToastAction;
 };
 
 export type ToastInput =
   Omit<Toast, 'id' | 'createdAt' | 'ttlMs'> & { ttlMs?: number };
 
+/**
+ * Сколько мимолётных тостов помнит стор. В интерфейсе виден один,
+ * но админка показывает историю целиком — четыре достаточно.
+ */
 const MAX_TOASTS = 4;
+
+/**
+ * Ошибок в регионе не сорок: держим пять последних, показываем
+ * самый свежий. Полная история — в консоли (ConsoleSheet) и в
+ * журнале логгера.
+ */
+const MAX_ERRORS = 5;
 
 const TOAST_DEFAULT_TTL: Readonly<Record<ToastSeverity, number>> = {
   info: 4000,
   warn: 6000,
-  error: 8000,
+  // Ошибка в регионе не исчезает сама — её закрывают руками.
+  error: 0,
   critical: 0,
   fatal: 0,
 };
 
 const [toasts, setToasts] = createSignal<readonly Toast[]>([]);
+const [errors, setErrors] = createSignal<readonly Toast[]>([]);
 const [consoleOpen, setConsoleOpenSignal] = createSignal(false);
 const [unreadErrors, setUnreadErrors] = createSignal(0);
 
 const isErrorSeverity = (s: ToastSeverity): boolean =>
   s === 'error' || s === 'critical' || s === 'fatal';
 
+/**
+ * Обрезка очереди тостов: сначала уходят «липкие» (ttlMs === 0),
+ * и только если таких нет — самые старые. Липкий тост не должен
+ * вытесняться обычным: он тоже важен, просто живёт дольше.
+ */
 const capToasts = (next: readonly Toast[]): readonly Toast[] => {
   if (next.length <= MAX_TOASTS) return next;
 
@@ -87,6 +120,7 @@ const setConsoleOpen = (open: boolean): void => {
 
 export const consoleStore = {
   toasts,
+  errors,
   consoleOpen,
   setConsoleOpen,
   unreadErrors,
@@ -100,22 +134,52 @@ export const consoleStore = {
       title: input.title,
       ...(input.body !== undefined ? { body: input.body } : {}),
       ...(input.source !== undefined ? { source: input.source } : {}),
+      ...(input.action !== undefined ? { action: input.action } : {}),
       createdAt: Date.now(),
       ttlMs,
     };
-    setToasts((prev) => capToasts([...prev, toast]));
     if (isErrorSeverity(severity)) {
+      // Новые ошибки сверху: регион показывает самую свежую.
+      // Повтор той же ошибки (тот же источник и тот же текст) НЕ
+      // добавляется вторым элементом — он заменяет предыдущий,
+      // сохраняя id. Иначе регион «дёргался» бы на каждой неудачной
+      // оценке партитуры и зря перечитывал бы сообщение скринридером.
+      setErrors((prev) => {
+        const head = prev[0];
+        if (
+          head !== undefined &&
+          head.source === toast.source &&
+          head.title === toast.title &&
+          head.body === toast.body
+        ) {
+          return [{ ...toast, id: head.id }, ...prev.slice(1)];
+        }
+        return [toast, ...prev].slice(0, MAX_ERRORS);
+      });
       setUnreadErrors((n) => n + 1);
+    } else {
+      setToasts((prev) => capToasts([...prev, toast]));
     }
     return toast.id;
   },
 
+  /** Закрыть сообщение по id — из того канала, где оно лежит. */
   dismissToast(id: string): void {
     setToasts((prev) => prev.filter((t) => t.id !== id));
+    setErrors((prev) => prev.filter((t) => t.id !== id));
+  },
+
+  /** Закрыть конкретную ошибку (регион ошибок). */
+  dismissError(id: string): void {
+    setErrors((prev) => prev.filter((t) => t.id !== id));
   },
 
   clearToasts(): void {
     setToasts([]);
+  },
+
+  clearErrors(): void {
+    setErrors([]);
   },
 
   markAllRead(): void {
@@ -124,6 +188,7 @@ export const consoleStore = {
 
   reset(): void {
     setToasts([]);
+    setErrors([]);
     setConsoleOpenSignal(false);
     setUnreadErrors(0);
   },
@@ -133,10 +198,12 @@ export const toastError = (opts: {
   title: string;
   body?: string;
   source?: string;
+  action?: ToastAction;
 }): string =>
   consoleStore.pushToast({
     severity: 'error',
     title: opts.title,
     ...(opts.body !== undefined ? { body: opts.body } : {}),
     ...(opts.source !== undefined ? { source: opts.source } : {}),
+    ...(opts.action !== undefined ? { action: opts.action } : {}),
   });

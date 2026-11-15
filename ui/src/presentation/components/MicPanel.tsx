@@ -91,13 +91,13 @@ const SLOTS: ReadonlyArray<{
 }> = [
   {
     id: 'append-stack',
-    label: 'Add to end',
-    ariaLabel: 'Append the recorded snippet to the end of the existing stack',
+    label: 'В конец',
+    ariaLabel: 'Дописать записанный фрагмент в конец текущего стека',
   },
   {
     id: 'at-cursor',
-    label: 'At cursor',
-    ariaLabel: 'Insert the recorded snippet at the cursor position in the editor',
+    label: 'В курсор',
+    ariaLabel: 'Вставить записанный фрагмент в позицию курсора',
   },
 ];
 
@@ -173,8 +173,8 @@ export function MicPanel(): JSX.Element {
   const slotTitle = (slot: MicSlot): string => {
     if (slot !== 'at-cursor') return `→ ${SLOTS.find((s) => s.id === slot)?.label ?? ''}`;
     return micEditorFocused()
-      ? '⌖ insert at cursor'
-      : '⌖ cursor — focus the editor first';
+      ? '⌖ вставить в позицию курсора'
+      : '⌖ курсор — сначала щёлкните в редакторе';
   };
 
   return (
@@ -230,33 +230,33 @@ export function MicPanel(): JSX.Element {
           data-cta="start"
           data-listening={micListening()}
           aria-pressed={micListening()}
-          aria-label={micListening() ? 'Stop the mic' : 'Start the mic'}
-          title={micListening() ? 'Stop listening' : 'Start listening — grant mic permission'}
+          aria-label={micListening() ? 'Остановить микрофон' : 'Включить микрофон'}
+          title={micListening() ? 'Прекратить запись' : 'Начать запись — разрешите доступ к микрофону'}
           onClick={onToggleMic}
         >
-          <span>{micListening() ? '■ STOP' : '◆ START'}</span>
+          <span>{micListening() ? '■ СТОП' : '◆ СТАРТ'}</span>
         </button>
         <button
           type="button"
           class="mic-ux-cta"
           data-cta="apply"
-          aria-label="Apply the recorded snippet to the score"
-          title="Apply preview via the active slot"
+          aria-label="Применить записанный фрагмент к партитуре"
+          title="Применить через активный слот"
           disabled={micPreviewNotes().length === 0 && micTransients().length === 0}
           onClick={() => applyToScore()}
         >
-          <span>⌃ Add to score</span>
+          <span>⌃ В партитуру</span>
         </button>
         <button
           type="button"
           class="mic-ux-cta-sm"
           data-cta="reset"
-          aria-label="Reset the preview buffer"
-          title="Clear the preview (Ctrl+Z doesn't apply — preview is local)"
+          aria-label="Сбросить предпрослушивание"
+          title="Очистить предпрослушивание (Ctrl+Z не работает — буфер локальный)"
           disabled={micPreviewNotes().length === 0 && micTransients().length === 0}
           onClick={() => clearPreview()}
         >
-          + reset
+          + сброс
         </button>
         <button
           type="button"
@@ -264,19 +264,19 @@ export function MicPanel(): JSX.Element {
           data-cta="preview"
           data-active={previewing() ? 'true' : 'false'}
           aria-pressed={previewing()}
-          aria-label={previewing() ? 'Stop preview playback' : 'Play the recorded snippet'}
-          title={previewing() ? 'Stop preview' : 'Hear the recorded snippet in the running audio'}
+          aria-label={previewing() ? 'Остановить предпрослушивание' : 'Проиграть записанный фрагмент'}
+          title={previewing() ? 'Остановить' : 'Услышать записанный фрагмент в текущем звуке'}
           disabled={micPreviewNotes().length === 0 && micTransients().length === 0}
           onClick={onTogglePreview}
         >
-          {previewing() ? '■ stop preview' : '👁 preview'}
+          {previewing() ? '■ стоп превью' : '👁 превью'}
         </button>
         <button
           type="button"
           class="mic-ux-cta-sm"
           data-cta="gesture"
-          aria-label="Open the hand-gesture control panel"
-          title="Control the music with your hands — the camera is only asked for when you enable it"
+          aria-label="Открыть панель управления жестами"
+          title="Управляйте музыкой руками — камера включается только по запросу"
           onClick={() => openKindSheet('gesture', 'half')}
         >
           ✋ руки
@@ -284,7 +284,7 @@ export function MicPanel(): JSX.Element {
       </div>
 
       <div class="mic-ux-row-roll">
-        <div class="mic-ux-roll-header">Live timeline</div>
+        <div class="mic-ux-roll-header">Живая лента</div>
         <PianoRollPreview
           notes={micPreviewNotes()}
           transients={micTransients()}
@@ -319,7 +319,7 @@ const PreviewPill = (): JSX.Element => {
     >
       {(() => {
         const p = payload();
-        if (p === null) return 'no preview';
+        if (p === null) return 'нет превью';
         const overflow = p.overflow > 0 ? ` +${p.overflow}` : '';
         const pruned = p.pruned > 0 ? ` [+${p.pruned}]` : '';
         return `● ${p.firstNames.join(' ')}${overflow}${pruned}`;
@@ -337,7 +337,7 @@ const PreviewPill = (): JSX.Element => {
  * behaves well on a phone.
  */
 const InstrumentSelector = (): JSX.Element => (
-  <label class="mic-ux-inst-selector" aria-label="Instrument">
+  <label class="mic-ux-inst-selector" aria-label="Инструмент">
     <span class="mic-ux-inst-glyph" aria-hidden="true">
       {INSTRUMENTS.find((i) => i.id === micInstrument())?.glyph ?? '♪'}
     </span>
@@ -360,7 +360,7 @@ const InstrumentSelector = (): JSX.Element => (
 const SlotSelect = (props: {
   readonly slotTitle: (slot: MicSlot) => string;
 }): JSX.Element => (
-  <label class="mic-ux-slot-select-wrap" aria-label="Slot">
+  <label class="mic-ux-slot-select-wrap" aria-label="Слот">
     <select
       class="mic-ux-slot-select"
       data-slot={micSlot()}
@@ -381,7 +381,7 @@ const SlotSelect = (props: {
               value={s.id}
               disabled={disabled()}
               aria-label={s.ariaLabel}
-              title={disabled() ? 'At-cursor requires editor focus' : s.ariaLabel}
+              title={disabled() ? 'Вставка по курсору требует фокуса в редакторе' : s.ariaLabel}
             >
               {s.label}
             </option>
@@ -396,30 +396,29 @@ const EmptyState = (props: {
   readonly showHelp: boolean;
   readonly onToggleHelp: () => void;
 }): JSX.Element => (
-  <div class="mic-ux-empty" role="region" aria-label="Mic feature introduction">
-    <div class="mic-ux-empty-title">Tap START and sing, tap, or hum.</div>
+  <div class="mic-ux-empty" role="region" aria-label="О микрофоне">
+    <div class="mic-ux-empty-title">Нажмите START и спойте, постучите или напойте.</div>
     <div class="mic-ux-empty-sub">
-      Try a kick drum, a beatbox pattern, or a melody.
+      Попробуйте барабан, битбокс или мелодию.
     </div>
     <div class="mic-ux-empty-actions">
       <button
         type="button"
         class="mic-ux-empty-help"
         aria-expanded={props.showHelp}
-        aria-label="Toggle help text"
-        title="Show or hide help text"
+        aria-label="Показать или скрыть подсказку"
+        title="Показать или скрыть подсказку"
         onClick={(): void => { props.onToggleHelp(); }}
       >
-        {props.showHelp ? '− hide help' : '+ Learn more'}
+        {props.showHelp ? '− скрыть подсказку' : '+ подробнее'}
       </button>
     </div>
     <Show when={props.showHelp}>
       <p class="mic-ux-empty-help-text">
-        The mic detects two things in parallel: sustained pitch (your voice or
-        a whistle becomes MIDI notes) and percussive onsets (a tap on the
-        table or a clap becomes a drum hit). Both show up on the live timeline
-        above the meter; click &ldquo;Add to score&rdquo; to splice them into
-        your pattern at the slot you choose.
+        Микрофон одновременно распознаёт два: sustained pitch (голос или свист
+        превращаются в MIDI-ноты) и перкуссионные атаки (стук по столу или
+        хлоп превращаются в удар). Оба видны на живой шкале над индикатором;
+        нажми «⌃ В партитуру», чтобы вставить их в выбранный слот.
       </p>
     </Show>
   </div>

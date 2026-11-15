@@ -670,3 +670,300 @@
   outline: 2px solid var(--primary);
   outline-offset: 2px;
 }
+
+/* ── ФАЗА 6: ТИШИНА ─────────────────────────────────────────────────
+ *
+ * wavecode-zen-ui-phases-6-7: фаза 6 («Тишина») убрала из интерфейса
+ * три источника шума: стек тостов, ссылку «⚠» на /admin и разбросанные
+ * по экрану индикаторы состояния. Ниже — стили трёх новых элементов и
+ * новой строки транспорта.
+ */
+
+/* ── СТРОКА СТАТУСА (офлайн + сэмплы + звук) ─────────────────────────── */
+
+.wc-status {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  min-width: 0;
+}
+
+.wc-status__led {
+  display: inline-flex;
+  align-items: center;
+}
+
+.wc-status__chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px var(--space-xs);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--surface-1);
+  color: var(--fg-dim);
+  font-family: var(--font-mono);
+  font-size: var(--fs-2xs);
+  letter-spacing: var(--ls-wide);
+  white-space: nowrap;
+}
+
+.wc-status__chip[data-tone='warn'] {
+  border-color: var(--warn);
+  color: var(--warn);
+  background: var(--warn-soft);
+}
+
+.wc-status__chip[data-tone='err'] {
+  border-color: var(--err);
+  color: var(--err);
+  background: var(--err-soft);
+}
+
+/* ── РЕГИОН ОШИБОК (внизу холста) ────────────────────────────────────── */
+
+.wc-error-region {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-xs) var(--space-md);
+  background: var(--err-soft);
+  border-top: 1px solid var(--err);
+  color: var(--fg);
+  font-size: var(--fs-sm);
+}
+
+.wc-error-region[data-severity='warn'] {
+  background: var(--warn-soft);
+  border-top-color: var(--warn);
+}
+
+.wc-error-region__icon {
+  display: inline-flex;
+  align-items: center;
+  color: var(--err);
+  flex-shrink: 0;
+}
+
+.wc-error-region__body {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.wc-error-region__title {
+  font-weight: var(--fw-semibold);
+}
+
+.wc-error-region__text {
+  color: var(--fg-dim);
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wc-error-region__more {
+  color: var(--fg-ghost);
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  flex-shrink: 0;
+}
+
+.wc-error-region__btn {
+  padding: 3px var(--space-sm);
+  background: transparent;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  color: var(--fg);
+  font-family: var(--font-sans);
+  font-size: var(--fs-xs);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: border-color var(--dur-2xs) var(--ease),
+    color var(--dur-2xs) var(--ease);
+}
+
+.wc-error-region__btn:hover {
+  border-color: var(--err);
+  color: var(--err);
+}
+
+.wc-error-region__btn--ghost {
+  border-color: transparent;
+  color: var(--fg-dim);
+}
+
+.wc-error-region__close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-full);
+  color: var(--fg-dim);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.wc-error-region__close:hover {
+  color: var(--fg);
+  border-color: var(--border-strong);
+}
+
+/* ── ВЫБОР КОМПОЗИЦИИ (лист «Инструменты») ───────────────────────────── */
+
+.wc-preset-picker {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.wc-preset-picker__label {
+  color: var(--fg-dim);
+  font-size: var(--fs-xs);
+  letter-spacing: var(--ls-wide);
+  text-transform: lowercase;
+}
+
+.wc-preset-picker .preset-select {
+  flex: 1 1 200px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.wc-preset-picker__draft {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-xs);
+  flex: 1 1 100%;
+}
+
+.wc-preset-picker__input {
+  flex: 1 1 160px;
+  min-width: 0;
+  min-height: 32px;
+  padding: 0 var(--space-sm);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  color: var(--fg);
+  font-family: var(--font-sans);
+  font-size: var(--fs-sm);
+}
+
+.wc-preset-picker__btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2xs);
+  min-height: 32px;
+  padding: 3px var(--space-sm);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  color: var(--fg-dim);
+  font-family: var(--font-sans);
+  font-size: var(--fs-xs);
+  cursor: pointer;
+  transition: border-color var(--dur-2xs) var(--ease),
+    color var(--dur-2xs) var(--ease);
+}
+
+.wc-preset-picker__btn:hover:not(:disabled) {
+  border-color: var(--primary);
+  color: var(--fg);
+}
+
+.wc-preset-picker__btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.wc-preset-picker__btn--primary {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+/* ── РАСКРЫТИЕ ПОД ПАРТИТУРОЙ (сниппеты + вид + отладка) ─────────────── */
+
+.score-extra {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2xs);
+  padding: var(--space-2xs) var(--space-sm);
+  border-top: 1px solid var(--border);
+}
+
+.score-extra__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2xs);
+  min-height: 28px;
+  padding: 2px var(--space-xs);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  color: var(--fg-ghost);
+  font-family: var(--font-sans);
+  font-size: var(--fs-xs);
+  cursor: pointer;
+  transition: color var(--dur-2xs) var(--ease),
+    border-color var(--dur-2xs) var(--ease);
+}
+
+.score-extra__toggle:hover {
+  color: var(--fg-dim);
+  border-color: var(--border);
+}
+
+.score-extra__toggle[data-active='true'] {
+  color: var(--fg-dim);
+}
+
+.score-extra__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  width: 100%;
+}
+
+/* ── СТРОКА ТРАНСПОРТА: play · темп · позиция ────────────────────────── */
+
+.app-transport-bar__bpm {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 3px;
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+  color: var(--warm);
+  white-space: nowrap;
+}
+
+.app-transport-bar__bpm .bpm-suffix {
+  color: var(--fg-ghost);
+  font-size: var(--fs-2xs);
+  letter-spacing: var(--ls-wide);
+}
+
+.app-transport-bar__position {
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  color: var(--fg-dim);
+  min-width: 3ch;
+  text-align: center;
+  white-space: nowrap;
+}
+
+/* Полоса позиции растягивается между показаниями и кнопкой раскрытия. */
+.app-transport-bar__strip .playhead-track {
+  flex: 1 1 auto;
+  min-width: 40px;
+  margin-top: 0;
+  margin-bottom: 0;
+}

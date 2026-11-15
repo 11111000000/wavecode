@@ -39,19 +39,19 @@ export function BottomSheets(_: BottomSheetsProps): JSX.Element {
   void _;
   return (
     <>
-      <BottomSheet kind="status" title="Состояние" subtitle="run-time telemetry">
+      <BottomSheet kind="status" title="Состояние" subtitle="телеметрия рантайма">
         <HelloPanel />
       </BottomSheet>
 
-      <BottomSheet kind="ai" title="ИИ-ассистент" subtitle="live-coding chat">
+      <BottomSheet kind="ai" title="ИИ-ассистент" subtitle="чат live-coding">
         <AIEditPanel />
       </BottomSheet>
 
-      <BottomSheet kind="mixer" title="Микшер" subtitle="M/S · gain">
+      <BottomSheet kind="mixer" title="Микшер" subtitle="громкость, mute и solo">
         <MixerPanel />
       </BottomSheet>
 
-      <BottomSheet kind="step" title="Step grid" subtitle="4×8 pads">
+      <BottomSheet kind="step" title="Шаги" subtitle="сетка 4×8">
         <div class="step-sheet-body">
           <StepGrid />
         </div>
@@ -79,7 +79,7 @@ export function BottomSheets(_: BottomSheetsProps): JSX.Element {
       </BottomSheet>
 
       <Show when={!isDesktopViewport()}>
-        <BottomSheet kind="piano" title="Piano" subtitle="WebMIDI auto-bind">
+        <BottomSheet kind="piano" title="Пианино" subtitle="авто-подключение WebMIDI">
           <div class="piano-sheet-body">
             <PianoKeyboard variant="sheet" />
           </div>
@@ -94,7 +94,7 @@ export function BottomSheets(_: BottomSheetsProps): JSX.Element {
           visible above for context. */}
       <BottomSheet
         kind="mic"
-        title="Mic"
+        title="Микрофон"
         subtitle="микрофон → Strudel"
       >
         <div class="mic-sheet-body">

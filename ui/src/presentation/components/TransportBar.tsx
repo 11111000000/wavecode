@@ -1,5 +1,5 @@
 import {
-  Show, For, createSignal, createEffect, onMount, onCleanup,
+  For, createSignal, createEffect, onMount, onCleanup,
   untrack, type JSX,
 } from 'solid-js';
 import { Effect } from 'effect';
@@ -13,8 +13,27 @@ import {
   setSwingAmountLocal,
   setSwingDivisorLocal,
 } from '~/presentation/state/transportState';
-import { allPresets } from '~/presentation/state/presetsStore';
 import { PlayIcon, StopIcon } from '~/presentation/icons';
+
+/**
+ * TransportBar — строка транспорта.
+ *
+ * wavecode-zen-ui-phases-6-7 (фаза 6, «Тишина»): строка transport
+ * была девятью контролами в ряд — play, select композиций, кнопка
+ * раскрытия, а в раскрытом виде ещё CPS-слайдер, свинг, три пресета
+ * темпа и полоса сохранения пресета. По плану остаётся ОДНА строка:
+ *
+ *     ▶ · 120 BPM · 2.3 · (тонкая полоса позиции)
+ *
+ * Всё остальное (темп в циклах, свинг, пресеты темпа) — за раскрытием,
+ * а выбор самой композиции уехал в лист «Инструменты»
+ * (см. PresetPicker.tsx).
+ *
+ * Раскрытие по умолчанию ЗАКРЫТО на всех экранах: одна строка — это
+ * и есть состояние покоя. Положение «раскрыто» помнится в
+ * localStorage, чтобы решение пользователя не переигрывалось при
+ * каждом релоаде.
+ */
 
 const STORAGE_KEY = 'wavecode-mobile-transport-expanded-v1';
 
@@ -26,7 +45,7 @@ const SWING_DIVISORS: ReadonlyArray<{ value: string; label: string }> = [
   { value: '1/4', label: '1/4' },
   { value: '1/8', label: '1/8' },
   { value: '1/16', label: '1/16' },
-  { value: '1/3', label: '1/3 (triplet)' },
+  { value: '1/3', label: '1/3 (триоли)' },
 ];
 
 const PRESET_CPS_LABELS: ReadonlyArray<{ value: number; label: string }> = [
@@ -38,6 +57,17 @@ const PRESET_CPS_LABELS: ReadonlyArray<{ value: number; label: string }> = [
 const formatBpm = (cpsValue: number): number => Math.round(60 * cpsValue * 2);
 const formatCps = (cpsValue: number): string => cpsValue.toFixed(2);
 const formatSwing = (s: number): string => s.toFixed(2);
+
+/**
+ * Позиция внутри цикла: один цикл Strudel = один такт 4/4, поэтому
+ * прогресс 0…1 раскладывается в «такт.доля» (1.1 … 1.4).
+ */
+const formatPosition = (progress: number): string => {
+  const beats = progress * 4;
+  const bar = Math.floor(beats) + 1;
+  const beat = Math.floor((beats % 1) * 4) + 1;
+  return `${bar}.${beat}`;
+};
 
 const isMobileViewport = (): boolean => {
   if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
@@ -65,11 +95,12 @@ const writeStored = (v: boolean): void => {
   }
 };
 
-const initialExpanded = (): boolean => {
-  const stored = readStored();
-  if (stored !== null) return stored;
-  return !isMobileViewport();
-};
+/**
+ * Фаза 6: строка transport по умолчанию свёрнута на всех экранах.
+ * Раньше на десктопе она раскрывалась сразу — и занимала треть
+ * экрана слайдерами, которые никто не двигал.
+ */
+const initialExpanded = (): boolean => readStored() ?? false;
 
 const readProgress = async (): Promise<number> => {
   try {
@@ -87,15 +118,8 @@ const readProgress = async (): Promise<number> => {
 const noop = (): void => undefined;
 
 export type TransportBarProps = {
-  presetId: string;
-  showSavePreset: boolean;
-  newPresetName: string;
   audioRunning?: () => boolean;
   audioStarting?: () => boolean;
-  onLoadPreset: (id: string) => void;
-  onShowSavePreset: (v: boolean) => void;
-  onNewPresetName: (v: string) => void;
-  onSavePreset: () => void;
   onPlay?: () => void;
   onStop?: () => void;
 };
@@ -127,6 +151,7 @@ export function TransportBar(props: TransportBarProps): JSX.Element {
   });
 
   const [localCps, setLocalCps] = createSignal(cps());
+  const [position, setPosition] = createSignal('1.1');
   let rafId: number | null = null;
   let playheadEl: HTMLDivElement | undefined;
 
@@ -166,6 +191,7 @@ export function TransportBar(props: TransportBarProps): JSX.Element {
   });
 
   let lastWrite = 0;
+  let lastPosWrite = 0;
   const loop = (): void => {
     const now = performance.now();
     if (now - lastWrite >= 14) {
@@ -178,6 +204,16 @@ export function TransportBar(props: TransportBarProps): JSX.Element {
           }
         });
       }
+    }
+    // Позиция — текст, её незачем обновлять 60 раз в секунду: десяти
+    // раз в секунду хватает, чтобы цифра читалась как живая.
+    if (now - lastPosWrite >= 100) {
+      lastPosWrite = now;
+      void readProgress().then((p) => {
+        const clamped = Number.isFinite(p) ? Math.max(0, Math.min(1, p)) : 0;
+        const next = formatPosition(clamped);
+        setPosition((prev) => (prev === next ? prev : next));
+      });
     }
     sync();
     rafId = requestAnimationFrame(loop);
@@ -204,34 +240,36 @@ export function TransportBar(props: TransportBarProps): JSX.Element {
           aria-busy={!audioRunning() && audioStarting()}
           disabled={!audioRunning() && audioStarting()}
           data-testid="transport-play-btn"
-          title={audioRunning() ? 'Стоп (running)' : 'Запуск (play)'}
+          title={audioRunning() ? 'Стоп' : 'Запуск'}
           onClick={() => { if (audioRunning()) handleStop(); else handlePlay(); }}
         >
           {audioRunning() ? <StopIcon size={16} /> : <PlayIcon size={16} />}
         </button>
 
-        <div class="app-transport-bar__preset">
-          <select
-            class="preset-select"
-            value={props.presetId}
-            onChange={(e) => props.onLoadPreset(e.currentTarget.value)}
-            title="Готовые пресеты"
-            aria-label="Выбор композиции"
-            data-testid="preset-select"
-          >
-            <optgroup label="Встроенные">
-              <For each={allPresets().filter((p) => !p.custom)}>
-                {(p) => <option value={p.id}>{p.name}{p.artist ? ` · ${p.artist}` : ''}</option>}
-              </For>
-            </optgroup>
-            <Show when={allPresets().some((p) => p.custom)}>
-              <optgroup label="Мои">
-                <For each={allPresets().filter((p) => p.custom)}>
-                  {(p) => <option value={p.id}>⭐ {p.name}</option>}
-                </For>
-              </optgroup>
-            </Show>
-          </select>
+        {/* Темп и позиция — показания, а не кнопки: строка транспорта
+            это «play · темп · позиция», и лишних интерактивных
+            регионов в ней быть не должно. Настройки темпа — за
+            раскрытием (кнопка «▼ Темп»). */}
+        <span
+          class="app-transport-bar__bpm"
+          data-testid="transport-bpm"
+          title="Темп"
+        >
+          <strong>{formatBpm(localCps())}</strong>
+          <span class="bpm-suffix">BPM</span>
+        </span>
+
+        <span
+          class="app-transport-bar__position"
+          data-testid="transport-position"
+          title="Позиция в такте"
+          aria-label={`Позиция ${position()}`}
+        >
+          {position()}
+        </span>
+
+        <div class="playhead-track" aria-hidden="true">
+          <div class="playhead" ref={(el) => (playheadEl = el)} style={{ '--playhead-x': '0%' }} />
         </div>
 
         <button
@@ -240,14 +278,14 @@ export function TransportBar(props: TransportBarProps): JSX.Element {
           data-testid="transport-bar-toggle"
           aria-expanded={expanded()}
           aria-controls="app-transport-bar-body"
-          title={expanded() ? 'Свернуть панель' : 'Развернуть панель (BPM/свинг)'}
+          title={expanded() ? 'Свернуть настройки' : 'Настройки темпа'}
           onClick={toggleExpanded}
         >
           <span class="app-transport-bar__toggle-icon" aria-hidden="true">
             {expanded() ? '▲' : '▼'}
           </span>
           <span class="app-transport-bar__toggle-label">
-            {expanded() ? 'Свернуть' : 'BPM'}
+            {expanded() ? 'Свернуть' : 'Темп'}
           </span>
         </button>
       </div>
@@ -258,14 +296,9 @@ export function TransportBar(props: TransportBarProps): JSX.Element {
         data-testid="transport-bar-body"
       >
         <div class="transport-panel" data-testid="transport-panel">
-          <div class="bpm-indicator bpm-indicator--in-body" data-testid="bpm-indicator" title="60 × cps × 2 при 4/4">
-            <strong>{formatBpm(localCps())}</strong>
-            <span class="bpm-suffix">BPM</span>
-          </div>
-
           <div class="transport-controls">
             <label class="cps-control">
-              <span class="cps-label">cps</span>
+              <span class="cps-label">темп, циклов/с</span>
               <input
                 type="range"
                 min={CPS_MIN}
@@ -273,15 +306,15 @@ export function TransportBar(props: TransportBarProps): JSX.Element {
                 step={CPS_STEP}
                 value={localCps()}
                 onInput={onSliderInput}
-                title="cycles per second (0.05 — 2.0)"
-                aria-label="CPS"
+                title="Циклы в секунду (0.05 — 2.0)"
+                aria-label="Темп в циклах в секунду"
                 data-testid="cps-slider"
               />
               <span class="cps-readout">{formatCps(localCps())}</span>
             </label>
 
             <div class="swing-control" data-testid="swing-control">
-              <span class="swing-label">swing</span>
+              <span class="swing-label">свинг</span>
               <input
                 type="range"
                 min={0}
@@ -290,8 +323,8 @@ export function TransportBar(props: TransportBarProps): JSX.Element {
                 value={swingAmount()}
                 onInput={onSwingSlider}
                 class="swing-slider"
-                title="Swing amount: 0=off, 1=max shuffle"
-                aria-label="Swing amount"
+                title="Свинг: 0 — ровно, 1 — максимум"
+                aria-label="Свинг"
                 data-testid="swing-slider"
               />
               <span class="swing-readout" data-testid="swing-readout">{formatSwing(swingAmount())}</span>
@@ -299,8 +332,8 @@ export function TransportBar(props: TransportBarProps): JSX.Element {
                 class="swing-divisor"
                 value={swingDivisor()}
                 onChange={onDivisorChange}
-                title="Swing divisor (Strudel .swing amount, divisor)"
-                aria-label="Swing divisor"
+                title="Делитель свинга"
+                aria-label="Делитель свинга"
                 data-testid="swing-divisor"
               >
                 <For each={SWING_DIVISORS}>
@@ -309,14 +342,14 @@ export function TransportBar(props: TransportBarProps): JSX.Element {
               </select>
             </div>
 
-            <div class="cps-presets" role="group" aria-label="CPS presets">
+            <div class="cps-presets" role="group" aria-label="Готовый темп">
               <For each={PRESET_CPS_LABELS}>
                 {(p) => (
                   <button
                     type="button"
                     class="cps-preset-btn"
                     onClick={() => onPresetClick(p.value)}
-                    title={`cps ${p.value} (${p.label} BPM)`}
+                    title={`${p.label} BPM`}
                   >
                     {p.label}
                   </button>
@@ -324,41 +357,7 @@ export function TransportBar(props: TransportBarProps): JSX.Element {
               </For>
             </div>
           </div>
-
-          <div class="playhead-track" aria-hidden="true">
-            <div class="playhead" ref={(el) => (playheadEl = el)} style={{ '--playhead-x': '0%' }} />
-          </div>
         </div>
-
-        <Show when={props.showSavePreset}>
-          <div class="save-preset-bar">
-            <input
-              type="text"
-              placeholder="Имя пресета"
-              value={props.newPresetName}
-              onInput={(e) => props.onNewPresetName(e.currentTarget.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter') props.onSavePreset(); }}
-            />
-            <button
-              type="button"
-              class="ctrl-btn ctrl-btn-primary"
-              onClick={props.onSavePreset}
-              disabled={!props.newPresetName.trim()}
-            >
-              OK
-            </button>
-            <button
-              type="button"
-              class="ctrl-btn"
-              onClick={() => {
-                props.onShowSavePreset(false);
-                props.onNewPresetName('');
-              }}
-            >
-              Отмена
-            </button>
-          </div>
-        </Show>
       </div>
     </div>
   );
