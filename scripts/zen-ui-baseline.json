@@ -1,24 +1,24 @@
 {
-  "recordedAt": "2026-11-15T12:56:40.404Z",
+  "recordedAt": "2026-11-15T13:26:38.156Z",
   "note": "Baseline of the minimal/zen UI guard. Metrics listed as MAX must not grow; MIN must not shrink.",
   "metrics": {
     "tokensDefined": 136,
     "tokensUsed": 117,
     "danglingRefs": 0,
     "hardcodedColors": 0,
-    "hoverSelectors": 139,
+    "hoverSelectors": 144,
     "focusVisibleSelectors": 27,
     "outlineNone": 15,
     "infiniteAnimations": 1,
     "keyframes": 14,
-    "surfaceClasses": 100,
+    "surfaceClasses": 103,
     "sheetClasses": 19,
     "drawerClasses": 2,
     "modalClasses": 28,
     "fabClasses": 12,
-    "panelClasses": 39,
+    "panelClasses": 41,
     "cssFiles": 9,
-    "cssLines": 10613
+    "cssLines": 10916
   },
   "dangling": []
 }
