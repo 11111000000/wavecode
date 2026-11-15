@@ -42,3 +42,8 @@ __pycache__/
 
 # mathc cache (per-session evaluation cache)
 .local/
+
+# MediaPipe wasm runtime — generated from node_modules by
+# scripts/sync-mediapipe-assets.mjs (`npm run sync:mediapipe`).
+# The model (ui/public/models/hand_landmarker.task) IS committed.
+ui/public/mediapipe/

@@ -170,6 +170,13 @@ export default defineConfig({
           // the main chunk because the AppLayer composition and the
           // appStore Effect.gen pipelines both depend on it at boot.
           effect: ['effect', '@effect/schema', '@effect/platform', '@effect/platform-browser'],
+          // MediaPipe Tasks Vision (~30 MB of wasm glue + the wasm
+          // binaries). Imported lazily by GestureCapture — the camera
+          // feature is opt-in, so the heavy runtime must not weigh
+          // down the main chunk. The wasm binaries themselves are
+          // served as static assets from `public/mediapipe/wasm`
+          // (see scripts/sync-mediapipe-assets.mjs), not bundled.
+          mediapipe: ['@mediapipe/tasks-vision'],
         },
       },
     },
