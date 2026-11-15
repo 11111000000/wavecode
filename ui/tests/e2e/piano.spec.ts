@@ -91,7 +91,7 @@ async function openPiano(page: Page): Promise<void> {
   // The `▼ Piano` disclosure inside the score panel. On desktop
   // (>=1024px) the inline <PianoKeyboard variant="inline" /> renders
   // here; below that breakpoint the piano is a BottomSheet opened
-  // from the TabBar instead (see piano-rec-slot.spec.ts).
+  // from the «Инструменты» sheet instead (see piano-rec-slot.spec.ts).
   await page.locator('.piano-toggle').first().click();
   await page.waitForSelector('.piano-keys', { timeout: 5000 });
   // Wait for the toolbar (and any MIDI status pill) to render.

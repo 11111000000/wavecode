@@ -107,7 +107,11 @@ describe('useRouteGuards — onNew creates and selects a custom preset', () => {
     const created = customs[0]!;
     expect(created.id).toMatch(/^custom-/);
     expect(created.name).toBe('Новая композиция');
-    expect(created.score).toContain('Начни новую композицию');
+    // Шаблон новой композиции должен быть ИГРАБЕЛЬНЫМ, а не комментарием
+    // (wavecode-zen-minimal-ui, фаза 5): «Play запустит шаблон» — обещание,
+    // которое нельзя выполнять пустым score.
+    expect(created.score).toContain('Новая композиция');
+    expect(created.score).toContain('s(');
 
     // The selected preset signal points at the new composition (NOT 'creep').
     expect(getSelectedPresetId()).toBe(created.id);

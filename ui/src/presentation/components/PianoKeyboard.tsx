@@ -343,6 +343,37 @@ export function PianoKeyboard(props: PianoKeyboardProps = {}) {
   const _typeAnchor: PianoInstrument = instrument();
   void _typeAnchor;
 
+  // wavecode-zen-minimal-ui (ревизия 2, фаза 2): клавиши пианино
+  // реагировали только на указатель — с клавиатуры (Enter/Пробел на
+  // сфокусированной клавише) не звучало ничего. Теперь у каждой
+  // клавиши есть и клавиатурный путь.
+  let lastPointerAt = 0;
+  const keyboardTimers = new Map<number, number>();
+
+  const playFromKeyboard = (midi: number): void => {
+    playNote(midi);
+    const existing = keyboardTimers.get(midi);
+    if (existing !== undefined) window.clearTimeout(existing);
+    keyboardTimers.set(
+      midi,
+      window.setTimeout(() => {
+        keyboardTimers.delete(midi);
+        stopNote(midi);
+      }, 600),
+    );
+  };
+
+  const onKeyClick = (midi: number): void => {
+    // Клик мышью идёт после pointerdown — это не клавиатурная нота.
+    if (Date.now() - lastPointerAt < 500) return;
+    playFromKeyboard(midi);
+  };
+
+  onCleanup(() => {
+    for (const timer of keyboardTimers.values()) window.clearTimeout(timer);
+    keyboardTimers.clear();
+  });
+
   return (
     <div
       class={`piano-wrap piano-wrap--${props.variant ?? 'sheet'}`}
@@ -399,10 +430,12 @@ export function PianoKeyboard(props: PianoKeyboardProps = {}) {
                   aria-pressed={active()}
                   onPointerDown={(e) => {
                     e.preventDefault();
+                    lastPointerAt = Date.now();
                     playNote(midi);
                   }}
                   onPointerUp={() => stopNote(midi)}
                   onPointerLeave={() => activeNotes().has(midi) && stopNote(midi)}
+                  onClick={() => onKeyClick(midi)}
                 >
                   {whiteIndex(midi) % 7 === 0 && (
                     <span class="piano-key-label">{noteNumberToName(midi)}</span>
@@ -438,10 +471,12 @@ export function PianoKeyboard(props: PianoKeyboardProps = {}) {
                   aria-pressed={active()}
                   onPointerDown={(e) => {
                     e.preventDefault();
+                    lastPointerAt = Date.now();
                     playNote(midi);
                   }}
                   onPointerUp={() => stopNote(midi)}
                   onPointerLeave={() => activeNotes().has(midi) && stopNote(midi)}
+                  onClick={() => onKeyClick(midi)}
                 >
                   <span class="piano-key-label">{noteNumberToName(midi)}</span>
                 </button>

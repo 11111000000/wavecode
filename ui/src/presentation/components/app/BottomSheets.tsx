@@ -8,6 +8,8 @@ import { HelloPanel } from '~/presentation/panels/HelloPanel';
 import { AIEditPanel } from '~/presentation/panels/AIEditPanel';
 import { VisualizerPanelLazy } from '~/presentation/panels/VisualizerPanelLazy';
 import { GesturePanelLazy } from '~/presentation/panels/GesturePanelLazy';
+import { ToolsSheet } from './ToolsSheet';
+import { ExportSheet } from './ExportSheet';
 
 export type BottomSheetsProps = Record<string, never>;
 
@@ -114,6 +116,14 @@ export function BottomSheets(_: BottomSheetsProps): JSX.Element {
           <GesturePanelLazy />
         </Suspense>
       </BottomSheet>
+
+      {/* wavecode-zen-minimal-ui (ревизия 2): всё, что не вошло в рельс
+          из четырёх пунктов, живёт здесь — одним листом с поиском. */}
+      <ToolsSheet />
+
+      {/* MIDI-импорт/экспорт и WAV-рендер были реализованы, но не
+          смонтированы. Теперь они доступны из одного места. */}
+      <ExportSheet />
     </>
   );
 }

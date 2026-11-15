@@ -12,6 +12,15 @@ import {
   dismissVoiceAI,
   discardVoiceAITake,
 } from '../state/voiceAIStore';
+import {
+  getInputMode,
+  setInputMode,
+  isInputDockOpen,
+  closeInputDock,
+  type InputMode,
+} from '../state/inputMode';
+import { rhythmRunning } from '../state/rhythmStore';
+import { RhythmCapture } from './RhythmCapture';
 import { CloseIcon, SendIcon, TrashIcon } from '../icons';
 import { Effect } from 'effect';
 import { consoleStore } from './consoleStore';
@@ -61,10 +70,18 @@ import { consoleStore } from './consoleStore';
  * The confirm-before-send contract stays: nothing reaches the LLM
  * until the user presses «→ В ИИ» (see
  * `decisions/wavecode-voice-confirm-before-send`).
+ *
+ * One dock, two modes
+ * -------------------
+ * wavecode-zen-minimal-ui (ревизия 2, пункт 10): голос и ритм —
+ * два явных режима ОДНОГО дока. Переключатель «Голос | Ритм» живёт
+ * ВЫШЕ содержимого дока, а не внутри голосовой части: в режиме
+ * «Голос» док показывает ровно то же, что и раньше (статус, композер,
+ * одно действие), в режиме «Ритм» — сетку тапов.
  */
 
 export function RecordingPanel(): JSX.Element {
-  const visible = createMemo<boolean>(() => {
+  const voiceVisible = createMemo<boolean>(() => {
     const v = voiceAIState().tag;
     return (
       v === 'arming'
@@ -79,20 +96,96 @@ export function RecordingPanel(): JSX.Element {
     );
   });
 
+  /**
+   * Док открыт, если его открыли (рельс, пункт «Ввод») ИЛИ голосовая
+   * сессия сама что-то несёт.
+   *
+   * Раньше док был видим ровно тогда, когда FSM голоса был не-idle:
+   * входного дока как отдельной поверхности не существовало, а кнопка
+   * микрофона открывала только запись. Теперь док — поверхность ввода
+   * целиком, и рельс открывает его в текущем режиме (голос или ритм).
+   */
+  const visible = createMemo<boolean>(() => isInputDockOpen() || voiceVisible());
+
+  const mode = createMemo<InputMode>(() => getInputMode());
+
   return (
     <Show when={visible()}>
       <div
         class="voice-recording-panel"
-        data-mode="voice-ai"
-        data-state={voiceAIState().tag}
+        data-mode={mode() === 'rhythm' ? 'rhythm' : 'voice-ai'}
+        data-input-mode={mode()}
+        data-state={
+          mode() === 'rhythm'
+            ? (rhythmRunning() ? 'running' : 'idle')
+            : voiceAIState().tag
+        }
         role="status"
         aria-live="polite"
       >
-        <VoiceAIDock />
+        <InputModeSwitch />
+        <Show when={mode() === 'voice'} fallback={<RhythmCapture />}>
+          <VoiceAIDock />
+        </Show>
       </div>
     </Show>
   );
 }
+
+/* ── the mode switch ───────────────────────────────────────────────── */
+
+/**
+ * InputModeSwitch — явный переключатель «Голос | Ритм».
+ *
+ * Переключатель отражает `getInputMode()` и вызывает `setInputMode()`
+ * — состояние ввода живёт в отдельном сторе (`inputMode.ts`), чтобы
+ * оркестратор распознавания речи ничего не знал про ритм.
+ *
+ * Почему «Ритм» заблокирован, пока идёт голосовая запись
+ * -----------------------------------------------------------
+ * Голосовой док обещает композер В КАЖДОМ состоянии FSM
+ * (`decisions/wavecode-voice-minimal-dock`). Переключиться на ритм
+ * посреди записи — значит убрать композер с экрана, то есть сломать
+ * это обещание. Поэтому пока жива голосовая сессия, сегмент «Ритм»
+ * выключен, а у него есть подсказка, ПОЧЕМУ он выключен.
+ */
+const InputModeSwitch = (): JSX.Element => {
+  const mode = (): InputMode => getInputMode();
+  const voiceBusy = (): boolean => voiceAIState().tag !== 'idle';
+
+  return (
+    <div
+      class="voice-recording-panel__modes"
+      role="group"
+      aria-label="Режим ввода"
+    >
+      <button
+        type="button"
+        class="voice-recording-panel__mode"
+        data-active={mode() === 'voice' ? 'true' : 'false'}
+        aria-pressed={mode() === 'voice' ? 'true' : 'false'}
+        onClick={() => { setInputMode('voice'); }}
+      >
+        Голос
+      </button>
+      <button
+        type="button"
+        class="voice-recording-panel__mode"
+        data-active={mode() === 'rhythm' ? 'true' : 'false'}
+        aria-pressed={mode() === 'rhythm' ? 'true' : 'false'}
+        disabled={voiceBusy()}
+        title={
+          voiceBusy()
+            ? 'Сначала завершите голосовую запись — потом переключите режим'
+            : 'Ритм: сетка тапов'
+        }
+        onClick={() => { setInputMode('rhythm'); }}
+      >
+        Ритм
+      </button>
+    </div>
+  );
+};
 
 /* ── the dock ──────────────────────────────────────────────────────── */
 
@@ -101,11 +194,15 @@ const VoiceAIDock = (): JSX.Element => {
     try {
       if (voiceAIState().tag === 'review') {
         await Effect.runPromise(cancelVoiceAIReview());
-        return;
+      } else {
+        await Effect.runPromise(dismissVoiceAI());
       }
-      await Effect.runPromise(dismissVoiceAI());
     } catch {
       /* orchestrator handles error recovery */
+    } finally {
+      // Док мог быть открыт рельсом (пункт «Ввод»), а не самой
+      // записью — закрываем и его, иначе док остался бы висеть.
+      closeInputDock();
     }
   };
 
@@ -215,6 +312,11 @@ const VoiceAIDock = (): JSX.Element => {
         return '✓ Правка применена — можно отправить заново';
       case 'paused':
         return 'Запись на паузе — нажмите кнопку микрофона, чтобы продолжить';
+      case 'idle':
+        // Док теперь можно открыть и без записи (рельс → «Ввод»).
+        // В этом состоянии раньше док не показывался вовсе, а фразы
+        // для него не было — значит, надо сказать что-то правдивое.
+        return 'Готов к записи — нажмите кнопку микрофона';
       case 'errored': {
         const s = voiceAIState();
         return s.tag === 'errored' ? s.error : 'Ошибка голосового ввода';

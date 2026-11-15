@@ -1,0 +1,672 @@
+/*
+ * wavecode — Zen v1: рельс, лист «Инструменты», палитра команд.
+ *
+ * wavecode-zen-minimal-ui (ревизия 2, пункт 9): вместо восьми вкладок
+ * нижней панели — четыре пункта рельса и один лист на всё остальное.
+ * Этот файл — единственное место, где описана геометрия новой
+ * навигации; он лежит в отдельном слое `zen`, чтобы не спорить с
+ * компонентными правилами.
+ *
+ * Принципы: пустота держит структуру, один акцент, у каждого
+ * инструмента один путь. Здесь нет ни свечений, ни градиентов, ни
+ * бесконечных анимаций — только расстояние, волосяная линия и цвет.
+ */
+
+/* ── VISUALLY HIDDEN ───────────────────────────────────────────── */
+.wc-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ── RAIL ───────────────────────────────────────────────────────── */
+.wc-rail {
+  display: flex;
+  align-items: center;
+  background: var(--surface-1);
+}
+
+.wc-rail__items {
+  display: flex;
+  align-items: center;
+}
+
+.wc-rail__item,
+.wc-rail__more {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-lg);
+  color: var(--fg-dim);
+  cursor: pointer;
+  transition: color var(--dur-xs) var(--ease),
+              background var(--dur-xs) var(--ease);
+}
+
+.wc-rail__item:hover,
+.wc-rail__more:hover {
+  color: var(--fg);
+  background: var(--surface-2);
+}
+
+.wc-rail__item:focus-visible,
+.wc-rail__more:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.wc-rail__item[data-active='true'] {
+  color: var(--primary);
+  background: var(--primary-soft);
+}
+
+.wc-rail__label {
+  font-size: var(--fs-2xs);
+  line-height: 1;
+  letter-spacing: var(--ls-wide);
+  color: inherit;
+}
+
+/* Desktop: вертикальный рельс слева от холста. */
+@media (min-width: 1024px) {
+  .wc-rail {
+    position: fixed;
+    left: 0;
+    /* Ниже шапки И ниже транспорта: транспортная строка закреплена под
+       TopBar, и без этого сдвига первые два пункта рельса уезжали под
+       неё (нашлось на скриншоте). Высота транспорта двух величин —
+       свёрнут/развёрнут, поэтому берём её из состояния оболочки. */
+    top: calc(var(--header-h) + var(--app-transport-h-expanded));
+    bottom: 0;
+    width: 68px;
+    z-index: var(--z-sticky);
+    flex-direction: column;
+    justify-content: flex-start;
+    gap: var(--space-xs);
+    padding: var(--space-md) 0;
+    border-right: 1px solid var(--border);
+  }
+
+  :has(.app-body[data-transport-collapsed='true']) .wc-rail {
+    top: calc(var(--header-h) + var(--app-transport-h-collapsed));
+  }
+
+  .wc-rail__items {
+    flex-direction: column;
+    gap: var(--space-2xs);
+    width: 100%;
+  }
+
+  .wc-rail__item,
+  .wc-rail__more {
+    width: 52px;
+    height: 52px;
+    margin: 0 auto;
+  }
+
+  .wc-rail__more {
+    margin-top: auto;
+  }
+
+  /* Холст не уезжает под рельс. */
+  .app-body {
+    padding-left: 68px;
+  }
+}
+
+/* Mobile: тот же рельс, но нижним рядом из четырёх пунктов. */
+@media (max-width: 1023px) {
+  .wc-rail {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: var(--tabbar-h);
+    z-index: var(--z-tabbar);
+    justify-content: stretch;
+    padding-bottom: var(--safe-bottom);
+    border-top: 1px solid var(--border);
+  }
+
+  .wc-rail__items {
+    flex: 1 1 auto;
+    justify-content: space-around;
+  }
+
+  .wc-rail__item {
+    flex: 1 1 0;
+    height: 100%;
+    border-radius: 0;
+  }
+
+  /* Вход в лист «Инструменты» на мобиле — в верхней панели, чтобы
+     нижний ряд оставался четырёхпунктным. */
+  .wc-rail__more {
+    display: none;
+  }
+
+  .wc-rail .sample-progress-badge {
+    display: none;
+  }
+}
+
+/* ── TOOLS SHEET ────────────────────────────────────────────────── */
+.wc-tools-sheet {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  padding: var(--space-md);
+}
+
+.wc-tools-sheet__search input {
+  width: 100%;
+  min-height: 40px;
+  padding: 0 var(--space-md);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  color: var(--fg);
+  font-size: var(--fs-base);
+  font-family: var(--font-sans);
+}
+
+.wc-tools-sheet__search input::placeholder {
+  color: var(--fg-ghost);
+}
+
+.wc-tools-sheet__search input:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 1px;
+  border-color: var(--border-strong);
+}
+
+.wc-tools-sheet__grid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-sm);
+}
+
+.wc-tool-card {
+  width: 100%;
+  min-height: 84px;
+  display: grid;
+  gap: var(--space-3xs);
+  align-content: start;
+  text-align: left;
+  padding: var(--space-md);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  color: var(--fg);
+  cursor: pointer;
+  transition: border-color var(--dur-xs) var(--ease),
+              background var(--dur-xs) var(--ease);
+}
+
+.wc-tool-card:hover {
+  border-color: var(--border-strong);
+  background: var(--surface-3);
+}
+
+.wc-tool-card:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.wc-tool-card__icon {
+  color: var(--fg-dim);
+}
+
+.wc-tool-card__label {
+  font-size: var(--fs-base);
+  font-weight: var(--fw-medium);
+}
+
+.wc-tool-card__desc {
+  font-size: var(--fs-2xs);
+  color: var(--fg-dim);
+  line-height: var(--lh-base);
+}
+
+.wc-tools-sheet__empty {
+  padding: var(--space-lg) 0;
+  text-align: center;
+  color: var(--fg-dim);
+  font-size: var(--fs-sm);
+}
+
+/* ── COMMAND PALETTE ────────────────────────────────────────────── */
+.wc-palette {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-modal);
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding-top: 12vh;
+}
+
+.wc-palette__backdrop {
+  position: absolute;
+  inset: 0;
+  background: var(--surface-overlay);
+}
+
+.wc-palette__panel {
+  position: relative;
+  width: min(560px, calc(100vw - 32px));
+  max-height: 70vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface-1);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
+.wc-palette__input {
+  width: 100%;
+  min-height: 48px;
+  padding: 0 var(--space-lg);
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  color: var(--fg);
+  font-size: var(--fs-lg);
+  font-family: var(--font-sans);
+}
+
+.wc-palette__input:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: -2px;
+}
+
+.wc-palette__list {
+  list-style: none;
+  margin: 0;
+  padding: var(--space-xs);
+  overflow-y: auto;
+}
+
+.wc-palette__item {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 24px 1fr auto;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-sm) var(--space-md);
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-md);
+  color: var(--fg);
+  text-align: left;
+  cursor: pointer;
+}
+
+.wc-palette__item[data-active='true'] {
+  background: var(--primary-soft);
+  color: var(--fg);
+}
+
+.wc-palette__item:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: -2px;
+}
+
+.wc-palette__icon {
+  color: var(--fg-dim);
+  display: flex;
+}
+
+.wc-palette__label {
+  font-size: var(--fs-base);
+}
+
+.wc-palette__desc {
+  font-size: var(--fs-2xs);
+  color: var(--fg-dim);
+}
+
+/* ── SCORE-FIRST ────────────────────────────────────────────────── */
+/* Партитура — главный объект: ограничиваем ширину строки кода и
+   центрируем её, чтобы длинная строка не тянула взгляд вбок. */
+@media (min-width: 1024px) {
+  .score-panel-inner {
+    max-width: 880px;
+    margin-inline: auto;
+    width: 100%;
+  }
+}
+
+/* ── RHYTHM ──────────────────────────────────────────────────────── */
+/* Режим «Ритм» входного дока: переключатель «Голос | Ритм», темп и
+   сетка 4×4. Плюс вид той же плавающей кнопки в режиме ритма.
+   Только токены темы: --primary (активный режим и действие),
+   --cyan (живой тап), --surface-* (поверхности), --space-* (отступы),
+   --radius-lg (скругления). Без свечений, градиентов и бесконечных
+   анимаций — как и весь остальной zen-слой. */
+
+/* Переключатель режимов — сегмент в доке, а не отдельный экран. */
+.voice-recording-panel__modes {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2xs);
+  padding: var(--space-3xs);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+}
+
+.voice-recording-panel__mode {
+  padding: var(--space-2xs) var(--space-sm);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-lg);
+  color: var(--fg-dim);
+  font-family: var(--font-sans);
+  font-size: var(--fs-xs);
+  cursor: pointer;
+  transition: color var(--dur-xs) var(--ease),
+              background var(--dur-xs) var(--ease),
+              border-color var(--dur-xs) var(--ease);
+}
+
+.voice-recording-panel__mode:hover:not(:disabled) {
+  color: var(--fg);
+  background: var(--surface-3);
+}
+
+.voice-recording-panel__mode:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.voice-recording-panel__mode[data-active='true'] {
+  color: var(--primary);
+  background: var(--primary-soft);
+  border-color: var(--primary);
+}
+
+.voice-recording-panel__mode:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* Поверхность ритма. */
+.rhythm-capture {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.rhythm-capture__head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  flex-wrap: wrap;
+}
+
+.rhythm-capture__tempo {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2xs);
+}
+
+.rhythm-capture__tempo-btn {
+  width: 26px;
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  color: var(--fg-dim);
+  font-family: var(--font-sans);
+  font-size: var(--fs-sm);
+  line-height: 1;
+  cursor: pointer;
+  transition: color var(--dur-xs) var(--ease),
+              border-color var(--dur-xs) var(--ease);
+}
+
+.rhythm-capture__tempo-btn:hover {
+  color: var(--fg);
+  border-color: var(--border-strong);
+}
+
+.rhythm-capture__tempo-btn:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 1px;
+}
+
+.rhythm-capture__tempo-value {
+  min-width: 54px;
+  text-align: center;
+  color: var(--fg);
+  font-size: var(--fs-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+.rhythm-capture__tempo-unit {
+  margin-left: var(--space-2xs);
+  color: var(--fg-ghost);
+  font-size: var(--fs-2xs);
+}
+
+.rhythm-capture__start {
+  padding: var(--space-2xs) var(--space-sm);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  color: var(--fg-dim);
+  font-family: var(--font-sans);
+  font-size: var(--fs-xs);
+  cursor: pointer;
+  transition: color var(--dur-xs) var(--ease),
+              border-color var(--dur-xs) var(--ease);
+}
+
+.rhythm-capture__start:hover {
+  color: var(--fg);
+  border-color: var(--border-strong);
+}
+
+.rhythm-capture__start:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 1px;
+}
+
+.rhythm-capture__start[aria-pressed='true'] {
+  color: var(--cyan);
+  border-color: var(--cyan);
+  background: var(--cyan-soft);
+}
+
+.rhythm-capture__status {
+  flex: 1 1 auto;
+  color: var(--fg-dim);
+  font-size: var(--fs-xs);
+}
+
+.rhythm-capture__close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-lg);
+  color: var(--fg-dim);
+  cursor: pointer;
+  transition: color var(--dur-xs) var(--ease),
+              border-color var(--dur-xs) var(--ease);
+}
+
+.rhythm-capture__close:hover {
+  color: var(--fg);
+  border-color: var(--border-strong);
+}
+
+.rhythm-capture__close:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 1px;
+}
+
+/* Сетка: 4 колонки = 4 шага доли, 4 строки = такт. */
+.rhythm-capture__grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--space-2xs);
+  /* Квадраты не должны раздувать док: сетка занимает свою полосу,
+     а не всю ширину дока. */
+  width: 100%;
+  max-width: 320px;
+}
+
+.rhythm-capture__step {
+  aspect-ratio: 1 / 1;
+  min-height: 30px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  cursor: pointer;
+  transition: background var(--dur-xs) var(--ease),
+              border-color var(--dur-xs) var(--ease);
+}
+
+.rhythm-capture__step:hover {
+  border-color: var(--border-strong);
+}
+
+.rhythm-capture__step:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.rhythm-capture__step[data-on='true'] {
+  background: var(--primary);
+  border-color: var(--primary);
+}
+
+/* Начало доли — шаг 0, 4, 8, 12: рамка чуть плотнее, чтобы такт
+   читался глазами. */
+.rhythm-capture__step[data-beat-start='true'] {
+  border-color: var(--border-strong);
+}
+
+/* Указатель: шаг, на котором сейчас стоит проход. */
+.rhythm-capture__step[data-current='true'] {
+  border-color: var(--cyan);
+}
+
+.rhythm-capture__step[data-on='true'][data-current='true'] {
+  background: var(--cyan);
+  border-color: var(--cyan);
+}
+
+.rhythm-capture__actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-sm);
+}
+
+.rhythm-capture__btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2xs);
+  padding: var(--space-2xs) var(--space-sm);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  color: var(--fg-dim);
+  font-family: var(--font-sans);
+  font-size: var(--fs-xs);
+  cursor: pointer;
+  transition: color var(--dur-xs) var(--ease),
+              border-color var(--dur-xs) var(--ease);
+}
+
+.rhythm-capture__btn:hover {
+  color: var(--fg);
+  border-color: var(--border-strong);
+}
+
+.rhythm-capture__btn:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 1px;
+}
+
+.rhythm-capture__btn--primary {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: var(--fg-inverse);
+}
+
+.rhythm-capture__btn--primary:hover {
+  background: color-mix(in oklab, var(--primary) 85%, var(--fg));
+  border-color: color-mix(in oklab, var(--primary) 85%, var(--fg));
+}
+
+/* Та самая ОДНА плавающая кнопка — в режиме ритма. */
+.voice-mini-fab--rhythm {
+  color: var(--cyan);
+  border-color: var(--cyan);
+}
+
+.voice-mini-fab--rhythm[data-state='running'] {
+  background: var(--cyan-soft);
+  border-color: var(--cyan);
+}
+
+.voice-mini-fab--rhythm .voice-mini-fab__label {
+  color: var(--cyan);
+}
+
+.voice-mini-fab__tap-dot {
+  width: 14px;
+  height: 14px;
+  border-radius: var(--radius-full);
+  background: var(--cyan);
+}
+
+/* ── FOCUS (фаза 2) ───────────────────────────────────────────────
+ *
+ * wavecode-zen-minimal-ui (ревизия 2, фаза 2): интерфейс был написан
+ * под мышь — 139 hover-правил против 13 :focus-visible, и 15 мест, где
+ * контур фокуса снимали. Вместо ста правил на каждый класс здесь одно
+ * правило на все интерактивные элементы: элементы, у которых уже
+ * есть собственный фокус (кольцо или подсветка границы), перечислены
+ * ниже и сохраняют его.
+ */
+/* У элементов ниже свой фокус (кольцо или подсветка границы) —
+   глобальное правило их не трогает, чтобы не было двойного кольца. */
+:where(button, a, input, select, textarea, summary, [tabindex]:not([tabindex='-1'])):not(
+  .preset-select,
+  .llm-select,
+  .ai-textarea,
+  .l-preset,
+  .l-preset__play,
+  .toast-item.toast-clickable,
+  .share-url,
+  .voice-recording-panel__review-textarea,
+  .save-preset-bar input[type='text']
+):focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}

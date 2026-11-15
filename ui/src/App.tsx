@@ -1,5 +1,5 @@
 import { createSignal, createEffect, onMount, Show, untrack, type JSX } from 'solid-js';
-import { setTab, getActiveTab, getLayout, setLayout, setMobileMode, getMobileMode, type MobileMode } from './presentation/state/uiState';
+import { setTab, getActiveTab, getMobileMode, setMobileMode, type MobileMode } from './presentation/state/uiState';
 import { appStore, dispatch } from './presentation/state/appStore';
 import { installTypingTracker } from './presentation/state/editorTypingTracker';
 import { evalScore, stopAudio } from './presentation/state/audioActions';
@@ -83,7 +83,7 @@ function AppShell(): JSX.Element {
     if (raw === null) return;
     renameCustomPreset(id, raw);
   };
-  const onToggleLayout = (): void => { setLayout(getLayout() === 'ai-primary' ? 'code-primary' : 'ai-primary'); };
+  const onToggleLayout = (): void => { /* layout toggle удалён: ИИ теперь слой поверх холста */ };
   const chooseMobileMode = (m: MobileMode): void => { setMobileMode(m); setMobileModeSignal(m); };
   const onLoadPreset = (id: string): void => {
     const preset = getPreset(id);

@@ -6,7 +6,19 @@ import { addCustomPreset, resetAllBrowserData } from './presetsStore';
 import { resetSelectedPreset, setSelectedPresetPersist } from './selectedPreset';
 import { stopAudio } from './audioActions';
 
-const NEW_COMPOSITION_TEMPLATE = '// Начни новую композицию здесь\n';
+/**
+ * Стартовая композиция — ИГРАБЕЛЬНАЯ, а не комментарий.
+ *
+ * wavecode-zen-minimal-ui (ревизия 2, фаза 5): раньше шаблон был
+ * одной строкой-комментарием, поэтому «Play запустит шаблон» в
+ * пустом состоянии обещал музыку, которой не было. Теперь это
+ * минимальный валидный паттерн: барабанная петля на 4 доли.
+ */
+const NEW_COMPOSITION_TEMPLATE = [
+  '// Новая композиция — играй, меняй, спрашивай ИИ',
+  's("bd sd [~ bd] sd").gain(0.8)',
+  '',
+].join('\n');
 
 export const confirmNew = (): boolean => window.confirm(
   'Создать новую композицию?\nТекущая партитура и история диалога сбросятся.',

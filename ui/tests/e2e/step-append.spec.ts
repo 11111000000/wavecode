@@ -19,7 +19,7 @@ import { APP_URL } from './support/appUrl';
  */
 
 const openStepGrid = async (page: import('@playwright/test').Page) => {
-  await page.locator('.wc-tab[aria-label="Step"]').first().click();
+  await page.locator('.wc-rail__item[aria-label="Шаги"]').first().click();
   await page.waitForSelector('.step-grid', { timeout: 5_000 });
 };
 
