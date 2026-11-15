@@ -1,5 +1,5 @@
 import { Effect, Layer } from 'effect';
-import { AudioEngine } from '~/domain/services';
+import { AudioEngine, type LiveParam } from '~/domain/services';
 import type * as CoreModule from '@strudel/core';
 import type * as MiniModule from '@strudel/mini';
 import type * as TonalModule from '@strudel/tonal';
@@ -7,9 +7,11 @@ import type * as TranspilerModule from '@strudel/transpiler';
 import type * as WebaudioModule from '@strudel/webaudio';
 import type { LayerMix } from '~/domain/types';
 import type { NoteEvent } from '~/domain/midi/encoder';
+import { getSuperdoughAudioController } from 'superdough';
 import { injectMix } from '~/application/useCases/injectMix';
 import { LiveRecorder, pickSupportedMime } from './AudioRecorder';
 import { renderToWav } from './OfflineRender';
+import { LiveParamController } from './liveParams';
 import { applyVoicingAliases } from './strudelPatches';
 import { setActive as setRuntimeHighlightActive, clearActive as clearRuntimeHighlightActive, parseLayerRanges } from './runtimeHighlight';
 
@@ -397,6 +399,70 @@ export const primeSuperdoughAudio = async (
 
 let cachedRepl: Promise<ReplHandle> | null = null;
 let modulesPromise: Promise<StrudelModules> | null = null;
+
+/**
+ * Live parameter controller (master gain today; per-voice FX as soon as
+ * superdough exposes them). Created lazily so that merely importing this
+ * module never touches superdough's audio graph.
+ *
+ * See `./liveParams.ts` for the full rationale.
+ */
+let liveParams: LiveParamController | null = null;
+
+/**
+ * superdough's module-global AudioContext is pinned to wavecode's own
+ * context by `primeSuperdoughAudio`. Until that happens,
+ * `getSuperdoughAudioController()` would CREATE a controller bound to a
+ * THROWAWAY AudioContext (superdough's `getAudioContext()` lazily makes
+ * one) — and since superdough caches that controller module-globally,
+ * every hap would afterwards be routed into the wrong context (silent
+ * audio). So the master gain node is only resolved AFTER the prime.
+ */
+let superdoughPinned = false;
+
+/**
+ * Resolve superdough's live master GainNode
+ * (`output.destinationGain`) — the one node in the audio graph that a
+ * gesture can drive today without re-evaluating the pattern.
+ *
+ * Returns `null` (instead of throwing) whenever the node is not ours yet
+ * or not reachable — the caller then keeps the requested value and
+ * applies it later.
+ */
+const resolveMasterGainNode = (): GainNode | null => {
+  const appCtx = (window as unknown as { __wavecodeAudioCtx?: AudioContext })
+    .__wavecodeAudioCtx;
+  if (!appCtx || !superdoughPinned) return null;
+  try {
+    const controller = getSuperdoughAudioController() as {
+      output?: { destinationGain?: AudioNode | null } | null;
+    } | null;
+    const node = controller?.output?.destinationGain ?? null;
+    if (!node) return null;
+    // A controller bound to another context (another tab, or an offline
+    // render still in flight) is not ours to touch.
+    const nodeCtx = (node as { context?: BaseAudioContext }).context;
+    if (nodeCtx && nodeCtx !== appCtx) return null;
+    return node as GainNode;
+  } catch {
+    return null;
+  }
+};
+
+const getLiveParams = (): LiveParamController => {
+  if (!liveParams) {
+    liveParams = new LiveParamController({
+      getGainNode: resolveMasterGainNode,
+      getNow: () => {
+        const ctx = (window as unknown as { __wavecodeAudioCtx?: AudioContext })
+          .__wavecodeAudioCtx;
+        return ctx ? ctx.currentTime : 0;
+      },
+    });
+  }
+  return liveParams;
+};
+
 let debugState: DebugState = {
   triggers: 0,
   superdoughErr: null,
@@ -575,11 +641,21 @@ const ensureRepl = (audioCtx: AudioContext): Promise<ReplHandle> => {
       // same value, which is a no-op.
       await primeSuperdoughAudio(superdoughRuntime, audioCtx);
 
+      // superdough's module-global AudioContext now points at OURS, so
+      // `getSuperdoughAudioController()` is safe to call from here on:
+      // it returns (or creates) a controller bound to this context.
+      superdoughPinned = true;
+
       const repl = modules.webaudio.webaudioRepl({
         audioContext: audioCtx,
         transpiler: modules.transpilerMod.transpiler,
       });
       console.log('[wavecode] webaudioRepl created');
+
+      // The master gain node may have just been created (or replaced) —
+      // re-apply a live value that was requested BEFORE the repl existed,
+      // so a gesture set before the first eval is not lost.
+      liveParams?.reapply();
 
       /**
        * Полная тишина: планировщик остановлен, живые голоса убиты.
@@ -893,6 +969,9 @@ export const LiveAudioEngine: Layer.Layer<AudioEngine, never, never> = Layer.suc
     stop: () =>
       Effect.tryPromise({
         try: async () => {
+          // A gesture-set master level must not survive a stop — the next
+          // score would start at the old level.
+          liveParams?.reset();
           if (!cachedRepl) return;
           const repl = await cachedRepl;
           await repl.stop();
@@ -990,6 +1069,26 @@ export const LiveAudioEngine: Layer.Layer<AudioEngine, never, never> = Layer.suc
         },
         catch: silentRollback('setScore'),
       }).pipe(Effect.catchAll(() => Effect.void)),
+    /**
+     * Live parameter path (camera hand-gesture feature, Phase 0).
+     *
+     * Applies a continuous value to the RUNNING audio graph — no
+     * re-evaluation, no scheduler touch. Today only the master gain is
+     * reachable (superdough's `output.destinationGain`); the per-voice
+     * FX (cutoff / hcutoff / room / speed) are not globally reachable
+     * yet and are accepted but not applied.
+     *
+     * Synchronous on purpose: a gesture produces a value per frame, and
+     * an Effect per frame would only add overhead. Errors are swallowed
+     * here — a frame that cannot be applied is dropped, never surfaced.
+     */
+    setLiveParam: (p: LiveParam) => {
+      try {
+        getLiveParams().set(p);
+      } catch (err) {
+        console.warn('[wavecode/LiveAudioEngine.setLiveParam]', err);
+      }
+    },
     getCycleProgress: () =>
       Effect.sync(() => {
         // Sync-only — вызывается RAF-ом, обещание здесь неуместно.
@@ -1157,6 +1256,10 @@ export const LiveAudioEngine: Layer.Layer<AudioEngine, never, never> = Layer.suc
               liveAudioCtx: liveCtx,
             },
           );
+          // The offline render swaps the live superdough controller for a
+          // NEW one (a fresh `destinationGain` at unity) and restores it
+          // afterwards — re-apply the live level so it does not snap back.
+          liveParams?.reapply();
           return result;
         },
         catch: (err) => {

@@ -30,6 +30,49 @@ export type CompletionChunk = {
   readonly delta: string;
 };
 
+/**
+ * Which part of the live audio graph a live parameter addresses.
+ *
+ * `master` — the single global output of superdough
+ * (`channelMerger → destinationGain → audioContext.destination`).
+ * This is the only scope that is reachable from user code today.
+ *
+ * `layer` — one of wavecode's score layers. Layers exist only inside the
+ * score string (they are pattern-level constructs, not audio-graph
+ * nodes), so a layer-scoped live change is currently a documented no-op
+ * rather than an error.
+ */
+export type LiveParamScope =
+  | { readonly scope: 'master' }
+  | { readonly scope: 'layer'; readonly index: number };
+
+/**
+ * Continuous parameters that a live gesture can drive.
+ *
+ * `gain` is applied to the master GainNode (reachable). `cutoff`,
+ * `hcutoff`, `room` and `speed` are per-voice superdough FX — they are
+ * built inside `superdough()` on every trigger and are not globally
+ * reachable yet, so they are accepted (validated + clamped) but not
+ * applied.
+ */
+export type LiveParamName = 'gain' | 'cutoff' | 'hcutoff' | 'room' | 'speed';
+
+/**
+ * A single live parameter change.
+ *
+ * This is the "real" continuous-control path: it changes the running
+ * audio graph WITHOUT re-evaluating the pattern string (the textual
+ * `.gain(X)` rewrite in `injectMix` re-compiles and re-swaps the whole
+ * scheduler pattern, which is unusable at frame rate).
+ */
+export type LiveParam = {
+  readonly scope: LiveParamScope;
+  readonly param: LiveParamName;
+  readonly value: number;
+  /** 0 = immediate, otherwise smoothed over this duration (ms). */
+  readonly rampMs: number;
+};
+
 export class LLMClient extends Context.Tag('LLMClient')<
   LLMClient,
   {
@@ -96,6 +139,24 @@ export class AudioEngine extends Context.Tag('AudioEngine')<
       score: string,
       layerMix: ReadonlyArray<LayerMix>,
     ) => Effect.Effect<void, never, never>;
+    /**
+     * Push a CONTINUOUS parameter change into the running audio graph
+     * without touching the pattern.
+     *
+     * This is the live-parameter path used by the camera hand-gesture
+     * feature: a gesture produces a new value every frame, and the
+     * value must be applied to the already-playing audio graph. The
+     * textual alternative (rewrite `.gain(X)` in the score and
+     * re-evaluate it — `injectMix` → `repl.evaluate`) re-compiles the
+     * pattern and swaps the scheduler pattern, which is unusable at
+     * frame rate.
+     *
+     * Optional on purpose: implementations that cannot expose a live
+     * parameter (and the existing test doubles) keep type-checking.
+     * Implementations MUST be silent and non-throwing — a gesture frame
+     * that cannot be applied is dropped, never surfaced as an error.
+     */
+    readonly setLiveParam?: (p: LiveParam) => void;
     /**
      * Synchronous read of current playback cycle position (0..1).
      * Computed from AudioContext clock + last successful eval start time.
