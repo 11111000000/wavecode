@@ -1,0 +1,253 @@
+{
+  "schema_version": 5,
+  "goal": {
+    "text": "Wavecode остаётся beat-maker'ом, который нельзя сломать незаметно: архитектурные инварианты, камера, деплой, секреты и запись решений проверяются свежими воспроизводимыми проверками, а не договорённостями.",
+    "scope": [
+      "ui/src", "scripts", "decisions", "spec.json", "bin",
+      ".github/workflows", ".gitverse/workflows"
+    ],
+    "by": "az",
+    "at": 1794762539,
+    "reason": null
+  },
+  "claims": [
+    {
+      "id": "layering-holds",
+      "text": "The four layers keep their boundaries: domain carries no UI, audio or IO bindings, application reaches the outside world only through the declared interfaces, infrastructure never imports the UI framework, and presentation never touches the audio DSP, the AI SDK or IndexedDB directly.",
+      "scope": [ "ui/src" ],
+      "source": {
+        "kind": "madr",
+        "path": "decisions/wavecode-strict-layering.yaml",
+        "section": null,
+        "digest": "77e45b3168639d27db36248e35d4804ed641333976094c51b9fadf7288c64aa5",
+        "review": null
+      },
+      "kind": "acceptance",
+      "phase": "pre-merge",
+      "owner": "az",
+      "review_on": [],
+      "requirements": [
+        {
+          "kind": "verifier",
+          "spec": "node scripts/check-invariants.mjs layering"
+        }
+      ],
+      "falsifier": "A file of one layer imports a package that the layer is forbidden to depend on — the same violation eslint's no-restricted-imports reports.",
+      "register": "fact",
+      "control": "printf '\\nimport { createSignal } from \"solid-js\";\\n' >> ui/src/infrastructure/audio/LiveAudioEngine.ts",
+      "waiver": null
+    },
+    {
+      "id": "no-console-in-core",
+      "text": "domain/ and application/ never write to the global console: the log surface is the centralised logger, and the only console a test may observe is the injected one.",
+      "scope": [ "ui/src/domain", "ui/src/application" ],
+      "source": {
+        "kind": "madr",
+        "path": "decisions/wavecode-debug-console.yaml",
+        "section": null,
+        "digest": "f1d58ad98ff074b6da40708e4adc90124d22056a3e78a226e21cacf7b9cd0524",
+        "review": null
+      },
+      "kind": "acceptance",
+      "phase": "pre-merge",
+      "owner": "az",
+      "review_on": [],
+      "requirements": [
+        {
+          "kind": "verifier",
+          "spec": "node scripts/check-invariants.mjs console"
+        }
+      ],
+      "falsifier": "A global console call appears in domain/ or application/ — the log pipeline would be bypassed and the output would no longer be observable in the console sheet.",
+      "register": "fact",
+      "control": "printf '\\nconsole.log(\"control\");\\n' >> ui/src/domain/types.ts",
+      "waiver": null
+    },
+    {
+      "id": "camera-starts-only-on-request",
+      "text": "The camera is opened only by an explicit action of the user in the gesture panel; the application never asks for the camera on its own.",
+      "scope": [ "ui/src" ],
+      "source": {
+        "kind": "specification",
+        "path": "docs/hand-gesture-control-design.md",
+        "section": null,
+        "digest": "9f8acbb0dd1159194ca1a3f964028fa14ec984b89d8f51941655077dc093b5e9",
+        "review": null
+      },
+      "kind": "acceptance",
+      "phase": "pre-merge",
+      "owner": "az",
+      "review_on": [],
+      "requirements": [
+        {
+          "kind": "verifier",
+          "spec": "node scripts/check-invariants.mjs camera"
+        }
+      ],
+      "falsifier": "A module outside the gesture panel starts the capture — the camera would turn on without the user's consent.",
+      "register": "fact",
+      "control": "printf '\\nvoid toggleGestureControl();\\n' >> ui/src/App.tsx",
+      "waiver": null
+    },
+    {
+      "id": "ci-never-deploys",
+      "text": "No CI workflow deploys: the production bundle is published only by bin/deploy.sh, run by hand on angara-1.",
+      "scope": [ ".github/workflows", ".gitverse/workflows" ],
+      "source": {
+        "kind": "specification",
+        "path": "docs/math-coding-v5.md",
+        "section": null,
+        "digest": "7f51717967b029eeb494846bbe53b767c57428ca6a571830b4dd9f3e2a0fb35d",
+        "review": null
+      },
+      "kind": "acceptance",
+      "phase": "pre-merge",
+      "owner": "az",
+      "review_on": [],
+      "requirements": [
+        {
+          "kind": "verifier",
+          "spec": "node scripts/check-invariants.mjs deploy"
+        }
+      ],
+      "falsifier": "A workflow gains a step that reaches the production host — a push to master would silently publish a build.",
+      "register": "fact",
+      "control": "printf '\\n      - run: ssh az@angara-1 ./bin/deploy.sh\\n' >> .github/workflows/ci.yml",
+      "waiver": null
+    },
+    {
+      "id": "no-secrets-in-repo",
+      "text": "No secret value is committed: the LLM proxy key lives in the gitignored ui/.env.local, and no tracked file carries a key, token or private key.",
+      "scope": [ "ui/src", "bin", "scripts", "decisions" ],
+      "source": {
+        "kind": "specification",
+        "path": "docs/math-coding-v5.md",
+        "section": null,
+        "digest": "7f51717967b029eeb494846bbe53b767c57428ca6a571830b4dd9f3e2a0fb35d",
+        "review": null
+      },
+      "kind": "acceptance",
+      "phase": "pre-merge",
+      "owner": "az",
+      "review_on": [],
+      "requirements": [
+        {
+          "kind": "verifier",
+          "spec": "node scripts/check-invariants.mjs secrets"
+        }
+      ],
+      "falsifier": "A tracked file contains a key or token value — anybody with read access to the repository could use it.",
+      "register": "fact",
+      "control": "printf '\\nOPENAI_API_KEY=sk-abcdefghijklmnopqrstuvwxyz0123456789\\n' >> ui/src/domain/types.ts",
+      "waiver": null
+    },
+    {
+      "id": "decisions-keep-their-keys",
+      "text": "Every decision in the historical registry decisions/ keeps the keys that make it readable: schema, id, state, intent, commitment and obligations.",
+      "scope": [ "decisions" ],
+      "source": {
+        "kind": "madr",
+        "path": "decisions/decision.yaml",
+        "section": null,
+        "digest": "3dd0ff1b160c20f43e5fc4b02e8c8dafd213d6acd927a6841b2746edbe3b011c",
+        "review": null
+      },
+      "kind": "acceptance",
+      "phase": "pre-merge",
+      "owner": "az",
+      "review_on": [],
+      "requirements": [
+        {
+          "kind": "verifier",
+          "spec": "node scripts/check-invariants.mjs decisions"
+        }
+      ],
+      "falsifier": "A decision file loses one of its keys — the record would no longer say what was decided or how it is to be checked.",
+      "register": "fact",
+      "control": "sed -i \"/^intent:/d\" decisions/wavecode-audio-recording.yaml",
+      "waiver": null
+    },
+    {
+      "id": "spec-is-the-active-record",
+      "text": "spec.json is the active decision record of math-coding v5: it states the goal, and every claim in it carries a scope that exists, an executable verifier and a negative control.",
+      "scope": [ "spec.json" ],
+      "source": {
+        "kind": "specification",
+        "path": "docs/math-coding-v5.md",
+        "section": null,
+        "digest": "7f51717967b029eeb494846bbe53b767c57428ca6a571830b4dd9f3e2a0fb35d",
+        "review": null
+      },
+      "kind": "acceptance",
+      "phase": "pre-merge",
+      "owner": "az",
+      "review_on": [],
+      "requirements": [
+        {
+          "kind": "verifier",
+          "spec": "node scripts/check-invariants.mjs spec"
+        }
+      ],
+      "falsifier": "A claim loses its verifier or its control, or points at a source that no longer exists — the claim could no longer be proved or refuted.",
+      "register": "fact",
+      "control": "sed -i \"s|\"path\": \"decisions/|\"path\": \"decisions/missing-|\" spec.json",
+      "waiver": null
+    },
+    {
+      "id": "math-coding-gate-uses-v5",
+      "text": "The math-coding gate runs the v5 kernel: it installs the mathc v5 release and executes 'mathc run', and it no longer calls the commands of the retired v3.7 kernel.",
+      "scope": [ ".gitverse/workflows/math-coding.yml" ],
+      "source": {
+        "kind": "specification",
+        "path": "docs/math-coding-v5.md",
+        "section": null,
+        "digest": "7f51717967b029eeb494846bbe53b767c57428ca6a571830b4dd9f3e2a0fb35d",
+        "review": null
+      },
+      "kind": "acceptance",
+      "phase": "pre-merge",
+      "owner": "az",
+      "review_on": [],
+      "requirements": [
+        {
+          "kind": "verifier",
+          "spec": "node scripts/check-invariants.mjs gate"
+        }
+      ],
+      "falsifier": "The gate stops running 'mathc run' or falls back to a v3.7 command — the check would either pass without checking anything or fail on a command that no longer exists.",
+      "register": "fact",
+      "control": "sed -i \"/mathc run/d\" .gitverse/workflows/math-coding.yml",
+      "waiver": null
+    },
+    {
+      "id": "term-box-maps-gestures-to-rows",
+      "text": "The term box maps every rhythmic gesture to its own row of the 4x8 grid (pinch to the kick, fist to the snare, open palm to the hihat, snap to the clap) and offers the target lengths 4, 8 and 16 hits.",
+      "scope": [
+        "ui/src/domain/gesture/term.ts",
+        "ui/src/presentation/state/gestureStore.ts",
+        "ui/src/presentation/components/TermBox.tsx"
+      ],
+      "source": {
+        "kind": "specification",
+        "path": "docs/hand-gesture-control-design.md",
+        "section": null,
+        "digest": "9f8acbb0dd1159194ca1a3f964028fa14ec984b89d8f51941655077dc093b5e9",
+        "review": null
+      },
+      "kind": "acceptance",
+      "phase": "pre-merge",
+      "owner": "az",
+      "review_on": [],
+      "requirements": [
+        {
+          "kind": "verifier",
+          "spec": "node scripts/check-invariants.mjs term"
+        }
+      ],
+      "falsifier": "Two gestures write into the same row, or a gesture writes outside the grid — the recorded rhythm could not be read as a 4x8 pattern.",
+      "register": "fact",
+      "control": "sed -i \"s/'openPalm', sample: 'hh'/'openPalm', sample: 'cp'/\" ui/src/domain/gesture/term.ts",
+      "waiver": null
+    }
+  ]
+}

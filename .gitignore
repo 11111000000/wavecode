@@ -40,6 +40,9 @@ __pycache__/
 .pytest_cache/
 .ruff_cache/
 
+# math-coding v5: локальные доказательства (.math/v5/) — в Git не попадают
+.math/
+
 # mathc cache (per-session evaluation cache)
 .local/
 

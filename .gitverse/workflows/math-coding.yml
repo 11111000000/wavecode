@@ -1,34 +1,25 @@
-# GitVerse Actions — math-coding 3.7 gate (warn-only transition step).
+# GitVerse Actions — math-coding v5 gate.
 #
 # Триггеры:
-#   - push в master           → проверка live tree (warn)
-#   - pull_request            → проверка PR-diff (warn)
+#   - push в master           → проверка live tree
+#   - pull_request            → проверка PR
 #   - workflow_dispatch       → ручной запуск
 #
 # Что делает:
-#   1. Скачивает `mathc` из edge release math-coding (kernel 3.7).
-#      Формат decision-файла при этом остаётся `math-coding/3.3` —
-#      семейство схемы меняется только вместе с форматом, а формат
-#      в 3.7.x не менялся (см. AGENTS.md § «Две версии — не путать»).
-#   2. `mathc rehash --dry-run` — проверяет, что `body_sha`/`yaml_sha`
-#      каждого решения соответствуют его телу. Устаревший дайджест —
-#      MC-SHA-DIGEST-STALE (severity: block): ядро читает первое
-#      вхождение и отказывается верить содержимому. Лечится
-#      `mathc rehash --write` (обязательный шаг после правки тела).
-#   3. `mathc validate decisions/*.yaml` — структурная валидность.
-#      Если хоть одна decision имеет MC-* reject, step fails.
-#   4. `mathc self-check` — kernel gate verdict (pass / unknown / fail).
-#      В переходный период step выставлен в `continue-on-error: true`,
-#      потому что obligations на свеже-мигрированных решениях не имеют
-#      свежих attestations (legacy пакеты v1.0 → unknown). Promotion
-#      в fail-режим — отдельное решение (см. AGENTS.md).
-#   5. Артефакт: self-check-verdict.json (для отладки).
+#   1. Ставит `mathc` из релиза ядра v5 (v5.0.2): готовый статический
+#      бинарь linux-x86_64 + проверка SHA-256 по SHA256SUMS того же
+#      релиза. Старый edge-релиз (ядро 3.7) отдаёт 404 — его формат
+#      `decisions/*.yaml` ядро 5 не читает вовсе.
+#   2. `mathc run` — исполняет verifier'ы и отрицательные контроли всех
+#      утверждений из `spec.json` и печатает вердикт + карту покрытия.
+#      Коды возврата: 0 — green, 1 — red, 3 — unknown (утверждение не
+#      доказано). Любой ненулевой код валит шаг: «unknown» — это тоже
+#      «не доказано», а не «доказано, что всё хорошо».
+#   3. Артефакт: вывод прогона (вердикт, состояния, uncovered).
 #
-# Promotion из warn в fail:
-#   Требует решения decisions/promote-math-coding-gate-to-fail.yaml со
-#   свидетельством того, что все obligations в live tree имеют
-#   `pass`-attestation. До тех пор этот workflow — observability,
-#   не enforcement.
+# Формат решений: `spec.json` (schema_version 5). Исторический реестр
+# `decisions/*.yaml` — источник мотивации, а не формат ядра.
+# См. docs/math-coding-v5.md.
 
 name: math-coding
 
@@ -42,90 +33,41 @@ concurrency:
   group: wavecode-math-coding-gate
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
 jobs:
   gate:
+    name: math-coding v5
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install mathc
+      - name: Setup Node.js
+        # Verifier'ы — это `node scripts/check-invariants.mjs` (только
+        # stdlib), поэтому Node нужен гейту, а не приложению.
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install mathc (kernel v5)
         env:
-          MC_VERSION: "edge"
+          MC_VERSION: "v5.0.2"
         run: |
           set -eu
-          # math-coding install.sh verifies SHA-256 of the downloaded
-          # binary against SHA256SUMS on the same release.
-          curl -fsSL \
-            "https://github.com/11111000000/math-coding/releases/download/${MC_VERSION}/install.sh" \
-            | sh -s -- --version="${MC_VERSION}"
-          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
-          mathc version
+          base="https://github.com/11111000000/math-coding/releases/download/${MC_VERSION}"
+          curl -fsSL "${base}/mathc-v${MC_VERSION}-linux-x86_64" -o /tmp/mathc
+          curl -fsSL "${base}/SHA256SUMS" -o /tmp/SHA256SUMS
+          cd /tmp
+          grep "mathc-v${MC_VERSION}-linux-x86_64" SHA256SUMS | sha256sum -c -
+          chmod +x /tmp/mathc
+          sudo install -m 0755 /tmp/mathc /usr/local/bin/mathc
+          mathc --version
 
-      - name: Digests are current (body_sha / yaml_sha)
-        run: |
-          set -eu
-          # `mathc rehash --dry-run` exits 0 even when a digest is
-          # stale, so the verdict is read from its own report. The
-          # count is matched as a NON-ZERO number: the report always
-          # contains "0 changed", which must not trip the check.
-          report=$(mathc rehash --dry-run 2>&1)
-          echo "$report"
-          if echo "$report" | grep -qE '[1-9][0-9]* changed'; then
-            echo "::error::stale body_sha/yaml_sha — run 'mathc rehash --write'"
-            exit 1
-          fi
-
-      - name: Validate every decision file
-        run: |
-          set -eu
-          pass=0
-          fail=0
-          for f in decisions/*.yaml; do
-            [ "$f" = "decisions/decision.yaml" ] && continue
-            # 3.7 kernel prints verdict "parse-ok"; the 3.3-era
-            # kernel printed "accept" (renamed in math-coding
-            # a602b361). Accept either so the gate works on both.
-            if mathc validate "$f" --format=json 2>&1 | grep -qE '"verdict":"(accept|parse-ok)"'; then
-              pass=$((pass + 1))
-            else
-              echo "REJECT: $f"
-              mathc validate "$f" --format=text 2>&1
-              fail=$((fail + 1))
-            fi
-          done
-          echo "validated $((pass + fail)) decision files: $pass pass, $fail fail"
-          if [ "$fail" -gt 0 ]; then
-            echo "ERROR: $fail decisions rejected by mathc validate"
-            exit 1
-          fi
-
-      - name: Self-check (warn-only during transition)
-        id: self-check
-        continue-on-error: true
+      - name: Run the v5 gate
         run: |
           set -eu
           mkdir -p artifacts
-          mathc self-check > artifacts/self-check-verdict.json 2>&1 || true
-          # Extract top-level verdict for the workflow log.
-          verdict=$(python3 -c "
-import json
-with open('artifacts/self-check-verdict.json') as f:
-    d = json.load(f)
-print(d.get('verdict', 'unknown'))
-" 2>/dev/null || echo unknown)
-          echo "self-check verdict: $verdict"
-          if [ "$verdict" = "fail" ]; then
-            echo "::warning::mathc self-check returned verdict=fail (transition: not blocking yet)"
-          elif [ "$verdict" = "unknown" ]; then
-            echo "::notice::mathc self-check returned verdict=unknown (expected during transition; no attestations yet for migrated v1.0 obligations)"
-          fi
-
-      - name: Upload verdict artifact
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: math-coding-verdict
-          path: artifacts/self-check-verdict.json
-          retention-days: 30
+          mathc run | tee artifacts/mathc-run.txt
