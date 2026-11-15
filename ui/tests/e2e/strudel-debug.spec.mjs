@@ -12,10 +12,10 @@ test('Strudel eval produces triggers', async ({ page }) => {
   console.log('=== initial state ===');
   await page.waitForTimeout(2000);
 
-  console.log('=== Test 440Hz ===');
-  await page.locator('button:has-text("🔊 440")').click();
-  await page.waitForTimeout(1500);
-
+  // Отладочный «🔊 440» ушёл из интерфейса вместе с отладочной
+  // строкой (фаза 6 убрала её за раскрытие «⋯ Ещё», а сам beep-кнопки
+  // в UI уже нет). Разблокировка AudioContext теперь происходит
+  // нажатием «Запуск» — это и есть жест пользователя.
   console.log('=== Eval ===');
   await page.locator('button[aria-label="Запуск"]').click();
   await page.waitForTimeout(5000);

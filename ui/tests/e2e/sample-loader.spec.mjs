@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { APP_URL } from './support/appUrl';
+import { selectPreset } from './support/toolsSheet';
 
 /**
  * Sample loader e2e — verifies that CC0 Freesound drum samples
@@ -51,17 +52,21 @@ test('808-king preset loads, eval plays, no console errors', async ({ page }) =>
   // lazily — only on first eval). 1s is enough for the dynamic import.
   await page.waitForTimeout(1000);
 
-  // Select 808-king preset.
-  const presetSelect = page.locator('select.preset-select');
-  await expect(presetSelect).toBeVisible();
-  await presetSelect.selectOption('808-king');
+  // Select 808-king preset (в листе «Инструменты»).
+  await selectPreset(page, '808-king');
 
   // CodeMirror should reflect the new score.
   const editorText = await page.locator('.cm-content').textContent();
   expect(editorText || '').toContain('808 king');
 
-  // Trigger ▶ Запуск (Eval).
-  await page.locator('button:has-text("Запуск")').click();
+  // Выбор композиции сам запускает eval (loadPresetById → evalScore),
+  // поэтому кнопка транспорта уже в состоянии «Стоп». Проверяем
+  // именно повторный запуск: останавливаем и стартуем заново.
+  const playBtn = page.locator('[data-testid="transport-play-btn"]');
+  await expect(playBtn).toHaveAttribute('aria-label', 'Стоп');
+  await playBtn.click();
+  await expect(playBtn).toHaveAttribute('aria-label', 'Запуск');
+  await playBtn.click();
   await page.waitForTimeout(2000);
 
   // No uncaught exceptions; allow Strudel/network warnings but not errors.

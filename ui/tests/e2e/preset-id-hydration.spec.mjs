@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { APP_URL } from './support/appUrl';
 import { waitForPresetPersisted } from './support/persistence';
+import { openToolsSheet, selectPreset } from './support/toolsSheet';
 
 /**
  * e2e for math/wavecode-preset-id-hydration.
@@ -43,14 +44,17 @@ test('selected preset survives reload (and is not always Creep)', async ({ page 
     for (const [k, v] of saved) window.localStorage.setItem(k, v);
   });
   await page.reload({ waitUntil: 'domcontentloaded' });
-  await page.waitForSelector('select.preset-select', { timeout: 15000 });
+  await page.waitForSelector('main.app', { timeout: 15000 });
 
-  // First-launch state: default Creep.
-  await expect(page.locator('select.preset-select')).toHaveValue('creep');
+  // First-launch state: default Creep. Селект живёт в листе
+  // «Инструменты» — пока лист закрыт, его нет в DOM.
+  await openToolsSheet(page);
+  await expect(page.locator('[data-testid="preset-select"]')).toHaveValue('creep');
 
   // Pick a non-Creep preset and confirm persistence.
-  await page.locator('select.preset-select').selectOption('ambient-drone');
-  await expect(page.locator('select.preset-select')).toHaveValue('ambient-drone');
+  await selectPreset(page, 'ambient-drone');
+  await openToolsSheet(page);
+  await expect(page.locator('[data-testid="preset-select"]')).toHaveValue('ambient-drone');
   const stored = await page.evaluate(() =>
     window.localStorage.getItem('wavecode-selected-preset-v1'));
   expect(stored).toBe('ambient-drone');
@@ -62,10 +66,11 @@ test('selected preset survives reload (and is not always Creep)', async ({ page 
 
   // Reload — score restores from IDB, presetId from localStorage.
   await page.reload({ waitUntil: 'domcontentloaded' });
-  await page.waitForSelector('select.preset-select', { timeout: 15000 });
+  await page.waitForSelector('main.app', { timeout: 15000 });
 
   // The critical assertion: dropdown shows the persisted id, not Creep.
-  await expect(page.locator('select.preset-select')).toHaveValue('ambient-drone');
+  await openToolsSheet(page);
+  await expect(page.locator('[data-testid="preset-select"]')).toHaveValue('ambient-drone');
 
   // The score in the editor should match the ambient-drone preset.
   const editorText = await page.locator('.cm-content').textContent();
@@ -84,11 +89,12 @@ test('deleted custom preset falls back to Creep on next reload', { tag: '@smoke'
     window.localStorage.setItem('wavecode-selected-preset-v1', 'custom-ghost');
   });
   await page.reload({ waitUntil: 'domcontentloaded' });
-  await page.waitForSelector('select.preset-select', { timeout: 15000 });
+  await page.waitForSelector('main.app', { timeout: 15000 });
 
   // hydrateSelectedPreset detects the dead id and falls back to Creep,
   // AND persists the fallback (so the next reload is clean).
-  await expect(page.locator('select.preset-select')).toHaveValue('creep');
+  await openToolsSheet(page);
+  await expect(page.locator('[data-testid="preset-select"]')).toHaveValue('creep');
   const storedAfter = await page.evaluate(() =>
     window.localStorage.getItem('wavecode-selected-preset-v1'));
   expect(storedAfter).toBe('creep');

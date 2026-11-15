@@ -11,11 +11,13 @@ test('Score is autosaved to IndexedDB and restored after page reload', async ({ 
   await page.waitForSelector('main.app', { timeout: 15000 });
   await page.waitForTimeout(2000);
 
-  // First, reset persisted state by clicking the "Reset all" button (🧹)
-  // so the typed marker below is the only thing that could possibly match after reload.
+  // First, reset persisted state by clicking the "Сбросить всё" item
+  // (🧹) in the «Ещё» overflow menu — после фазы 3 кнопки сброса в
+  // верхней панели больше нет, действие живёт в меню «⋯».
   // Confirm dialog must be accepted.
   page.once('dialog', (d) => d.accept());
-  await page.locator('button[aria-label="Сбросить всё"]').click();
+  await page.locator('button[aria-label="Ещё"]').click();
+  await page.locator('.wc-overflow-menu__panel button:has-text("Сбросить всё")').click();
   await page.waitForTimeout(2000);
   await page.waitForSelector('main.app', { timeout: 15000 });
 

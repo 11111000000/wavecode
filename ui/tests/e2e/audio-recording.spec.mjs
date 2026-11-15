@@ -47,7 +47,10 @@ test('Transport bar sits at the top of the shell and carries the play control', 
   if (!transportBox || !scoreBox) throw new Error('no bounding box for transport/score');
   expect(transportBox.y).toBeLessThan(scoreBox.y);
 
-  // Выбор композиции — в той же полосе.
+  // Выбор композиции уехал из транспортной строки в лист
+  // «Инструменты» (фаза 6) — в полосе его больше нет.
+  await expect(page.locator('[data-testid="preset-select"]')).toHaveCount(0);
+  await page.locator('.wc-topbar [aria-label="Инструменты"]').first().click();
   await expect(page.locator('[data-testid="preset-select"]')).toBeVisible();
 });
 
