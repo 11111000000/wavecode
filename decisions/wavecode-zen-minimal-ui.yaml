@@ -1,10 +1,10 @@
 ---
 schema: math-coding/3.3
 id: wavecode-zen-minimal-ui
-revision: 1
+revision: 2
 state: active
-body_sha: "sha256:9b7b74b35ca034f9ceed9dd4cc52a353a0d2e132e1c09aa1c4d1b42a277c9ee6"
-yaml_sha: "sha256:9b7b74b35ca034f9ceed9dd4cc52a353a0d2e132e1c09aa1c4d1b42a277c9ee6"
+body_sha: "sha256:86dfe44a09c34d5a32739f061dd44e5f45018870185784ad80236a3f757ea766"
+yaml_sha: "sha256:86dfe44a09c34d5a32739f061dd44e5f45018870185784ad80236a3f757ea766"
 
 intent: |
   Решение владельца (2026-11-15): весь интерфейс wavecode переводится
@@ -12,6 +12,12 @@ intent: |
   лишнего нет, но всё необходимое остаётся: каждый реализованный
   инструмент должен быть виден в интерфейсе и достижим за один шаг,
   без перегрузки экрана.
+
+  Вторая редакция (2026-11-15, после аудита): владелец утвердил
+  направление целиком и передал спорные вопросы на решение по
+  рекомендациям аудита. Ниже зафиксированы конкретные ответы; полный
+  план «от философии до реализации» — `docs/2026-11-15-zen-ui-plan.md`,
+  визуальный макет целевого состояния — `docs/2026-11-15-zen-ui-wireframe.html`.
 
   Аудит (docs/2026-11-15-zen-ui-audit.md) показал, что сегодня
   направление разъехалось с кодом и с корпусом решений:
@@ -41,8 +47,8 @@ commitment: |
   1. **Пустота несущая.** Разделение и отступы задаются шкалой
      `--space-*`; декоративные тени, glow, scanline и градиентные
      подложки не добавляются без отдельного решения. Радиусы
-     сводятся к двум ступеням (0 для управляющих элементов,
-     `--radius-sm` для поверхностей).
+     сводятся к двум ступеням (0 для управляющих элементов
+     и кода, 12 px для поверхностей).
   2. **Полнота без перегрузки.** Ни один реализованный инструмент
      не исчезает из интерфейса. Если экран перегружен, инструмент
      уходит в раскрываемый слой (sheet/drawer), но не за хоткей,
@@ -63,14 +69,49 @@ commitment: |
   7. **Регрессии измеримы.** `scripts/check-zen-ui.mjs` падает при
      росте доли шума и при падении покрытия фокусом;
      `scripts/zen-ui-baseline.json` фиксирует текущий уровень.
+
+  Ревизии 2 — ответы на спорные вопросы, которые владелец передал
+  на решение по рекомендациям аудита:
+
+  8. **Палитра не меняется, меняется её дозировка.** База —
+     Chroma Indigo Spectrum (`tokens.css:1-12`). Свечения
+     (`--primary-glow`, `--cyan-glow`, `--magenta-glow`,
+     `--warm-glow`) удаляются; `--warm` остаётся только для темпа и
+     метронома; поверхностная шкала сокращается с 5 уровней до 3;
+     золотой уходит из активных состояний и hover.
+  9. **Навигация: четыре уровня.** Tier 0 — холст, транспорт,
+     top bar, одна кнопка ввода. Tier 1 — рельс из четырёх
+     пунктов (Нотная, Шаги, ИИ, Ввод). Tier 2 — один лист
+     «Инструменты». Tier 3 — палитра команд `⌘K`. Глубина
+     раскрытия ≤ 2. На десктопе рельс вертикальный, AI — выдвижной
+     слой поверх холста, а не панель рядом.
+  10. **Ритм — второй режим входного дока.** Голос и Ритм делят
+      одну плавающую кнопку и один док с явным переключателем
+      «Голос | Ритм». Логика ветки `feat/rhythm-recorder`
+      переиспользуется, третья плавающая кнопка не добавляется —
+      это сохраняет `wavecode-voice-minimal-dock@1`.
+  11. **Инструменты-сироты не остаются сиротами.** MIDI и
+      WAV-экспорт выводятся в лист «Инструменты → Экспорт»; сетка
+      мелодии — режим в листе «Шаги»; `editScore` подключается к
+      модели, если прокси принимает `tools`, иначе обещание
+      убирается из README; дублирующий `TransportPanel` удаляется.
+  12. **Реестр инструментов — источник правды.**
+      `ui/src/presentation/state/toolRegistry.ts` описывает каждый
+      инструмент (id, ярлык, иконка, уровень, поверхность, хоткей);
+      из него строятся рельс, лист «Инструменты», палитра команд и
+      e2e-проверка достижимости. Состояние «реализовано, но не
+      выведено» запрещено.
 axiom_link:
   - A1
 scope:
   paths:
     - ui/src/styles
     - ui/src/presentation
+    - ui/src/presentation/state/toolRegistry.ts
     - docs/design.md
     - docs/2026-11-15-zen-ui-audit.md
+    - docs/2026-11-15-zen-ui-plan.md
+    - docs/2026-11-15-zen-ui-wireframe.html
     - scripts/check-zen-ui.mjs
     - scripts/zen-ui-baseline.json
   capabilities:
@@ -100,6 +141,23 @@ outcomes:
     statement: |
       Интерактивные цели не меньше 24×24 CSS px, у каждой есть
       видимый `:focus-visible`, контраст текста ≥ 4.5:1.
+  - id: wavecode-zen-minimal-ui-outcome-structure
+    statement: |
+      Приложение имеет пять структурных поверхностей (холст, рельс,
+      транспорт, входной док, лист «Инструменты») и не более 20
+      интерактивных регионов в состоянии покоя; AI открывается
+      выдвижным слоем поверх холста, а не панелью рядом с ним.
+  - id: wavecode-zen-minimal-ui-outcome-input-dock
+    statement: |
+      Голос и ритм — два явных режима одного входного дока с
+      переключателем; ритм доступен не более чем за два действия из
+      любого состояния, а плавающих кнопок в приложении ровно одна.
+  - id: wavecode-zen-minimal-ui-outcome-tool-registry
+    statement: |
+      Каждый инструмент описан в `toolRegistry.ts`, и рельс, лист
+      «Инструменты», палитра команд и e2e-проверка достижимости
+      строятся из этого одного списка; инструментов в состоянии
+      «реализовано, но не выведено» не остаётся.
 obligations:
   - id: wavecode-zen-minimal-ui-kernel-validates
     claim: |
@@ -126,6 +184,24 @@ obligations:
     acceptance:
       all:
         - verifier: "test -f docs/2026-11-15-zen-ui-audit.md"
+          result: pass
+  - id: wavecode-zen-minimal-ui-plan-exists
+    claim: |
+      The implementation plan exists and covers philosophy, visual
+      language, navigation tiers, the input dock, per-surface specs and
+      the phased rollout with acceptance criteria.
+    acceptance:
+      all:
+        - verifier: "test -f docs/2026-11-15-zen-ui-plan.md"
+          result: pass
+  - id: wavecode-zen-minimal-ui-wireframe-exists
+    claim: |
+      A visual mockup of the target state exists and shows the five
+      structural surfaces, the four-item rail and the explicit
+      «Голос | Ритм» input switch.
+    acceptance:
+      all:
+        - verifier: "test -f docs/2026-11-15-zen-ui-wireframe.html"
           result: pass
   - id: wavecode-zen-minimal-ui-quality-gate
     claim: |

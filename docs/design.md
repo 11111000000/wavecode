@@ -1,143 +1,126 @@
 # wavecode — Design System
 
-> Phosphor-amber REPL с моноширинным UI, ASCII-волной как логотипом,
-> SVG-иконками и CRT-фактурой. Решение зафиксировано в
-> `math/wavecode-redesign-repl-phosphor/packet.md`.
+> **Статус документа.** Описывает **фактически выпущенную** визуальную
+> систему: «Chroma Indigo Spectrum» (`ui/src/styles/tokens.css`).
+> Прежняя версия этого файла описывала выведенную из обращения
+> «phosphor-amber REPL / CRT» — она больше не соответствует коду.
+>
+> Целевое направление развития — минималистичный, «дзенский» интерфейс:
+> [`2026-11-15-zen-ui-plan.md`](2026-11-15-zen-ui-plan.md).
+> Доказательная база — [`2026-11-15-zen-ui-audit.md`](2026-11-15-zen-ui-audit.md).
+> Решение — [`decisions/wavecode-zen-minimal-ui.yaml`](../decisions/wavecode-zen-minimal-ui.yaml).
 
-## Принципы
+## Слои CSS
 
-1. **Mono-first.** Весь интерфейс — моноширинный шрифт JetBrains Mono.
-   Sans-serif не используется даже для заголовков. Это отделяет
-   wavecode от generic dark-theme редакторов и усиливает семиотику
-   «это программа / REPL / инструмент».
-2. **Один источник правды.** Палитра, шрифты, spacing, motion
-   вынесены в `ui/src/styles/tokens.css`. Любая правка цвета —
-   только там; в компонентах читаем через `var(--…)`.
-3. **SVG-иконки вместо emoji.** 14 inline-компонент в
-   `ui/src/presentation/icons/index.tsx`. Все используют
-   `currentColor`, рендерятся одинаково на всех ОС.
-4. **Никакого украшательства без функции.** Glow — только на
-   `[data-active]`, scanlines — фоном с opacity 0.04, ASCII-волна —
-   один раз в title bar.
-5. **Sharp shapes by default.** `--radius: 0` на всех углах, кроме
-   pill-бейджей. Это читается как «инструмент / терминал».
-
-## Слойная архитектура CSS
+Каскад объявлен декларативно в `ui/src/index.css:30-37`:
 
 ```
-tokens.css        ← custom properties (палитра, шрифты, spacing, motion)
-base.css          ← reset, html/body, CRT scanlines, focus ring
-components.css    ← новые «wc-*» компоненты
-icons.css         ← стили для SVG-иконок (currentColor)
-legacy.css        ← shim для старых селекторов в новой палитре
+tokens      палитра, поверхности, типографика, motion, radius, z-scale
+base        reset, Geist, focus-ring, скроллбары, safe-area, prefers-*
+components  wc-*, app-*, score-*, transport-*, ai-*, mixer-*, step-grid-*, …
+sheets      bottom-sheet, side-drawer, snap-points, drag-handle, scroll-lock
+icons       иконки и их анимации
+landing     страница-лендинг (#/)
 ```
 
-Каскад: `index.css` импортирует слои в порядке сверху-вниз; внутри
-слоя — обычный specificity-каскад. Migration plan: компоненты
-постепенно переходят с legacy-classes на `.wc-*` классы; shim
-остаётся как страховочная сетка.
+Первый в объявлении `@layer` = низший приоритет. Благодаря слоям
+каскад не зависит от порядка `@import` и от накопленной специфичности.
 
 ## Палитра
 
-| Token | HEX | Использование |
+Токены живут только в `ui/src/styles/tokens.css`. Вне него — ни одного
+цветового литерала.
+
+| Токен | HEX | Роль |
 |---|---|---|
-| `--bg-base` | `#0c0d0e` | основной фон |
-| `--bg-elev` | `#15110d` | панели, header |
-| `--bg-screen` | `#0a0807` | экран редактора, transport-panel |
-| `--fg` | `#f4a62b` | основной текст |
-| `--fg-dim` | `#b8801e` | вторичный текст |
-| `--amber` | `#ffb547` | primary actions, glow |
-| `--ok` | `#94e344` | running, online, success |
-| `--warn` | `#ffd87a` | предупреждения |
-| `--err` | `#ff5c3a` | ошибки, удаление |
-| `--border` | `#2a201a` | разделители |
-| `--border-strong` | `#4a3a2a` | видимые границы |
+| `--surface-0` | `#0a0a0e` | базовый фон |
+| `--surface-1` | `#11121a` | панели |
+| `--surface-2` | `#181a25` | приподнятые блоки |
+| `--surface-3` / `--surface-4` | `#1f2230` / `#272a3b` | тосты, модалки |
+| `--fg` / `--fg-dim` / `--fg-ghost` | `#f4f4f5` / `#a1a1aa` / `#52525b` | три уровня текста |
+| `--primary` | `#a78bfa` | действия, активное состояние, фокус |
+| `--cyan` | `#5eead4` | «звучит» / live |
+| `--magenta` | `#f472b6` | «пишет» / record |
+| `--warm` | `#fbbf24` | темп и метроном |
+| `--ok` / `--err` | `#4ade80` / `#fb7185` | статус |
+| `--border` / `--border-strong` | `#27272a` / `#3f3f46` | волосяные линии |
 
-Контраст fg/bg-base: 9.4:1 (WCAG AAA для body text).
-Амбер — это не ретро-имитация, а семантический выбор primary action.
+Производные: `--primary-soft`, `--cyan-soft`, `--magenta-soft`, `--ok-soft`,
+`--err-soft`, `--warm-soft` — 14 %-ные подложки активных состояний.
 
-## Шрифты
+## Типографика
 
-```css
---font-mono: 'JetBrains Mono', 'IBM Plex Mono', 'SF Mono', Menlo,
-             'DejaVu Sans Mono', Consolas, monospace;
---font-sans: 'IBM Plex Sans', 'Inter', system-ui, -apple-system, sans-serif;
-```
+- `--font-sans` — Geist / Inter / system-ui. Весь интерфейс.
+- `--font-mono` — Geist Mono / JetBrains Mono. **Только** код, нотация, числа.
+- Размеры: `--fs-3xs` 9 → `--fs-display` 22 px. Целевой диапазон в
+  новом языке — 11/12/13/14/18/24 px (см. план, фаза 1).
+- Интерлиньяж `--lh-tight/base/relaxed`, трекинг `--ls-tight/base/wide/caps`.
 
-JetBrains Mono — открытая SIL OFL 1.1, через Google Fonts CDN
-(preconnect в `ui/index.html`). Fallback — все OS-моно-шрифты.
+## Отступы
 
-## Движения
+Шкала `--space-3xs…--space-4xl`: 2, 4, 6, 8, 12, 16, 24, 32, 48, 64 px.
+Рабочие значения в UI — 4 / 8 / 12 / 16 / 24 / 32 / 48. Промежутки между
+смысловыми блоками — 24 px, внутри блока — 8–12 px: расстояние, а не рамка,
+выражает структуру.
 
-- `--dur-fast: 80ms` — hover, border-color, focus-ring
-- `--dur-base: 160ms` — раскрытие/сворачивание панелей, toggle
-- `--dur-slow: 320ms` — крупные изменения layout (не используется
-  широко; конкретные transitions могут переопределять)
-- `--ease: cubic-bezier(0.2, 0.6, 0.2, 1)` — дефолт; никакого
-  `linear` для UI motion
-- `@media (prefers-reduced-motion: reduce)` — все duration → 0
+## Движение
 
-## Spacing scale (4-step)
+- Длительности: `--dur-2xs` 60, `--dur-xs` 100, `--dur-sm` 160, `--dur-md` 240,
+  `--dur-lg` 320, `--dur-xl` 480, `--dur-sheet` 380 ms.
+- Кривые: `--ease` (по умолчанию), `--ease-out`, `--ease-in`, `--ease-spring`.
+- `prefers-reduced-motion: reduce` обнуляет все длительности
+  (`tokens.css:287-297`) — состояния при этом сохраняются.
+- `prefers-contrast: more` усиливает границы (`tokens.css:300-305`).
+- Целевое правило: бесконечная анимация разрешена только у играющего
+  транспорта; всё остальное — по событию.
 
-`--space-2xs (2px)` → `--space-xs (4px)` → `--space-sm (8px)` →
-`--space-md (12px)` → `--space-lg (16px)` → `--space-xl (24px)` →
-`--space-2xl (32px)`. Используется через `gap`, `padding`, `margin`.
+## Тени и слои
+
+`--shadow-pop`, `--shadow-overlay`, `--shadow-inset`, `--shadow-fab` и четыре
+glow-тени (`--shadow-glow-primary/warm/cyan/magenta`). В целевом языке glow
+и `--*-glow` удаляются, у листов и модалок остаётся одна тень.
+
+z-scale: `base 0 · body 1 · sticky 10 · fab 20 · tabbar 30 · sheet 40 ·
+modal 60 · toast 80 · consent-gate 90`.
 
 ## Иконки
 
-Все иконки в `presentation/icons/index.tsx`, ~14 компонент:
+`ui/src/presentation/icons/index.tsx` — 42 компонента, все
+`<svg viewBox="0 0 16 16">`, `fill="none"`, `stroke="currentColor"`,
+`stroke-width="1.5"`, `stroke-linecap/linejoin: round`, `aria-hidden="true"`.
+Цвет наследуется от родителя, размер по умолчанию 14 px, варианты
+16 / 20 / 24 px через `--icon-size-*`. Эмодзи как иконки не используются.
 
-`PlayIcon`, `StopIcon`, `RecordIcon`, `StepIcon`, `PianoIcon`,
-`SaveIcon`, `TrashIcon`, `ShareIcon`, `UndoIcon`, `RedoIcon`,
-`ResetIcon`, `NewIcon`, `PhoneIcon`, `SpeakerIcon`.
-
-Каждая — `<svg viewBox="0 0 16 16">`, `fill="none"`, `stroke="currentColor"`,
-`stroke-width="1.5"`, `stroke-linecap="square"`, `stroke-linejoin="miter"`.
-
-Размер — `width/height: 14px` (default) или 18px через prop `size`.
-Цвет — через `color` родителя (`currentColor`).
-
-## Glow / состояния
-
-| Состояние | Стиль |
-|---|---|
-| `default` | border + color из токенов |
-| `hover` | brighter foreground, `--border-strong` |
-| `active/pressed` | `--bg-elev` фон |
-| `data-tone="amber"` | amber border + bg-fill on hover + `--shadow-glow` |
-| `data-state="running"` | `--ok` foreground + border + `--ok-soft` |
-| `data-state="recording"` | `--err` + `--err-soft` + pulse animation |
-| `disabled` | `opacity: 0.4`, `cursor: not-allowed` |
-
-## Как добавить новую кнопку
+## Как добавить контрол
 
 ```tsx
 import { SomeIcon } from '../icons';
 
-<button
-  type="button"
-  class="ctrl-btn"
-  data-tone="amber"
-  onClick={…}
-  disabled={…}
->
+<button type="button" class="wc-btn" onClick={…} disabled={…}>
   <SomeIcon />
   <span>Действие</span>
 </button>
 ```
 
-## Как НЕ надо делать
+Обязательно: цвет, отступы, радиус и длительность — только из `tokens.css`;
+у интерактивного элемента есть видимый `:focus-visible`; цель ≥ 24×24 px
+(на мобильном — `--touch-target: 44px`); состояние выражено цветом или
+текстом, а не анимацией.
 
-- Хардкодить цвета (`#ff6b6b`, `rgba(255, 107, 107, 0.12)`) — только
-  через `var(--…)` из `tokens.css`.
-- Использовать emoji как иконки — `PlayIcon`/etc из icons module.
-- Добавлять border-radius > 0 — UI терминальный, sharp только.
-- Игнорировать `prefers-reduced-motion` — transitions должны
-  отключаться.
+## Как не надо делать
 
-## Status: applied
+- Хардкодить цвета, радиусы, размеры шрифта — только `var(--…)`.
+- Снимать фокус (`outline: none`) без равноценной замены.
+- Добавлять свечение, градиентную подложку, scanline, «стекло».
+- Делать бесконечную анимацию без смысла.
+- Держать у элемента размер меньше `--touch-target` на мобильном.
+- Прятать инструмент за хоткеем, которого нигде не видно.
 
-Пакет: `math/wavecode-redesign-repl-phosphor`.
-Migrated: App.tsx (header, controls, ASCII-wave title), index.html
-(boot screen, JetBrains Mono CDN), ui/src/styles/{tokens,base,
-components,icons,legacy}.css — все 5 слоёв в production.
+## Известный долг и как его проверять
+
+`scripts/check-zen-ui.mjs` измеряет висящие токены, литералы цвета,
+паритет `:hover` / `:focus-visible`, `outline: none`, бесконечные анимации и
+число классов-поверхностей; базовая линия — `scripts/zen-ui-baseline.json`.
+Текущее состояние и целевые значения — в
+[`2026-11-15-zen-ui-audit.md`](2026-11-15-zen-ui-audit.md) и
+[`2026-11-15-zen-ui-plan.md`](2026-11-15-zen-ui-plan.md).
