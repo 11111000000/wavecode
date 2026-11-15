@@ -34,20 +34,16 @@
   /* ── SPECTRUM ACCENTS (semantic) ──────────────────────────── */
   --primary:    #a78bfa;   /* primary — actions, identity, brand (violet) */
   --primary-soft: rgba(167, 139, 250, 0.14);
-  --primary-glow: rgba(167, 139, 250, 0.45);
 
   --warm:       #fbbf24;         /* warm — gold accent (BPM, hot
                                           indicators, hover-shimmer, playhead) */
   --warm-soft:  rgba(251, 191, 36, 0.14);
-  --warm-glow:  rgba(251, 191, 36, 0.45);
 
   --cyan:       #5eead4;         /* live — playing-state, audio-active */
   --cyan-soft:  rgba(94, 234, 212, 0.14);
-  --cyan-glow:  rgba(94, 234, 212, 0.45);
 
   --magenta:    #f472b6;         /* record — record-state, error accent */
   --magenta-soft: rgba(244, 114, 182, 0.14);
-  --magenta-glow: rgba(244, 114, 182, 0.45);
 
   --ok:         #4ade80;   /* ok / success — slightly green, distinct from cyan */
   --ok-soft:    rgba(74, 222, 128, 0.14);
@@ -62,15 +58,17 @@
   --border-active: var(--primary);
   --border-focus:  var(--cyan);
 
-  /* ── RADIUS (modern, soft) ───────────────────────────────── */
-  --radius-xs:   4px;
-  --radius-sm:   6px;
-  --radius-md:   8px;
+  /* ── RADIUS (zen: two steps) ───────────────────────────────── */
+  /* 0 for controls/code, 12px for surfaces/cards/sheets.
+     --radius-pill stays for dots, --radius-full for circles. */
+  --radius-xs:   0px;
+  --radius-sm:   0px;
+  --radius-md:   0px;
   --radius-lg:   12px;
-  --radius-xl:   16px;
-  --radius-2xl:  24px;
+  --radius-xl:   12px;
+  --radius-2xl:  12px;
   --radius-pill: 999px;
-  --radius-sheet: 20px 20px 0 0;     /* bottom-sheet top corners */
+  --radius-sheet: 12px 12px 0 0;     /* bottom-sheet top corners */
   --radius-full: 50%;
 
   /* ── TYPOGRAPHY ───────────────────────────────────────────── */
@@ -80,8 +78,8 @@
                'SF Mono', Menlo, monospace;
   --font-display: 'Geist', var(--font-sans);
 
-  --fs-3xs:  9px;
-  --fs-2xs:  10px;
+  --fs-3xs:  11px;
+  --fs-2xs:  11px;
   --fs-xs:   11px;
   --fs-sm:   12px;
   --fs-md:   13px;
@@ -227,10 +225,6 @@
   --ease-in:     cubic-bezier(0.4, 0, 1, 1);
 
   /* ── SHADOWS ──────────────────────────────────────────────── */
-  --shadow-glow-primary:  0 0 12px var(--primary-glow);
-  --shadow-glow-warm:     0 0 12px var(--warm-glow);
-  --shadow-glow-cyan:    0 0 12px var(--cyan-glow);
-  --shadow-glow-magenta: 0 0 12px var(--magenta-glow);
   --shadow-pop:    0 8px 32px rgba(0, 0, 0, 0.6);
   --shadow-overlay: 0 16px 48px rgba(0, 0, 0, 0.7);
   --shadow-inset:  inset 0 0 0 1px var(--border-strong);
