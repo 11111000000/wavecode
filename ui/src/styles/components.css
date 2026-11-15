@@ -7006,3 +7006,297 @@ textarea.ai-textarea:focus-visible {
 }
 .ai-instrument-select:hover:not(:disabled) { color: var(--fg); }
 .ai-instrument-select:disabled { opacity: 0.55; cursor: not-allowed; }
+
+/* =========================================================================
+ *  HAND GESTURE CONTROL (feat/hand-gesture-control)
+ *  Panel «Управление руками»: master toggle, camera preview with the
+ *  landmark overlay, per-axis mapping, calibration and «режим терминовки».
+ *
+ *  All `.gesture-*` classes are ADDITIVE — they do not touch any existing
+ *  rule. Same tokens as the rest of the app (dark surfaces, soft radii,
+ *  mono type for the read-outs).
+ * ========================================================================= */
+
+.gesture-panel {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-sm);
+  padding: var(--space-sm) var(--space-md);
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  font-family: var(--font-sans);
+  color: var(--fg-dim);
+}
+@media (min-width: 720px) {
+  .gesture-panel { padding: var(--space-md); }
+}
+.gesture-panel--loading {
+  min-height: 120px;
+  opacity: 0.6;
+}
+
+/* --- row 1: master toggle + status pill ---------------------------------- */
+.gesture-row-status {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  flex-wrap: wrap;
+}
+.gesture-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  min-height: var(--touch-target);
+  padding: 0 var(--space-md);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  color: var(--fg);
+  font-family: var(--font-sans);
+  font-size: var(--fs-md);
+  font-weight: var(--fw-medium);
+  cursor: pointer;
+  transition:
+    color var(--dur-xs) var(--ease),
+    background var(--dur-xs) var(--ease),
+    border-color var(--dur-xs) var(--ease);
+}
+.gesture-toggle:hover { background: var(--surface-3); border-color: var(--border-strong); }
+.gesture-toggle[aria-pressed='true'] {
+  color: var(--fg-inverse);
+  background: var(--primary);
+  border-color: var(--primary);
+  box-shadow: var(--shadow-glow-primary);
+}
+.gesture-toggle-state {
+  font-family: var(--font-mono);
+  font-size: var(--fs-2xs);
+  opacity: 0.8;
+}
+.gesture-pill {
+  display: inline-flex;
+  align-items: center;
+  height: 28px;
+  padding: 0 var(--space-sm);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  color: var(--fg);
+  font-family: var(--font-mono);
+  font-size: var(--fs-2xs);
+  letter-spacing: var(--ls-wide);
+  white-space: nowrap;
+}
+.gesture-pill[data-status='running'] { border-color: var(--cyan);    color: var(--cyan); }
+.gesture-pill[data-status='starting']{ border-color: var(--warm);    color: var(--warm); }
+.gesture-pill[data-status='no-hand'] { border-color: var(--warm);    color: var(--warm); }
+.gesture-pill[data-status='error']   { border-color: var(--err);     color: var(--err); }
+.gesture-error {
+  margin: 0;
+  padding: var(--space-xs) var(--space-sm);
+  background: var(--err-soft);
+  border: 1px solid var(--err);
+  border-radius: var(--radius-sm);
+  color: var(--err);
+  font-size: var(--fs-xs);
+  line-height: var(--lh-base);
+}
+
+/* --- row 2: camera preview + read-out ------------------------------------ */
+.gesture-preview-wrap {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-xs);
+}
+@media (min-width: 480px) {
+  .gesture-preview-wrap { grid-template-columns: auto 1fr; align-items: start; }
+}
+.gesture-preview {
+  position: relative;
+  width: 160px;
+  height: 120px;
+  overflow: hidden;
+  background: var(--surface-0);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+.gesture-video,
+.gesture-overlay {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.gesture-overlay { pointer-events: none; }
+.gesture-badge {
+  position: absolute;
+  left: var(--space-2xs);
+  bottom: var(--space-2xs);
+  padding: 1px var(--space-xs);
+  background: var(--surface-overlay);
+  border: 1px solid var(--cyan);
+  border-radius: var(--radius-pill);
+  color: var(--cyan);
+  font-family: var(--font-mono);
+  font-size: var(--fs-3xs);
+}
+.gesture-readout {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-3xs);
+  align-content: start;
+}
+.gesture-readout-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  font-family: var(--font-mono);
+  font-size: var(--fs-2xs);
+}
+.gesture-readout-row span:first-child { color: var(--fg-dim); }
+.gesture-readout-row span:last-child  { color: var(--fg); }
+
+/* --- row 3: axis mapping + sensitivity ----------------------------------- */
+.gesture-section-title {
+  font-size: var(--fs-2xs);
+  font-weight: var(--fw-semibold);
+  letter-spacing: var(--ls-caps);
+  text-transform: uppercase;
+  color: var(--fg-ghost);
+}
+.gesture-axes,
+.gesture-calibration,
+.gesture-modes {
+  display: grid;
+  gap: var(--space-xs);
+}
+.gesture-axis {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: var(--space-2xs) var(--space-sm);
+  padding: var(--space-2xs) 0;
+  border-bottom: 1px solid var(--border);
+}
+.gesture-axis:last-of-type { border-bottom: none; }
+.gesture-axis-label {
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-medium);
+  color: var(--fg);
+}
+.gesture-axis-select-wrap,
+.gesture-axis-curve-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2xs);
+}
+.gesture-axis-select-label,
+.gesture-axis-curve-label {
+  font-size: var(--fs-3xs);
+  color: var(--fg-ghost);
+}
+.gesture-axis-select,
+.gesture-axis-curve {
+  min-height: var(--control-h-sm);
+  padding: 0 var(--space-2xs);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--fg);
+  font-family: var(--font-mono);
+  font-size: var(--fs-2xs);
+  cursor: pointer;
+}
+.gesture-axis-select:hover,
+.gesture-axis-curve:hover { border-color: var(--border-strong); }
+.gesture-axis-invert-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2xs);
+  font-size: var(--fs-3xs);
+  color: var(--fg-dim);
+  cursor: pointer;
+}
+.gesture-axis-invert,
+.gesture-switch-input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--primary);
+  cursor: pointer;
+}
+.gesture-sensitivity-wrap {
+  display: grid;
+  gap: var(--space-3xs);
+  margin-top: var(--space-2xs);
+}
+.gesture-sensitivity-label {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  font-size: var(--fs-2xs);
+  color: var(--fg-dim);
+}
+.gesture-sensitivity-value {
+  font-family: var(--font-mono);
+  color: var(--fg);
+}
+.gesture-sensitivity {
+  width: 100%;
+  accent-color: var(--primary);
+  cursor: pointer;
+}
+
+/* --- row 4: calibration --------------------------------------------------- */
+.gesture-calibration-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  flex-wrap: wrap;
+}
+.gesture-btn {
+  min-height: var(--control-h);
+  padding: 0 var(--space-md);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  color: var(--fg);
+  font-family: var(--font-sans);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-medium);
+  cursor: pointer;
+  transition:
+    background var(--dur-xs) var(--ease),
+    border-color var(--dur-xs) var(--ease);
+}
+.gesture-btn:hover:not(:disabled) { background: var(--surface-3); border-color: var(--border-strong); }
+.gesture-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.gesture-btn--primary {
+  color: var(--fg-inverse);
+  background: var(--primary);
+  border-color: var(--primary);
+}
+.gesture-btn--primary:hover:not(:disabled) { background: var(--primary); border-color: var(--primary); }
+.gesture-calibration-state {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: var(--fs-3xs);
+  color: var(--fg-ghost);
+}
+.gesture-calibration-state[data-calibrated='true'] { color: var(--ok); }
+
+/* --- row 5: two hands + term mode ---------------------------------------- */
+.gesture-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  font-size: var(--fs-xs);
+  color: var(--fg-dim);
+  cursor: pointer;
+}
+.gesture-axis-source {
+  font-size: var(--fs-3xs);
+  color: var(--fg-ghost);
+}
