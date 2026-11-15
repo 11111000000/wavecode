@@ -42,6 +42,128 @@ import { setActive as setRuntimeHighlightActive, clearActive as clearRuntimeHigh
 
 const MIN_PERIODIC_WAVE_LENGTH = 2;
 
+/**
+ * Живые голоса — реестр для «panic».
+ *
+ * `repl.stop()` останавливает только ПЛАНИРОВЩИК Strudel: уже
+ * запланированные WebAudio-ноды (осцилляторы, семплы, worklet-голоса)
+ * продолжают звучать до конца своей огибающей. Для `ambient-drone`
+ * (`.attack(2).release(4)`) это 4–6 секунд старой композиции после
+ * переключения. Хуже — `AudioContext.suspend()` замораживает
+ * `currentTime`: огибающие старых голосов замирают на полпути и
+ * оживают при следующем `resume()`, то есть старая композиция
+ * возвращается уже во время Play новой.
+ *
+ * Реестр + master-gate дают честную тишину: голоса останавливаются и
+ * отключаются явно, а гейт гасит щелчок от мгновенного обрыва.
+ */
+const liveVoices = new Set<AudioScheduledSourceNode>();
+const liveWorklets = new Set<AudioWorkletNode>();
+
+/** Длительность fade гейта (сек) — anti-click при обрыве голосов. */
+const GATE_FADE_S = 0.02;
+
+const registerVoice = (node: AudioScheduledSourceNode): void => {
+  liveVoices.add(node);
+  node.addEventListener(
+    'ended',
+    () => {
+      liveVoices.delete(node);
+    },
+    { once: true },
+  );
+};
+
+/**
+ * Worklet-голоса (`s("supersaw")`, `s("wavetable")`) superdough создаёт
+ * через глобальный `new AudioWorkletNode(...)` — не метод AudioContext,
+ * поэтому патч `createOscillator` их не видит. У них нет `stop()`, но
+ * есть `disconnect()` — сигнал перестаёт идти в микс.
+ */
+const patchAudioWorkletNode = (): void => {
+  const win = window as unknown as {
+    AudioWorkletNode?: typeof AudioWorkletNode;
+    __wavecodeWorkletPatched?: boolean;
+  };
+  if (win.__wavecodeWorkletPatched || !win.AudioWorkletNode) return;
+  const Original = win.AudioWorkletNode;
+  class TrackedWorkletNode extends Original {
+    constructor(...args: ConstructorParameters<typeof AudioWorkletNode>) {
+      super(...args);
+      liveWorklets.add(this);
+    }
+  }
+  win.AudioWorkletNode = TrackedWorkletNode as unknown as typeof AudioWorkletNode;
+  win.__wavecodeWorkletPatched = true;
+};
+
+/**
+ * Убить все живые голоса: осцилляторы/семплы — `stop()` + `disconnect()`,
+ * worklet-голоса — `disconnect()`. Идемпотентно: повторный вызов на
+ * уже мёртвых нодах безопасен.
+ */
+const killLiveVoices = (): void => {
+  for (const node of liveVoices) {
+    try {
+      node.stop();
+    } catch {
+      /* never started / already stopped */
+    }
+    try {
+      node.disconnect();
+    } catch {
+      /* already disconnected */
+    }
+  }
+  liveVoices.clear();
+  for (const node of liveWorklets) {
+    try {
+      node.disconnect();
+    } catch {
+      /* already disconnected */
+    }
+  }
+  liveWorklets.clear();
+};
+
+/**
+ * Master-gate — GainNode между анализатором и destination.
+ *
+ * Стоит в цепочке `source → analyser → gate → destination`, поэтому одним
+ * `gain` можно заглушить всё, что уже звучит, не трогая планировщик.
+ * Используется как anti-click: сначала тихий fade-out, потом жёсткая
+ * остановка нод.
+ */
+const masterGates = new WeakMap<AudioContext, GainNode>();
+
+const getMasterGate = (audioCtx: AudioContext): GainNode | undefined =>
+  masterGates.get(audioCtx);
+
+/** Мгновенная установка значения гейта (без ramp). */
+const setGateValue = (gate: GainNode, to: number): void => {
+  const g = gate.gain;
+  g.cancelScheduledValues(gate.context.currentTime);
+  g.value = to;
+};
+
+/**
+ * Fade гейта. Если контекст заморожен (`suspended`), `currentTime` не
+ * идёт и ramp никогда не завершится — тогда ставим значение напрямую,
+ * иначе гейт «залипнет» на нуле и следующий паттерн будет беззвучен.
+ */
+const fadeGate = (gate: GainNode, to: number): void => {
+  const ctx = gate.context;
+  const now = ctx.currentTime;
+  const g = gate.gain;
+  g.cancelScheduledValues(now);
+  if (ctx.state !== 'running') {
+    g.setValueAtTime(to, now);
+    return;
+  }
+  g.setValueAtTime(g.value, now);
+  g.linearRampToValueAtTime(to, now + GATE_FADE_S);
+};
+
 const patchCreatePeriodicWave = (): void => {
   if ((window as unknown as { __patchedPeriodicWave?: boolean }).__patchedPeriodicWave) return;
   const proto = AudioContext.prototype as unknown as {
@@ -51,6 +173,7 @@ const patchCreatePeriodicWave = (): void => {
       constraints?: PeriodicWaveConstraints,
     ) => PeriodicWave;
     createOscillator: (...args: unknown[]) => OscillatorNode;
+    createBufferSource: (...args: unknown[]) => AudioBufferSourceNode;
   };
   // CRITICAL: НЕ биндить к proto — метод должен вызываться с `this = AudioContext instance`.
   // .bind(proto) даёт `this = AudioContext.prototype`, и OscillatorNode создаётся с
@@ -69,7 +192,16 @@ const patchCreatePeriodicWave = (): void => {
   const originalCreateOsc = proto.createOscillator;
   proto.createOscillator = function (...args: unknown[]) {
     setDebug({ triggers: debugState.triggers + 1 });
-    return originalCreateOsc.apply(this, args);
+    const osc = originalCreateOsc.apply(this, args);
+    registerVoice(osc);
+    return osc;
+  };
+  // Семплы (`s("bd")`) — тоже живые голоса, их тоже надо уметь убить.
+  const originalCreateBuf = proto.createBufferSource;
+  proto.createBufferSource = function (...args: unknown[]) {
+    const src = originalCreateBuf.apply(this, args);
+    registerVoice(src);
+    return src;
   };
   (window as unknown as { __patchedPeriodicWave?: boolean }).__patchedPeriodicWave = true;
 };
@@ -87,12 +219,18 @@ const patchCreatePeriodicWave = (): void => {
  * `VisualizerPanel` to read. We use a re-entry guard so the
  * `analyser.connect(destination)` we issue ourselves does not recurse.
  *
+ * Между анализатором и destination стоит ещё и master-gate
+ * (`analyser → gate → destination`): одним `gain` он глушит всё, что
+ * уже звучит — так переключение композиции обрывает старые голоса
+ * без щелчка. Гейт — часть master-пути, поэтому превью сэмплов и
+ * визуализатор идут через него же.
+ *
  * Idempotent per audioCtx (engine caches the AudioContext in
  * `__wavecodeAudioCtx` so this runs at most once per session).
  *
  * See packet decisions/visualizer-tab.yaml for the design rationale.
  */
-const installAnalyserTap = (audioCtx: AudioContext, analyser: AnalyserNode): void => {
+const installOutputTap = (audioCtx: AudioContext, analyser: AnalyserNode, gate: GainNode): void => {
   const tag = (AudioNode.prototype as unknown as {
     __wcAnalyserCtx?: WeakSet<AudioContext>;
   });
@@ -117,6 +255,12 @@ const installAnalyserTap = (audioCtx: AudioContext, analyser: AnalyserNode): voi
         );
         (original as unknown as (...a: unknown[]) => AudioNode).call(
           analyser,
+          gate,
+          0,
+          0,
+        );
+        (original as unknown as (...a: unknown[]) => AudioNode).call(
+          gate,
           target,
           0,
           inIdx,
@@ -141,7 +285,24 @@ type StrudelModules = {
 
 type ReplHandle = {
   evaluate: (code: string) => Promise<unknown>;
-  stop: () => void;
+  stop: () => Promise<void>;
+  /**
+   * Полная тишина: планировщик остановлен И уже звучащие голоса убиты.
+   *
+   * `repl.stop()` останавливает только планировщик — WebAudio-ноды
+   * старой композиции доигрывают свои огибающие (у `ambient-drone`
+   * это 4–6 секунд). Здесь гейт сначала гасит звук fade-ом, потом
+   * голоса обрываются жёстко — старой композиции больше нечего
+   * доигрывать.
+   *
+   * AudioContext НЕ замораживается: `suspend()` останавливает
+   * `currentTime`, и огибающие замерших голосов оживают при
+   * следующем `resume()` — старая композиция возвращается в момент
+   * Play новой.
+   */
+  silence: () => Promise<void>;
+  /** Открыть master-gate (fade-in) — новый паттерн уже запланирован. */
+  openGate: () => void;
   audioCtx: AudioContext;
   setCps?: (cps: number) => void;
   /**
@@ -276,9 +437,11 @@ const loadModules = (): Promise<StrudelModules> => {
 
 export const unlockAudioContext = (): AudioContext => {
   patchCreatePeriodicWave();
+  patchAudioWorkletNode();
   const win = window as unknown as {
     __wavecodeAudioCtx?: AudioContext;
     __wavecodeAnalyser?: AnalyserNode;
+    __wavecodeMasterGate?: GainNode;
   };
   let audioCtx = win.__wavecodeAudioCtx;
   if (!audioCtx) {
@@ -290,8 +453,15 @@ export const unlockAudioContext = (): AudioContext => {
     const analyser = audioCtx.createAnalyser();
     analyser.fftSize = 1024;
     analyser.smoothingTimeConstant = 0.78;
-    installAnalyserTap(audioCtx, analyser);
+    // Master-gate живёт между анализатором и destination: через него
+    // проходит весь звук, поэтому одним `gain` можно заглушить старые
+    // голоса при переключении композиции.
+    const gate = audioCtx.createGain();
+    gate.gain.value = 1;
+    masterGates.set(audioCtx, gate);
+    installOutputTap(audioCtx, analyser, gate);
     win.__wavecodeAnalyser = analyser;
+    win.__wavecodeMasterGate = gate;
   }
   setDebug({ audioCtxState: audioCtx.state });
   if (audioCtx.state === 'suspended') {
@@ -411,6 +581,32 @@ const ensureRepl = (audioCtx: AudioContext): Promise<ReplHandle> => {
       });
       console.log('[wavecode] webaudioRepl created');
 
+      /**
+       * Полная тишина: планировщик остановлен, живые голоса убиты.
+       *
+       * Гейт закрывается fade-ом (anti-click), и только когда он
+       * действительно закрыт — ноды обрываются. Поэтому silence()
+       * асинхронный: ~25мс, чтобы fade успел отработать.
+       */
+      const silence = async (): Promise<void> => {
+        repl.stop();
+        const gate = getMasterGate(audioCtx);
+        if (gate && audioCtx.state === 'running') {
+          fadeGate(gate, 0);
+          await new Promise<void>((resolve) => {
+            setTimeout(resolve, GATE_FADE_S * 1000 + 5);
+          });
+        }
+        killLiveVoices();
+        if (gate) setGateValue(gate, 0);
+        // Reset progress anchor — после stop прогресс должен показать 0,
+        // а не «застыть» на значении, бывшем в момент остановки.
+        setDebug({ lastEvalClock: 0 });
+        // Clear runtime mini-notation highlight — no active pattern,
+        // any leftover decoration would freeze on stale ranges.
+        clearRuntimeHighlightActive();
+      };
+
       return {
         evaluate: async (code: string) => {
           try {
@@ -434,15 +630,21 @@ const ensureRepl = (audioCtx: AudioContext): Promise<ReplHandle> => {
             throw err;
           }
         },
-        stop: () => {
-          repl.stop();
+        silence,
+        openGate: () => {
+          const gate = getMasterGate(audioCtx);
+          if (gate) fadeGate(gate, 1);
+        },
+        stop: async () => {
+          await silence();
+          // Гейт открываем обратно: голоса уже мертвы, звука не будет,
+          // но превью сэмплов (пиано) продолжит работать.
+          const gate = getMasterGate(audioCtx);
+          if (gate) setGateValue(gate, 1);
+          // Контекст замораживаем ПОСЛЕ тишины: состояние контекста —
+          // это состояние транспорта в UI (кнопка Play/Stop), а заморозка
+          // после kill гарантирует, что мёртвые голоса не оживут.
           if (audioCtx.state === 'running') void audioCtx.suspend();
-          // Reset progress anchor — после stop прогресс должен показать 0,
-          // а не «застыть» на значении, бывшем в момент остановки.
-          setDebug({ lastEvalClock: 0 });
-          // Clear runtime mini-notation highlight — no active pattern,
-          // any leftover decoration would freeze on stale ranges.
-          clearRuntimeHighlightActive();
         },
         setCps: (cps: number) => {
           // Cyclist (через @strudel/webaudio) поддерживает setCps сразу —
@@ -626,16 +828,18 @@ export const LiveAudioEngine: Layer.Layer<AudioEngine, never, never> = Layer.suc
           const audioCtx = (window as unknown as { __wavecodeAudioCtx?: AudioContext }).__wavecodeAudioCtx
             ?? unlockAudioContext();
           const repl = await ensureRepl(audioCtx);
-          // Stop the in-flight scheduler first so the previous pattern
-          // does NOT keep playing one more cycle after the new one is
-          // loaded. Without this, switching presets while audio was playing
-          // leaves the user listening to the previous score for one cycle.
-          await Promise.resolve();
-          repl.stop();
-          // AudioContext itself stays alive (do not call suspend — preserve
-          // user-gesture state for subsequent context-stable resumes).
-          if (audioCtx.state === 'suspended') await audioCtx.resume();
-await repl.evaluate(snippet);
+          try {
+            // Полная тишина перед новым паттерном: и планировщик, и уже
+            // звучащие голоса. Иначе старая композиция доигрывает сама
+            // (до 6 секунд у ambient-drone), а после suspend() ещё и
+            // «оживает» при следующем resume() — пользователь слышит
+            // прежнюю композицию вместо новой.
+            await repl.silence();
+            // AudioContext не замораживаем (в отличие от stop): resume
+            // после suspend() на iOS разрешён только внутри user-gesture,
+            // а переключение композиции не должно его терять.
+            if (audioCtx.state !== 'running') await audioCtx.resume();
+            await repl.evaluate(snippet);
             // Snapshot the snippet SOON AS POSSIBLE — even before the
             // scheduler's first lookahead resolves. `getActiveHaps` uses
             // this to re-run `compileAndQuery` against the latest score
@@ -672,6 +876,13 @@ await repl.evaluate(snippet);
             } else if (process.env.NODE_ENV !== 'production') {
               console.warn('[wavecode/LiveAudioEngine.eval] no livePattern; setActive skipped (repl.scheduler=', !!repl.scheduler, 'hasPattern=', !!livePattern, ')');
             }
+          } finally {
+            // Гейт открываем в любом случае: с закрытым гейтом приложение
+            // молчит целиком (пиано-превью, визуализатор), даже если eval
+            // упал. Старые голоса к этому моменту уже мертвы, поэтому
+            // открытие гейта ничего не возвращает.
+            repl.openGate();
+          }
         },
         catch: (err) => {
           const msg = err instanceof Error ? err.message : String(err);
@@ -684,7 +895,7 @@ await repl.evaluate(snippet);
         try: async () => {
           if (!cachedRepl) return;
           const repl = await cachedRepl;
-          repl.stop();
+          await repl.stop();
         },
         catch: () => null as null,
       }).pipe(Effect.catchAll(() => Effect.void)),
