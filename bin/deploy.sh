@@ -73,24 +73,27 @@ if ! "$SUDO" -n true 2>/dev/null; then
 fi
 "$SUDO" -n mkdir -p "$DEPLOY_DIR"
 "$SUDO" -n cp -r "$UI_DIR/dist/." "$DEPLOY_DIR/"
-# Drop stale hashed assets. Vite emits content-hashed filenames, so the
-# previous index-*.js / index-*.css are orphaned once a new build lands.
-# Keep ONLY the bundle(s) referenced by the freshly-copied index.html —
-# otherwise the cleanup loop would happily nuke the just-deployed bundle.
-ACTIVE_JS=$(grep -oE 'index-[A-Za-z0-9_-]+\.js' "$DEPLOY_DIR/index.html" | sort -u || true)
-ACTIVE_CSS=$(grep -oE 'index-[A-Za-z0-9_-]+\.css' "$DEPLOY_DIR/index.html" | sort -u || true)
-for f in "$DEPLOY_DIR/assets/"index-*.js "$DEPLOY_DIR/assets/"index-*.js.map \
-         "$DEPLOY_DIR/assets/"index-*.css "$DEPLOY_DIR/assets/"index-*.css.map; do
-  [ -f "$f" ] || continue
-  base=$(basename "$f")
-  case "$base" in
-    *.js|*.js.map)
-      echo "$ACTIVE_JS" | grep -qx "$base" && continue ;;
-    *.css|*.css.map)
-      echo "$ACTIVE_CSS" | grep -qx "$base" && continue ;;
-  esac
-  "$SUDO" -n rm -f "$f"
-done
+# Prune stale files. Vite content-hashes every chunk, so each build
+# orphans the previous one's files; the fresh build dir is the source of
+# truth — anything in the deploy dir that is not in it is garbage.
+# The old index-*-only loop missed every other chunk family (codemirror-*,
+# effect-*, VisualizerPanel-*, workbox-*, …) and so accumulated ~60 MB of
+# orphans per deploy; it also deleted the ACTIVE bundle's source map,
+# because the map filename was never in the ACTIVE_JS list.
+if [ ! -f "$UI_DIR/dist/index.html" ]; then
+  echo "ERROR: $UI_DIR/dist/index.html missing — refusing to prune."
+  exit 1
+fi
+pruned=0
+while IFS= read -r rel; do
+  [ -n "$rel" ] || continue
+  if [ -e "$UI_DIR/dist/$rel" ]; then
+    continue
+  fi
+  "$SUDO" -n rm -rf "$DEPLOY_DIR/$rel"
+  pruned=$((pruned + 1))
+done < <(cd "$DEPLOY_DIR" && find . -mindepth 1 -printf '%P\n' | sort -r)
+[ "$pruned" -gt 0 ] && echo "==> pruned $pruned stale file(s) from $DEPLOY_DIR/"
 "$SUDO" -n chown -R caddy:caddy "$DEPLOY_DIR"
 
 echo
