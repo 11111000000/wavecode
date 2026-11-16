@@ -410,12 +410,10 @@ export function MelodyGrid() {
             id="melody-grid-confirm-title"
             class="melody-grid-confirm-title"
           >
-            Discard unsaved changes?
+            Несохранённые изменения
           </h3>
           <p class="melody-grid-confirm-body">
-            {dirtyMelodyCount()} cell
-            {dirtyMelodyCount() === 1 ? '' : 's'} in your sketch differ
-            from the current score. Closing the sheet will discard them.
+            {`В наброске изменено ячеек: ${dirtyMelodyCount()}. Закрытие листа отменит их.`}
           </p>
           <div class="melody-grid-confirm-actions">
             <button
@@ -423,7 +421,7 @@ export function MelodyGrid() {
               class="melody-grid-btn"
               onClick={() => setConfirmOpen(false)}
             >
-              Keep editing
+              Продолжить правку
             </button>
             <button
               type="button"
@@ -433,7 +431,7 @@ export function MelodyGrid() {
                 setConfirmOpen(false);
               }}
             >
-              Discard
+              Отменить изменения
             </button>
             <button
               type="button"
@@ -447,7 +445,7 @@ export function MelodyGrid() {
                 setConfirmOpen(false);
               }}
             >
-              Save
+              Сохранить в партитуру
             </button>
           </div>
         </div>

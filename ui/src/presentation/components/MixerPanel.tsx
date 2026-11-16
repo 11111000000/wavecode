@@ -41,7 +41,13 @@ export function MixerPanel() {
   });
   // Sections start collapsed; a single-section score (the common case)
   // has nothing to expand, so its header is inert.
-  const [openSections, setOpenSections] = createSignal<ReadonlySet<number>>(new Set());
+  //
+  // wavecode-sound-choice-and-rhythm-feedback: первая секция
+  // раскрыта сразу. Раньше ВСЕ секции были свёрнуты, и человек,
+  // открывший микшер, видел только заголовки «секция 1 … секция 8»
+  // — ни одного слоя, а значит и ни одного выбора инструмента. Пока
+  // инструмент не видно, им нельзя пользоваться.
+  const [openSections, setOpenSections] = createSignal<ReadonlySet<number>>(new Set([0]));
 
   const isOpen = (section: number): boolean =>
     sectionCount() <= 1 || openSections().has(section);

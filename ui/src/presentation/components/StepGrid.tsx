@@ -17,6 +17,8 @@ import {
 import { canEditGridLayer } from '~/application/useCases/editGridLayer';
 import { dispatch, appStore } from '../state/appStore';
 import { evalScore, previewSample, scheduleGridEdit } from '../state/audioActions';
+import { closeKindSheet } from '../state/uiState';
+import { consoleStore } from '~/presentation/components/consoleStore';
 import {
   GRID_COLS,
   type GridRowSample,
@@ -148,6 +150,17 @@ export function StepGrid() {
     if (newScore !== null) {
       dispatch({ type: 'replaceScore', text: newScore });
       void evalScore();
+      // Результат должен быть ВИДЕН: лист «Шаги» занимает пол-экрана
+      // и закрывает редактор, а партитура только что изменилась.
+      // Без закрытия записанный слой остаётся за листом — это тот же
+      // класс «ничего не происходит», что был с ритмом
+      // (см. wavecode-sound-choice-and-rhythm-feedback).
+      consoleStore.pushToast({
+        severity: 'info',
+        title: 'Шаги',
+        body: 'Сетка записана в партитуру.',
+      });
+      closeKindSheet('step');
     }
   };
 
@@ -304,11 +317,10 @@ export function StepGrid() {
           aria-labelledby="step-grid-confirm-title"
         >
           <h3 id="step-grid-confirm-title" class="step-grid-confirm-title">
-            Discard unsaved changes?
+            Несохранённые изменения
           </h3>
           <p class="step-grid-confirm-body">
-            {dirtyCellCount()} cell{dirtyCellCount() === 1 ? '' : 's'} in your sketch differ from
-            the current score. Closing the sheet will discard them.
+            {`В черновике изменено ячеек: ${dirtyCellCount()}. Закрытие листа отменит их.`}
           </p>
           <div class="step-grid-confirm-actions">
             <button
@@ -316,7 +328,7 @@ export function StepGrid() {
               class="step-grid-btn"
               onClick={() => setConfirmOpen(false)}
             >
-              Keep editing
+              Продолжить правку
             </button>
             <button
               type="button"
@@ -326,21 +338,17 @@ export function StepGrid() {
                 setConfirmOpen(false);
               }}
             >
-              Discard
+              Отменить изменения
             </button>
             <button
               type="button"
               class="step-grid-btn step-grid-btn-primary"
               onClick={() => {
-                const newScore = commitDraft(appStore.score);
-                if (newScore !== null) {
-                  dispatch({ type: 'replaceScore', text: newScore });
-                  void evalScore();
-                }
+                onCommit();
                 setConfirmOpen(false);
               }}
             >
-              Save
+              Сохранить в партитуру
             </button>
           </div>
         </div>
