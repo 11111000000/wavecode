@@ -1,7 +1,11 @@
 import { For, Show, createMemo, createSignal } from 'solid-js';
 import { appStore, dispatch } from '../state/appStore';
 import { parseStackTopLayers, type LayerDescriptor } from '~/domain/layers/parseStack';
-import { scheduleMixLive } from '../state/audioActions';
+import { scheduleMixLive, evalScore } from '../state/audioActions';
+import { detectLayerSound, isMelodicLayer } from '~/domain/layers/layerSound';
+import { injectLayerSound } from '~/application/useCases/injectLayerSound';
+import { DEFAULT_MELODIC_SOUND } from '~/domain/sounds';
+import { SoundSelect } from './SoundSelect';
 
 /**
  * MixerPanel — collapsible `<details>` со списком слоёв текущей партитуры.
@@ -117,6 +121,21 @@ export function MixerPanel() {
 }
 
 function LayerRows(props: { rows: ReadonlyArray<LayerDescriptor> }) {
+  /**
+   * Сменить инструмент слоя.
+   *
+   * Правка точечная: переписывается `.s("…")` ТОЛЬКО этого слоя,
+   * остальные слои и остальной текст партитуры не трогаются.
+   * Пересчёт партитуры — единственный источник правды (`replaceScore`),
+   * поэтому звук сразу слышно: после правки партитура переоценивается.
+   */
+  const onSoundChange = (index: number, soundId: string): void => {
+    const next = injectLayerSound(appStore.score, index, soundId);
+    if (next === appStore.score) return;
+    dispatch({ type: 'replaceScore', text: next });
+    void evalScore(next);
+  };
+
   return (
     <div class="mixer-rows">
       <For each={props.rows}>
@@ -125,6 +144,12 @@ function LayerRows(props: { rows: ReadonlyArray<LayerDescriptor> }) {
           const gain = () => mix()?.gain ?? 1;
           const muted = () => mix()?.muted ?? false;
           const soloed = () => mix()?.soloed ?? false;
+          // Инструмент слоя: либо задан явно (`.s("…")`), либо слой
+          // играет дефолтным инструментом (пианино). Ударные слои
+          // (`s("drums_bd …")`) — не мелодические: там `.s(…)` выбирает
+          // СЭМПЛ, а не инструмент, и менять нечего.
+          const sound = (): string | null => detectLayerSound(layer.source);
+          const melodic = (): boolean => isMelodicLayer(layer.source);
           return (
             <div class="mixer-row" data-index={layer.index}>
               <button
@@ -153,8 +178,26 @@ function LayerRows(props: { rows: ReadonlyArray<LayerDescriptor> }) {
               >
                 S
               </button>
-              <span class="mixer-name" title={layer.source}>
-                {layer.index}: {layer.name}
+              <span class="mixer-name">
+                <span class="mixer-name__text" title={layer.source}>
+                  {layer.index}: {layer.name}
+                </span>
+                <Show
+                  when={melodic()}
+                  fallback={
+                    <span class="mixer-sound-static" title={layer.source}>
+                      Сэмпл
+                    </span>
+                  }
+                >
+                  <SoundSelect
+                    value={sound() ?? DEFAULT_MELODIC_SOUND}
+                    onChange={(id) => { onSoundChange(layer.index, id); }}
+                    label={`Инструмент слоя ${layer.index}`}
+                    class="mixer-sound"
+                    glyph={false}
+                  />
+                </Show>
               </span>
               <input
                 type="range"
