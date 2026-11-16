@@ -3,8 +3,8 @@ schema: math-coding/3.3
 id: wavecode-pinned-tools
 revision: 1
 state: active
-body_sha: "sha256:963d28aa57ec5c6e71446cec0ffc53b91e620a5da7029ac4e59e62d8d0f6140e"
-yaml_sha: "sha256:963d28aa57ec5c6e71446cec0ffc53b91e620a5da7029ac4e59e62d8d0f6140e"
+body_sha: "sha256:11a6c58516b25b91dcbe1e32b8af4dbcb3762160c8e5b96a07ff83fbdb432b81"
+yaml_sha: "sha256:11a6c58516b25b91dcbe1e32b8af4dbcb3762160c8e5b96a07ff83fbdb432b81"
 
 intent: |
   Владелец (2026-11-16) посмотрел на интерфейс после волны правок и
@@ -106,8 +106,12 @@ scope:
     - ui/src/presentation
     - ui/src/styles
     - ui/tests/e2e
+    - ui/tests/baseline
+    - scripts/zen-ui-baseline.json
     - decisions/wavecode-pinned-tools.yaml
     - decisions/wavecode-zen-ui-implementation.yaml
+    - README.md
+    - README.en.md
   capabilities:
     - ui-information-architecture
     - ui-content-truthfulness
