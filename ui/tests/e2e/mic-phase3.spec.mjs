@@ -4,7 +4,7 @@ import { test, expect } from '@playwright/test';
  * Mic feature — UX redesign (commit ee85b0a on master).
  *
  * Smoke test against the deployed production bundle
- * (https://wavecode.kosov.online/#/app). The redesigned MicPanel
+ * (https://wavecode.sibres.tech/#/app). The redesigned MicPanel
  * is intentionally empty-state-first: the 4-row layout
  * (status / cta / roll / meter) renders INSIDE
  * <Show when={!isEmpty()}> — i.e. only after the user records.
@@ -23,7 +23,7 @@ import { test, expect } from '@playwright/test';
  * route — FAB «Ввод» → tab «Свист».
  */
 
-const DEPLOYED_URL = 'https://wavecode.kosov.online/#/app';
+const DEPLOYED_URL = 'https://wavecode.sibres.tech/#/app';
 
 test.describe('Mic panel — UX redesign (empty state + structural presence)', () => {
   test.use({ viewport: { width: 1280, height: 800 } });

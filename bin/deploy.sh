@@ -8,7 +8,7 @@
 #   4. sudo cp -r ui/dist/* → /var/lib/wavecode/dist/ (caddy:caddy).
 #
 # После deploy:
-#   • https://wavecode.kosov.online/  — публичный URL (Caddy public listener)
+#   • https://wavecode.sibres.tech/  — публичный URL (Caddy public listener)
 #   • https://wavecode.tail347ae6.ts.net/ — tailnet URL (Tailscale mesh)
 #
 # Rollback:
@@ -100,5 +100,5 @@ echo "Nix config already points there. Если меняли .env.local,"
 echo "перезагрузите Caddy: systemctl reload caddy"
 echo
 echo "Verify:"
-echo "  curl -I https://wavecode.kosov.online/"
+echo "  curl -I https://wavecode.sibres.tech/"
 echo "  curl -I https://wavecode.tail347ae6.ts.net/"
