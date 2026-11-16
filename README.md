@@ -21,8 +21,8 @@
 
 ## ▶ Попробовать
 
-* **Live demo:** <https://wavecode.sibres.tech/> (прежний адрес <https://wavecode.kosov.online/> продолжает работать и отдаёт то же приложение; также доступно через Tailscale: <https://wavecode.tail347ae6.ts.net/>)
-* **Стабильный билд:** деплоится автоматически в `master` → [см. CI/CD](docs/ARCHITECTURE.md)
+* **Live demo:** <https://wavecode.sibres.tech/> (прежний адрес <https://wavecode.kosov.online/> продолжает работать и отдаёт то же приложение; из Tailscale открывай <https://wavecode.kosov.online/> — split-DNS резолвит `*.kosov.online` в tailnet-IP)
+* **Стабильный билд:** деплоится с dev-хоста через `./bin/deploy.sh` — авто-деплоя по push нет
 * **PWA:** устанавливается как standalone-приложение (Chrome / Edge / Safari iOS 16.4+)
 
 > **Первый запуск:** открой `#/app` (мимо landing), подожди ~5 секунд пока прогрузятся Strudel-сэмплы из ServiceWorker-кеша. Бейдж «Загружено N/M семплов» в верхней панели показывает прогресс. Звук включается только по клику ▶ (browser autoplay policy).
@@ -223,7 +223,7 @@ Issue templates: [bug report](.github/ISSUE_TEMPLATE/bug.yml) · [feature reques
 ## Контакты
 
 - **Live demo:** <https://wavecode.sibres.tech/>
-- **Tailscale:** <https://wavecode.tail347ae6.ts.net/>
+- **Tailscale:** <https://wavecode.kosov.online/> (split-DNS → tailnet IP)
 - **Issues:** [github.com/11111000000/wavecode/issues](https://github.com/11111000000/wavecode/issues)
 - **GitVerse mirror:** [gitverse.ru/b11111000000/wavecode](https://gitverse.ru/b11111000000/wavecode) (canonical)
 

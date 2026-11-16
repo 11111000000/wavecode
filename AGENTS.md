@@ -184,7 +184,10 @@ Composer (`~/Projects/Composer/`) — **отдельный backend-проект 
 Production: https://wavecode.sibres.tech/ (Caddy на angara-1, обслуживает
 `/var/lib/wavecode/dist/`). Прежний адрес https://wavecode.kosov.online/
 тоже работает — отдаёт то же приложение, редиректа между ними нет.
-Также доступно на Tailscale: https://wavecode.tail347ae6.ts.net/.
+Из Tailscale приложение доступно по https://wavecode.kosov.online/
+(split-DNS `*.kosov.online` → 100.81.163.63). Отдельного Tailscale
+Service `wavecode` нет: имя `wavecode.tail347ae6.ts.net` не резолвится
+и в README, и в AGENTS его указывать нельзя.
 
 ### Единственный путь: `./bin/deploy.sh`, локально на angara-1
 
