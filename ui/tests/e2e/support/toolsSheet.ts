@@ -78,6 +78,19 @@ export async function currentPresetId(page: Page): Promise<string> {
 }
 
 /**
+ * Открыть лист «Микшер».
+ *
+ * Микшер — инструмент второго уровня, поэтому живёт в листе
+ * «Инструменты». Хелпер открывает лист (если он ещё закрыт) и
+ * кликает карточку «Микшер».
+ */
+export async function openMixer(page: Page): Promise<void> {
+  await openToolsSheet(page);
+  await page.locator('.wc-tool-card', { hasText: 'Микшер' }).first().click();
+  await expect(page.locator('.wc-sheet[data-kind="mixer"]')).toBeVisible({ timeout: 5_000 });
+}
+
+/**
  * Дождаться, что музыка играет; если не играет — запустить.
  *
  * Выбор композиции САМ запускает воспроизведение (`loadPresetById` →

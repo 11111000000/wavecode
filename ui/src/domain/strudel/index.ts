@@ -32,7 +32,12 @@ export type {
 
 export type { MixerLayer, ValidateForEditResult } from './walker';
 
-export type { AppendToStackResult, LayerEdit, ReplaceLayersResult } from './splice';
+export type {
+  AppendToStackResult,
+  AppendLayersResult,
+  LayerEdit,
+  ReplaceLayersResult,
+} from './splice';
 export type { EditInvalidReason } from './walker';
 
 // Parser / walker — the public behaviour.
@@ -52,7 +57,7 @@ export {
   isNumberArg,
 } from './walker';
 
-export { appendToTopStack, replaceLayerSources } from './splice';
+export { appendToTopStack, appendLayersToScore, replaceLayerSources } from './splice';
 
 // Tokenizer is exposed for advanced consumers (e.g. a future
 // IDE highlighter that wants the raw token stream). Most

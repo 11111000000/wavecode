@@ -108,6 +108,35 @@ describe('appendGridToScore — editor already has a top-level stack', () => {
   });
 });
 
+describe('appendGridToScore — многосекционный пресет', () => {
+  /**
+   * Регрессия: обёртка `cat(...)`-пресета в `stack(...)` схлопывала
+   * микшер (29 строк → 2). Сетка должна добавляться НОВОЙ СЕКЦИЕЙ.
+   * Форма пресета — как у настоящего `creep`: `cat(...).slow(1.3)`.
+   */
+  it('добавляет сетку новой секцией и не схлопывает микшер', async () => {
+    const preset = [
+      'cat(',
+      '  stack(note("g3 b3 d4"), note("g2")),',
+      '  stack(note("f#3 b3 d#4"), note("b2"))',
+      ').slow(1.3)',
+    ].join('\n');
+
+    const result = appendGridToScore(preset, sampleGrid());
+
+    // Партитура остаётся `cat(...)` — обёртки в `stack(...)` нет.
+    expect(result.trimStart().startsWith('cat(')).toBe(true);
+    expect(result).toContain('.slow(1.3)');
+
+    const { listLayerSpans } = await import('~/domain/layers/layerSpans');
+    const layers = listLayerSpans(result);
+    // 2 + 2 слоя пресета и 4 ряда сетки — каждый ряд отдельным слоем.
+    expect(layers.length).toBe(8);
+    expect(layers[4]?.source).toContain('s("bd ~ ~ ~ ~ ~ ~ ~")');
+    expect(layers[5]?.source).toContain('s("~ sd ~ ~ ~ ~ ~ ~")');
+  });
+});
+
 describe('appendGridToScore — hasTopLevelStack classifier', () => {
   it('false on empty', () => {
     expect(hasTopLevelStack('')).toBe(false);

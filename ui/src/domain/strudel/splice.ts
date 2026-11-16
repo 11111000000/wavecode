@@ -14,20 +14,50 @@
  * Purity: no Web APIs, no Solid signals, no `@strudel/*` imports —
  * only the AST produced by `parser.ts` / `walker.ts`.
  *
- * `appendToTopStack` behaviour (identical to the legacy walker for
- * well-formed input):
+ * `appendToTopStack` behaviour:
  *
  *   1. empty / whitespace-only editor        → snippet verbatim
  *   2. first non-comment statement is a
  *      top-level `stack(...)`                → splice the snippet INSIDE
  *                                               the stack, comma-aware
- *   3. any other score (bare `note(…)`, a
+ *   3. first non-comment statement is a
+ *      top-level `cat(...)` (every shipping
+ *      preset is a `cat` of sections)       → append the snippet as a
+ *                                               NEW section: `cat(…,
+ *                                               stack(snippet))`
+ *   4. any other score (bare `note(…)`, a
  *      `cat([…])` container, leading code)   → wrap both in a fresh
  *                                               `stack(...)`
- *   4. first statement is a `stack(` but it
+ *   5. first statement is a `stack(` but it
  *      is unterminated (no closing paren)    → `{ ok: false }` so the
  *                                               caller can warn instead
  *                                               of emitting broken code
+ *
+ * Why case 3 matters (wavecode-sound-choice-and-rhythm-feedback):
+ * wrapping a `cat(...)` preset in a fresh `stack(…)` looks harmless in
+ * the text, but it changes what the app SEES: the mixer enumerates
+ * the layers of the top-level `stack(…)`, so a wrapped `creep` went
+ * from 29 mixer rows to 2 — the instrument mix of the whole preset
+ * collapsed into one line after a single rhythm take. Appending a
+ * section keeps every layer addressable and the new take visible as
+ * its own row.
+ *
+ * `appendLayersToScore` behaviour (multi-layer sibling of
+ * `appendToTopStack`):
+ *
+ *   1. empty editor                        → `stack(src₁, src₂, …)`
+ *   2. top-level `stack(…)`                → the sources become NEW
+ *                                              layers of that stack
+ *   3. top-level `cat(…)` of sections      → the sources become a NEW
+ *                                              SECTION of the arrangement
+ *   4. any other score                     → wrap score + sources into a
+ *                                              fresh `stack(…)`
+ *
+ * Why a multi-layer sibling exists: the StepGrid commits FOUR
+ * independent drum rows. Splicing them as one snippet would put them
+ * into a single layer — the mixer would show one row where the person
+ * expects four, and a fader on it would move all four at once. The
+ * grid therefore needs "append N layers", not "append one snippet".
  *
  * `replaceLayerSources` behaviour:
  *
@@ -54,6 +84,13 @@ import type { ScoreAST, StackNode } from './ast';
 export type AppendToStackResult =
   | { readonly ok: true; readonly score: string }
   | { readonly ok: false; readonly reason: 'unbalanced-stack' };
+
+/**
+ * Result of `appendLayersToScore`. Same contract as
+ * `AppendToStackResult`: `ok: false` only when the score HAS a
+ * top-level `stack(` call but it is unbalanced.
+ */
+export type AppendLayersResult = AppendToStackResult;
 
 /**
  * One in-place edit for `replaceLayerSources`: substitute the i-th
@@ -98,14 +135,19 @@ const resolveTopStack = (currentScore: string): StackNode | null => {
   return firstNode;
 };
 
-export const appendToTopStack = (
+/**
+ * Вставка слоёв в НЕПУСТУЮ партитуру. Общая часть для
+ * `appendToTopStack` (один слой) и `appendLayersToScore` (несколько).
+ *
+ * Три формы результата:
+ *   - верхнеуровневый `stack(…)`  → слои становятся аргументами стека;
+ *   - верхнеуровневый `cat(…)`    → слои становятся НОВОЙ СЕКЦИЕЙ;
+ *   - что угодно другое            → всё оборачивается в новый `stack`.
+ */
+const spliceLayersInto = (
   currentScore: string,
-  snippet: string,
-): AppendToStackResult => {
-  if (currentScore.trim() === '') {
-    return { ok: true, score: snippet };
-  }
-
+  layers: ReadonlyArray<string>,
+): AppendLayersResult => {
   const ast: ScoreAST = parseScore(currentScore);
   // Only the FIRST non-comment top-level node can be the splice target.
   // This mirrors the legacy `findTopLevelStackAt`, which required the
@@ -122,7 +164,7 @@ export const appendToTopStack = (
     }
     const head = currentScore.slice(0, closeIdx).replace(/\s+$/, '');
     const tail = currentScore.slice(closeIdx);
-    const inner = indent(snippet);
+    const inner = layers.map(indent).join(',\n');
     const headNeedsComma = /,\s*$/.test(head);
     return {
       ok: true,
@@ -130,12 +172,78 @@ export const appendToTopStack = (
     };
   }
 
+  // Top-level `cat(...)` of SECTIONS — every shipping preset is
+  // `cat(stack(…), stack(…), …)`. The take becomes a NEW SECTION of
+  // that arrangement instead of the whole preset being wrapped in an
+  // outer stack (which would collapse the mixer to two rows).
+  //
+  // A `cat([…])` — a single bracketed array — is NOT that shape: its
+  // one argument is a bracket expression, and adding a second argument
+  // would change the meaning of the array. Such a score keeps the
+  // legacy wrap.
+  if (firstNode !== undefined && firstNode.kind === 'call' && firstNode.name === 'cat') {
+    const closeIdx = firstNode.span.end - 1;
+    const sectionsOnly = firstNode.args.every(
+      (a) => a.kind !== 'expr' || !a.text.trim().startsWith('['),
+    );
+    if (sectionsOnly && currentScore[closeIdx] === ')') {
+      const head = currentScore.slice(0, closeIdx).replace(/\s+$/, '');
+      const tail = currentScore.slice(closeIdx);
+      // Слои секции сдвигаются на два пробела — читаемый отступ.
+      const section = indent(`stack(\n${layers.map((l) => '  ' + l).join(',\n')}\n)`);
+      const headNeedsComma = /,\s*$/.test(head);
+      return {
+        ok: true,
+        score: `${head}${headNeedsComma ? '' : ','}\n${section}\n${tail}`,
+      };
+    }
+  }
+
   // No top-level stack → wrap both in a fresh stack(...).
   const trimmedCurrent = currentScore.trim();
   return {
     ok: true,
-    score: `stack(\n${trimmedCurrent},\n${indent(snippet)}\n)`,
+    score: `stack(\n${trimmedCurrent},\n${layers.map(indent).join(',\n')}\n)`,
   };
+};
+
+export const appendToTopStack = (
+  currentScore: string,
+  snippet: string,
+): AppendToStackResult => {
+  if (currentScore.trim() === '') {
+    return { ok: true, score: snippet };
+  }
+  return spliceLayersInto(currentScore, [snippet]);
+};
+
+/**
+ * Добавить в партитуру НЕСКОЛЬКО независимых слоёв.
+ *
+ * Отличие от `appendToTopStack`: слои остаются ОТДЕЛЬНЫМИ слоями
+ * микшера. Шаг-сетка коммитит четыре ударных ряда (`bd`, `sd`, `hh`,
+ * `cp`) — если завернуть их в один `stack(...)`, микшер покажет одну
+ * строку вместо четырёх, и фейдер на ней двигал бы все ряды разом.
+ *
+ * Пустой редактор → `stack(src₁, src₂, …)`.
+ * Верхнеуровневый `stack(…)` → слои добавляются внутрь него.
+ * Верхнеуровневый `cat(…)` из секций → слои становятся новой секцией.
+ */
+export const appendLayersToScore = (
+  currentScore: string,
+  sources: ReadonlyArray<string>,
+): AppendLayersResult => {
+  const layers = sources.map((s) => s.trim()).filter((s) => s !== '');
+  if (layers.length === 0) {
+    return { ok: true, score: currentScore };
+  }
+  if (currentScore.trim() === '') {
+    return {
+      ok: true,
+      score: `stack(\n${layers.map(indent).join(',\n')}\n)`,
+    };
+  }
+  return spliceLayersInto(currentScore, layers);
 };
 
 /**

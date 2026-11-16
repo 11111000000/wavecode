@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { APP_URL } from './support/appUrl';
-import { selectPreset, ensurePlaying } from './support/toolsSheet';
+import { selectPreset, ensurePlaying, openMixer } from './support/toolsSheet';
 
 /**
  * wavecode-step-grid-modes — e2e regression suite (supersedes
@@ -91,7 +91,7 @@ test('view mode: tapping a cell does NOT clobber the loaded preset', async ({ pa
   consoleLogs.forEach((l) => console.log(l));
 });
 
-test('sketch mode + ↑ commit with a loaded preset wraps grid layers into the existing stack', async ({ page }) => {
+test('sketch mode + ↑ commit with a loaded preset adds a section instead of collapsing the mixer', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto(APP_URL, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('main.app', { timeout: 15_000 });
@@ -118,11 +118,11 @@ test('sketch mode + ↑ commit with a loaded preset wraps grid layers into the e
   const text = (await page.locator('.cm-content').textContent()) ?? '';
   // The original Creep comment must still be present.
   expect(text).toContain('Creep');
-  // Сетка дописана ВНУТРЬ нового stack(...) вместе с исходной Creep:
-  // исходная композиция начинается с cat(...), а не со stack(...), так
-  // что merge оборачивает оба в общий stack — это видно по ведущему
-  // `stack(`.
-  expect(text.trimStart().startsWith('stack(')).toBe(true);
+  // Сетка дописывается НОВОЙ СЕКЦИЕЙ: исходная композиция начинается
+  // с cat(...), и merge добавляет в неё секцию stack(...) вместо
+  // обёртки всего пресета во внешний stack — обёртка схлопывала
+  // микшер с 29 строк до двух (см. wavecode-sound-choice-and-rhythm-feedback).
+  expect(text.trimStart().startsWith('cat(')).toBe(true);
 
   // Контракт черновика: draft засевается из партитуры (см.
   // enterSketch в gridState.ts), поэтому нажатие переключает ячейку, а
@@ -133,6 +133,30 @@ test('sketch mode + ↑ commit with a loaded preset wraps grid layers into the e
   // У bb-ряда клик снял засеянную ячейку, поэтому он пустой.
   expect(text).toMatch(/s\("sd sd ~ ~ ~ ~ ~ ~"\)/);
   expect(text).toMatch(/s\("hh ~ hh ~ ~ ~ ~ ~"\)/);
+});
+
+test('микшер после записи сетки показывает все слои пресета плюс четыре ряда', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto(APP_URL, { waitUntil: 'domcontentloaded' });
+  await page.waitForSelector('main.app', { timeout: 15_000 });
+  await page.waitForSelector('.cm-content', { timeout: 15_000 });
+
+  await selectPreset(page, 'creep');
+  await expect(page.locator('.cm-content')).toContainText('Creep');
+
+  await openStepGrid(page);
+  await enterSketchMode(page);
+  await page.locator('.step-cell').nth(0).click();
+  await clickCommit(page);
+  await page.waitForTimeout(1_500);
+
+  // Микшер: число слоёв ДОЛЖНО вырасти на четыре, а не упасть до
+  // двух. Это главная проверка «микшер не схлопывается».
+  await openMixer(page);
+  const list = page.locator('.mixer-list');
+  // У creep 29 слоёв в 8 секциях; сетка добавляет 4 слоя в новой секции.
+  await expect(list).toHaveAttribute('data-count', '33');
+  await expect(list).toHaveAttribute('data-sections', '9');
 });
 
 test('empty editor + sketch + ↑ commit equals standalone grid snippet', async ({ page }) => {
