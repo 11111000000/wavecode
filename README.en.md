@@ -21,7 +21,7 @@
 
 ## ▶ Try it
 
-* **Live demo:** <https://wavecode.sibres.tech/> (the former <https://wavecode.kosov.online/> keeps serving the same app; also available over Tailscale: <https://wavecode.tail347ae6.ts.net/>)
+* **Live demo:** <https://wavecode.sibres.tech/> (the former <https://wavecode.kosov.online/> keeps serving the same app; from Tailscale open <https://wavecode.kosov.online/> — split-DNS resolves `*.kosov.online` to the tailnet IP)
 * **Stable build:** deployed from the dev host with `./bin/deploy.sh` — there is no auto-deploy
 * **PWA:** installable as a standalone app (Chrome / Edge / Safari iOS 16.4+)
 
@@ -221,7 +221,7 @@ Issue templates: [bug report](.github/ISSUE_TEMPLATE/bug.yml) · [feature reques
 ## Contact
 
 - **Live demo:** <https://wavecode.sibres.tech/>
-- **Tailscale:** <https://wavecode.tail347ae6.ts.net/>
+- **Tailscale:** <https://wavecode.kosov.online/> (split-DNS → tailnet IP)
 - **Issues:** [github.com/11111000000/wavecode/issues](https://github.com/11111000000/wavecode/issues)
 - **GitVerse mirror (canonical):** [gitverse.ru/b11111000000/wavecode](https://gitverse.ru/b11111000000/wavecode)
 

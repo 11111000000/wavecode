@@ -9,7 +9,7 @@
 #
 # После deploy:
 #   • https://wavecode.sibres.tech/  — публичный URL (Caddy public listener)
-#   • https://wavecode.tail347ae6.ts.net/ — tailnet URL (Tailscale mesh)
+#   • https://wavecode.kosov.online/ — из Tailscale (split-DNS → tailnet IP)
 #
 # Rollback:
 #   • cd ~/Projects/AngaraConfig && git revert <commit> && bin/rebuild.sh switch
@@ -101,4 +101,4 @@ echo "перезагрузите Caddy: systemctl reload caddy"
 echo
 echo "Verify:"
 echo "  curl -I https://wavecode.sibres.tech/"
-echo "  curl -I https://wavecode.tail347ae6.ts.net/"
+echo "  curl -I https://wavecode.kosov.online/"
