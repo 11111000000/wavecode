@@ -1,7 +1,6 @@
 import type { LayerMix } from '~/domain/types';
-import { collectStacksOf } from '~/domain/strudel/walker';
+import { listLayerSpans } from '~/domain/layers/layerSpans';
 import { argText } from '~/domain/strudel/parser';
-import type { Arg } from '~/domain/strudel/ast';
 
 /**
  * injectMix — pure application use case.
@@ -79,32 +78,14 @@ const formatGain = (gain: number): string => {
 };
 
 /**
- * Absolute byte range of every top-level segment of a stack body.
+ * Абсолютный byte range of every top-level segment of a stack body.
  *
  * A comment-only segment yields empty text once comments are stripped —
  * callers emit it verbatim without consuming a mixer row.
  */
-const splitSegments = (
-  bodyStart: number,
-  args: ReadonlyArray<Arg>,
-): ReadonlyArray<{ start: number; end: number }> =>
-  args.map((arg) => ({ start: arg.span.start - bodyStart, end: arg.span.end - bodyStart }));
-
 const anySoloed = (mix: ReadonlyArray<LayerMix>): boolean =>
   mix.some((m) => m.soloed);
 
-/**
- * Absolute byte offset of the `(` that opens a stack's body.
- *
- * `StackNode.span.start` points at the `stack` IDENT, not the paren —
- * `+1` would land inside the word. Scanning forward for the first
- * `(` is safe because the tokenizer only emits LPAREN as a real token,
- * so nothing between the ident and the paren can be a paren.
- */
-const openParenAt = (score: string, stackStart: number): number => {
-  const i = score.indexOf('(', stackStart);
-  return i === -1 ? stackStart : i;
-};
 
 /** One pending text replacement, expressed in absolute score offsets. */
 type Edit = {
@@ -116,44 +97,28 @@ type Edit = {
 export const injectMix = (score: string, layerMix: ReadonlyArray<LayerMix>): string => {
   if (!score.trim()) return score;
   const soloActive = anySoloed(layerMix);
-  const stacks = collectStacksOf(score);
+  // Перечисление слоёв — общее с микшером и правкой звука
+  // (`domain/layers/layerSpans`), поэтому номер строки микшера и
+  // номер правимого слоя — всегда одно и то же число.
+  const layers = listLayerSpans(score);
 
-  if (stacks.length === 0) {
-    if (layerMix.length === 0) return score;
-    const only = layerMix[0]!;
-    const muted = only.muted || (soloActive && !only.soloed);
-    const gain = muted ? 0 : only.gain;
-    return replaceGain(score, gain);
-  }
+  if (layers.length === 0) return score;
 
   const edits: Edit[] = [];
-  let index = 0;
 
-  for (const ref of stacks) {
-    const bodyStart = openParenAt(score, ref.start) + 1;
-    const segments = splitSegments(bodyStart, ref.args);
-
-    for (const seg of segments) {
-      const raw = score.slice(bodyStart + seg.start, bodyStart + seg.end);
-      const trimmed = raw.replace(/\/\/.*$/gm, '').trim();
-      if (!trimmed) {
-        // Comment-only or empty slot — preserve as-is, no row consumed.
-        continue;
-      }
-      const mix = layerMix[index];
-      index += 1;
-      if (mix === undefined) continue;
-      // Solo cascade: if any layer is soloed, only soloed layers are
-      // audible. Soloed layers ignore their own `muted` flag (standard
-      // DAW behaviour: solo forces the track on).
-      const isAudible = soloActive ? mix.soloed : !mix.muted;
-      const gain = isAudible ? mix.gain : 0;
-      edits.push({
-        start: bodyStart + seg.start,
-        end: bodyStart + seg.end,
-        text: replaceGain(raw, gain),
-      });
-    }
+  for (const layer of layers) {
+    const mix = layerMix[layer.index];
+    if (mix === undefined) continue;
+    // Solo cascade: if any layer is soloed, only soloed layers are
+    // audible. Soloed layers ignore their own `muted` flag (standard
+    // DAW behaviour: solo forces the track on).
+    const isAudible = soloActive ? mix.soloed : !mix.muted;
+    const gain = isAudible ? mix.gain : 0;
+    edits.push({
+      start: layer.start,
+      end: layer.end,
+      text: replaceGain(layer.source, gain),
+    });
   }
 
   if (edits.length === 0) return score;
