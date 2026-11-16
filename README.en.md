@@ -9,7 +9,7 @@
 <p align="center">
   <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/License-Apache_2.0-blue.svg"/></a>
   <a href=".github/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/11111000000/wavecode/ci.yml?branch=master&label=CI&logo=githubactions&logoColor=white"/></a>
-  <a href="https://wavecode.kosov.online/"><img alt="Live demo" src="https://img.shields.io/badge/demo-wavecode.kosov.online-ffb547?logo=googlechrome&logoColor=white"/></a>
+  <a href="https://wavecode.sibres.tech/"><img alt="Live demo" src="https://img.shields.io/badge/demo-wavecode.sibres.tech-ffb547?logo=googlechrome&logoColor=white"/></a>
   <a href="https://github.com/11111000000/wavecode"><img alt="Repo" src="https://img.shields.io/badge/gitverse-11111000000/wavecode-1f6feb?logo=git&logoColor=white"/></a>
 </p>
 
@@ -21,7 +21,7 @@
 
 ## ▶ Try it
 
-* **Live demo:** <https://wavecode.kosov.online/> (also available over Tailscale: <https://wavecode.tail347ae6.ts.net/>)
+* **Live demo:** <https://wavecode.sibres.tech/> (the former <https://wavecode.kosov.online/> answers 301 to it; also available over Tailscale: <https://wavecode.tail347ae6.ts.net/>)
 * **Stable build:** deployed from the dev host with `./bin/deploy.sh` — there is no auto-deploy
 * **PWA:** installable as a standalone app (Chrome / Edge / Safari iOS 16.4+)
 
@@ -220,7 +220,7 @@ Issue templates: [bug report](.github/ISSUE_TEMPLATE/bug.yml) · [feature reques
 
 ## Contact
 
-- **Live demo:** <https://wavecode.kosov.online/>
+- **Live demo:** <https://wavecode.sibres.tech/>
 - **Tailscale:** <https://wavecode.tail347ae6.ts.net/>
 - **Issues:** [github.com/11111000000/wavecode/issues](https://github.com/11111000000/wavecode/issues)
 - **GitVerse mirror (canonical):** [gitverse.ru/b11111000000/wavecode](https://gitverse.ru/b11111000000/wavecode)

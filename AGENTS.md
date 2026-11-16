@@ -181,7 +181,7 @@ Composer (`~/Projects/Composer/`) — **отдельный backend-проект 
 
 ## Deployment
 
-Production: https://wavecode.kosov.online/ (Caddy на angara-1, обслуживает
+Production: https://wavecode.sibres.tech/ (Caddy на angara-1, обслуживает
 `/var/lib/wavecode/dist/`). Также доступно на Tailscale:
 https://wavecode.tail347ae6.ts.net/.
 

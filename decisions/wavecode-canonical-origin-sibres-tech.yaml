@@ -1,0 +1,212 @@
+---
+schema: math-coding/3.3
+id: wavecode-canonical-origin-sibres-tech
+revision: 1
+state: active
+body_sha: "sha256:70922c56a959a6431bbd2fa807f9b08760e43a1746a169a7487eca980dbab374"
+yaml_sha: "sha256:70922c56a959a6431bbd2fa807f9b08760e43a1746a169a7487eca980dbab374"
+
+intent: |
+  2026-11-16: wavecode переезжает с `wavecode.kosov.online` на
+  `wavecode.sibres.tech` — собственный домен с wildcard-сертификатом
+  `*.sibres.tech` (тот же, что у genium/grom), в отличие от
+  `*.kosov.online`, где имя vhost'а совпадает с проектом.
+
+  Причина не в самом домене, а в конфигурации: `wavecode.kosov.online`
+  — это wildcard-поддомен, который нельзя переименовать в
+  `wavecode.sibres.tech` без собственного сайта-блока и без
+  wildcard-сертификата. Переезд даёт стабильный, не зависящий от
+  wildcard-имён адрес и освобождает vhost-имя `wavecode` в реестре
+  `services.kinetic.services`.
+
+  Инфраструктурная часть (Caddy vhost, DNS A-запись в Reg.ru, CORS
+  allowlist публичного llm-proxy) принадлежит AngaraConfig и по
+  `decisions/decision.yaml` §5 в этот math-coding-инстанс НЕ входит —
+  она зафиксирована там (AngaraConfig/KB/10_infrastructure/services.md,
+  раздел «wavecode на sibres.tech»). Это решение фиксирует только
+  волкодовую сторону переезда: канонический origin приложения,
+  адреса в тестах против задеплоенного билда и в документации.
+
+  Порядок выкладки (DNS раньше редиректа):
+  1. Caddy: новый сайт-блок `https://wavecode.sibres.tech` с
+     сертификатом `*.sibres.tech` + backend `/var/lib/wavecode/dist`
+     и теми же cache-заголовками (`cacheControl = "vite-spa"`).
+  2. llm-proxy: `https://wavecode.sibres.tech` в CORS-allowlist
+     публичного инстанса (без этого браузер блокирует ответ).
+  3. Репозиторий: тесты и доки переключаются на новый origin.
+  4. DNS: A-запись `wavecode.sibres.tech` → `201.24.118.191` в зоне
+     sibres.tech (Reg.ru; API не умеет создавать A-записи для этой
+     зоны — запись вручную в UI).
+  5. Только после того, как запись резолвится: `redirectTo` для
+     `wavecode.kosov.online` в AngaraConfig → 301 на новый origin.
+     До этого старый адрес продолжает отдавать приложение сам —
+     иначе 301 ведёт в NXDOMAIN и сайт не открывается.
+
+commitment: |
+  1. Канонический origin production-SPA wavecode —
+     `https://wavecode.sibres.tech`. Это origin, к которому привязаны
+     PWA/service worker, закладки и ссылки в письмах.
+  2. `ui/playwright.deployed.config.ts` (baseURL + storageState) и
+     `ui/tests/e2e/mic-phase3.spec.mjs` (DEPLOYED_URL) бьют по
+     каноническому origin. Storage state привязан к origin, поэтому
+     тест против старого адреса после включения 301 проверял бы
+     не тот origin, в котором живёт состояние.
+  3. README/README.en/AGENTS.md/bin/deploy.sh называют
+     `https://wavecode.sibres.tech/` публичным адресом.
+  4. LLM-запросы приложения с канонического origin проходят CORS
+     публичного llm-proxy: origin есть в allowlist.
+  5. `wavecode.kosov.online` продолжает отдавать приложение до
+     появления A-записи; включение 301 — отдельный шаг в AngaraConfig,
+     зафиксированный там же.
+
+antithesis: |
+  (1) «Оставить всё на `wavecode.kosov.online`, а `sibres.tech`
+  трогать не надо — домен же общий, wildcard и так покрывает всё».
+  Возражение: wildcard `*.kosov.online` покрывает имя, но не даёт
+  отдельного сайта-блока с собственным сертификатом и отдельного
+  DNS-имени для CORS-allowlist. Переезд на sibres.tech — это
+  ровно то, что уже сделано для genium (genium-clean.kosov.online →
+  genium.sibres.tech) и grom (grom.kosov.online → grom.sibres.tech);
+  повторение схемы снимает риск «получилось у двух, а у третьего
+  не получится».
+
+  (2) «Включать 301 сразу, вместе с новым vhost — пользователи сами
+  перейдут на новый адрес».
+  Возражение: на момент переключения A-записи `wavecode.sibres.tech`
+  ещё не существует (NXDOMAIN), и 301 уводит живых пользователей
+  с работающего сайта на нерезолвящийся хост. Редирект включается
+  после того, как запись резолвится. Это единственный порядок, при
+  котором переезд не создаёт окно недоступности.
+
+  (3) «Тесты против задеплоенного билда надо оставить на старом
+  адресе — он ведь работает и не ломается».
+  Возражение: storage state в Playwright привязан к origin: сессия,
+  сохранённая для `wavecode.kosov.online`, не видна на
+  `wavecode.sibres.tech`. Тест, идущий через 301, проверял бы
+  приложение, поднятое с нуля на другом origin, — то есть проверял
+  не то состояние, которое он задумал проверять.
+
+counterexample: |
+  (1) «Домен можно переключить одной строкой в Caddy, зачем целая
+  процедура с DNS, CORS и тестами?». Возражение: одна строка в Caddy
+  не даёт ни DNS-имени, ни сертификата, ни CORS-allowlist. Без
+  последнего браузер блокирует ответ LLM-прокси (Origin не в
+  allowlist → preflight не проходит) — приложение откроется, но
+  чат не заработает. Переезд — это три независимых слоя, а не одна
+  правка.
+
+  (2) «Раз Caddy и DNS живут в AngaraConfig, то и решение целиком
+  должно быть там — зачем дублировать его в wavecode?». Возражение:
+  по `decisions/decision.yaml` §5 инфраструктурная часть в этот
+  инстанс не входит, и она действительно зафиксирована в AngaraConfig.
+  Здесь фиксируется часть, которой нет в AngaraConfig: какой origin
+  является каноническим для самого приложения и куда бьют его
+  тесты и доки. Оба решения ссылаются друг на друга.
+
+  (3) «Пока A-записи нет, старый адрес отдаёт приложение — значит
+  переезд уже состоялся, редирект можно включить позже и не
+  заметят». Возражение: в этом промежуточном состоянии приложение
+  существует на двух origin'ах одновременно, и storage state,
+  service worker и закладки продолжают жить на старом. Чем дольше
+  живёт это состояние, тем больше пользователей останется на старом
+  origin после включения 301. Поэтому шаг редиректа не «когда-нибудь»,
+  а сразу после резолва A-записи.
+
+axiom_link:
+  - A3
+
+scope:
+  paths:
+    - "ui/playwright.deployed.config.ts"
+    - "ui/tests/e2e/mic-phase3.spec.mjs"
+    - "README.md"
+    - "README.en.md"
+    - "AGENTS.md"
+    - "bin/deploy.sh"
+    - "decisions/wavecode-canonical-origin-sibres-tech.yaml"
+
+outcomes:
+  - id: canonical-origin-declared
+    statement: |
+      Производственный origin wavecode — `https://wavecode.sibres.tech`;
+      он назван в README.md, README.en.md, AGENTS.md и bin/deploy.sh.
+  - id: deployed-e2e-targets-canonical-origin
+    statement: |
+      `ui/playwright.deployed.config.ts` (baseURL и storageState) и
+      `ui/tests/e2e/mic-phase3.spec.mjs` (DEPLOYED_URL) указывают на
+      `https://wavecode.sibres.tech`, а не на `wavecode.kosov.online`.
+  - id: canonical-origin-serves-app
+    statement: |
+      `https://wavecode.sibres.tech/` отдаёт SPA (200, text/html) с
+      валидным сертификатом `*.sibres.tech` (Caddy vhost, создан
+      в AngaraConfig).
+  - id: llm-cors-allows-canonical-origin
+    statement: |
+      Preflight к `https://llm.kosov.online/v1/chat/completions` с
+      `Origin: https://wavecode.sibres.tech` возвращает
+      `Access-Control-Allow-Origin: https://wavecode.sibres.tech`.
+  - id: old-origin-still-serving-until-dns
+    statement: |
+      `https://wavecode.kosov.online/` продолжает отдавать приложение
+      (200), пока A-запись `wavecode.sibres.tech` не появилась в DNS;
+      включение 301 отложено до резолва, чтобы не увести живых
+      пользователей в NXDOMAIN.
+
+obligations:
+  - id: canonical-origin-kernel-validates
+    claim: |
+      Decision file structurally valid under math-coding 3.3.
+    acceptance:
+      all:
+        - verifier: "mathc validate"
+          result: pass
+  - id: canonical-origin-deployed-e2e-updated
+    claim: |
+      Ни один e2e-файл против задеплоенного билда не ссылается на
+      `wavecode.kosov.online` как на целевой origin.
+    acceptance:
+      all:
+        - verifier: "shell:! grep -rn 'wavecode\\.kosov\\.online' ui/playwright.deployed.config.ts ui/tests/e2e/mic-phase3.spec.mjs"
+          result: pass
+  - id: canonical-origin-serves-app
+    claim: |
+      Канонический origin отдаёт SPA с валидным TLS-сертификатом
+      `*.sibres.tech`.
+    acceptance:
+      all:
+        - verifier: "shell:curl -sS -o /dev/null -w '%{http_code}' --resolve wavecode.sibres.tech:443:201.24.118.191 https://wavecode.sibres.tech/ | grep -q 200"
+          result: pass
+  - id: canonical-origin-cors-allowed
+    claim: |
+      LLM-прокси принимает origin канонического адреса (иначе чат в
+      браузере не работает).
+    acceptance:
+      all:
+        - verifier: "shell:curl -sS -X OPTIONS -D - -o /dev/null -H 'Origin: https://wavecode.sibres.tech' -H 'Access-Control-Request-Method: POST' https://llm.kosov.online/v1/chat/completions | grep -qi 'access-control-allow-origin: https://wavecode.sibres.tech'"
+          result: pass
+  - id: old-origin-no-outage
+    claim: |
+      До появления A-записи в DNS старый адрес не отдаёт 301 в
+      нерезолвящийся хост — приложение продолжает работать.
+    acceptance:
+      all:
+        - verifier: "shell:curl -sS -o /dev/null -w '%{http_code}' https://wavecode.kosov.online/ | grep -q 200"
+          result: pass
+
+assumptions:
+  - A-запись `wavecode.sibres.tech` → 201.24.118.191 будет создана вручную в Reg.ru (API не создаёт A-записи для этой зоны).
+  - Wildcard-сертификат `*.sibres.tech` действителен до 2027-02-11 и продлевается через lego+regru DNS-01.
+  - Caddy vhost для `wavecode.sibres.tech` живёт в AngaraConfig и переживает переезд (vhost-имя `wavecode` в реестре остаётся).
+
+risk:
+  declared_triggers:
+    - A-запись в Reg.ru не создана → канонический origin не резолвится, приложение недоступно по новому адресу
+    - креды Reg.ru для ACME DNS-01 протухли → wildcard-сертификат *.sibres.tech не продлится
+    - origin не добавлен в CORS-allowlist llm-proxy → приложение открывается, но чат не отвечает
+  owner: human:operator
+
+relations:
+  addresses:
+    - wavecode-bootstrap-math-coding-3.3@1
+    - wavecode-llm-cors-explicit-allowlist@1
+    - fix-pwa-cache-control@1
