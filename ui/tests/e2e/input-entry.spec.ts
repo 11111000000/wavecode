@@ -105,7 +105,7 @@ test.describe('единый ввод', () => {
 
     // Отдельного «Микрофона» в листе «Инструменты» нет — свист
     // живёт вкладкой.
-    await page.locator('.wc-topbar [aria-label="Инструменты"]').first().click();
+    await page.locator('.wc-rail__more').first().click();
     await expect(page.locator('.wc-tools-sheet')).toBeVisible({ timeout: 5_000 });
     await expect(page.locator('.wc-tool-card', { hasText: 'Микрофон' })).toHaveCount(0);
 

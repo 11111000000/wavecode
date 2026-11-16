@@ -149,10 +149,14 @@
     border-radius: 0;
   }
 
-  /* Вход в лист «Инструменты» на мобиле — в верхней панели, чтобы
-     нижний ряд оставался четырёхпунктным. */
+  /* Вход в лист «Инструменты» — в рельсе, на всех экранах: раньше на
+     мобиле кнопка скрывалась, а вход жил в верхней панели, то есть
+     два входа в одну поверхность, и верхний был голой иконкой. */
   .wc-rail__more {
-    display: none;
+    flex: 0 0 auto;
+    width: 60px;
+    height: 100%;
+    border-radius: 0;
   }
 
   .wc-rail .sample-progress-badge {
@@ -239,6 +243,48 @@
   font-size: var(--fs-2xs);
   color: var(--fg-dim);
   line-height: var(--lh-base);
+}
+
+/* Булавка закрепления — вторая кнопка внутри карточки: вложить кнопку
+   в кнопку нельзя, поэтому она лежит поверх, а ячейке задаётся контекст
+   позиционирования. Фокус-контур даёт глобальное правило zen.css. */
+.wc-tool-cell {
+  position: relative;
+}
+
+.wc-tool-card__pin {
+  position: absolute;
+  top: var(--space-2xs);
+  right: var(--space-2xs);
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  color: var(--fg-ghost);
+  cursor: pointer;
+}
+
+.wc-tool-card__pin:hover {
+  color: var(--fg);
+  border-color: var(--border-strong);
+}
+
+/* Закреплено — цветом и подложкой: состояние видно без подписи. */
+.wc-tool-card__pin[data-on='true'] {
+  color: var(--primary);
+  border-color: var(--primary);
+  background: var(--primary-soft);
+}
+
+/* Закрепить нельзя (своя кнопка / выбран лимит) — галочка приглушена,
+   причина — в подсказке, а не в молчании. */
+.wc-tool-card__pin[data-locked='true'] {
+  opacity: 0.45;
+  cursor: default;
 }
 
 .wc-tools-sheet__empty {

@@ -1,0 +1,296 @@
+---
+schema: math-coding/3.3
+id: wavecode-pinned-tools
+revision: 1
+state: active
+body_sha: "sha256:11a6c58516b25b91dcbe1e32b8af4dbcb3762160c8e5b96a07ff83fbdb432b81"
+yaml_sha: "sha256:11a6c58516b25b91dcbe1e32b8af4dbcb3762160c8e5b96a07ff83fbdb432b81"
+
+intent: |
+  Владелец (2026-11-16) посмотрел на интерфейс после волны правок и
+  сказал три вещи:
+
+    * «как будто бы у нас есть какое-то дублирование»;
+    * «вот вкладка, которая открывает непонятно как что»;
+    * «с другой стороны много чего не хватает … все инструменты уехали
+      куда-то в отдельную кнопочку наверху, а которые не влезли вниз»;
+    * и конкретное требование: «должна быть возможность нажать какую-то
+      галочку на каждом инструменте, чтобы он появился в меню внизу,
+      если человек часто пользуется».
+
+  Замеры на живом проде (2026-11-16, бот Chromium, production-бандл
+  `index-B80rwCcv.js`) подтвердили каждое слово:
+
+    * **Две кнопки на один лист.** `[aria-label="Инструменты"]` встречалась
+      дважды: кнопка «Ещё» в рельсе и голая иконка-сетка в верхней панели.
+      Обе открывали один и тот же лист `.wc-tools-sheet`. Верхняя была
+      без подписи — это и есть «кнопка, которая открывает непонятно что».
+    * **Лист повторял рельс.** В листе было 9 карточек: Нотная, Шаги, ИИ,
+      Ввод, Пианино, Микшер, Визуализация, Экспорт, Консоль. Первые три —
+      ровно те же, что стоят в рельсе, при этом подпись листа обещала
+      «всё, что не в рельсе». Обещание было ложью, и ложь была видна
+      безо всяких замеров.
+    * **На мобиле входа внизу не было вовсе.** `.wc-rail__more` имел
+      `display: none` на ширине ≤ 1023 px — на телефоне лист открывался
+      только из верхней панели, то есть через ту самую голую иконку.
+
+  То есть претензия сводится к трём вещам, и все три лечатся одной
+  перестройкой:
+
+    1. один вход в лист вместо двух, и он — рядом с инструментами, а
+       не в шапке;
+    2. лист без повторов рельса;
+    3. способ поднять часто используемое в рельс — по требованию
+       владельца, руками пользователя, а не подбором автора.
+
+  Это решение фиксирует перестройку информационной архитектуры рельса
+  и листа «Инструменты».
+
+commitment: |
+  1. **Вход в лист один.** Кнопка «Ещё» в рельсе (`.wc-rail__more`,
+     `aria-label="Инструменты"`) — единственный способ открыть лист
+     «Инструменты». Иконка-сетка в верхней панели удалена: два входа в
+     один лист читались как «непонятно что», а голая иконка без подписи
+     тем более.
+  2. **«Ещё» есть на всех экранах.** На мобиле кнопка больше не
+     скрывается (`display: none` → `flex: 0 0 auto; width: 60px`): вход
+     в инструменты стоит там же, где сами инструменты.
+  3. **Лист не повторяет рельс.** В покое лист показывает только tier 2
+     (6 карточек: Ввод, Пианино, Микшер, Визуализация, Экспорт,
+     Консоль). Базовые пункты рельса (Нотная, Шаги, ИИ) в листе не
+     повторяются, и подпись листа «что закрепить в рельсе» теперь
+     правдива.
+  4. **Поиск в листе находит всё, включая базовые.** Закрепление не
+     должно ломать достижимость: на «нотная» лист отвечает карточкой
+     «Нотная» с заблокированной булавкой, а не «Ничего не найдено».
+  5. **Галочка на карточке закрепляет инструмент в рельсе.** Булавка
+     `.wc-tool-card__pin` (`aria-pressed`) добавляет инструмент в рельс;
+     та же булавка его снимает. Закреплённый инструмент остаётся в
+     листе — снять его можно только там. Глиф у булавки свой
+     (`RailPinIcon`): `PinIcon` из тостов нарисован вертикальной линией
+     с перекладинами и в карточке читается как ползунок.
+  6. **Рельс = базовые три + до трёх закреплённых.** `MAX_PINNED_TOOLS =
+     3`. Порядок: сначала базовые, потом закреплённые в порядке
+     закрепления. Основание для лимита: мобильный ряд — 60 px, семь
+     слотов по ~54 px с подписями («Нотная», «Пианино») ещё влезают,
+     восемь — уже нет.
+  7. **«Ввод» не закрепляется.** У него есть постоянная круглая кнопка,
+     а вторая точка входа в тот же лист вернула бы ровно то дублирование,
+     которое здесь убирается. Карточка «Ввод» в листе остаётся — иначе
+     поиск по «микрофон» или «свист» отвечал бы «Ничего не найдено»;
+     её булавка заблокирована.
+  8. **Заблокированная булавка объясняет причину.** Не `disabled`, а
+     `aria-disabled="true"` + `title` с причиной: «уже в рельсе»,
+     «Открывается круглой кнопкой „Ввод“ — в рельсе незачем» или
+     «закрепить можно не больше 3». Молчащая галочка — это не
+     «почему нельзя», а «сломанный интерфейс».
+  9. **Доступное имя булавки всегда содержит имя инструмента.** В любом
+     состоянии: «Закрепить „Микшер“ в рельсе», «Убрать „Микшер“ из
+     рельса», «„Микшер“ — уже в рельсе». Иначе в листе с девятью
+     карточками четыре заблокированные булавки звучали бы одинаково.
+  10. **Выбор переживает перезагрузку.** `localStorage`, версионированный
+      ключ `wavecode-pinned-tools-v1` (как `wavecode-mobile-sheet-h-v1`).
+      Инструменты — не данные композиции, поэтому IndexedDB не нужен.
+  11. **Хранилище не доверяют.** При чтении отбрасываются неизвестные id,
+      повторы, базовые инструменты и незакрепляемые («Ввод»). Иначе
+      «Нотная» могла бы появиться в рельсе дважды — то самое дублирование,
+      ради которого решение и принималось.
+  12. **Реестр — источник правды.** Возможность закрепить инструмент
+      описана в `toolRegistry.ts` (`pinnable`, `pinNote`), а не
+      вычисляется в UI по тиру: причина принадлежит инструменту.
+
+axiom_link:
+  - A1
+scope:
+  paths:
+    - ui/src/presentation
+    - ui/src/styles
+    - ui/tests/e2e
+    - ui/tests/baseline
+    - scripts/zen-ui-baseline.json
+    - decisions/wavecode-pinned-tools.yaml
+    - decisions/wavecode-zen-ui-implementation.yaml
+    - README.md
+    - README.en.md
+  capabilities:
+    - ui-information-architecture
+    - ui-content-truthfulness
+    - ui-accessibility
+  exclusions:
+    - ui/src/domain
+    - ui/src/application
+    - ui/src/infrastructure
+outcomes:
+  - id: wavecode-pinned-tools-outcome-one-entry
+    statement: |
+      В интерфейсе ровно одна кнопка «Инструменты», и она живёт в рельсе
+      — на десктопе и на мобиле. В верхней панели кнопки листа больше
+      нет. Один вход — одна поверхность.
+  - id: wavecode-pinned-tools-outcome-no-duplication
+    statement: |
+      Лист «Инструменты» не показывает то, что уже в рельсе: в покое в
+      нём шесть карточек второго уровня и ни одной из трёх базовых. Если
+      пользователь ищет базовый инструмент, он находится — но с
+      заблокированной булавкой и пометкой «уже в рельсе».
+  - id: wavecode-pinned-tools-outcome-pin
+    statement: |
+      Часто используемый инструмент можно поднять в рельс одной галочкой
+      на его карточке. Рельс остаётся читаемым: базовые три пункта плюс
+      не больше трёх закреплённых. Выбор сохраняется между запусками.
+  - id: wavecode-pinned-tools-outcome-honest-lock
+    statement: |
+      Заблокированная булавка всегда объясняет, почему она заблокирована,
+      и всегда называет инструмент, к которому относится. Причина —
+      в доступном имени, а не в молчании.
+obligations:
+  - id: wavecode-pinned-tools-guard-targets
+    claim: |
+      The zen guard reports the phase-1 targets met and no regression
+      against the recorded baseline: no dangling token reference, no
+      hardcoded colour outside the token file, at most one infinite
+      animation, and no growth of the sheet-surface count — the pin
+      control lives inside the existing tools sheet, it does not add a
+      surface.
+    acceptance:
+      all:
+        - verifier: "node scripts/check-zen-ui.mjs --targets"
+          result: pass
+  - id: wavecode-pinned-tools-quality-gate
+    claim: |
+      The repository quality gate is green: typecheck, unit tests,
+      console lint and preset validation.
+    acceptance:
+      all:
+        - verifier: "cd ui && npm run test:precommit"
+          result: pass
+  - id: wavecode-pinned-tools-store-unit
+    claim: |
+      The pinned-tools store holds the contract of the rail: three base
+      items first, at most three pinned, tier-1 and non-pinnable tools
+      refused, the choice persisted to localStorage, and a corrupted
+      store ignored instead of crashing the rail.
+    acceptance:
+      all:
+        - verifier: "cd ui && npx vitest run src/presentation/state/pinnedTools.test.ts"
+          result: pass
+  - id: wavecode-pinned-tools-sheet-unit
+    claim: |
+      The tools sheet shows only tier-2 cards by default, finds base
+      tools on search, moves a tool into the rail when its pin is
+      pressed, and explains every blocked pin.
+    acceptance:
+      all:
+        - verifier: "cd ui && npx vitest run src/presentation/components/app/ToolsSheet.test.tsx"
+          result: pass
+  - id: wavecode-pinned-tools-reachability-e2e
+    claim: |
+      The e2e suite pins the new information architecture: exactly one
+      «Инструменты» button in the whole interface, a tools sheet with no
+      rail duplicates, a pin that moves a tool into the rail and survives
+      a page reload, and a «Ещё» button on the mobile viewport too.
+    acceptance:
+      all:
+        - verifier: "cd ui && npx playwright test tests/e2e/tool-reachability.spec.ts"
+          result: pass
+  - id: wavecode-pinned-tools-kernel-validates
+    claim: |
+      The decision file is structurally valid under the math-coding 3.3
+      schema.
+    acceptance:
+      all:
+        - verifier: "mathc validate"
+          result: pass
+negative_control: |
+  The checks have teeth in every direction the change could go wrong.
+  If a second «Инструменты» button reappeared (the top-bar grid icon),
+  `toHaveCount(1)` on `[aria-label="Инструменты"]` fails, and the
+  assertion that `.wc-topbar [aria-label="Инструменты"]` is absent
+  fails too. If the sheet started listing rail items again, the
+  component test's exact-array assertion on the card labels fails. If
+  pinning stopped persisting, the e2e check after `page.reload()` —
+  which expects the pinned tool to still be in the rail — fails. If the
+  pin limit were raised, the store test's `MAX_PINNED_TOOLS === 3` and
+  the «четвёртая булавка блокируется лимитом» case fail. If the blocked
+  pin became a real `disabled` attribute instead of `aria-disabled`,
+  the assertion `hasAttribute('disabled') === false` fails — and with
+  it the promise that the reason stays reachable from the keyboard.
+counterexample: |
+  The strongest objection is that the rail stops being a fixed contract.
+  Today every user sees the same three items in the same order, which
+  makes the interface learnable, makes screenshots and guides
+  reproducible, and makes "where do I open the mixer?" a question with
+  one answer. Personalised pinning breaks that: two people using the
+  same build get different rails, a muscle memory formed yesterday may
+  be wrong today, and a tool that moved out of the rail looks like it
+  disappeared. The objection is accepted as a real cost. It is
+  bounded by four rules: the base three never move and never leave, the
+  pinned block is at most three items, it always sits after the base
+  ones, and the sheet — where everything remains reachable — never
+  loses a card because of it. Pinning therefore cannot remove a tool
+  from the interface; it can only move a shortcut into the thumb zone.
+  The alternative of a fixed rail with no pinning was rejected because
+  it does not answer the owner's second complaint at all: frequently
+  used tools would stay two clicks away, and the only answer to that
+  is to let the user decide.
+antithesis: |
+  The coherent alternative was to leave the rail exactly as it is and
+  solve everything through the command palette — every tool reachable
+  in two keystrokes, no personalisation, no new state, nothing to
+  persist. It was rejected because it answers a different complaint
+  than the owner's: the palette is fast for the person who already
+  knows the tool's name, and useless for the person who wants the
+  mixer "right there". A second alternative was rejected as well — a
+  settings screen with a checklist of tools, which would put the same
+  decision one more layer away, behind a route, a scroll and a save
+  button. The owner's words were «нажать какую-то галочку на каждом
+  инструменте»: the checkbox belongs on the tool itself, where the
+  decision is made.
+assumptions:
+  - id: wavecode-pinned-tools-assumption-three-slots
+    state: assumed
+    statement: |
+      Three pinned slots is what the mobile rail can hold without
+      truncating labels: the row is 60 px tall, and seven slots of
+      ~54 px still fit with readable captions («Нотная», «Пианино»).
+    owner: human:operator
+    consequence_if_false: |
+      If the rail turns out to fit only two pinned items on the
+      narrowest supported phone, `MAX_PINNED_TOOLS` drops to two and the
+      store test is updated with it. If it fits more, the limit is a
+      product decision, not a layout one, and needs the owner's call.
+  - id: wavecode-pinned-tools-assumption-local-storage
+    state: assumed
+    statement: |
+      `localStorage` is available and durable for the preference. It is
+      a preference, not data: losing it costs one re-pinning round,
+      and it is never synchronised between devices.
+    owner: human:operator
+    consequence_if_false: |
+      If a browser blocks storage in private mode, the store already
+      falls back to an empty rail instead of crashing; the cost is that
+      pinning does not survive the reload in that browser.
+risk:
+  declared_triggers:
+    - duplicated-entry-return
+    - rail-overflow-on-mobile
+    - lost-pinning-after-update
+    - pin-without-reason
+  owner: human:operator
+reversal:
+  - signal: |
+      Users report that a tool "disappeared from the rail" — that is,
+      they cannot find a pinned tool they expected to stay.
+    action: rework
+  - signal: |
+      The mobile rail starts truncating labels or the pinned block
+      pushes the base items off screen.
+    action: review
+  - signal: |
+      A second «Инструменты» entry reappears anywhere in the interface.
+    action: rework
+relations:
+  implements:
+    - wavecode-zen-ui-implementation@2
+  refines:
+    - wavecode-unified-input-entry@1
+    - wavecode-zen-minimal-ui@2

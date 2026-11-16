@@ -308,12 +308,21 @@ export function ScorePanel() {
           data-active={extraOpen() ? 'true' : 'false'}
           aria-expanded={extraOpen()}
           aria-controls="score-extra-body"
-          aria-label={extraOpen() ? 'Скрыть сниппеты и отладку' : 'Показать сниппеты и отладку'}
+          aria-label={
+            extraOpen()
+              ? 'Скрыть вид партитуры, мини-нотацию и отладку'
+              : 'Показать вид партитуры, мини-нотацию и отладку'
+          }
           onClick={toggleExtra}
-          title={extraOpen() ? 'Скрыть' : 'Сниппеты, вид и отладка'}
+          title={extraOpen() ? 'Скрыть' : 'Вид партитуры, мини-нотация и отладка'}
         >
           <span aria-hidden="true">⋯</span>
-          <span class="score-extra__toggle-label">Ещё</span>
+          {/* wavecode-pinned-tools: раньше тут тоже стояло «Ещё» — и на
+              экране оказывалось два «Ещё»: в рельсе (инструменты) и
+              здесь (вид партитуры, мини-нотация, отладка). Кнопка в
+              рельсе остаётся «Ещё» — там это про инструменты; здесь
+              «Подробнее» не путается с ней. */}
+          <span class="score-extra__toggle-label">Подробнее</span>
         </button>
 
         <Show when={extraOpen()}>

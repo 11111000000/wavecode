@@ -1,10 +1,9 @@
 import { onCleanup, type JSX } from 'solid-js';
 import { appStore } from '~/presentation/state/appStore';
 import type { MobileMode } from '~/presentation/state/uiState';
-import { openKindSheet } from '~/presentation/state/uiState';
 import {
   UndoIcon, RedoIcon, NewIcon,
-  WavecodeLogo, ToolsIcon,
+  WavecodeLogo,
 } from '~/presentation/icons';
 import { ShareButton } from '~/presentation/components/ShareButton';
 import { ConsoleButton } from '~/presentation/components/ConsoleButton';
@@ -105,20 +104,13 @@ export function TopBar(props: TopBarProps): JSX.Element {
         </button>
         <ShareButton />
         <ConsoleButton />
-        {/* wavecode-zen-minimal-ui (ревизия 2): на мобиле нижний ряд
-            остаётся четырёхпунктным, поэтому вход в лист «Инструменты»
-            живёт здесь. Кнопка переключения layout (ИИ ↔ код) убрана:
-            ИИ теперь слой поверх холста, переключать нечего. */}
-        <button
-          type="button"
-          class="wc-icon-btn"
-          data-tone="ghost"
-          onClick={() => openKindSheet('tools', 'half')}
-          aria-label="Инструменты"
-          title="Инструменты (⌘K)"
-        >
-          <ToolsIcon size={18} />
-        </button>
+        {/* wavecode-pinned-tools: кнопка «Инструменты» убрана из
+            верхней панели. Она открывала тот же лист, что и «Ещё» в
+            рельсе, — два входа в одну поверхность, и верхний был
+            голой иконкой-сеткой без подписи: «кнопка, которая
+            открывает непонятно что». Теперь вход один, он стоит в
+            рельсе рядом с инструментами, которые этим листом
+            управляются, и на мобиле он тоже внизу. */}
         <OverflowMenu
           presetId={props.presetId}
           mobileMode={props.mobileMode}

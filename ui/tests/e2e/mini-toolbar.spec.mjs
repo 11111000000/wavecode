@@ -7,7 +7,7 @@ import { APP_URL } from './support/appUrl';
  * через CodeMirror's view.dispatch и оставляет курсор сразу за ним.
  *
  * wavecode-zen-ui-phases-6-7 (фаза 6, «Тишина»): мини-нотация убрана
- * под раскрытие «⋯ Ещё» под партитурой — 14 кнопок не должны кричать
+ * под раскрытием «⋯ Подробнее» под партитурой — 14 кнопок не должны кричать
  * о себе в покое. Раскрытие закрыто по умолчанию на всех экранах.
  */
 test('mobile (375×667): mini-toolbar is visible and tapping `note(` inserts the snippet into the editor', async ({ page }) => {
@@ -18,7 +18,7 @@ test('mobile (375×667): mini-toolbar is visible and tapping `note(` inserts the
   // CodeMirror mounts async; give it a moment to render and for onReady to fire.
   await page.waitForSelector('.cm-content', { timeout: 15000 });
 
-  // Полоса закрыта по умолчанию: живёт под раскрытием «⋯ Ещё».
+  // Полоса закрыта по умолчанию: живёт под раскрытием «⋯ Подробнее».
   const toggle = page.locator('[data-testid="score-extra-toggle"]');
   await expect(toggle).toBeVisible();
   await toggle.click();

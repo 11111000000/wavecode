@@ -7,22 +7,54 @@ import { expect, type Page } from '@playwright/test';
  * транспортной строки в лист «Инструменты» (см. PresetPicker.tsx), а
  * строка транспорта теперь это ровно «play · темп · позиция».
  *
- * Спеки, которым нужно выбрать композицию, раньше делали
- * `page.locator('select.preset-select').selectOption(...)` — селекта
- * в транспортной строке больше нет. Теперь он живёт в листе, который
- * открывается кнопкой «Инструменты» в верхней панели (на мобиле и
- * десктопе это одна и та же кнопка — рельс на мобиле держит только
- * четыре пункта первого уровня).
+ * wavecode-pinned-tools: у листа остался ОДИН вход — кнопка «Ещё» в
+ * рельсе. Раньше их было два: тот же «Ещё» внизу и голая иконка-сетка
+ * в верхней панели. Верхняя открывала ровно тот же лист и выглядела
+ * как «кнопка, которая открывает непонятно что». Теперь вход один и
+ * он стоит рядом с инструментами, которыми этот лист управляет.
  *
  * Лист закрывается сразу после выбора композиции: пользователь выбрал
  * композицию — он хочет видеть и слышать её, а не перекрытый лист.
  */
 
-/** Открыть лист «Инструменты». */
+/** Кнопка «Ещё» в рельсе — единственный вход в лист «Инструменты». */
+export const TOOLS_OPENER = '.wc-rail__more';
+
+/**
+ * Открыть лист «Инструменты», если он ещё закрыт.
+ *
+ * Идемпотентность — не удобство, а необходимость после
+ * wavecode-pinned-tools. Вход в лист теперь один: кнопка «Ещё» в
+ * рельсе. Подложка листа (`.wc-sheet-backdrop`, z-sheet) лежит ПОВЕРХ
+ * рельса, поэтому пока лист открыт, клик по кнопке рельса
+ * перехватывается подложкой. Раньше вход был и в верхней панели, а
+ * она над подложкой, — второй клик по ней работал. Теперь повторный
+ * клик по рельсу при открытом листе — это таймаут, а не «открыть
+ * ещё раз».
+ *
+ * Семантика «открыть, если закрыто» совпадает с тем, что делает
+ * человек: увидеть лист, а не «нажать на кнопку подложки».
+ */
 export async function openToolsSheet(page: Page): Promise<void> {
-  const opener = page.locator('.wc-topbar [aria-label="Инструменты"]').first();
+  const sheet = page.locator('.wc-tools-sheet');
+  if (await sheet.isVisible()) return;
+  const opener = page.locator(TOOLS_OPENER).first();
   await opener.click();
-  await expect(page.locator('.wc-tools-sheet')).toBeVisible({ timeout: 5_000 });
+  await expect(sheet).toBeVisible({ timeout: 5_000 });
+}
+
+/**
+ * Закрыть лист «Инструменты».
+ *
+ * Esc, а не клик по кнопке рельса: кнопка под подложкой, и клик по
+ * ней не доедет (см. openToolsSheet). Esc — тот же путь, которым лист
+ * закрывает пользователь.
+ */
+export async function closeToolsSheet(page: Page): Promise<void> {
+  const sheet = page.locator('.wc-tools-sheet');
+  if ((await sheet.count()) === 0) return;
+  await page.keyboard.press('Escape');
+  await expect(sheet).toHaveCount(0);
 }
 
 /**
@@ -41,7 +73,7 @@ export async function selectPreset(page: Page, id: string): Promise<void> {
 export async function currentPresetId(page: Page): Promise<string> {
   await openToolsSheet(page);
   const value = await page.locator('[data-testid="preset-select"]').inputValue();
-  await page.locator('.wc-topbar [aria-label="Инструменты"]').first().click();
+  await closeToolsSheet(page);
   return value;
 }
 

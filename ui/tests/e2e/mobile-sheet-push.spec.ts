@@ -7,13 +7,16 @@ import { APP_URL } from './support/appUrl';
  * End-to-end assertions covering the mobile-only push-mode layout.
  * Navigation moved on with wavecode-zen-minimal-ui: the eight-tab
  * TabBar is replaced by a three-item rail (`.wc-rail__item`) plus one
- * «Инструменты» sheet (`.wc-tool-card`) for everything else. On
- * mobile the sheet is opened from the top-bar button
- * `.wc-topbar [aria-label="Инструменты"]` — the bottom rail stays
- * three items wide.
+ * «Инструменты» sheet (`.wc-tool-card`) for everything else. The sheet
+ * is opened from the rail's «Ещё» button (`.wc-rail__more`) — the one
+ * and only entry point, on mobile as well as on desktop.
  *
  * wavecode-unified-input-entry убрала из рельса «Ввод»: он стал
  * вторым уровнем, а вход в него — круглая кнопка «Ввод».
+ *
+ * wavecode-pinned-tools убрала вторую кнопку «Инструменты» из
+ * верхней панели: два входа в один лист читались как «какая-то
+ * кнопка, которая открывает непонятно что».
  *
  *   1. **Sheet push-mode exists.** Mobile viewport (412×900) — open the
  *      «Микшер» tool → its sheet opens. Both ScorePanel (top) and the
@@ -50,11 +53,10 @@ async function bootApp(page: Page): Promise<void> {
 
 /**
  * Открыть инструмент второго уровня через лист «Инструменты».
- * На мобиле вход в лист — кнопка в верхней панели: нижний рельс
- * держит только три пункта (Нотная / Шаги / ИИ).
+ * Вход в лист — кнопка «Ещё» в рельсе, на мобиле она тоже внизу.
  */
 async function openTool(page: Page, name: string): Promise<void> {
-  await page.locator('.wc-topbar [aria-label="Инструменты"]').first().click();
+  await page.locator('.wc-rail__more').first().click();
   await page.waitForTimeout(300);
   await page.locator('.wc-tool-card', { hasText: name }).first().click();
   await page.waitForTimeout(300);
@@ -67,8 +69,9 @@ test.describe('mobile split-pane (412×900)', () => {
     await bootApp(page);
 
     // Before: sheet is closed. The «Инструменты» entry point lives in
-    // the top bar — the bottom rail keeps only the three permanent items.
-    const toolsBtn = page.locator('.wc-topbar [aria-label="Инструменты"]').first();
+    // the rail — the bottom row keeps the three permanent items plus
+    // the «Ещё» button.
+    const toolsBtn = page.locator('.wc-rail__more').first();
     await expect(toolsBtn).toBeVisible();
     await openTool(page, 'Микшер');
 
