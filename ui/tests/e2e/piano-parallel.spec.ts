@@ -150,7 +150,7 @@ test('instrument selector changes oscType for next tap (no errors)', async ({ pa
 
   // Pick the "sine" instrument. The picker is a <select> over the
   // melodic-sound catalogue, not a row of buttons.
-  const select = page.locator('.piano-inst-select');
+  const select = page.locator('.inst-select');
   await expect(select).toBeVisible();
   await expect(select).toHaveValue('piano');
   await select.selectOption('sine');
