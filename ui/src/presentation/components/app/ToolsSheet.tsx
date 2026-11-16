@@ -8,7 +8,7 @@ import {
   MAX_PINNED_TOOLS,
   togglePinned,
 } from '~/presentation/state/pinnedTools';
-import { PinIcon } from '~/presentation/icons';
+import { RailPinIcon } from '~/presentation/icons';
 import { PresetPicker } from './PresetPicker';
 
 /**
@@ -169,7 +169,7 @@ export function ToolsSheet(): JSX.Element {
                         togglePinned(tool.id);
                       }}
                     >
-                      <PinIcon size={14} />
+                      <RailPinIcon size={14} />
                     </button>
                   </li>
                 );
