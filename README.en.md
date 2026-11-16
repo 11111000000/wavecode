@@ -21,7 +21,7 @@
 
 ## ▶ Try it
 
-* **Live demo:** <https://wavecode.sibres.tech/> (the former <https://wavecode.kosov.online/> answers 301 to it; also available over Tailscale: <https://wavecode.tail347ae6.ts.net/>)
+* **Live demo:** <https://wavecode.sibres.tech/> (the former <https://wavecode.kosov.online/> keeps serving the same app; also available over Tailscale: <https://wavecode.tail347ae6.ts.net/>)
 * **Stable build:** deployed from the dev host with `./bin/deploy.sh` — there is no auto-deploy
 * **PWA:** installable as a standalone app (Chrome / Edge / Safari iOS 16.4+)
 
