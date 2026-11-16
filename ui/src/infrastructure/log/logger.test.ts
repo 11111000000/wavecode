@@ -30,6 +30,9 @@ describe('logger', () => {
   let savedInfo: typeof console.info;
   let savedWarn: typeof console.warn;
   let savedError: typeof console.error;
+  /** The spies installed in beforeAll — the logger captured THESE. */
+  let infoSpy: ReturnType<typeof vi.spyOn>;
+  let errorSpy: ReturnType<typeof vi.spyOn>;
 
   beforeAll(() => {
     // Silently mock the native console methods BEFORE install captures
@@ -38,9 +41,9 @@ describe('logger', () => {
     // calls land on a silent mock instead of polluting test stdout. The
     // spies stay installed for the whole suite — install is idempotent.
     vi.spyOn(console, 'log').mockImplementation(() => {});
-    vi.spyOn(console, 'info').mockImplementation(() => {});
+    infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
     vi.spyOn(console, 'warn').mockImplementation(() => {});
-    vi.spyOn(console, 'error').mockImplementation(() => {});
+    errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     logger.install();
   });
 
@@ -162,6 +165,73 @@ describe('logger', () => {
     expect(buf[0]?.level).toBe('warn');
     expect(buf[0]?.text).toBe('something went wrong');
     expect(buf[0]?.source).toBe('cyclist');
+  });
+
+  describe('native (wasm) severity', () => {
+    it('a wasm INFO line on console.error is info, not error', () => {
+      // The MediaPipe runtime prints EVERYTHING on console.error.
+      console.error('INFO: Created TensorFlow Lite XNNPACK delegate for CPU.');
+      const buf = logger.getBuffer();
+      expect(buf).toHaveLength(1);
+      expect(buf[0]?.level).toBe('info');
+      expect(buf[0]?.source).toBe('mediapipe');
+      expect(buf[0]?.text).toBe('INFO: Created TensorFlow Lite XNNPACK delegate for CPU.');
+    });
+
+    it('a wasm WARNING line on console.error is warn', () => {
+      console.error('WARNING: something is off');
+      const buf = logger.getBuffer();
+      expect(buf[0]?.level).toBe('warn');
+      expect(buf[0]?.source).toBe('mediapipe');
+    });
+
+    it('a wasm ERROR line on console.error stays error', () => {
+      console.error('ERROR: the graph failed to build');
+      const buf = logger.getBuffer();
+      expect(buf[0]?.level).toBe('error');
+      expect(buf[0]?.source).toBe('mediapipe');
+    });
+
+    it('the glog header form is classified by its leading letter', () => {
+      console.error(
+        'W1116 23:35:46.140999 2210688 gl_context.cc:1136] OpenGL error checking is disabled',
+      );
+      console.error(
+        'I1116 23:35:46.124000 2210688 gl_context.cc:408] GL version: 3.0',
+      );
+      const buf = logger.getBuffer();
+      expect(buf[0]?.level).toBe('warn');
+      expect(buf[1]?.level).toBe('info');
+      expect(buf[0]?.source).toBe('mediapipe');
+      expect(buf[1]?.source).toBe('mediapipe');
+    });
+
+    it('an ordinary console.error is untouched', () => {
+      console.error('boom');
+      const buf = logger.getBuffer();
+      expect(buf[0]?.level).toBe('error');
+      expect(buf[0]?.source).toBe('app');
+    });
+
+    it('a wasm INFO line is NOT persisted as an error (IDB slice stays clean)', async () => {
+      vi.mocked(idb.set).mockClear();
+      console.error('INFO: Created TensorFlow Lite XNNPACK delegate for CPU.');
+      await new Promise((r) => setTimeout(r, 10));
+      const persistedCalls = vi.mocked(idb.set).mock.calls.filter(
+        (c) => c[0] === PERSISTED_KEY,
+      );
+      expect(persistedCalls).toHaveLength(0);
+    });
+
+    it('a wasm INFO line is re-emitted on console.info, not console.error', () => {
+      infoSpy.mockClear();
+      errorSpy.mockClear();
+      console.error('INFO: Created TensorFlow Lite XNNPACK delegate for CPU.');
+      expect(infoSpy).toHaveBeenCalledWith(
+        'INFO: Created TensorFlow Lite XNNPACK delegate for CPU.',
+      );
+      expect(errorSpy).not.toHaveBeenCalled();
+    });
   });
 
   it('getBuffer() returns a frozen array — consumers cannot mutate', () => {

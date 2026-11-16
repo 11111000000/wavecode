@@ -86,6 +86,52 @@ MediaPipe Tasks Vision 1.2.3 (Apache-2.0), `HandLandmarker` в режиме `VID
 
 Камера **не включается на старте приложения** — только по тумблеру в панели.
 
+### 4.1 Логи MediaPipe: почему «ошибка» при старте трекера
+
+Симптом: при включении тумблера «руки» в консоли появляется красная запись
+
+```
+INFO: Created TensorFlow Lite XNNPACK delegate for CPU.
+```
+
+и в приложении она показывалась как «ошибка» (вкладка «errors» консоли,
+IDB-срез сохранённых ошибок, счётчик непрочитанных ошибок).
+
+Причина — **не** в трекере. MediaPipe Tasks Vision — это Emscripten-сборка:
+wasm биндит stderr на `console.error` и печатает туда **всё**, включая
+INFO-диагностику:
+
+```js
+// ui/public/mediapipe/wasm/vision_wasm_internal.js
+var out = console.log.bind(console);
+var err = console.error.bind(console);
+```
+
+`ui/src/infrastructure/log/logger.ts` брал уровень записи из метода
+консоли, поэтому строка `INFO: …` классифицировалась как `error`. Сама по
+себе она означает обратное: CPU-делегат создан, трекер запустился штатно
+(воспроизведено: `INFO: Created TensorFlow Lite XNNPACK delegate for CPU.`
+появляется сразу после `HandLandmarker.createFromOptions`, статус панели —
+«вкл»).
+
+Решение (`fix(log): classify native wasm logs by their message prefix`):
+уровень берётся из самого сообщения, а не из метода консоли.
+
+| префикс сообщения | уровень | источник |
+|---|---|---|
+| `INFO: …` | `info` | `mediapipe` |
+| `WARNING: …` | `warn` | `mediapipe` |
+| `ERROR: …` | `error` | `mediapipe` |
+| `I1116 23:35:46.124000 … file.cc:408] …` (glog) | `info` | `mediapipe` |
+| `W1116 …` / `E1116 …` (glog) | `warn` / `error` | `mediapipe` |
+
+Такая строка больше не попадает в «errors», не пишется в IDB-срез ошибок и
+не вызывает тост; в DevTools она перевыводится на `console.info` с тем же
+текстом. Настоящие ошибки MediaPipe (`ERROR: …`) остаются ошибками.
+
+Записи, попавшие в IDB-срез **до** фикса, остаются в старом виде — их
+видно в админке (`#/admin`, раздел «Persisted errors») до очистки.
+
 ## 5. Жесты и оси
 
 Распознаются: `pinch` (щипок), `openPalm` (ладонь), `fist` (кулак),
@@ -138,6 +184,9 @@ npx vitest run src/domain/gesture src/infrastructure/gesture \
 1. **Формат фиксации решения** — math-coding гейт в репозитории неработоспособен
    (upstream v5.0.0 удалил форматы v3/v4; edge-релиз 3.7 отдаёт 404), поэтому
    решение зафиксировано документацией, а не файлом `decisions/*.yaml`.
+   Проверено и для правки классификации логов (§4.1): установленный `mathc` —
+   это v5 (`mathc --help` показывает `goal`/`run`/`record`, а не
+   `validate`/`self-check`), он не понимает формат `math-coding/3.3`.
 2. **Первый набор жестов** — предлагается щипок / ладонь / кулак / указание вверх.
 3. **Первая непрерывная ось для MVP** — предлагается высота.
 4. **Режим терминовки** — входит ли в MVP или в отдельную фазу.

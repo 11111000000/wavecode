@@ -39,6 +39,18 @@
  *    is used. Otherwise `source = 'app'`.
  *  • Callers may override via `push(level, args, source)`.
  *
+ * Native severity (wasm loggers)
+ *  • The MediaPipe / TFLite runtime is an Emscripten build: it binds
+ *    stderr to `console.error` and prints INFO diagnostics there too
+ *    (`INFO: Created TensorFlow Lite XNNPACK delegate for CPU.`).
+ *  • For those lines the severity is taken from the MESSAGE prefix
+ *    (`INFO:` / `WARNING:` / `ERROR:`, or the glog `I…`/`W…`/`E…`
+ *    header) and the source becomes `mediapipe`; the line is
+ *    re-emitted on the native console method that matches it.
+ *  • Without this, a perfectly healthy tracker start showed up as an
+ *    «ошибка» in the console, in the IDB error slice and in the
+ *    unread-error counter.
+ *
  * Log levels
  *  • `debug | info | warn | error | fatal` — see `./cleanLogArgs.ts` and
  *    `presentation/components/consoleStore.ts` for the UI contract.
@@ -152,6 +164,85 @@ const detectSource = (first: string | null): string => {
   return 'app';
 };
 
+/**
+ * Source label for lines that come from a native (wasm) library logger.
+ * Today that is MediaPipe / TensorFlow-Lite — the hand-gesture tracker.
+ */
+const NATIVE_SOURCE = 'mediapipe';
+
+/**
+ * Severity carried by the MESSAGE, not by the console method that
+ * carried it.
+ *
+ * The MediaPipe / TFLite runtime is an Emscripten build: it binds
+ * stderr to `console.error` and prints EVERYTHING there — INFO
+ * diagnostics included:
+ *
+ *   INFO: Created TensorFlow Lite XNNPACK delegate for CPU.
+ *
+ * Read literally, that line says "the tracker crashed". It does not:
+ * it says the CPU delegate was created, i.e. the tracker started fine.
+ * Classified by the console method alone, the line landed in the
+ * console's «errors» tab, in the IDB error slice (restored on the next
+ * boot) and in the unread-error counter — a false alarm on every start
+ * of the hand-gesture panel.
+ *
+ * So for native lines the severity comes from the message prefix and
+ * the source label becomes `mediapipe`: the noise stays attributable
+ * and stays OUT of the error slice. A real `ERROR:` line from the same
+ * runtime is still an error.
+ */
+const NATIVE_LEVEL_PATTERNS: ReadonlyArray<readonly [RegExp, LogLevel]> = [
+  [/^INFO:\s/, 'info'],
+  [/^WARNING:\s/, 'warn'],
+  [/^ERROR:\s/, 'error'],
+];
+
+/**
+ * The same runtime's internal glog format:
+ *
+ *   W1116 23:35:46.140999 2210688 gl_context.cc:1136] <message>
+ *
+ * The leading letter is the severity, the rest is the glog header
+ * (date, time, pid, file:line).
+ */
+const NATIVE_GLOG_PATTERNS: ReadonlyArray<readonly [RegExp, LogLevel]> = [
+  [/^I\d{4} \d{2}:\d{2}:\d{2}\.\d{6}\s/, 'info'],
+  [/^W\d{4} \d{2}:\d{2}:\d{2}\.\d{6}\s/, 'warn'],
+  [/^E\d{4} \d{2}:\d{2}:\d{2}\.\d{6}\s/, 'error'],
+];
+
+/**
+ * The severity a native logger put into the message text, or `null`
+ * when the line is not from a native logger.
+ */
+const detectNativeLevel = (first: string | null): LogLevel | null => {
+  if (first === null) return null;
+  for (const [pattern, level] of NATIVE_LEVEL_PATTERNS) {
+    if (pattern.test(first)) return level;
+  }
+  for (const [pattern, level] of NATIVE_GLOG_PATTERNS) {
+    if (pattern.test(first)) return level;
+  }
+  return null;
+};
+
+/**
+ * Which native console method carries a given severity. Used to
+ * re-emit a native line at the level it actually has, so the DevTools
+ * console agrees with the in-app console (a wasm INFO line must not
+ * look like an app error there either).
+ */
+const LEVEL_TO_CONSOLE_METHOD: Readonly<
+  Record<LogLevel, 'log' | 'info' | 'warn' | 'error'>
+> = {
+  debug: 'log',
+  info: 'info',
+  warn: 'warn',
+  error: 'error',
+  fatal: 'error',
+};
+
 const joinArgs = (args: readonly unknown[]): string =>
   args
     .map((a) => {
@@ -241,10 +332,16 @@ const push = (
 ): void => {
   const cleaned = cleanLogArgs(args);
   const first = typeof cleaned[0] === 'string' ? cleaned[0] : null;
-  const resolvedSource = source ?? detectSource(first);
+  // A native (wasm) logger puts INFO and WARNING lines on
+  // `console.error`, so the console method is NOT the severity for
+  // those lines — the message prefix is. See `detectNativeLevel`.
+  const nativeLevel = detectNativeLevel(first);
+  const effectiveLevel: LogLevel = nativeLevel ?? level;
+  const resolvedSource = source
+    ?? (nativeLevel !== null ? NATIVE_SOURCE : detectSource(first));
   const ts = Date.now();
 
-  if (isThrottleable(level)) {
+  if (isThrottleable(effectiveLevel)) {
     const history = throttleHistory.get(resolvedSource) ?? [];
     const decision = shouldEmit(history, resolvedSource, ts, THROTTLE_CONFIG);
     if (!decision.emit) {
@@ -266,7 +363,7 @@ const push = (
 
   const entry: LogEntry = {
     id: ++nextId,
-    level,
+    level: effectiveLevel,
     text: joinArgs(cleaned),
     args: cleaned.slice(),
     source: resolvedSource,
@@ -274,6 +371,18 @@ const push = (
   };
   pushEntry(entry);
 };
+
+/**
+ * The native console methods, captured at install() time — BEFORE the
+ * patch replaces them, so re-emitting a native line at its true level
+ * cannot recurse into the patch.
+ */
+type NativeConsole = Record<
+  'log' | 'info' | 'warn' | 'error',
+  (...args: unknown[]) => void
+>;
+
+let nativeConsole: NativeConsole | null = null;
 
 const installPatch = <K extends 'log' | 'info' | 'warn' | 'error'>(
   key: K,
@@ -285,7 +394,15 @@ const installPatch = <K extends 'log' | 'info' | 'warn' | 'error'>(
     ...args: unknown[]
   ): void {
     const cleaned = cleanLogArgs(args);
-    original.apply(this, cleaned);
+    const first = typeof cleaned[0] === 'string' ? cleaned[0] : null;
+    const nativeLevel = detectNativeLevel(first);
+    if (nativeLevel !== null && nativeConsole !== null) {
+      // Re-emit at the severity the message actually carries: a wasm
+      // INFO line must not look like an app error in DevTools either.
+      nativeConsole[LEVEL_TO_CONSOLE_METHOD[nativeLevel]].apply(console, cleaned);
+    } else {
+      original.apply(this, cleaned);
+    }
     push(level, cleaned);
   };
   console[key] = patched as typeof original;
@@ -295,6 +412,17 @@ export const logger = {
   install(): void {
     if (installed) return;
     installed = true;
+    // Capture the current console methods BEFORE patching them: the
+    // re-emit path needs to call the untouched originals, otherwise a
+    // native line re-routed to `console.info` would recurse into the
+    // patch. `console.log` may already be Strudel's wrapper at this
+    // point — capturing it keeps that chain intact.
+    nativeConsole = {
+      log: console.log.bind(console),
+      info: console.info.bind(console),
+      warn: console.warn.bind(console),
+      error: console.error.bind(console),
+    };
     installPatch('log', 'info');
     installPatch('info', 'info');
     installPatch('warn', 'warn');
