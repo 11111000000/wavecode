@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   TOOLS,
   TIER1_TOOLS,
+  TIER2_TOOLS,
   searchTools,
   getTool,
 } from './toolRegistry';
@@ -86,5 +87,21 @@ describe('toolRegistry', () => {
     setTab('step');
     expect(getKindSnap('step')).not.toBe('closed');
     setTab('score');
+  });
+
+  it('помечает «Ввод» как незакрепляемый и объясняет почему', () => {
+    // wavecode-pinned-tools: «Ввод» открывает круглая кнопка, которая
+    // на экране всегда. Закреплять его в рельсе незачем, а булавка без
+    // объяснения просто «не нажимается».
+    const input = getTool('input');
+    expect(input?.pinnable).toBe(false);
+    expect(input?.pinNote).toBeTruthy();
+  });
+
+  it('оставляет остальные инструменты второго уровня закрепляемыми', () => {
+    for (const tool of TIER2_TOOLS) {
+      if (tool.id === 'input') continue;
+      expect(tool.pinnable).not.toBe(false);
+    }
   });
 });
