@@ -414,12 +414,12 @@ export const PianoToolbar = (props: PianoToolbarProps): JSX.Element => {
           </span>
         </Show>
       </Show>
-      <label class="piano-instrument-selector" aria-label="Инструмент пианино">
-        <span class="piano-inst-glyph" aria-hidden="true">
+      <label class="instrument-selector" aria-label="Инструмент пианино">
+        <span class="inst-glyph" aria-hidden="true">
           {instrumentGlyph(instrument())}
         </span>
         <select
-          class="piano-inst-select"
+          class="inst-select"
           value={instrument()}
           onChange={(e) => { setInstrument(e.currentTarget.value as PianoInstrument); }}
         >

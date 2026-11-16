@@ -2,6 +2,7 @@ import { Show, Suspense, type JSX } from 'solid-js';
 import { BottomSheet } from '~/presentation/components/BottomSheet';
 import { MixerPanel } from '~/presentation/components/MixerPanel';
 import { StepGrid } from '~/presentation/components/StepGrid';
+import { MelodyGrid } from '~/presentation/components/MelodyGrid';
 import { PianoKeyboard } from '~/presentation/components/PianoKeyboard';
 import { HelloPanel } from '~/presentation/panels/HelloPanel';
 import { AIEditPanel } from '~/presentation/panels/AIEditPanel';
@@ -54,6 +55,18 @@ export function BottomSheets(_: BottomSheetsProps): JSX.Element {
       <BottomSheet kind="step" title="Шаги" subtitle="сетка 4×8">
         <div class="step-sheet-body">
           <StepGrid />
+        </div>
+      </BottomSheet>
+
+      {/* wavecode-sound-choice-and-rhythm-feedback: «Мелодия» — сетка
+          16×36 с тремя режимами (просмотр / набросок / правка). Компонент
+          был написан, покрыт стилями и тестами, но НИГДЕ не был
+          смонтирован: готовая возможность была недостижима. Теперь она
+          живёт в своём листе рядом с «Шагами» — ударная сетка и
+          мелодическая сетка решают разные задачи и не делят один лист. */}
+      <BottomSheet kind="melody" title="Мелодия" subtitle="сетка 16×36">
+        <div class="step-sheet-body">
+          <MelodyGrid />
         </div>
       </BottomSheet>
 

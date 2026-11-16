@@ -1,0 +1,345 @@
+---
+schema: math-coding/3.3
+id: wavecode-sound-choice-and-rhythm-feedback
+revision: 1
+state: active
+body_sha: "sha256:aa28bf6722bf1dede93dca299aa3c28bb603175b13eba7357580a16bbd26c710"
+yaml_sha: "sha256:aa28bf6722bf1dede93dca299aa3c28bb603175b13eba7357580a16bbd26c710"
+
+intent: |
+  Владелец (2026-11-16) после волны правок интерфейса сказал:
+
+    * «настучать Ритм у нас не получается ничего не происходит»;
+    * «когда мы свестим то мы не можем выбрать инструмент которым это
+      потом применится, хотя мы видим ноты но они применяются и играют
+      всегда фортепиано, непонятно как это пользоваться»;
+    * «сделай так чтобы всё-таки все возможности действительно можно
+      было использовать»;
+    * «в общем лучше качество интерфейсов у нашего проекта».
+
+  Четыре претензии, и все четыре — про одно и то же: возможности в
+  приложении либо не работают, либо работают, но до них нельзя
+  добраться, либо работают, но человек не видит результата. Разбор по
+  коду и на живом проде (production-бандл `index-CK43MCIz.js`)
+  подтвердил каждую:
+
+    * **Ритм не давал обратной связи.** `applyRhythmToScore` делал
+      `dispatch(replaceScore)` БЕЗ `evalScore` — паттерн попадал в
+      текст, но не звучал. Результат при этом оставался ЗА листом ввода
+      (лист занимает пол-экрана и закрывает редактор), а кнопка
+      «Отметить» была `disabled` до нажатия «Старт» — на тач-экране
+      это выглядит как «кнопка сломалась», потому что подсказка жила
+      только в `title`. Во время прохода метронома не было: шаг шёл
+      молча, отмечать было не по чему.
+    * **Инструмент слоя нельзя было выбрать.** Слой партитуры умеет
+      играть на чём угодно (`.s("triangle")`, `.s("sawtooth")`), но
+      интерфейс не показывал звук слоя и не давал его сменить. Микшер
+      показывал имя слоя и фейдер — и всё. Пиано-ролл писал
+      `note("c4")` без `.s(...)`, то есть дефолт Strudel — всегда
+      пианино. Человек видел ноты и слышал фортепиано, и не понимал,
+      как это пользоваться.
+    * **Часть возможностей была недостижима.** `MelodyGrid` (сетка
+      16×36, 31 CSS-правило, покрыта тестами) не был смонтирован НИГДЕ
+      — только в тесте. Лист `kind="gesture"` («Руки») открывался
+      только из вкладки «Свист» листа ввода и не был описан в
+      `toolRegistry`, то есть не находился ни в листе инструментов, ни
+      в палитре ⌘K.
+    * **Микшер схлопывался после записи.** `appendToTopStack` правил
+      ТОЛЬКО верхнеуровневый `stack(...)`, а каждый пресет — это
+      `cat(stack(…), stack(…), …)`. Поэтому запись оборачивала весь
+      пресет во внешний `stack(...)`, и микшер (который перечисляет
+      слои верхнеуровневых стеков) с 29 строк пресета `creep` падал до
+      двух. Шаг-сетка с четырьмя ударными рядами схлопывалась в ОДИН
+      слой: фейдер на нём двигал бы барабан, малый, хай-хэт и клэп
+      разом.
+
+  Это решение фиксирует четыре исправления: ритм с обратной связью,
+  выбор инструмента слоя, монтаж недостижимых возможностей и
+  сохранение адресуемости слоёв при записи.
+
+commitment: |
+  1. **Ритм слышен.** Во время прохода по сетке играет щелчок
+     метронома (`playRhythmClick`): акцент на начале доли (1600 Гц),
+     остальные шаги тише (1100 Гц), 60 мс. Отметка шага проигрывает
+     голос этого шага (`previewRhythmHit`) — бочка, малый барабан или
+     хай-хэт, — чтобы человек слышал, ЧТО он отметил.
+  2. **Результат ритма виден и звучит.** `applyRhythmToScore` после
+     `dispatch(replaceScore)` вызывает `evalScore`, и лист ввода
+     закрывается (`closeInputSheet`). Паттерн не остаётся за листом.
+  3. **Кнопка «Отметить» всегда живая.** Она больше не `disabled`:
+     нажатие вне прохода запускает проход, нажатие во время прохода
+     отмечает текущий шаг. Подсказка «как пользоваться» переехала из
+     `title` в видимую строку `.rhythm-capture__hint`, потому что на
+     тач-экране `title` не виден.
+  4. **Звук слоя виден.** У каждого слоя микшера показан его звук:
+     у мелодического слоя — селектор с текущим инструментом, у
+     ударного (`s("drums_bd …")`) — статичная подпись «Сэмпл»: там
+     `.s(…)` выбирает сам сэмпл, а не инструмент.
+  5. **Инструмент слоя меняется.** Выбор в микшере точечно переписывает
+     `.s("…")` ТОЛЬКО этого слоя (`injectLayerSound` → `replaceScore` →
+     `evalScore`). Остальные слои и остальной текст партитуры не
+     трогаются.
+  6. **Новые ноты пиано-ролла играют выбранным инструментом.**
+     `noteSnippet` пишет `note("c4").s("piano")`, а инструмент берётся
+     из общего сигнала `instrument` (`pianoRecStore`) — одна «концепция
+     инструмента» на всё приложение, а не своя в каждом экране.
+  7. **Один каталог инструментов.** `MELODIC_INSTRUMENTS` в
+     `domain/sounds.ts` — единственный источник правды; `SoundSelect`
+     не собирает свой список. Каталог содержит только реально
+     существующие звуки (12 мелодических, без шумов), а тест следит за
+     паритетом с `PIANO_INSTRUMENTS`.
+  8. **`.s(…)` ищется посимвольно.** Регулярка нашла бы `.s(` внутри
+     строкового литерала или комментария. Сканер `findSoundCall`
+     пропускает строки и оба вида комментариев; побеждает ПОСЛЕДНИЙ
+     вызов в цепочке — как и в Strudel.
+  9. **Перечисление слоёв — одно на всех.** `listLayerSpans` —
+     единственный источник границ слоёв; на нём работают микшер,
+     `injectMix` и правка звука. Разные перечисления разъезжаются:
+     микшер показывает 4 строки, а правка звука меняет слой 5.
+  10. **«Мелодия» смонтирована.** `MelodyGrid` живёт в листе
+      `kind="melody"` и открывается карточкой «Мелодия» в листе
+      инструментов и из палитры ⌘K.
+  11. **«Руки» достижимы.** Лист `kind="gesture"` открывается
+      карточкой «Руки» в листе инструментов — раньше он был спрятан в
+      глубине вкладки «Свист».
+  12. **Тихие no-op стали тостами.** Пустой буфер записи и слот
+      «в курсор» без доступа к редактору объясняют, что делать, вместо
+      того чтобы выглядеть сломанной кнопкой.
+  13. **Слои не схлопываются.** Запись в пресет (`cat(...)`) добавляет
+      НОВУЮ СЕКЦИЮ, а не оборачивает пресет во внешний `stack(...)`.
+      Шаг-сетка добавляет четыре ряда как ЧЕТЫРЕ отдельных слоя
+      (`appendLayersToScore`), чтобы фейдер на бочке двигал только
+      бочку.
+  14. **Первая секция микшера раскрыта сразу.** Пока все секции были
+      свёрнуты, человек открывал микшер и не видел ни одного слоя — а
+      значит, и выбрать инструмент не мог.
+
+axiom_link:
+  - A0
+  - A1
+scope:
+  paths:
+    - ui/src/domain/layers
+    - ui/src/domain/music/gridTypes.ts
+    - ui/src/domain/sounds.ts
+    - ui/src/domain/strudel/splice.ts
+    - ui/src/application/useCases/injectLayerSound.ts
+    - ui/src/application/useCases/injectMix.ts
+    - ui/src/presentation/components/MixerPanel.tsx
+    - ui/src/presentation/components/Pianoroll.tsx
+    - ui/src/presentation/components/PianoToolbar.tsx
+    - ui/src/presentation/components/RhythmCapture.tsx
+    - ui/src/presentation/components/SoundSelect.tsx
+    - ui/src/presentation/components/app/BottomSheets.tsx
+    - ui/src/presentation/state/audioActions.ts
+    - ui/src/presentation/state/gridState.ts
+    - ui/src/presentation/state/micStore.ts
+    - ui/src/presentation/state/pianoRecStore.ts
+    - ui/src/presentation/state/rhythmStore.ts
+    - ui/src/presentation/state/toolRegistry.ts
+    - ui/src/presentation/state/uiState.ts
+    - ui/src/presentation/icons/index.tsx
+    - ui/src/styles/components.css
+    - ui/tests/e2e
+    - decisions/wavecode-sound-choice-and-rhythm-feedback.yaml
+    - README.md
+  capabilities:
+    - ui-feedback-loop
+    - ui-instrument-choice
+    - ui-capability-reachability
+    - ui-layer-addressability
+  exclusions:
+    - ui/src/infrastructure
+    - bin
+    - .github
+    - .gitverse
+outcomes:
+  - id: wavecode-sound-choice-rhythm-feedback-outcome
+    statement: |
+      Настучать ритм и услышать результат можно с первого раза: во
+      время прохода идут щелчки метронома, отметка проигрывает голос
+      шага, кнопка «Отметить» всегда живая, а после «Применить к
+      партитуре» паттерн звучит и партитура сразу на экране — лист
+      ввода закрывается.
+  - id: wavecode-sound-choice-rhythm-instrument-outcome
+    statement: |
+      Инструмент слоя виден и меняется. В микшере у мелодического слоя
+      стоит селектор с текущим инструментом; выбор переписывает
+      `.s("…")` только этого слоя в партитуре. Новые ноты пиано-ролла
+      записываются с выбранным инструментом, а не всегда фортепиано.
+      Ударные слои честно показывают «Сэмпл» — там инструмента нет.
+  - id: wavecode-sound-choice-rhythm-reachability-outcome
+    statement: |
+      Каждая возможность приложения достижима из интерфейса: сетка
+      «Мелодия» (16×36) и лист «Руки» открываются карточками в листе
+      инструментов и находятся палитрой ⌘K. Возможность, написанная и
+      забытая, больше не остаётся в коде.
+  - id: wavecode-sound-choice-rhythm-layers-outcome
+    statement: |
+      Запись не разрушает аранжировку: после записи ритма или сетки в
+      микшере видны все слои пресета плюс новые, а каждый ряд ударных
+      остаётся отдельным слоем.
+obligations:
+  - id: wavecode-sound-choice-rhythm-domain-unit
+    claim: |
+      The domain layer can read and rewrite the instrument of a layer:
+      the `.s(…)` scanner ignores strings and comments, the last call
+      wins, a rewrite touches only the target layer, and the layer
+      enumeration is shared between the mixer and the rewrite.
+    acceptance:
+      all:
+        - verifier: "cd ui && npx vitest run src/domain/layers/layerSound.test.ts src/application/useCases/injectLayerSound.test.ts"
+          result: pass
+  - id: wavecode-sound-choice-rhythm-splice-unit
+    claim: |
+      Appending to a score keeps every layer addressable: a `cat(...)`
+      preset receives a new section instead of an outer wrap, and the
+      step grid contributes four separate layers.
+    acceptance:
+      all:
+        - verifier: "cd ui && npx vitest run src/domain/strudel/splice.test.ts src/presentation/state/gridState.test.ts"
+          result: pass
+  - id: wavecode-sound-choice-rhythm-mixer-unit
+    claim: |
+      The mixer shows the instrument of a melodic layer, changes it in
+      the score, and leaves the other layers untouched; a drum layer
+      shows «Сэмпл» instead of a selector.
+    acceptance:
+      all:
+        - verifier: "cd ui && npx vitest run src/presentation/components/MixerPanel.test.tsx"
+          result: pass
+  - id: wavecode-sound-choice-rhythm-quality-gate
+    claim: |
+      The repository quality gate is green: typecheck, unit tests,
+      console lint and preset validation.
+    acceptance:
+      all:
+        - verifier: "cd ui && npm run test:precommit"
+          result: pass
+  - id: wavecode-sound-choice-rhythm-zen-guard
+    claim: |
+      The zen guard reports no regression against the recorded
+      baseline: the stylesheet does not grow, no new surface class is
+      introduced, and the focus-visible count does not shrink.
+    acceptance:
+      all:
+        - verifier: "node scripts/check-zen-ui.mjs --targets"
+          result: pass
+  - id: wavecode-sound-choice-rhythm-e2e
+    claim: |
+      The e2e suite pins the promises: the rhythm button is alive, the
+      applied pattern lands in the score and closes the sheet, a layer
+      instrument can be changed from the mixer, the melody grid and the
+      gesture panel are reachable, and the mixer keeps every layer
+      after a grid commit.
+    acceptance:
+      all:
+        - verifier: "cd ui && npx playwright test tests/e2e/sound-and-rhythm.spec.ts tests/e2e/step-append.spec.ts tests/e2e/tool-reachability.spec.ts"
+          result: pass
+  - id: wavecode-sound-choice-rhythm-kernel-validates
+    claim: |
+      The decision file is structurally valid under the math-coding 3.3
+      schema.
+    acceptance:
+      all:
+        - verifier: "mathc validate"
+          result: pass
+negative_control: |
+  The checks have teeth in every direction the change could go wrong. If
+  the rhythm pattern stopped being evaluated, the e2e check that the
+  sheet closes and the pattern appears in the editor would still pass —
+  so the promise about sound is checked by the unit tests of the store
+  and by the `evalScore` call being present in the commit that applies
+  the pattern. If the mixer selector were rendered but disconnected,
+  the MixerPanel unit test asserting that the score now contains
+  `.s("sawtooth")` and no longer `.s("triangle")` fails. If the
+  instrument change leaked to a neighbouring layer, the same test fails
+  on the `s("drums_bd ~")` assertion. If `appendToTopStack` regressed to
+  the outer wrap, the grid test asserting `data-count="33"` and
+  `data-sections="9"` for `creep` fails, as does the splice test that
+  expects a `cat(…)` result. If the melody grid stopped being mounted,
+  the e2e check for 576 `.melody-cell` elements fails. If a tool
+  disappeared from the tools sheet, the exact-array assertion on the
+  card labels in `ToolsSheet.test.tsx` fails.
+counterexample: |
+  The strongest objection is that the mixer grows a control per layer
+  and the instrument list is duplicated into two places (the mixer and
+  the piano toolbar), so the interface becomes busier and the two
+  selectors could drift apart. The objection is accepted as a real cost
+  and bounded by three rules: both selectors read the SAME catalogue
+  (`MELODIC_INSTRUMENTS`), so they cannot drift; the mixer selector
+  appears only for melodic layers, so drum layers stay clean; and both
+  are native `<select>` elements, which are one row tall on a phone and
+  open the system picker. The alternative — a single global instrument
+  switch, as if the whole piece were played by one instrument — was
+  rejected because it cannot express what a mixer is for: different
+  layers of one piece playing different instruments. The compromise
+  actually shipped is stronger than a global switch: the piano toolbar
+  keeps ONE app-wide instrument for new notes, while the mixer changes
+  the instrument of any layer individually.
+antithesis: |
+  The coherent alternative was to leave the layer sound implicit and
+  fix only the visible symptoms: add a tooltip to the rhythm button,
+  close the input sheet after applying, and document in the README
+  that `.s("triangle")` must be written by hand. It was rejected
+  because it leaves the second complaint untouched — the owner asked
+  to CHOOSE the instrument, and a hidden `.s(...)` in the text is not a
+  choice. A second alternative was rejected as well: rewriting the
+  score from the AI assistant ("play this with sawtooth") — it makes
+  the sound reachable only for people who write prompts, and it changes
+  the whole arrangement instead of one layer. The layer-scoped selector
+  is the smallest thing that actually answers the request.
+assumptions:
+  - id: wavecode-sound-choice-rhythm-assumption-sound-catalogue
+    state: assumed
+    statement: |
+      The twelve melodic sounds in `MELODIC_INSTRUMENTS` are the ones the
+      project considers its instruments: they exist in Strudel, they
+      cover the tonal range a browser can render, and drums are
+      deliberately a separate class of sounds.
+    owner: human:operator
+    consequence_if_false: |
+      If a sound in the catalogue turns out to be silent or unpleasant
+      in the browser, it is removed from `MELODIC_INSTRUMENTS`; the
+      picker, the mixer and the piano toolbar follow the catalogue
+      automatically, so nothing else needs changing.
+  - id: wavecode-sound-choice-rhythm-assumption-layer-model
+    state: assumed
+    statement: |
+      A score is a set of layers that can be addressed one by one, and
+      the mixer is the list of those layers. This is why a recording is
+      a new section rather than a wrapper: wrapping hides the layers
+      from the mixer.
+    owner: human:operator
+    consequence_if_false: |
+      If the score model ever moves to something without explicit
+      layers, `listLayerSpans` becomes the place where that model is
+      read, and the mixer, the mix injection and the sound rewrite
+      change together — they share one enumeration by design.
+risk:
+  declared_triggers:
+    - instrument-not-applied
+    - mixer-collapses-after-record
+    - rhythm-silent-after-apply
+    - capability-unreachable-again
+  owner: human:operator
+reversal:
+  - signal: |
+      Users report that the mixer shows a layer with an instrument that
+      does not sound like the instrument they picked.
+    action: rework
+  - signal: |
+      The mixer again shows fewer layers than the arrangement contains
+      after a recording.
+    action: rework
+  - signal: |
+      A capability is again only reachable from a hidden place and is
+      not in the tool registry.
+    action: review
+relations:
+  implements:
+    - wavecode-pinned-tools@1
+    - wavecode-unified-input-entry@1
+  refines:
+    - wavecode-mixer-live-update@1
+    - wavecode-zen-minimal-ui@2

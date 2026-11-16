@@ -24,7 +24,7 @@ import type { Transient, OnsetType } from '~/domain/audio/transient';
  * text without needing actual mouse-over DOM events. CSS-styled tooltips
  * are bonus if the parent enables `.mic-ux-roll-tooltip` siblings.
  *
- * Empty state: thin grey bar with "no notes yet" centred.
+ * Empty state: thin grey bar with "нот пока нет" centred.
  */
 
 const TIME_WINDOW_MS = 3000;
@@ -185,7 +185,7 @@ export function PianoRollPreview(props: PianoRollPreviewProps): JSX.Element {
     >
       <Show when={isEmpty()}>
         <div class="mic-ux-piano-roll-empty" aria-hidden="true">
-          no notes yet
+          нот пока нет
         </div>
       </Show>
 

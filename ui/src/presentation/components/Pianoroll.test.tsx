@@ -4,6 +4,8 @@ import {
   Pianoroll,
   applyNoteEdit,
   noteSnippet,
+  findNoteLayer,
+  noteChainSuffix,
   _internal,
 } from './Pianoroll';
 import { defaultMidiBounds, extractNoteEvents } from '~/domain/music/noteEvents';
@@ -404,5 +406,31 @@ describe('applyNoteEdit + noteSnippet — pure score-mutation helpers', () => {
   it('noteSnippet returns a single-note Strudel snippet', () => {
     expect(noteSnippet(60, 0, 1)).toBe('note("c4")');
     expect(noteSnippet(49, 0, 1)).toBe('note("c#3")');
+  });
+
+  it('noteSnippet writes the chosen instrument into the layer (.s)', () => {
+    // Без .s(...) Strudel играет дефолтным пианино — это была жалоба
+    // «ноты применяются и играют всегда фортепиано».
+    expect(noteSnippet(60, 0, 1, 'triangle')).toBe('note("c4").s("triangle")');
+    expect(noteSnippet(49, 0, 1, 'sine')).toBe('note("c#3").s("sine")');
+  });
+
+  it('noteSnippet without a sound stays a bare note', () => {
+    expect(noteSnippet(60, 0, 1, '')).toBe('note("c4")');
+    expect(noteSnippet(60, 0, 1, undefined)).toBe('note("c4")');
+  });
+
+  it('findNoteLayer finds the layer by note name even with a chain tail', () => {
+    const score = 'stack(note("c4").s("piano").gain(0.5), note("e4"))';
+    expect(findNoteLayer(score, 'c4')).toBe('note("c4").s("piano").gain(0.5)');
+    expect(findNoteLayer(score, 'e4')).toBe('note("e4")');
+    expect(findNoteLayer(score, 'g4')).toBeNull();
+  });
+
+  it('noteChainSuffix keeps .s(...) and .gain(...) when a note moves', () => {
+    // Перенос ноты не должен терять инструмент и громкость слоя.
+    expect(noteChainSuffix('note("c4").s("piano").gain(0.5)', 'c4')).toBe('.s("piano").gain(0.5)');
+    expect(noteChainSuffix('note("c4")', 'c4')).toBe('');
+    expect(noteChainSuffix('note("e4")', 'c4')).toBe('');
   });
 });

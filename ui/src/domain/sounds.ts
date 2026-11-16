@@ -161,6 +161,24 @@ export const MELODIC_SOUNDS: ReadonlyArray<SoundDef> = [
   ...SAMPLE_SOUNDS,
 ];
 
+/**
+ * Инструменты для выбора в интерфейсе: мелодические звуки БЕЗ шумов.
+ *
+ * Зачем отдельный список: `MELODIC_SOUNDS` включает три шумовых
+ * источника (`brown`, `white`, `pink`). Как «инструмент» они имеют
+ * смысл (слой шума — законный музыкальный слой), но в списке
+ * «выберите, на чём играть» они сбивают с толку: рядом с
+ * «Синт-падом» появляется «Шум (белый)», и человек не понимает,
+ * что это за инструмент.
+ *
+ * Список совпадает с `PIANO_INSTRUMENTS` из `domain/music/notes.ts`
+ * — это проверяется тестом `sounds.test.ts`, чтобы два списка
+ * инструментов в приложении не разъехались.
+ */
+export const MELODIC_INSTRUMENTS: ReadonlyArray<SoundDef> = MELODIC_SOUNDS.filter(
+  (s) => s.id !== 'brown' && s.id !== 'white' && s.id !== 'pink',
+);
+
 /** Every sound the app knows about. */
 export const ALL_SOUNDS: ReadonlyArray<SoundDef> = [
   ...MELODIC_SOUNDS,

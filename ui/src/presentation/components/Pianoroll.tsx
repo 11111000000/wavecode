@@ -21,6 +21,10 @@ import {
 } from '~/domain/music/rollModel';
 import type { NoteEvent } from '~/domain/midi/encoder';
 import { evalScore } from '../state/audioActions';
+import { listLayerSpans } from '~/domain/layers/layerSpans';
+import type { PianoInstrument } from '~/domain/music/notes';
+import { instrument, setInstrument } from '../state/pianoRecStore';
+import { SoundSelect } from './SoundSelect';
 
 /**
  * <Pianoroll /> — DAW-style score visualiser + editor.
@@ -289,8 +293,18 @@ export const applyNoteEdit = (
  * at a given cycle position. For now we emit a single-note mini — full
  * chord / sequence support is in scope but the MVP uses single-note
  * patterns (matches what pianoroll users expect when clicking).
+ *
+ * `sound` — инструмент слоя. Если он передан, нота пишется как
+ * `note("c4").s("piano")`: без `.s(...)` Strudel играет дефолтным
+ * инструментом (всегда пианино), и выбрать другой было негде — это
+ * и была жалоба «ноты играют всегда фортепиано».
  */
-export const noteSnippet = (midi: number, startCycle: number, endCycle: number): string => {
+export const noteSnippet = (
+  midi: number,
+  startCycle: number,
+  endCycle: number,
+  sound?: string,
+): string => {
   const lc = (() => {
     const pc = ((midi % 12) + 12) % 12;
     const oct = Math.floor(midi / 12) - 1;
@@ -299,8 +313,46 @@ export const noteSnippet = (midi: number, startCycle: number, endCycle: number):
   })();
   void startCycle;
   void endCycle;
-  return `note("${lc}")`;
+  const note = `note("${lc}")`;
+  return sound === undefined || sound === '' ? note : `${note}.s("${sound}")`;
 };
+
+/**
+ * Найти слой партитуры, в котором живёт нота с таким именем.
+ *
+ * Почему не поиск по строке `note("c4")`: в слое
+ * `note("c4").s("piano").gain(0.5)` такой текст есть, но он — лишь
+ * начало слоя. Раньше удаление и перенос ноты искали ровно эту
+ * строку и либо не находили ничего, либо вырезали кусок слоя,
+ * оставляя после себя `.s("piano").gain(0.5)` — невалидный код.
+ * Теперь слой находится по ИМЕНИ ноты и берётся целиком.
+ */
+export const findNoteLayer = (score: string, noteName: string): string | null => {
+  const want = `note("${noteName}")`;
+  for (const span of listLayerSpans(score)) {
+    const trimmed = span.source.trim();
+    if (trimmed === want) return trimmed;
+    if (trimmed.startsWith(`${want}.`) || trimmed.startsWith(`${want} `)) {
+      return trimmed;
+    }
+  }
+  return null;
+};
+
+/**
+ * Хвост цепочки слоя после вызова `note(...)`.
+ *
+ * Нужен при переносе ноты: слой `note("c4").s("piano").gain(0.5)`
+ * должен остаться таким же, но с другой высотой. Без этого хвоста
+ * перенос терял бы инструмент и громкость слоя.
+ */
+export const noteChainSuffix = (layerSource: string, noteName: string): string => {
+  const want = `note("${noteName}")`;
+  const idx = layerSource.indexOf(want);
+  if (idx === -1) return '';
+  return layerSource.slice(idx + want.length);
+};
+
 
 /**
  * The `Pianoroll` component.
@@ -735,10 +787,16 @@ export function Pianoroll(props: PianorollProps): JSX.Element {
     const hit = findNoteAt(cx, cy);
     if (hit !== null && e.shiftKey) {
       e.preventDefault();
-      const snippet = `note("${midiName(hit.event.midi).toLowerCase()}")`;
+      // Удаляем ВЕСЬ слой, в котором живёт нота: поиск идёт по имени
+      // ноты, а совпадение — целиком (`note("c4").s("piano")`).
+      const noteName = midiName(hit.event.midi).toLowerCase();
+      const layer = findNoteLayer(props.score, noteName);
+      // Слой не нашёлся — удалять нечего. Молчание здесь означало бы
+      // «Shift+клик ничего не делает», а человек решит, что сломалось.
+      if (layer === null) return;
       const newScore = applyNoteEdit(props.score, {
         kind: 'delete',
-        matchSource: snippet,
+        matchSource: layer,
       });
       props.onChange(newScore);
       const cb = props.onEval;
@@ -750,7 +808,7 @@ export function Pianoroll(props: PianorollProps): JSX.Element {
       // Click on empty area → add a note at the cursor coords.
       const cycle = clientToCycle(cx);
       const midi = clientToMidi(cy);
-      const snippet = `note("${midiName(midi).toLowerCase()}")`;
+      const snippet = noteSnippet(midi, cycle, cycle, instrument());
       const newScore = applyNoteEdit(props.score, { kind: 'add', snippet });
       props.onChange(newScore);
       const cb = props.onEval;
@@ -835,11 +893,20 @@ export function Pianoroll(props: PianorollProps): JSX.Element {
         && newMidi <= 127
         && newMidi !== origMidi
       ) {
-        const snippet = `note("${midiName(newMidi).toLowerCase()}")`;
-        const oldSnippet = `note("${midiName(origMidi).toLowerCase()}")`;
+        const origName = midiName(origMidi).toLowerCase();
+        const newName = midiName(newMidi).toLowerCase();
+        // Переносим ВЕСЬ слой: хвост цепочки (`.s("…")`, `.gain(…)`)
+        // сохраняется, меняется только высота ноты.
+        const layer = findNoteLayer(props.score, origName);
+        if (layer === null) {
+          drag = { kind: 'none' };
+          return;
+        }
+        const suffix = noteChainSuffix(layer, origName);
+        const snippet = `note("${newName}")${suffix}`;
         const newScore = applyNoteEdit(props.score, {
           kind: 'move',
-          matchSource: oldSnippet,
+          matchSource: layer,
           snippet,
         });
         props.onChange(newScore);
@@ -898,6 +965,11 @@ export function Pianoroll(props: PianorollProps): JSX.Element {
           −
         </button>
         <span class="pianoroll-zoom-value">{zoom().toFixed(2)}×</span>
+        <SoundSelect
+          value={instrument()}
+          onChange={(id) => { setInstrument(id as PianoInstrument); }}
+          label="Инструмент новых нот"
+        />
         <button
           type="button"
           class="pianoroll-zoom-btn"

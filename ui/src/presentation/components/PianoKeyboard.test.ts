@@ -842,7 +842,7 @@ describe('PianoKeyboard component (no MIDI status on iOS Safari)', () => {
   it('still renders the rec button and instrument selector', () => {
     expect(container.querySelector('.piano-rec-btn')).toBeTruthy();
     // The instrument picker is a <select> over the sound catalogue.
-    const select = container.querySelector('.piano-inst-select');
+    const select = container.querySelector('.inst-select');
     expect(select).toBeTruthy();
     expect(select?.querySelectorAll('option').length).toBeGreaterThan(0);
   });

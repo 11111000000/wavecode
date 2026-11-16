@@ -38,7 +38,16 @@ import { TOOLS_OPENER } from './support/toolsSheet';
 const RAIL_ITEMS = ['Нотная', 'Шаги', 'ИИ'];
 
 /** Инструменты второго уровня — те, что живут в листе. */
-const SHEET_ITEMS = ['Ввод', 'Пианино', 'Микшер', 'Визуализация', 'Экспорт', 'Консоль'];
+const SHEET_ITEMS = [
+  'Ввод',
+  'Пианино',
+  'Микшер',
+  'Мелодия',
+  'Руки',
+  'Визуализация',
+  'Экспорт',
+  'Консоль',
+];
 
 test.describe('zen navigation', () => {
   test.use({ viewport: { width: 1280, height: 900 } });

@@ -15,7 +15,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { appendToTopStack, replaceLayerSources } from './splice';
+import { appendToTopStack, appendLayersToScore, replaceLayerSources } from './splice';
 
 const SNIPPET = 'note("c4").s("triangle")';
 
@@ -62,6 +62,103 @@ describe('appendToTopStack — wrap (no top-level stack)', () => {
       expect(out.score).toContain('foo(1)');
       expect(out.score).toContain('stack(s("a"))');
     }
+  });
+});
+
+/**
+ * Многосекционный пресет (`cat(stack(…), stack(…), …)`) — самая частая
+ * форма партитуры в приложении. Запись (ритм, микрофон, пианино)
+ * должна стать НОВОЙ СЕКЦИЕЙ, а не обернуть весь пресет во внешний
+ * `stack(...)`: обёртка схлопывала микшер с 29 строк до двух.
+ */
+describe('appendToTopStack — многосекционный пресет', () => {
+  const preset = [
+    'cat(',
+    '  stack(note("c4"), note("g4")),',
+    '  stack(note("e4"))',
+    ')',
+  ].join('\n');
+
+  it('добавляет запись как новую секцию, а не оборачивает пресет', () => {
+    const out = appendToTopStack(preset, SNIPPET);
+    expect(out.ok).toBe(true);
+    if (out.ok) {
+      expect(out.score).toMatch(/^cat\(/);
+      expect(out.score).toContain('stack(note("c4"), note("g4"))');
+      expect(out.score).toContain('stack(note("e4"))');
+      expect(out.score).toContain('note("c4").s("triangle")');
+    }
+  });
+
+  it('микшер видит все слои пресета плюс новую секцию', async () => {
+    const { listLayerSpans } = await import('~/domain/layers/layerSpans');
+    const out = appendToTopStack(preset, SNIPPET);
+    expect(out.ok).toBe(true);
+    if (!out.ok) return;
+    const layers = listLayerSpans(out.score);
+    // 2 слоя первой секции + 1 слой второй + 1 слой новой секции.
+    expect(layers.length).toBe(4);
+    expect(layers[3]?.source).toContain('note("c4").s("triangle")');
+  });
+});
+
+/**
+ * `appendLayersToScore` — добавление НЕСКОЛЬКИХ независимых слоёв.
+ *
+ * Зачем: шаг-сетка коммитит четыре ударных ряда. Если завернуть их
+ * в один `stack(...)`, микшер покажет одну строку вместо четырёх и
+ * фейдер на ней двигал бы барабан, малый, хай-хэт и клэп разом.
+ */
+describe('appendLayersToScore — несколько слоёв', () => {
+  const ROWS = ['s("bd ~ ~ ~ ~ ~ ~ ~")', 's("~ sd ~ ~ ~ ~ ~ ~")', 's("~ ~ hh ~ ~ ~ ~ ~")', 's("~ ~ ~ ~ ~ ~ ~ ~")'];
+
+  it('пустой редактор → stack из четырёх слоёв', () => {
+    const out = appendLayersToScore('', ROWS);
+    expect(out.ok).toBe(true);
+    if (!out.ok) return;
+    expect(out.score).toMatch(/^stack\(/);
+    for (const row of ROWS) expect(out.score).toContain(row);
+    expect((out.score.match(/\bs\("/g) ?? []).length).toBe(4);
+  });
+
+  it('верхнеуровневый stack → слои добавляются внутрь него', () => {
+    const existing = 'stack(\n  note("c4")\n)';
+    const out = appendLayersToScore(existing, ROWS);
+    expect(out.ok).toBe(true);
+    if (!out.ok) return;
+    expect((out.score.match(/\bstack\s*\(/g) ?? []).length).toBe(1);
+    for (const row of ROWS) expect(out.score).toContain(row);
+  });
+
+  it('пресет cat(...) → новая секция, все слои пресета на месте', async () => {
+    const preset = [
+      'cat(',
+      '  stack(note("c4"), note("g4")),',
+      '  stack(note("e4"))',
+      ')',
+    ].join('\n');
+    const out = appendLayersToScore(preset, ROWS);
+    expect(out.ok).toBe(true);
+    if (!out.ok) return;
+    expect(out.score).toMatch(/^cat\(/);
+    const { listLayerSpans } = await import('~/domain/layers/layerSpans');
+    const layers = listLayerSpans(out.score);
+    // 2 + 1 слоя пресета и 4 новых ряда сетки.
+    expect(layers.length).toBe(7);
+    expect(layers[3]?.source).toContain('s("bd ~ ~ ~ ~ ~ ~ ~")');
+  });
+
+  it('пустой список слоёв → партитура не меняется', () => {
+    const out = appendLayersToScore('note("c4")', []);
+    expect(out).toEqual({ ok: true, score: 'note("c4")' });
+  });
+
+  it('пустые и пробельные источники отбрасываются', () => {
+    const out = appendLayersToScore('', ['', '   ', 's("bd")']);
+    expect(out.ok).toBe(true);
+    if (!out.ok) return;
+    expect(out.score).toContain('s("bd")');
+    expect((out.score.match(/\bs\("/g) ?? []).length).toBe(1);
   });
 });
 

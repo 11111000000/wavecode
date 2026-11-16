@@ -12,8 +12,8 @@ import { APP_URL } from './support/appUrl';
  *   - .piano-toolbar-row                           inner row (RecBtn + Instr + MIDI pill)
  *   - .piano-hint                                 "2 октавы (C3–B4) …" hint
  *   - .piano-rec-btn                              REC toggle (data-active + aria-pressed)
- *   - .piano-inst-btn                             4 instrument buttons (triangle/sine/sawtooth/square)
- *   - .piano-instrument-selector                  group wrapper around the 4 buttons
+ *   - .instrument-selector                       group wrapper around the instrument <select>
+ *   - .inst-select                               the instrument <select> itself
  *   - .piano-midi-status                          MIDI status pill (hidden when MIDI unavailable)
  *   - .piano-midi-source                          source-attribution chip (child of pill, only when set)
  *   - .piano-keys > .piano-keys-inner             key row
@@ -206,13 +206,13 @@ test('instrument selector offers the whole melodic-sound catalogue', async ({ pa
   await bootApp(page);
   await openPiano(page);
 
-  const selector = page.locator('.piano-instrument-selector');
+  const selector = page.locator('.instrument-selector');
   await expect(selector).toBeVisible();
 
   // The picker used to be four oscillator buttons. It is now a
   // <select> over the full melodic-sound catalogue (piano, synth_*,
   // triangle, sawtooth, square, sine, supersaw, sbd, …).
-  const select = selector.locator('select.piano-inst-select');
+  const select = selector.locator('select.inst-select');
   await expect(select).toBeVisible();
 
   const values = await select

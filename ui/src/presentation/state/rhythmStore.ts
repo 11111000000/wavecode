@@ -26,6 +26,7 @@ import { createSignal } from 'solid-js';
 import { appendToTopStack } from '~/domain/strudel';
 import { appStore, dispatch } from './appStore';
 import { consoleStore } from '~/presentation/components/consoleStore';
+import { playRhythmClick, previewRhythmHit } from './audioActions';
 
 /** Шагов в такте: 16 шестнадцатых = 4 доли. */
 export const RHYTHM_STEPS = 16;
@@ -65,6 +66,21 @@ const STEP_VOICE: readonly string[] = Array.from(
     return 'drums_hh';
   },
 );
+
+/**
+ * Голос ПРЕВЬЮ каждого шага — то, что слышно при отметке.
+ *
+ * Выведено из `STEP_VOICE`, а не заведено отдельно: если правило
+ * «какая доля какой барабан» изменится, превью изменится вместе с
+ * партитурой, а не разъедется с ней.
+ */
+const STEP_PREVIEW: readonly ('bd' | 'sd' | 'hh')[] = STEP_VOICE.map((voice) =>
+  voice === 'drums_bd' ? 'bd' : voice === 'drums_sd' ? 'sd' : 'hh',
+);
+
+/** Голос шага — для превью и для подписи в интерфейсе. */
+export const rhythmStepVoice = (index: number): 'bd' | 'sd' | 'hh' =>
+  STEP_PREVIEW[index] ?? 'hh';
 
 /* ── состояние ──────────────────────────────────────────────────────── */
 
@@ -168,12 +184,21 @@ const clearCountInTimer = (): void => {
  *
  * Это тот же «указатель», что в микрофонной ветке: удары клали на
  * сетку transport'а — здесь сетка едет сама, а палец отмечает шаги.
+ *
+ * Каждый шаг СЛЫШЕН: щелчок метронома даёт пульс, по которому
+ * попадают пальцем. Без щелчка сетка едет молча, и отметить шаг
+ * «на слух» невозможно — отсюда и было «настучать Ритм — ничего не
+ * происходит».
  */
 const restartStepTimer = (): void => {
   clearStepTimer();
   if (!rhythmRunning() || !hasWindow) return;
   stepTimer = window.setInterval(() => {
-    setRhythmPlayStep((s) => (s + 1) % RHYTHM_STEPS);
+    const next = (rhythmPlayStep() + 1) % RHYTHM_STEPS;
+    setRhythmPlayStep(next);
+    // Акцент на начале доли (шаги 0, 4, 8, 12 — каждая четвёртая
+    // шестнадцатая), обычный щелчок — на остальных.
+    playRhythmClick(next % RHYTHM_COLUMNS === 0);
   }, rhythmStepMs());
 };
 
@@ -192,15 +217,22 @@ export const startRhythmTake = (): void => {
   setRhythmRunning(true);
   setRhythmCountIn(COUNT_IN_BEATS);
   if (!hasWindow) return;
+  // Щелчок отсчёта: слышно, что проход начался. Без него кнопка
+  // «Старт» выглядит как «ничего не произошло» — сетка стоит, звука
+  // нет, а первый шаг наступит через целую долю.
+  playRhythmClick(true);
   let left = COUNT_IN_BEATS;
   countInTimer = window.setInterval(() => {
     left -= 1;
     if (left > 0) {
       setRhythmCountIn(left);
+      playRhythmClick(false);
       return;
     }
     clearCountInTimer();
     setRhythmCountIn(0);
+    // Сильная доля — проход пошёл.
+    playRhythmClick(true);
     restartStepTimer();
   }, rhythmBeatMs());
 };
@@ -227,7 +259,13 @@ export const tapRhythmStep = (): void => {
   }
   // Во время отсчёта take ещё не начался — тап пока некуда падать.
   if (rhythmCountIn() > 0) return;
-  setRhythmStepAt(rhythmPlayStep(), true);
+  const step = rhythmPlayStep();
+  setRhythmStepAt(step, true);
+  // Отмеченный шаг СЛЫШЕН: проигрывается тот же голос, который уйдёт
+  // в партитуру (бочка на сильных долях, малый на второй и четвёртой,
+  // хай-хэт на остальных). Иначе отметка — это молчаливая заливка
+  // клетки цветом, и человек не понимает, попал он в шаг или нет.
+  previewRhythmHit(rhythmStepVoice(step));
 };
 
 /** Очистить take: сетка пуста, часы остановлены. */

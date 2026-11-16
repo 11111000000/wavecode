@@ -41,7 +41,7 @@ afterEach(() => {
 describe('PianoToolbar — instrument selector (the sound catalogue)', () => {
   it('renders a <select> with ONLY sounds that really exist', () => {
     const { container } = render(() => <PianoToolbar />);
-    const select = container.querySelector<HTMLSelectElement>('.piano-inst-select');
+    const select = container.querySelector<HTMLSelectElement>('.inst-select');
     expect(select).not.toBeNull();
     const values = Array.from(select?.querySelectorAll('option') ?? [])
       .map((o) => o.getAttribute('value'));
@@ -62,7 +62,7 @@ describe('PianoToolbar — instrument selector (the sound catalogue)', () => {
     // moved it; the point here is the DEFAULT and the wiring.
     rec.setInstrument(DEFAULT_MELODIC_SOUND);
     const { container } = render(() => <PianoToolbar />);
-    const select = container.querySelector<HTMLSelectElement>('.piano-inst-select');
+    const select = container.querySelector<HTMLSelectElement>('.inst-select');
     expect(select?.value).toBe(DEFAULT_MELODIC_SOUND);
     expect(DEFAULT_MELODIC_SOUND).toBe('piano');
   });
@@ -70,7 +70,7 @@ describe('PianoToolbar — instrument selector (the sound catalogue)', () => {
   it('choosing an option sets the instrument signal', async () => {
     const rec = await import('../state/pianoRecStore');
     const { container } = render(() => <PianoToolbar />);
-    const select = container.querySelector<HTMLSelectElement>('.piano-inst-select')!;
+    const select = container.querySelector<HTMLSelectElement>('.inst-select')!;
     fireEvent.change(select, { target: { value: 'synth_lead' } });
     expect(rec.instrument()).toBe('synth_lead');
   });
@@ -78,7 +78,7 @@ describe('PianoToolbar — instrument selector (the sound catalogue)', () => {
   it('the option title explains that REC writes s("<name>")', () => {
     const { container } = render(() => <PianoToolbar />);
     const opt = container.querySelector<HTMLOptionElement>(
-      '.piano-inst-select option[value="piano"]',
+      '.inst-select option[value="piano"]',
     );
     expect(opt?.getAttribute('title')).toContain('s("piano")');
   });
@@ -87,7 +87,7 @@ describe('PianoToolbar — instrument selector (the sound catalogue)', () => {
     const rec = await import('../state/pianoRecStore');
     rec.appendNote(60, 0, 100);
     const { container } = render(() => <PianoToolbar />);
-    const select = container.querySelector<HTMLSelectElement>('.piano-inst-select')!;
+    const select = container.querySelector<HTMLSelectElement>('.inst-select')!;
     fireEvent.change(select, { target: { value: 'square' } });
     expect(rec.recBuffer()).toEqual([{ midi: 60, startMs: 0, endMs: 100 }]);
   });

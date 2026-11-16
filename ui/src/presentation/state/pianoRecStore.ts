@@ -268,9 +268,25 @@ export const stackAppend = (currentScore: string, snippet: string): string => {
  */
 export const applyToScore = (): void => {
   const buf = recBuffer();
-  if (buf.length === 0) return;
+  if (buf.length === 0) {
+    // Раньше выход был молчаливым: человек нажимал «применить» и не
+    // понимал, что кнопка не работает. Теперь — тост с причиной.
+    consoleStore.pushToast({
+      severity: 'warn',
+      title: 'Запись пуста',
+      body: 'Сначала нажмите клавиши на пианино — записать нечего.',
+    });
+    return;
+  }
   const snippet = commitSnippet(buf, instrument());
-  if (snippet === '') return;
+  if (snippet === '') {
+    consoleStore.pushToast({
+      severity: 'warn',
+      title: 'Запись пуста',
+      body: 'Из записанных нот не получилось собрать фрагмент партитуры.',
+    });
+    return;
+  }
 
   const slot = pianoSlot();
 
@@ -290,6 +306,13 @@ export const applyToScore = (): void => {
         ['pianoRecStore.applyToScore: at-cursor slot requires editor API; no-op'],
         'pianoRecStore.applyToScore',
       );
+      // Молчание было ловушкой: слот «в курсор» выглядит доступным,
+      // а на телефоне редактор скрыт — и кнопка просто ничего не делала.
+      consoleStore.pushToast({
+        severity: 'warn',
+        title: 'Нужна вставка в курсор',
+        body: 'Редактор сейчас недоступен — выберите слот «конец стека» или откройте партитуру.',
+      });
       return;
     }
     const view = api.getView();
@@ -299,6 +322,11 @@ export const applyToScore = (): void => {
         ['pianoRecStore.applyToScore: at-cursor slot requires EditorView; no-op'],
         'pianoRecStore.applyToScore',
       );
+      consoleStore.pushToast({
+        severity: 'warn',
+        title: 'Нужна вставка в курсор',
+        body: 'Редактор сейчас недоступен — выберите слот «конец стека» или откройте партитуру.',
+      });
       return;
     }
     const sel = view.state.selection.main;

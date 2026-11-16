@@ -1417,77 +1417,36 @@ textarea.wc-input {
   color: var(--fg-inverse);
 }
 
-.piano-instrument-selector {
+/* The instrument picker. A native <select>: the catalogue has 12
+ * melodic sounds, and 12 buttons do not fit a 360 px phone. The OS
+ * picker sheet is the one control that works there.
+ *
+ * Классы обобщены (были `piano-instrument-selector` /
+ * `piano-inst-select`): селектор инструмента нужен не только пианино,
+ * но и пиано-роллу и микшеру — «на чём играет этот слой».
+ * Набор кнопок (`.piano-inst-btn`) удалён: он остался от версии,
+ * где инструмент выбирался кнопками, и в разметке его больше нет. */
+.instrument-selector {
   display: inline-flex;
   align-items: center;
   gap: var(--space-2xs);
-  padding: 2px;
+  padding: 2px var(--space-2xs);
   background: var(--surface-2);
   border: 1px solid var(--border);
   border-radius: var(--radius-pill);
-  /* (wavecode-piano-sample-picker) 8 instruments with labels can
-     exceed available toolbar width — allow horizontal scroll on
-     narrow viewports instead of wrapping into 2 rows. */
+  /* 8+ инструментов с подписями не влезают в ширину тулбара на
+     узком экране — разрешаем горизонтальную прокрутку вместо
+     переноса на вторую строку. */
   overflow-x: auto;
   scrollbar-width: thin;
   max-width: 100%;
   -webkit-overflow-scrolling: touch;
 }
-.piano-inst-btn {
-  /* (wavecode-piano-sample-picker) Buttons now host either a
-     short unicode glyph (△ ∿ ⊿ ⊓ for oscillator literals) or
-     a 4-5 char label ("Piano", "Casio", "Guitar", "Synth").
-     min-width 32px fits the label, max-width clamps to prevent
-     the selector from exploding horizontally when 8 buttons
-     are present. */
-  min-width: 32px;
-  max-width: 64px;
-  height: 24px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  background: transparent;
-  color: var(--fg-dim);
-  border: 1px solid transparent;
-  border-radius: var(--radius-pill);
-  font-family: var(--font-mono);
-  font-size: var(--fs-2xs);
-  font-weight: var(--fw-medium);
-  letter-spacing: 0;
-  text-transform: none;
-  cursor: pointer;
-  transition:
-    color var(--dur-xs) var(--ease),
-    background var(--dur-xs) var(--ease),
-    border-color var(--dur-xs) var(--ease);
-  padding: 0 var(--space-2xs);
-  white-space: nowrap;
-}
-.piano-inst-btn:hover { color: var(--fg); }
-.piano-inst-btn[data-active='true'] {
-  color: var(--fg-inverse);
-  background: var(--primary);
-  border-color: var(--primary);
-}
-
-/* The instrument picker of the on-screen piano. A native <select>:
- * the catalogue has 12 melodic sounds, and 12 buttons do not fit a
- * 360 px phone. The OS picker sheet is the one control that works
- * there. */
-.piano-instrument-selector {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-  padding: 2px var(--space-2xs);
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-pill);
-}
-.piano-inst-glyph {
+.inst-glyph {
   font-size: var(--fs-xs);
   line-height: 1;
 }
-.piano-inst-select {
+.inst-select {
   appearance: none;
   background: transparent;
   border: 1px solid transparent;
@@ -1499,7 +1458,7 @@ textarea.wc-input {
   max-width: 120px;
   cursor: pointer;
 }
-.piano-inst-select:hover { color: var(--fg); }
+.inst-select:hover { color: var(--fg); }
 
 .piano-midi-status {
   display: inline-flex;
@@ -3888,6 +3847,9 @@ textarea.ai-textarea:focus-visible {
 .mixer-row {
   display: flex;
   align-items: center;
+  /* Строка слоя несёт ещё и выбор инструмента, поэтому на узком
+     экране она переносится, а не выпирает за край листа. */
+  flex-wrap: wrap;
   gap: var(--space-sm);
   min-height: 56px;
   padding: var(--space-xs) var(--space-sm);
@@ -3914,13 +3876,32 @@ textarea.ai-textarea:focus-visible {
 }
 .mixer-name {
   flex: 0 1 auto;
-  min-width: 80px;
-  max-width: 180px;
+  min-width: 132px;
+  max-width: 200px;
+  /* Имя слоя и выбор его инструмента — две строки в одной ячейке:
+     так «на чём играет этот слой» видно прямо в микшере. */
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  color: var(--fg);
+  font-size: var(--fs-sm);
+}
+.mixer-name__text {
+  max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: var(--fg);
-  font-size: var(--fs-sm);
+}
+.mixer-sound {
+  max-width: 100%;
+}
+.mixer-sound .inst-select {
+  max-width: 132px;
+}
+.mixer-sound-static {
+  color: var(--fg-dim);
+  font-size: var(--fs-2xs);
 }
 .mixer-gain {
   flex: 1 1 auto;

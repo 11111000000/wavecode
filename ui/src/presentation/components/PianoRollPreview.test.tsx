@@ -50,7 +50,7 @@ describe('PianoRollPreview — empty state', () => {
     const root = container.querySelector('.mic-ux-piano-roll');
     expect(root).not.toBeNull();
     expect(root?.getAttribute('data-empty')).toBe('true');
-    expect(container.querySelector('.mic-ux-piano-roll-empty')?.textContent).toBe('no notes yet');
+    expect(container.querySelector('.mic-ux-piano-roll-empty')?.textContent).toBe('нот пока нет');
   });
 
   it('hides empty state once a note is rendered', () => {

@@ -113,7 +113,7 @@ npm run build               # → ui/dist/
 
 ## Architectural decisions
 
-Full traceability — every decision is captured as a YAML in `decisions/` under the **math-coding 3.3** schema (kernel math-coding 3.7, see [AGENTS.md § math-coding](AGENTS.md)). 135 decisions cover everything from stack choice down to per-source log throttling.
+Full traceability — every decision is captured as a YAML in `decisions/` under the **math-coding 3.3** schema (kernel math-coding 3.7, see [AGENTS.md § math-coding](AGENTS.md)). 136 decisions cover everything from stack choice down to per-source log throttling.
 
 **Foundational 16** (see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for details):
 
@@ -138,7 +138,7 @@ Full traceability — every decision is captured as a YAML in `decisions/` under
 | `wavecode-test-strategy` | draft | wavecode's test strategy is a pyramid: many unit tests on domain and application (vitest, no mocks), moderate coverage on infrastructure (vitest with mocked Layers), and a small set of e2e tests on Playwright for the critical user-… |
 <!-- END decisions-table -->
 
-> **Full list (135 decisions):** `ls decisions/*.yaml` or `python3 scripts/build-readme-decisions.py`. About `draft`/`active` states — see [math-coding SKILL.md](../math-coding/adoption/SKILL.md): `state: active` is assigned explicitly, migrated v1.0 packets remain `draft` until the next revision. This does **not** mean they don't apply — all of them are applied in code and backed by attestations.
+> **Full list (136 decisions):** `ls decisions/*.yaml` or `python3 scripts/build-readme-decisions.py`. About `draft`/`active` states — see [math-coding SKILL.md](../math-coding/adoption/SKILL.md): `state: active` is assigned explicitly, migrated v1.0 packets remain `draft` until the next revision. This does **not** mean they don't apply — all of them are applied in code and backed by attestations.
 
 ---
 

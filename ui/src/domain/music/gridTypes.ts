@@ -44,11 +44,19 @@ export const toggleCell = (g: Grid, row: number, col: number): Grid =>
  * The "every step" semantics: each cell in 8-step grid is 1/8 of cycle.
  * `.fast(2)` не нужен — каждый ряд уже 8 hits / 8 шагов = 1 cycle.
  */
-export const gridToScore = (g: Grid): string => {
+/**
+ * Четыре ударных ряда сетки как ОТДЕЛЬНЫЕ слои партитуры.
+ *
+ * `gridToScore` оборачивает их в `stack(…)` — это удобно для
+ * показа, но для вставки в существующую партитуру нужен список
+ * слоёв: иначе четыре ряда станут ОДНИМ слоем микшера, и фейдер на
+ * нём двигал бы барабан, малый, хай-хэт и клэп разом.
+ */
+export const gridRowSources = (g: Grid): string[] => {
   if (g.length !== GRID_ROWS.length) {
     throw new Error(`grid must have ${GRID_ROWS.length} rows, got ${g.length}`);
   }
-  const lines: string[] = ['stack('];
+  const rows: string[] = [];
   for (let r = 0; r < GRID_ROWS.length; r += 1) {
     const sample = GRID_ROWS[r]!;
     const cells = g[r]!;
@@ -56,8 +64,16 @@ export const gridToScore = (g: Grid): string => {
     for (let c = 0; c < GRID_COLS; c += 1) {
       tokens.push(cells[c] ? sample : '~');
     }
-    const indent = '  ';
-    lines.push(`${indent}s("${tokens.join(' ')}"),`);
+    rows.push(`s("${tokens.join(' ')}")`);
+  }
+  return rows;
+};
+
+export const gridToScore = (g: Grid): string => {
+  const rows = gridRowSources(g);
+  const lines: string[] = ['stack('];
+  for (const row of rows) {
+    lines.push(`  ${row},`);
   }
   lines.push(')');
   return lines.join('\n');
