@@ -21,7 +21,7 @@
 
 ## ▶ Попробовать
 
-* **Live demo:** <https://wavecode.sibres.tech/> (прежний адрес <https://wavecode.kosov.online/> отдаёт 301 на него; также доступно через Tailscale: <https://wavecode.tail347ae6.ts.net/>)
+* **Live demo:** <https://wavecode.sibres.tech/> (прежний адрес <https://wavecode.kosov.online/> продолжает работать и отдаёт то же приложение; также доступно через Tailscale: <https://wavecode.tail347ae6.ts.net/>)
 * **Стабильный билд:** деплоится автоматически в `master` → [см. CI/CD](docs/ARCHITECTURE.md)
 * **PWA:** устанавливается как standalone-приложение (Chrome / Edge / Safari iOS 16.4+)
 

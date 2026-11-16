@@ -182,8 +182,9 @@ Composer (`~/Projects/Composer/`) — **отдельный backend-проект 
 ## Deployment
 
 Production: https://wavecode.sibres.tech/ (Caddy на angara-1, обслуживает
-`/var/lib/wavecode/dist/`). Также доступно на Tailscale:
-https://wavecode.tail347ae6.ts.net/.
+`/var/lib/wavecode/dist/`). Прежний адрес https://wavecode.kosov.online/
+тоже работает — отдаёт то же приложение, редиректа между ними нет.
+Также доступно на Tailscale: https://wavecode.tail347ae6.ts.net/.
 
 ### Единственный путь: `./bin/deploy.sh`, локально на angara-1
 

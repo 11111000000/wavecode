@@ -3,8 +3,8 @@ schema: math-coding/3.3
 id: wavecode-canonical-origin-sibres-tech
 revision: 1
 state: active
-body_sha: "sha256:70922c56a959a6431bbd2fa807f9b08760e43a1746a169a7487eca980dbab374"
-yaml_sha: "sha256:70922c56a959a6431bbd2fa807f9b08760e43a1746a169a7487eca980dbab374"
+body_sha: "sha256:9797278a6231a0d845eac5385a66e698cb6d5a6345d94d8abd28907ae885fa14"
+yaml_sha: "sha256:9797278a6231a0d845eac5385a66e698cb6d5a6345d94d8abd28907ae885fa14"
 
 intent: |
   2026-11-16: wavecode переезжает с `wavecode.kosov.online` на
@@ -37,27 +37,30 @@ intent: |
   4. DNS: A-запись `wavecode.sibres.tech` → `201.24.118.191` в зоне
      sibres.tech (Reg.ru; API не умеет создавать A-записи для этой
      зоны — запись вручную в UI).
-  5. Только после того, как запись резолвится: `redirectTo` для
-     `wavecode.kosov.online` в AngaraConfig → 301 на новый origin.
-     До этого старый адрес продолжает отдавать приложение сам —
-     иначе 301 ведёт в NXDOMAIN и сайт не открывается.
+  5. `wavecode.kosov.online` продолжает отдавать приложение сам.
+     Редирект 301 на новый адрес НЕ включается (решение владельца
+     2026-11-16): A-записи `wavecode.sibres.tech` ещё нет, а 301 в
+     нерезолвящийся хост — окно недоступности для живых пользователей.
+     Строка `redirectTo` в AngaraConfig лежит закомментированной как
+     готовая к включению. Побочный эффект решения: приложение живёт
+     на двух origin'ах, а storage state и service worker пользователей
+     остаются привязаны к тому адресу, на котором они начали работать.
 
 commitment: |
-  1. Канонический origin production-SPA wavecode —
-     `https://wavecode.sibres.tech`. Это origin, к которому привязаны
-     PWA/service worker, закладки и ссылки в письмах.
+  1. Новый канонический адрес production-SPA wavecode —
+     `https://wavecode.sibres.tech`: в него указывают новые ссылки,
+     доки и тесты. Исторический адрес `wavecode.kosov.online` при
+     этом продолжает обслуживать то же приложение.
   2. `ui/playwright.deployed.config.ts` (baseURL + storageState) и
      `ui/tests/e2e/mic-phase3.spec.mjs` (DEPLOYED_URL) бьют по
      каноническому origin. Storage state привязан к origin, поэтому
-     тест против старого адреса после включения 301 проверял бы
-     не тот origin, в котором живёт состояние.
+     тест должен проверять тот origin, в котором живёт состояние.
   3. README/README.en/AGENTS.md/bin/deploy.sh называют
      `https://wavecode.sibres.tech/` публичным адресом.
   4. LLM-запросы приложения с канонического origin проходят CORS
      публичного llm-proxy: origin есть в allowlist.
-  5. `wavecode.kosov.online` продолжает отдавать приложение до
-     появления A-записи; включение 301 — отдельный шаг в AngaraConfig,
-     зафиксированный там же.
+  5. Редиректа 301 со старого адреса нет: оба origin'а отдают
+     приложение, 200 на обоих.
 
 antithesis: |
   (1) «Оставить всё на `wavecode.kosov.online`, а `sibres.tech`
@@ -74,17 +77,19 @@ antithesis: |
   перейдут на новый адрес».
   Возражение: на момент переключения A-записи `wavecode.sibres.tech`
   ещё не существует (NXDOMAIN), и 301 уводит живых пользователей
-  с работающего сайта на нерезолвящийся хост. Редирект включается
-  после того, как запись резолвится. Это единственный порядок, при
-  котором переезд не создаёт окно недоступности.
+  с работающего сайта на нерезолвящийся хост. Поэтому решение —
+  оба адреса живут, редирект не включается (строка `redirectTo`
+  остаётся закомментированной как готовая к включению). Если
+  владелец позже захочет один origin — это отдельное решение со
+  своим шагом «DNS сначала, потом 301».
 
   (3) «Тесты против задеплоенного билда надо оставить на старом
   адресе — он ведь работает и не ломается».
   Возражение: storage state в Playwright привязан к origin: сессия,
   сохранённая для `wavecode.kosov.online`, не видна на
-  `wavecode.sibres.tech`. Тест, идущий через 301, проверял бы
-  приложение, поднятое с нуля на другом origin, — то есть проверял
-  не то состояние, которое он задумал проверять.
+  `wavecode.sibres.tech`. Тест, идущий через старый адрес или через
+  301, проверял бы приложение, поднятое с нуля на другом origin, —
+  то есть проверял бы не то состояние, которое он задумал проверять.
 
 counterexample: |
   (1) «Домен можно переключить одной строкой в Caddy, зачем целая
@@ -109,8 +114,10 @@ counterexample: |
   существует на двух origin'ах одновременно, и storage state,
   service worker и закладки продолжают жить на старом. Чем дольше
   живёт это состояние, тем больше пользователей останется на старом
-  origin после включения 301. Поэтому шаг редиректа не «когда-нибудь»,
-  а сразу после резолва A-записи.
+  origin после включения 301. Решение владельца — оставить оба адреса
+  и не включать редирект; тогда расхождение не растёт само по себе,
+  а переключение (если понадобится) делается одним шагом после
+  появления A-записи.
 
 axiom_link:
   - A3
@@ -145,12 +152,11 @@ outcomes:
       Preflight к `https://llm.kosov.online/v1/chat/completions` с
       `Origin: https://wavecode.sibres.tech` возвращает
       `Access-Control-Allow-Origin: https://wavecode.sibres.tech`.
-  - id: old-origin-still-serving-until-dns
+  - id: both-origins-serve-app-no-redirect
     statement: |
-      `https://wavecode.kosov.online/` продолжает отдавать приложение
-      (200), пока A-запись `wavecode.sibres.tech` не появилась в DNS;
-      включение 301 отложено до резолва, чтобы не увести живых
-      пользователей в NXDOMAIN.
+      `https://wavecode.kosov.online/` и `https://wavecode.sibres.tech/`
+      отдают одно и то же приложение (200 на обоих); редиректа 301
+      между ними нет — решение владельца от 2026-11-16.
 
 obligations:
   - id: canonical-origin-kernel-validates
@@ -186,8 +192,8 @@ obligations:
           result: pass
   - id: old-origin-no-outage
     claim: |
-      До появления A-записи в DNS старый адрес не отдаёт 301 в
-      нерезолвящийся хост — приложение продолжает работать.
+      Старый адрес не отдаёт 301 в нерезолвящийся хост — приложение
+      продолжает работать на обоих origin'ах.
     acceptance:
       all:
         - verifier: "shell:curl -sS -o /dev/null -w '%{http_code}' https://wavecode.kosov.online/ | grep -q 200"
