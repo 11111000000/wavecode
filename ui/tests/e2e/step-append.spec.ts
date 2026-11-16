@@ -115,14 +115,22 @@ test('sketch mode + ↑ commit with a loaded preset adds a section instead of co
   // Wait for the new score to flush through CodeMirror.
   await page.waitForTimeout(1_500);
 
+  // Лист «Шаги» закрылся: результат записан — он должен быть ВИДЕН,
+  // а не спрятан за листом на пол-экрана.
+  await expect(page.locator('.wc-sheet[data-kind="step"]')).toHaveCount(0, {
+    timeout: 5_000,
+  });
+
   const text = (await page.locator('.cm-content').textContent()) ?? '';
   // The original Creep comment must still be present.
   expect(text).toContain('Creep');
-  // Сетка дописывается НОВОЙ СЕКЦИЕЙ: исходная композиция начинается
-  // с cat(...), и merge добавляет в неё секцию stack(...) вместо
-  // обёртки всего пресета во внешний stack — обёртка схлопывала
-  // микшер с 29 строк до двух (см. wavecode-sound-choice-and-rhythm-feedback).
-  expect(text.trimStart().startsWith('cat(')).toBe(true);
+  // Сетка дописывается НОВОЙ СЕКЦИЕЙ: исходная композиция — это
+  // `cat(...)` (перед ней комментарий), и merge добавляет в неё
+  // секцию `stack(...)` вместо обёртки всего пресета во внешний
+  // stack — обёртка схлопывала микшер с 29 строк до двух (см.
+  // wavecode-sound-choice-and-rhythm-feedback).
+  expect(text).toMatch(/cat\(/);
+  expect(text.trimStart().startsWith('stack(')).toBe(false);
 
   // Контракт черновика: draft засевается из партитуры (см.
   // enterSketch в gridState.ts), поэтому нажатие переключает ячейку, а
