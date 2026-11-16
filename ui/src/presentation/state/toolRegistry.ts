@@ -17,6 +17,8 @@ import {
   TabVisualizeIcon,
   ConsoleIcon,
   SaveIcon,
+  MelodyIcon,
+  HandsIcon,
 } from '../icons';
 
 /**
@@ -40,7 +42,9 @@ export type ToolId =
   | 'mixer'
   | 'visualize'
   | 'console'
-  | 'export';
+  | 'export'
+  | 'melody'
+  | 'gesture';
 
 export type ToolTier = 1 | 2;
 
@@ -152,6 +156,39 @@ export const TOOLS: readonly ToolEntry[] = [
     open: () => setTab('mixer'),
   },
   {
+    // wavecode-sound-choice-and-rhythm-feedback: «Мелодия» — сетка
+    // 16×36 с режимами просмотра / наброска / правки. Компонент был
+    // готов, покрыт стилями и тестами, но не смонтирован НИГДЕ:
+    // возможность была написана и забыта. Теперь у неё свой лист
+    // и своя карточка в листе инструментов.
+    //
+    // Порядок карточек — по смыслу: сначала «что получаем» (ввод,
+    // пианино, микшер, мелодия, руки), потом «что делаем с этим»
+    // (визуализация, экспорт) и «что случилось» (консоль).
+    id: 'melody',
+    label: 'Мелодия',
+    short: 'Мелодия',
+    description: 'Сетка высот 16×36 с правкой нот',
+    tier: 2,
+    icon: MelodyIcon,
+    keywords: ['мелодия', 'сетка', 'высота', 'pitch', 'melody', 'grid', 'ноты'],
+    open: () => openKindSheet('melody', 'full'),
+  },
+  {
+    // wavecode-sound-choice-and-rhythm-feedback: «Руки» открывались
+    // только из вкладки «Свист» листа ввода — то есть возможность
+    // была спрятана в глубине другого инструмента и не была видна
+    // ни в рельсе, ни в листе инструментов, ни в палитре ⌘K.
+    id: 'gesture',
+    label: 'Руки',
+    short: 'Руки',
+    description: 'Управление жестами перед камерой',
+    tier: 2,
+    icon: HandsIcon,
+    keywords: ['руки', 'жесты', 'gesture', 'камера', 'управление'],
+    open: () => openKindSheet('gesture', 'half'),
+  },
+  {
     // wavecode-unified-input-entry: отдельного инструмента «Микрофон»
     // (и «Свист») больше нет — свист живёт вкладкой «Свист» листа
     // ввода. Иначе одно и то же устройство называлось бы в двух
@@ -214,6 +251,10 @@ export const isToolActive = (id: ToolId): boolean => {
       return getKindSnap('export') !== 'closed';
     case 'console':
       return getKindSnap('status') !== 'closed';
+    case 'melody':
+      return getKindSnap('melody') !== 'closed';
+    case 'gesture':
+      return getKindSnap('gesture') !== 'closed';
   }
 };
 

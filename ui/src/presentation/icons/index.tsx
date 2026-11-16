@@ -294,6 +294,28 @@ export const TabPianoIcon = (p: Props): JSX.Element => (
   </svg>
 );
 
+/** Melody — a piano-roll grid (horizontal rows) with one filled note
+ *  cell: the pitch grid of the «Мелодия» sheet. */
+export const MelodyIcon = (p: Props): JSX.Element => (
+  <svg {...base(p.size ?? 18)} class={`wc-icon ${p.class ?? ''}`}>
+    <line x1="2" y1="4" x2="14" y2="4" />
+    <line x1="2" y1="8" x2="14" y2="8" />
+    <line x1="2" y1="12" x2="14" y2="12" />
+    <rect x="4" y="5" width="3" height="2" fill="currentColor" stroke="none" />
+    <rect x="9" y="9" width="3" height="2" fill="currentColor" stroke="none" />
+  </svg>
+);
+
+/** Hands — an open palm with three fingers: gesture control. */
+export const HandsIcon = (p: Props): JSX.Element => (
+  <svg {...base(p.size ?? 18)} class={`wc-icon ${p.class ?? ''}`}>
+    <path d="M5.5 8.5 V4.2 a1 1 0 0 1 2 0 V8" />
+    <path d="M7.5 8 V3.2 a1 1 0 0 1 2 0 V8" />
+    <path d="M9.5 8 V4.2 a1 1 0 0 1 2 0 V8.6" />
+    <path d="M5.5 8.5 V10 a5 5 0 0 0 5 5 h.5 a4 4 0 0 0 4-4 v-2.4 a1 1 0 0 0-2 0 V10" />
+  </svg>
+);
+
 /** Visualize — bar-graph + sinewave combo, the universal "audio
  *  spectrum" pictogram. Five vertical bars of varying heights with a
  *  flowing line overlay, sized to the tab-bar (18px). */

@@ -387,7 +387,16 @@ export const applyToScore = (): void => {
     micTransients(),
     { instrument: micInstrument() },
   );
-  if (snippet === null) return;
+  if (snippet === null) {
+    // Буфер пуст — раньше выход был молчаливым, и кнопка «применить»
+    // выглядела как сломанная. Теперь человек видит почему.
+    consoleStore.pushToast({
+      severity: 'warn',
+      title: 'Запись пуста',
+      body: 'Сначала спойте или настучите что-нибудь — записывать пока нечего.',
+    });
+    return;
+  }
 
   const slot = micSlot();
 
@@ -399,6 +408,11 @@ export const applyToScore = (): void => {
         ['micStore.applyToScore: at-cursor slot requires editor API; no-op'],
         'micStore.applyToScore',
       );
+      consoleStore.pushToast({
+        severity: 'warn',
+        title: 'Нужна вставка в курсор',
+        body: 'Редактор сейчас недоступен — выберите слот «конец стека» или откройте партитуру.',
+      });
       return;
     }
     const view = api.getView();
@@ -408,6 +422,11 @@ export const applyToScore = (): void => {
         ['micStore.applyToScore: at-cursor slot requires EditorView; no-op'],
         'micStore.applyToScore',
       );
+      consoleStore.pushToast({
+        severity: 'warn',
+        title: 'Нужна вставка в курсор',
+        body: 'Редактор сейчас недоступен — выберите слот «конец стека» или откройте партитуру.',
+      });
       return;
     }
     const sel = view.state.selection.main;

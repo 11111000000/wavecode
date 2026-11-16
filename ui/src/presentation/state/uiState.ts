@@ -215,7 +215,7 @@ export const setLayout = (layout: Layout): void => {
 // Bottom Sheet (mobile-first)
 // =========================================================================
 
-export type SheetKind = 'ai' | 'mixer' | 'step' | 'piano' | 'status' | 'share' | 'record' | 'visualize' | 'input' | 'gesture' | 'tools' | 'export' | null;
+export type SheetKind = 'ai' | 'mixer' | 'step' | 'piano' | 'status' | 'share' | 'record' | 'visualize' | 'input' | 'gesture' | 'melody' | 'tools' | 'export' | null;
 export type SheetSnap = 'closed' | 'peek' | 'half' | 'full';
 export type TabId = 'score' | 'step' | 'piano' | 'mixer' | 'chat' | 'status' | 'visualize';
 
@@ -347,7 +347,7 @@ export const snapTo = (snap: SheetSnap): void => {
 
 /** Snap per-kind — несколько sheet'ов могут быть открыты каждый со своим snap. */
 const [snapsByKind, setSnapsByKindRaw] = createSignal<Record<NonNullable<SheetKind>, SheetSnap>>({
-  ai: 'closed', mixer: 'closed', step: 'closed', piano: 'closed', status: 'closed', share: 'closed', record: 'closed', visualize: 'closed', input: 'closed', gesture: 'closed', tools: 'closed', export: 'closed',
+  ai: 'closed', mixer: 'closed', step: 'closed', piano: 'closed', status: 'closed', share: 'closed', record: 'closed', visualize: 'closed', input: 'closed', gesture: 'closed', melody: 'closed', tools: 'closed', export: 'closed',
 });
 export const getSnapsByKind = snapsByKind;
 export const getKindSnap = (kind: NonNullable<SheetKind>): SheetSnap => snapsByKind()[kind];
