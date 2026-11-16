@@ -7,20 +7,22 @@ import { expect, type Page } from '@playwright/test';
  * транспортной строки в лист «Инструменты» (см. PresetPicker.tsx), а
  * строка транспорта теперь это ровно «play · темп · позиция».
  *
- * Спеки, которым нужно выбрать композицию, раньше делали
- * `page.locator('select.preset-select').selectOption(...)` — селекта
- * в транспортной строке больше нет. Теперь он живёт в листе, который
- * открывается кнопкой «Инструменты» в верхней панели (на мобиле и
- * десктопе это одна и та же кнопка — рельс на мобиле держит только
- * четыре пункта первого уровня).
+ * wavecode-pinned-tools: у листа остался ОДИН вход — кнопка «Ещё» в
+ * рельсе. Раньше их было два: тот же «Ещё» внизу и голая иконка-сетка
+ * в верхней панели. Верхняя открывала ровно тот же лист и выглядела
+ * как «кнопка, которая открывает непонятно что». Теперь вход один и
+ * он стоит рядом с инструментами, которыми этот лист управляет.
  *
  * Лист закрывается сразу после выбора композиции: пользователь выбрал
  * композицию — он хочет видеть и слышать её, а не перекрытый лист.
  */
 
+/** Кнопка «Ещё» в рельсе — единственный вход в лист «Инструменты». */
+export const TOOLS_OPENER = '.wc-rail__more';
+
 /** Открыть лист «Инструменты». */
 export async function openToolsSheet(page: Page): Promise<void> {
-  const opener = page.locator('.wc-topbar [aria-label="Инструменты"]').first();
+  const opener = page.locator(TOOLS_OPENER).first();
   await opener.click();
   await expect(page.locator('.wc-tools-sheet')).toBeVisible({ timeout: 5_000 });
 }
@@ -41,7 +43,7 @@ export async function selectPreset(page: Page, id: string): Promise<void> {
 export async function currentPresetId(page: Page): Promise<string> {
   await openToolsSheet(page);
   const value = await page.locator('[data-testid="preset-select"]').inputValue();
-  await page.locator('.wc-topbar [aria-label="Инструменты"]').first().click();
+  await page.locator(TOOLS_OPENER).first().click();
   return value;
 }
 

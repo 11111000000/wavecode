@@ -278,9 +278,10 @@ test.describe('mobile BottomSheet-piano', () => {
     await expect(page.locator('.piano-toggle')).toHaveCount(0);
 
     // Piano lives in the «Инструменты» sheet (wavecode-zen-minimal-ui,
-    // revision 2): the rail keeps four items, everything else is one
-    // sheet away. On mobile the sheet is opened from the top bar.
-    await page.locator('.wc-topbar [aria-label="Инструменты"]').first().click();
+    // revision 2): the rail keeps three items, everything else is one
+    // sheet away. The sheet is opened from the rail's «Ещё» button —
+    // the only entry point, on mobile too.
+    await page.locator('.wc-rail__more').first().click();
     await page.waitForTimeout(300);
     await page.locator('.wc-tool-card', { hasText: 'Пианино' }).first().click();
     await page.waitForTimeout(300);

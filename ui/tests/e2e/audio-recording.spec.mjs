@@ -50,7 +50,7 @@ test('Transport bar sits at the top of the shell and carries the play control', 
   // Выбор композиции уехал из транспортной строки в лист
   // «Инструменты» (фаза 6) — в полосе его больше нет.
   await expect(page.locator('[data-testid="preset-select"]')).toHaveCount(0);
-  await page.locator('.wc-topbar [aria-label="Инструменты"]').first().click();
+  await page.locator('.wc-rail__more').first().click();
   await expect(page.locator('[data-testid="preset-select"]')).toBeVisible();
 });
 
@@ -59,10 +59,9 @@ test('Piano sheet exposes the «Запись» REC toggle — the live recording
   await page.goto(APP_URL, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('main.app', { timeout: 15000 });
 
-  // Пианино — инструмент второго уровня: на мобиле в лист «Инструменты»
-  // ведёт кнопка в верхней панели (нижний рельс держит только четыре
-  // пункта), на desktop — кнопка «Ещё» в рельсе.
-  await page.locator('.wc-topbar [aria-label="Инструменты"]').first().click();
+  // Пианино — инструмент второго уровня: на мобиле и на десктопе
+  // в лист «Инструменты» ведёт кнопка «Ещё» в рельсе.
+  await page.locator('.wc-rail__more').first().click();
   await page.waitForTimeout(300);
   await page.locator('.wc-tool-card', { hasText: 'Пианино' }).first().click();
   await page.waitForTimeout(500);
