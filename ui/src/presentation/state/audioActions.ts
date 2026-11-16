@@ -353,6 +353,23 @@ const RELEASE_S = 0.1;
 const TAIL_PAD_S = 0.02;
 
 /**
+ * Общий `AudioContext`, если окружение его вообще умеет.
+ *
+ * Превью и щелчки — УДОВОЛЬСТВИЕ, а не условие работы. В окружении
+ * без Web Audio (юнит-тесты в jsdom, старый браузер) звука нет, но
+ * интерфейс обязан продолжать работать: раньше превью дёргало
+ * `unlockAudioContext()` без защиты и роняло модуль целиком.
+ */
+const safeAudioContext = (): AudioContext | null => {
+  if (typeof AudioContext === 'undefined') return null;
+  try {
+    return unlockAudioContext();
+  } catch {
+    return null;
+  }
+};
+
+/**
  * One-shot drum preview. Plays <500ms of `OscillatorNode + GainNode`
  * directly on the shared `AudioContext` (`__wavecodeAudioCtx`), bypasses
  * `audio.eval` entirely so the loaded Strudel pattern keeps playing
@@ -360,7 +377,10 @@ const TAIL_PAD_S = 0.02;
  * `wavecode-step-append-sync` synthesis (a).
  */
 export const previewSample = (sample: 'bd' | 'sd' | 'hh' | 'cp'): void => {
-  const audioCtx = unlockAudioContext();
+  const audioCtx = safeAudioContext();
+  // Без Web Audio (jsdom, старый браузер) — тишина, но не ошибка:
+  // превью — удовольствие, работа приложения от него не зависит.
+  if (!audioCtx) return;
   const recipe = SAMPLE_RECIPES[sample];
   const t0 = audioCtx.currentTime;
   const osc = audioCtx.createOscillator();
@@ -383,4 +403,56 @@ export const previewSample = (sample: 'bd' | 'sd' | 'hh' | 'cp'): void => {
       /* already disconnected — defensive, jsdom onended can re-fire */
     }
   };
+};
+
+/**
+ * Щелчок метронома вкладки «Ритм».
+ *
+ * Зачем он нужен: take идёт по сетке вообще без звука, и пользователь
+ * не слышит темп — указатель едет по клеткам, но пульса нет. Тапы
+ * «ни о чём не говорят»: палец ставит отметку вслепую, и жалоба
+ * «настучать Ритм — ничего не происходит» ровно про это. Щелчок даёт
+ * сетке пульс, по которому человек попадает в шаг.
+ *
+ * Акцент — на начале доли (каждая четвёртая шестнадцатая), обычный
+ * щелчок — на остальных: так слышно сильную долю, как в метрономе.
+ *
+ * Тот же приём, что у `previewSample`: короткий `OscillatorNode` на
+ * общем `AudioContext`, без переоценки Strudel — иначе щелчки
+ * перебивали бы играющую партитуру.
+ */
+export const playRhythmClick = (accent: boolean): void => {
+  const audioCtx = safeAudioContext();
+  if (!audioCtx) return;
+  const t0 = audioCtx.currentTime;
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  osc.type = 'square';
+  osc.frequency.setValueAtTime(accent ? 1600 : 1100, t0);
+  const peak = accent ? 0.22 : 0.12;
+  gain.gain.setValueAtTime(0.0001, t0);
+  gain.gain.linearRampToValueAtTime(peak, t0 + 0.002);
+  gain.gain.linearRampToValueAtTime(0.0001, t0 + 0.045);
+  osc.connect(gain).connect(audioCtx.destination);
+  osc.start(t0);
+  osc.stop(t0 + 0.06);
+  osc.onended = (): void => {
+    try {
+      osc.disconnect();
+      gain.disconnect();
+    } catch {
+      /* уже отключён — jsdom может вызвать onended повторно */
+    }
+  };
+};
+
+/**
+ * Превью удара сетки ритма — тот же голос, который попадёт в партитуру.
+ *
+ * Шаг 0 и 8 — бочка, 4 и 12 — малый барабан, остальные — хай-хэт
+ * (`STEP_VOICE` в rhythmStore). Здесь эти голоса названы по-русски
+ * для превью: `bd` / `sd` / `hh`.
+ */
+export const previewRhythmHit = (voice: 'bd' | 'sd' | 'hh'): void => {
+  previewSample(voice);
 };
