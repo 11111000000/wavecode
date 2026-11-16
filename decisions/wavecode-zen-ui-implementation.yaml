@@ -1,10 +1,10 @@
 ---
 schema: math-coding/3.3
 id: wavecode-zen-ui-implementation
-revision: 1
+revision: 2
 state: active
-body_sha: "sha256:0681e259bfd361613aa3587b6d2d6b7339e7460ea5f1ff2b9bc890b5bb1cea0a"
-yaml_sha: "sha256:0681e259bfd361613aa3587b6d2d6b7339e7460ea5f1ff2b9bc890b5bb1cea0a"
+body_sha: "sha256:49bbf06ed01558c9f8fd6db65f32a89d4c33818b2490b5fb0dc8d2c96397c389"
+yaml_sha: "sha256:49bbf06ed01558c9f8fd6db65f32a89d4c33818b2490b5fb0dc8d2c96397c389"
 
 intent: |
   Решение владельца (2026-11-15): после аудита и плана
@@ -15,6 +15,17 @@ intent: |
   Это решение фиксирует ЧТО именно реализовано в фазах 0–5 и чем
   это проверяется. Фазы 6–7 (тишина по умолчанию и замер) остаются
   запланированными и будут отдельным решением.
+
+  Ревизия 2 (2026-11-16) — правка обещаний на фактическое состояние.
+  Решение писалось, когда рельс состоял из ЧЕТЫРЁХ пунктов, и с тех
+  пор устарело дважды:
+    * wavecode-unified-input-entry убрала «Ввод» из рельса в tier 2 —
+      рельс стал из трёх пунктов;
+    * wavecode-pinned-tools убрала вторую кнопку «Инструменты» из
+      верхней панели — вход в лист остался один.
+  Раньше эти обещания были ложью в корпусе решений: тест обещал
+  «ровно четыре пункта рельса», а код давал три. Здесь они приведены
+  к тому, что реально есть.
 
   Реализовано:
     * Фаза 0 — правда: лендинг, README и e2e-ожидания приведены в
@@ -27,12 +38,16 @@ intent: |
       листах, видимый фокус на рельсе и в палитре, `aria-live` для
       диалога ИИ, программная метка редактора, доступное имя у
       кнопки «Поделиться», клавиатурная игра на пианино.
-    * Фаза 3 — структура: рельс из четырёх пунктов вместо восьми
-      вкладок, один лист «Инструменты», палитра команд `⌘K`,
-      ИИ переехал из панели рядом с холстом в слой поверх него,
-      удалён дубль `TransportPanel` и панель состояния из потока.
-    * Фаза 4 — вход: голос и ритм делят одну плавающую кнопку и
-      один док с явным переключателем «Голос | Ритм».
+    * Фаза 3 — структура: рельс вместо восьми вкладок, один лист
+      «Инструменты», палитра команд `⌘K`, ИИ переехал из панели
+      рядом с холстом в слой поверх него, удалён дубль
+      `TransportPanel` и панель состояния из потока. Изначально рельс
+      состоял из четырёх пунктов; после wavecode-unified-input-entry
+      их три (Нотная, Шаги, ИИ).
+    * Фаза 4 — вход: одна плавающая кнопка «Ввод» и один лист с
+      переключателем. Изначально переключатель назывался
+      «Голос | Ритм»; после wavecode-unified-input-entry — «Речь |
+      Свист | Ритм».
     * Фаза 5 — инструменты-сироты: MIDI и WAV-экспорт выведены в
       лист «Экспорт», промпт с лендинга больше не становится кодом
       (он идёт в ИИ, а партитура остаётся играбельной), закрытие
@@ -43,8 +58,8 @@ commitment: |
      команд и e2e-проверка достижимости строятся из него.
   2. **Пять структурных поверхностей.** Холст, рельс, транспорт,
      входной док, лист «Инструменты». Восьми вкладок внизу нет.
-  3. **Одна плавающая кнопка.** Голос и ритм — режимы одного дока;
-     третья FAB-кнопка не вводится.
+  3. **Одна плавающая кнопка.** Ввод — один док с переключателем
+     «Речь | Свист | Ритм»; третья FAB-кнопка не вводится.
   4. **Ни одного висящего токена.** `node scripts/check-zen-ui.mjs
      --targets` падает при `danglingRefs > 0`, `hardcodedColors > 0`,
      `infiniteAnimations > 1`.
@@ -74,7 +89,7 @@ scope:
 outcomes:
   - id: wavecode-zen-ui-implementation-outcome-navigation
     statement: |
-      В оболочке приложения четыре пункта рельса и один лист
+      В оболочке приложения три пункта рельса и один лист
       «Инструменты»; нижняя панель из восьми вкладок отсутствует, а
       ИИ открывается слоем поверх холста, а не панелью рядом с ним.
   - id: wavecode-zen-ui-implementation-outcome-visual-noise
@@ -89,9 +104,9 @@ outcomes:
       выведено» больше невозможно.
   - id: wavecode-zen-ui-implementation-outcome-input
     statement: |
-      Голос и ритм доступны через одну плавающую кнопку и один док с
-      явным переключателем «Голос | Ритм»; логика ритма перенесена из
-      ветки `feat/rhythm-recorder` без второй кнопки.
+      Ввод доступен через одну плавающую кнопку и один лист с
+      явным переключателем «Речь | Свист | Ритм»; логика ритма
+      перенесена из ветки `feat/rhythm-recorder` без второй кнопки.
   - id: wavecode-zen-ui-implementation-outcome-truth
     statement: |
       README, лендинг и e2e-ожидания не обещают того, чего нет:
@@ -118,7 +133,7 @@ obligations:
           result: pass
   - id: wavecode-zen-ui-implementation-registry-test
     claim: |
-      The tool registry keeps four rail items, opens every tier-2 tool
+      The tool registry keeps three rail items, opens every tier-2 tool
       in its own layer and is searchable.
     acceptance:
       all:
@@ -126,7 +141,7 @@ obligations:
           result: pass
   - id: wavecode-zen-ui-implementation-reachability-e2e
     claim: |
-      The navigation exposes exactly four rail items, the tools sheet
+      The navigation exposes exactly three rail items, the tools sheet
       with search, and the ⌘K palette; every tier-2 tool opens from the
       sheet.
     acceptance:
@@ -146,7 +161,7 @@ negative_control: |
   token definition (`--space-md`) from a scratch copy of
   `ui/src/styles/tokens.css` raises `danglingRefs` from 0 to 193 and
   the guard exits 1. The registry test has teeth as well: adding a
-  fifth tier-1 tool to `TOOLS` breaks the expectation of exactly four
+  fourth tier-1 tool to `TOOLS` breaks the expectation of exactly three
   rail items in `toolRegistry.test.ts`.
 counterexample: |
   The strongest objection is that the redesign removes affordances the
