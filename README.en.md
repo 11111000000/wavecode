@@ -101,6 +101,7 @@ npm run build               # → ui/dist/
 - 🥁 **Step sequencer** — grid editor (view/sketch/edit modes), live eval on score edit
 - 🎚️ **Track mixer** — mute / solo / gain per track, live updates without restart
 - 🎙️ **Input** — one round "Ввод" button opens a sheet with three tabs: **Speech** (text becomes a track), **Whistle** (whistling or any instrument becomes notes) and **Rhythm** (tapping becomes a grid); no WAV export in the UI yet (the renderer lives in the engine)
+- 🧭 **Rail** — three base items (Score, Steps, AI) plus an "Ещё" button that opens the "Tools" sheet with everything else; a checkbox on a card pins a frequently used tool straight into the rail (up to three), and the choice survives a reload
 - 🌐 **URL sharing** — `?s=…` encodes the full score + messages, restored in a new session
 - 📡 **PWA** — offline-ready, Workbox auto-update, dedicated cache for Strudel-vendor
 - ⌨️ **Hotkeys** — `Ctrl/⌘+\`` toggles Console, `Ctrl/⌘+Z/Y` undo/redo, focus AI/score
@@ -112,7 +113,7 @@ npm run build               # → ui/dist/
 
 ## Architectural decisions
 
-Full traceability — every decision is captured as a YAML in `decisions/` under the **math-coding 3.3** schema (kernel math-coding 3.7, see [AGENTS.md § math-coding](AGENTS.md)). 119 decisions cover everything from stack choice down to per-source log throttling.
+Full traceability — every decision is captured as a YAML in `decisions/` under the **math-coding 3.3** schema (kernel math-coding 3.7, see [AGENTS.md § math-coding](AGENTS.md)). 135 decisions cover everything from stack choice down to per-source log throttling.
 
 **Foundational 16** (see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for details):
 
@@ -137,7 +138,7 @@ Full traceability — every decision is captured as a YAML in `decisions/` under
 | `wavecode-test-strategy` | draft | wavecode's test strategy is a pyramid: many unit tests on domain and application (vitest, no mocks), moderate coverage on infrastructure (vitest with mocked Layers), and a small set of e2e tests on Playwright for the critical user-… |
 <!-- END decisions-table -->
 
-> **Full list (119 decisions):** `ls decisions/*.yaml` or `python3 scripts/build-readme-decisions.py`. About `draft`/`active` states — see [math-coding SKILL.md](../math-coding/adoption/SKILL.md): `state: active` is assigned explicitly, migrated v1.0 packets remain `draft` until the next revision. This does **not** mean they don't apply — all of them are applied in code and backed by attestations.
+> **Full list (135 decisions):** `ls decisions/*.yaml` or `python3 scripts/build-readme-decisions.py`. About `draft`/`active` states — see [math-coding SKILL.md](../math-coding/adoption/SKILL.md): `state: active` is assigned explicitly, migrated v1.0 packets remain `draft` until the next revision. This does **not** mean they don't apply — all of them are applied in code and backed by attestations.
 
 ---
 
@@ -175,7 +176,7 @@ wavecode/
 ├── .github/               GitHub-specific: workflows, issue/PR templates, CODEOWNERS
 ├── .gitverse/             GitVerse Actions: math-coding gate only (no deploy)
 ├── bin/                   deploy.sh, check-llm-key.sh
-├── decisions/             119 architectural decisions (math-coding 3.3 schema, kernel 3.7)
+├── decisions/             135 architectural decisions (math-coding 3.3 schema, kernel 3.7)
 ├── attestations/          evidence store for math-coding self-check
 ├── schemas/               JSON-schema for math-coding (kernel 3.7, family 3.3)
 ├── scripts/               utilities: pre-commit, validate:presets, build-readme-decisions
