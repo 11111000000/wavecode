@@ -209,6 +209,11 @@
   text-transform: lowercase;
   color: var(--fg-dim);
   white-space: nowrap;
+  /* wavecode-mobile-topbar: строка статуса обязана уметь сжаться.
+   * Раньше она оставалась шириной со своим текстом и вылезала из бокса —
+   * на телефоне «остановлен» наезжало на кнопки шапки. */
+  min-width: 0;
+  overflow: hidden;
 }
 .wc-led::before {
   content: '';
@@ -217,6 +222,13 @@
   border-radius: var(--radius-full);
   background: currentColor;
   flex-shrink: 0;
+}
+/* Слово состояния — отдельный элемент: ellipsis работает только на
+ * элементе с ограниченной шириной, а не на тексте внутри flex. */
+.wc-led__label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .wc-led[data-tone='idle']     { color: var(--fg-dim); }
 .wc-led[data-tone='stopped']  { color: var(--fg-dim); }
@@ -605,9 +617,25 @@ textarea.wc-input {
 .wc-topbar {
   position: sticky;
   top: 0;
+  /* wavecode-mobile-topbar: шапка не сжимается. Раньше flex-shrink был
+   * дефолтным (1), и когда открывался нижний лист, .app-body переполнялся
+   * — шапка сжималась с 56px до 45px, а полоса транспорта оставалась
+   * на `top: var(--header-h)` = 56px. Между ними появлялся зазор в 11px:
+   * ровно тот «отступ от верхнего меню», который видел владелец. */
+  flex-shrink: 0;
   /* Должен быть выше .wc-sheet-backdrop (z-sheet=40), чтобы при открытом
-   * bottom-sheet кнопки TopBar оставались кликабельными. */
-  z-index: calc(var(--z-sheet) + 5);
+   * bottom-sheet кнопки TopBar оставались кликабельными.
+   *
+   * wavecode-mobile-topbar: и ВЫШЕ транспортной полосы (z-sheet+12 = 52).
+   * Поповеры шапки (меню «Ещё») открываются вниз и попадают в полосу
+   * 56..105px, а транспорт — сосед шапки в дереве, поэтому перекрывал всё
+   * её поддерево: собственный z-index поповера (60) не помогает, он
+   * считается внутри stacking-контекста шапки. На 390px первым пунктом
+   * меню («Поделиться») был именно «съеденный» полосой транспорта — он
+   * не получал ни клика, ни hover. Шапка поднята на +14 = 54: выше
+   * транспорта (52), ниже листа (53 — лист перекрывает шапку, он идёт
+   * позже в DOM) и сильно ниже тоста (80) и модалки (60). */
+  z-index: calc(var(--z-sheet) + 14);
   display: flex;
   align-items: center;
   gap: var(--space-sm);
@@ -636,36 +664,33 @@ textarea.wc-input {
   -webkit-tap-highlight-color: transparent;
   user-select: none;
 }
-.wc-topbar__logo {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-xs);
-  font-family: var(--font-mono);
-  font-size: var(--fs-xs);
-  color: var(--primary);
-  letter-spacing: var(--ls-wide);
-  margin-right: var(--space-xs);
-}
 .wc-topbar__actions {
   margin-left: auto;
   display: flex;
   align-items: center;
   gap: var(--space-xs);
+  /* Кнопки шапки не ужимаются: место под них забирает строка статуса,
+   * которая умеет сжаться до многоточия (см. .wc-led__label). */
+  flex-shrink: 0;
 }
 
-.wc-topbar__led {
-  display: flex;
-  align-items: center;
-  gap: var(--space-sm);
-  padding: 0 var(--space-md);
-  height: 32px;
-  background: var(--surface-1);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-pill);
-  font-size: var(--fs-xs);
-  color: var(--fg);
-  font-family: var(--font-mono);
-  white-space: nowrap;
+/* wavecode-mobile-topbar: узкий экран — компактная шапка.
+ * На 390px полная шапка не помещалась (526px против 390): статус
+ * «остановлен» вылезал из бокса и наезжал на «Новую композицию».
+ * Уходят: слово «wavecode» (рядом логотип), «Поделиться» и «Консоль»
+ * — в меню «Ещё». Итог 335px: запас 55px в 390px и 25px в 360px,
+ * а слово статуса при нехватке сжимается до многоточия. */
+@media (max-width: 520px) {
+  .wc-topbar {
+    gap: var(--space-xs);
+    padding: 0 var(--space-sm);
+  }
+  .wc-topbar__title { display: none; }
+  /* Селектор с двумя классами: ниже по файлу есть `.preset-btn`
+   * (display: inline-flex), и без уточнения он перебивал бы
+   * `display: none` для кнопки «Поделиться». */
+  .wc-topbar__actions .wc-topbar__share,
+  .wc-topbar__actions .wc-topbar__console { display: none; }
 }
 
 .wc-body {
@@ -1891,7 +1916,7 @@ button:not([disabled]):not(.no-shrink):active {
 .toast-stack {
   position: fixed;
   /* wavecode-preset-row-and-toast-z: toast висит НА САМОМ ВЕРХУ
-   * viewport'а, нависая над TopBar'ом (z-toast=50 > topbar z=45).
+   * viewport'а, нависая над TopBar'ом (z-toast=80 > topbar z=54).
    * Раньше был `top: calc(var(--header-h) + var(--space-md) +
    * var(--safe-top))` — toast сидел ПОД TopBar'ом, перекрывая
    * editor. safe-top оставлен для iOS notch / status-bar. */
@@ -2452,6 +2477,21 @@ button:not([disabled]):not(.no-shrink):active {
 }
 .wc-overflow-item--danger:hover {
   background: var(--err-soft);
+}
+/* wavecode-mobile-topbar: «Поделиться» и «Консоль» — мобильные пункты
+ * меню «Ещё». На десктопе обе кнопки есть прямо в шапке, и два входа в
+ * одну поверхность проект уже убирал (кнопка «Инструменты»). */
+.wc-overflow-item--mobile {
+  display: none;
+}
+/* Значок непрочитанных ошибок на кнопке «Ещё»: на узком экране кнопка
+ * консоли уходит в меню, поэтому сигнал об ошибке переезжает сюда. */
+.wc-overflow-menu__badge {
+  display: none;
+}
+@media (max-width: 520px) {
+  .wc-overflow-item--mobile { display: flex; }
+  .wc-overflow-menu__badge { display: inline-flex; }
 }
 .wc-overflow-submenu {
   display: flex;
@@ -3019,10 +3059,18 @@ button:not([disabled]):not(.no-shrink):active {
 }
 .ai-messages-empty {
   color: var(--fg-dim);
-  font-size: var(--fs-sm);
-  line-height: var(--lh-relaxed);
+  /* wavecode-mobile-topbar: пустое состояние — служебная подсказка, а не
+   * заголовок: на телефоне оно занимало пять строк и треть листа. */
+  font-size: var(--fs-xs);
+  line-height: var(--lh-base);
   padding: var(--space-md);
   text-align: center;
+}
+.ai-messages-empty small {
+  display: block;
+  margin-top: var(--space-xs);
+  font-size: var(--fs-3xs);
+  color: var(--fg-ghost);
 }
 .ai-message {
   display: flex;
@@ -3085,27 +3133,14 @@ button:not([disabled]):not(.no-shrink):active {
   border-top: 1px solid var(--border);
   background: var(--surface-1);
   padding-bottom: calc(var(--space-md) + var(--safe-bottom));
-  /* wavecode-ai-apply-above-tabbar: the submit button is the
-   * last interactive element in the messenger and must stay
-   * reachable. On desktop the sheet is a right-side drawer that
-   * already sits above the TabBar, so no extra reserve. On mobile
-   * the sheet ends at the viewport bottom and the TabBar
-   * (position:fixed; bottom:0; height: tabbar-h + safe-bottom)
-   * overlays its lower edge — without this padding the
-   * «✦ Применить» button sat at sheet_bottom − space-md and got
-   * covered by the TabBar (see bug report 2026-10-15). Content
-   * (.ai-messages) can scroll underneath the footer — that's the
-   * intentional messenger UX — but the action button has to remain
-   * visible. We add tabbar-h + safe-bottom only on viewports where
-   * the sheet is in-flow (≤720px). */
-}
-
-@media (max-width: 720px) {
-  .ai-footer {
-    padding-bottom: calc(
-      var(--space-md) + var(--tabbar-h) + var(--safe-bottom)
-    );
-  }
+  /* wavecode-mobile-topbar: резерва под таббар больше НЕТ.
+   * Раньше здесь стоял `@media (max-width:720px)` с
+   * padding-bottom = space-md + tabbar-h + safe-bottom (72px) — по
+   * старой раскладке лист был overlay поверх вьюпорта и таббар его
+   * перекрывал. Сейчас на мобиле лист — обычный flex-child .app-body
+   * (wavecode-mobile-split-pane), его низ упирается ровно в верх
+   * рельса, поэтому резерв был мёртвым: под кнопкой «✦ Применить»
+   * зияли 72px пустоты. */
 }
 
 textarea.ai-textarea {
@@ -3133,6 +3168,18 @@ textarea.ai-textarea:focus-visible {
   gap: var(--space-xs);
   align-items: center;
   flex-wrap: wrap;
+}
+
+/* wavecode-mobile-topbar: на узком экране «✦ Применить» — отдельная
+ * полноширинная строка под чипами. Раньше он висел сиротой справа
+ * (margin-left:auto выдавливал его на новую строку), выглядел
+ * «выпадающим из дизайна» и съедал пустое место под собой. */
+@media (max-width: 720px) {
+  textarea.ai-textarea { min-height: 72px; }
+  .ai-apply-btn {
+    flex: 1 0 100%;
+    margin-left: 0;
+  }
 }
 
 .ai-apply-btn {
@@ -3276,41 +3323,11 @@ textarea.ai-textarea:focus-visible {
 
 .app { display: flex; flex-direction: column; height: 100%; }
 
-.app-header {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-sm);
-  padding: var(--space-sm) var(--space-md);
-  background: var(--surface-1);
-  border-bottom: 1px solid var(--border);
-  flex-shrink: 0;
-}
+/* wavecode-mobile-topbar: удалены мёртвые правила старого каркаса
+ * шапки (.app-header, .app-title, .app-header h1, .app-subtitle,
+ * .app-header-row1) — в разметке их нет ни в одном компоненте,
+ * шапка живёт на .wc-topbar (TopBar.tsx). */
 
-.app-title {
-  display: flex;
-  align-items: baseline;
-  gap: var(--space-md);
-}
-.app-header h1 {
-  margin: 0;
-  font-size: var(--fs-display);
-  font-weight: var(--fw-semibold);
-  letter-spacing: var(--ls-tight);
-  color: var(--fg);
-  font-family: var(--font-display);
-}
-.app-subtitle {
-  color: var(--fg-dim);
-  font-size: var(--fs-sm);
-  font-family: var(--font-sans);
-}
-
-.app-header-row1 {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-md);
-}
 /* =========================================================================
  *  TRANSPORT BAR — single collapsible row replacing .app-preset-row +
  *  .app-controls-row. math/wavecode-mobile-transport-bar.

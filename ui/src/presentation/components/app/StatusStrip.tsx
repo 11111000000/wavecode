@@ -40,17 +40,27 @@ export type StatusStripProps = {
 
 type Tone = 'running' | 'idle' | 'err';
 
-type AudioView = { tone: Tone; glyph: string; label: string };
+type AudioView = { tone: Tone; label: string };
 
+/**
+ * wavecode-mobile-topbar: состояние несёт ТОЧКА, а не глиф.
+ *
+ * Раньше строка рисовала и точку `.wc-led::before`, и собственный глиф
+ * («●» в покое, «▶» при игре) — в шапке висело «● ● остановлен», а на
+ * телефоне глиф вообще съедал место и наезжал на соседние кнопки.
+ * Точка `::before` уже красится тоном и получает ореол при игре, а
+ * слово («остановлен» / «играет» / «ошибка») называет состояние
+ * однозначно. Поэтому глиф убран: в шапке остаётся одна точка + слово.
+ */
 const audioView = (): AudioView => {
   const status = appStore.audio.status;
   if (status === 'playing') {
-    return { tone: 'running', glyph: '▶', label: labelFor(AUDIO_STATUS_LABEL, status) };
+    return { tone: 'running', label: labelFor(AUDIO_STATUS_LABEL, status) };
   }
   if (status === 'error') {
-    return { tone: 'err', glyph: '⚠', label: labelFor(AUDIO_STATUS_LABEL, status) };
+    return { tone: 'err', label: labelFor(AUDIO_STATUS_LABEL, status) };
   }
-  return { tone: 'idle', glyph: '●', label: labelFor(AUDIO_STATUS_LABEL, status) };
+  return { tone: 'idle', label: labelFor(AUDIO_STATUS_LABEL, status) };
 };
 
 export function StatusStrip(props: StatusStripProps): JSX.Element {
@@ -85,10 +95,15 @@ export function StatusStrip(props: StatusStripProps): JSX.Element {
         class="wc-status__led"
         data-tone={audioView().tone}
         data-testid="status-audio"
+        aria-label={`Звук: ${audioView().label}`}
         title={`Звук: ${audioView().label} (контекст: ${ctxLabel()})`}
       >
         <span class="wc-led" data-tone={audioView().tone}>
-          {audioView().glyph} {audioView().label}
+          {/* Слово — отдельным элементом: `.wc-led` — flex-контейнер, а
+              text-overflow/ellipsis работает только на блочном потомке.
+              Так строка статуса может безопасно сжаться и показать
+              многоточие вместо того, чтобы наехать на кнопки шапки. */}
+          <span class="wc-led__label">{audioView().label}</span>
         </span>
       </span>
       <Show when={samples().status === 'loading'}>

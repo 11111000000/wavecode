@@ -6,6 +6,7 @@ import {
   WavecodeLogo,
 } from '~/presentation/icons';
 import { ShareButton } from '~/presentation/components/ShareButton';
+import { ShareDialog } from '~/presentation/components/ShareDialog';
 import { ConsoleButton } from '~/presentation/components/ConsoleButton';
 import { OverflowMenu } from './OverflowMenu';
 import { StatusStrip } from './StatusStrip';
@@ -122,6 +123,10 @@ export function TopBar(props: TopBarProps): JSX.Element {
           onOpenAdmin={props.onOpenAdmin}
         />
       </div>
+      {/* wavecode-mobile-topbar: модалка «Поделиться» — одна на оба
+          входа (кнопка в шапке и пункт «Ещё» на мобиле), поэтому
+          живёт здесь, а не внутри кнопки. */}
+      <ShareDialog />
     </header>
   );
 }

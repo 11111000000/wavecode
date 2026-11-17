@@ -1,217 +1,27 @@
-import { Show, createSignal } from 'solid-js';
-import { Portal } from 'solid-js/web';
-import { appStore, dispatch } from '../state/appStore';
+import { type JSX } from 'solid-js';
+import { appStore } from '../state/appStore';
 import { ShareIcon } from '../icons';
-import {
-  shareState,
-  openShareModal,
-  closeShareModal,
-  decodePendingShare,
-  startLoadingShared,
-  finishLoadingShared,
-} from '../state/shareState';
+import { openShareDialog } from '../state/shareState';
 
 /**
  * ShareButton — кнопка «🔗 Поделиться» в шапке.
  *
- * Клик открывает модалку с текущим encoded URL и кнопкой «Copy URL».
- * Если закодированный score > 8KB — вместо URL показывается warning
- * «слишком длинный, лучше экспортируй .strudel.txt».
- *
- * Если при mount был pending share (URL `?s=...`) И в IDB уже есть
- * сохранённый score, в модалке появляется кнопка «📥 Загрузить shared
- * snippet» — пользователь явно подтверждает перезапись локальной работы.
+ * wavecode-mobile-topbar: сама модалка живёт в ShareDialog (она нужна
+ * в двух местах — здесь и в меню «Ещё» на мобиле), а кнопка осталась
+ * простым триггером. На узких экранах кнопка скрывается CSS-ом: там
+ * «Поделиться» переезжает в меню «Ещё», потому что в шапке не
+ * помещалось шесть кнопок подряд (см. OverflowMenu).
  */
-
-const copyToClipboard = async (text: string): Promise<boolean> => {
-  if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
-    try {
-      await navigator.clipboard.writeText(text);
-      return true;
-    } catch {
-      // secure context missing или permission denied — fallback ниже
-    }
-  }
-  if (typeof document === 'undefined') return false;
-  try {
-    const ta = document.createElement('textarea');
-    ta.value = text;
-    ta.setAttribute('readonly', '');
-    ta.style.position = 'fixed';
-    ta.style.opacity = '0';
-    ta.style.pointerEvents = 'none';
-    document.body.appendChild(ta);
-    ta.select();
-    const ok = document.execCommand('copy');
-    document.body.removeChild(ta);
-    return ok;
-  } catch {
-    return false;
-  }
-};
-
-const formatBytes = (n: number): string => {
-  if (n < 1024) return `${n} B`;
-  return `${(n / 1024).toFixed(1)} KB`;
-};
-
-export function ShareButton() {
-  const [copied, setCopied] = createSignal(false);
-  const [error, setError] = createSignal<string | null>(null);
-  const [open, setOpen] = createSignal(false);
-  let panel: HTMLDivElement | undefined;
-
-  const onOpen = (): void => {
-    setCopied(false);
-    setError(null);
-    openShareModal(appStore.score);
-    setOpen(true);
-    // Focus the panel so the keydown handler is reachable without a
-    // pointer event first — Esc must work immediately on open.
-    queueMicrotask(() => panel?.focus());
-  };
-
-  const onClose = (): void => {
-    setCopied(false);
-    setError(null);
-    setOpen(false);
-    closeShareModal();
-  };
-
-  // Esc closes the modal. Without a keyboard escape the only way out
-  // is the «Закрыть» button, which on short viewports sits under the
-  // transport-bar overlay and swallows the click — the modal then
-  // traps the user.
-  const onKeyDown = (e: KeyboardEvent): void => {
-    if (e.key !== 'Escape') return;
-    e.stopPropagation();
-    onClose();
-  };
-
-  const onCopy = async (): Promise<void> => {
-    const url = shareState.shareUrl();
-    if (!url) return;
-    const ok = await copyToClipboard(url);
-    if (ok) {
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 1500);
-    } else {
-      setError('Не удалось скопировать (clipboard API недоступен)');
-    }
-  };
-
-  const onLoadShared = (): void => {
-    const text = decodePendingShare();
-    if (!text) {
-      setError('Сниппет повреждён — не удалось декодировать');
-      return;
-    }
-    startLoadingShared();
-    dispatch({ type: 'replaceScore', text });
-    finishLoadingShared();
-    setError(null);
-    onClose();
-  };
-
-  const tooLarge = (): boolean => {
-    const size = shareState.shareSize();
-    const limit = shareState.shareSizeLimit();
-    return size > 0 && size > limit;
-  };
-
+export function ShareButton(): JSX.Element {
   return (
-    <>
-      <button
-        type="button"
-        class="preset-btn"
-        onClick={onOpen}
-        title="Поделиться текущей партитурой через URL"
-        aria-label="Поделиться партитурой"
-      >
-        <ShareIcon size={16} />
-      </button>
-
-      <Show when={open() && (shareState.shareUrl() !== null || tooLarge())}>
-        <Portal>
-          <div
-            class="share-modal-backdrop"
-            onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
-          >
-            <div
-              class="share-modal"
-              role="dialog"
-              aria-modal="true"
-              aria-label="Поделиться партитурой"
-              tabindex={-1}
-              ref={panel}
-              onKeyDown={onKeyDown}
-            >
-              <div class="share-modal-inner">
-                <h3 class="share-modal-title">Поделиться партитурой</h3>
-
-                <Show when={!tooLarge()}>
-                  <input
-                    type="text"
-                    class="share-url"
-                    readonly
-                    aria-label="Ссылка на партитуру"
-                    value={shareState.shareUrl() ?? ''}
-                    onFocus={(e) => e.currentTarget.select()}
-                  />
-                  <div class="share-modal-meta">
-                    <span class="share-modal-size">
-                      {formatBytes(shareState.shareSize())} / {formatBytes(shareState.shareSizeLimit())}
-                    </span>
-                    <button
-                      type="button"
-                      class="share-modal-btn share-modal-copy"
-                      onClick={() => void onCopy()}
-                    >
-                      {copied() ? '✓ Скопировано' : 'Скопировать ссылку'}
-                    </button>
-                  </div>
-                </Show>
-
-                <Show when={tooLarge()}>
-                  <div class="share-modal-warn">
-                    ⚠ Партитура слишком длинная ({formatBytes(shareState.shareSize())} &gt;{' '}
-                    {formatBytes(shareState.shareSizeLimit())}). URL такого размера обрезают
-                    прокси и CDN. Лучше экспортируй партитуру в <code>.strudel.txt</code>{' '}
-                    через «Инструменты → Экспорт» и перешли файлом.
-                  </div>
-                </Show>
-
-                <Show when={shareState.pendingEncoded() !== null && shareState.hasIdbScore()}>
-                  <div class="share-modal-pending">
-                    <div class="share-modal-pending-msg">
-                      В URL передан сниппет, но у вас уже есть несохранённая локальная
-                      работа. Загрузить сниппет? Текущая партитура будет заменена.
-                    </div>
-                    <button
-                      type="button"
-                      class="share-modal-btn share-modal-load"
-                      disabled={shareState.isLoadingShared()}
-                      onClick={onLoadShared}
-                    >
-                      📥 Загрузить сниппет
-                    </button>
-                  </div>
-                </Show>
-
-                <Show when={error()}>
-                  <div class="share-modal-err">{error()}</div>
-                </Show>
-
-                <div class="share-modal-actions">
-                  <button type="button" class="share-modal-btn" onClick={onClose}>
-                    Закрыть
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </Portal>
-      </Show>
-    </>
+    <button
+      type="button"
+      class="preset-btn wc-topbar__share"
+      onClick={() => openShareDialog(appStore.score)}
+      title="Поделиться текущей партитурой через URL"
+      aria-label="Поделиться партитурой"
+    >
+      <ShareIcon size={16} />
+    </button>
   );
 }
