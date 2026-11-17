@@ -3,12 +3,12 @@
   "goal": {
     "text": "Wavecode остаётся beat-maker'ом, который нельзя сломать незаметно: архитектурные инварианты, камера, деплой, секреты и запись решений проверяются свежими воспроизводимыми проверками, а не договорённостями.",
     "scope": [
-      "ui/src", "scripts", "decisions", "spec.json", "bin",
+      "ui/src", "ui/index.html", "scripts", "decisions", "spec.json", "bin",
       ".github/workflows", ".gitverse/workflows"
     ],
     "by": "az",
-    "at": 1794762539,
-    "reason": null
+    "at": 1794903231,
+    "reason": "Мобильная раскладка шапки и листа ИИ — часть приложения: оболочка ui/index.html держала неслойные копии правил шапки, которые молча перебивали @layer components. Утверждение о мобильной раскладке обязано видеть и оболочку, иначе предмет проверки неполон."
   },
   "claims": [
     {
@@ -118,7 +118,10 @@
     {
       "id": "no-secrets-in-repo",
       "text": "No secret value is committed: the LLM proxy key lives in the gitignored ui/.env.local, and no tracked file carries a key, token or private key.",
-      "scope": [ "ui/src", "scripts", "decisions", "spec.json", "bin", ".github/workflows", ".gitverse/workflows" ],
+      "scope": [
+        "ui/src", "scripts", "decisions", "spec.json", "bin",
+        ".github/workflows", ".gitverse/workflows"
+      ],
       "source": {
         "kind": "specification",
         "path": "docs/math-coding-v5.md",
@@ -247,6 +250,32 @@
       "falsifier": "Two gestures write into the same row, or a gesture writes outside the grid — the recorded rhythm could not be read as a 4x8 pattern.",
       "register": "fact",
       "control": "sed -i \"s/'openPalm', sample: 'hh'/'openPalm', sample: 'cp'/\" ui/src/domain/gesture/term.ts",
+      "waiver": null
+    },
+    {
+      "id": "mobile-layout-fits-narrow-viewports",
+      "text": "The mobile topbar neither compresses nor overlaps: the header keeps its height above the transport bar, the status word shrinks with an ellipsis instead of running over the buttons, the transport bar cannot cover the topbar popover, and the AI sheet leaves no dead space under «Применить».",
+      "scope": [ "ui/src", "ui/index.html" ],
+      "source": {
+        "kind": "madr",
+        "path": "decisions/wavecode-mobile-topbar-and-ai-footer.yaml",
+        "section": null,
+        "digest": "fea39eb221e7b9a9376d86caf79b2b3856222154c8f4f0b30b3bee3389ebd087",
+        "review": null
+      },
+      "kind": "acceptance",
+      "phase": "pre-merge",
+      "owner": "az",
+      "review_on": [],
+      "requirements": [
+        {
+          "kind": "verifier",
+          "spec": "node scripts/check-invariants.mjs mobile"
+        }
+      ],
+      "falsifier": "The topbar shrinks below --header-h (a gap opens above the transport bar), the status line leaves its box and covers the topbar buttons, the transport bar covers the topbar's popover, or the AI sheet footer keeps a tab-bar reserve that no longer overlaps it.",
+      "register": "fact",
+      "control": "sed -i '/^\\.wc-topbar {$/,/^}$/ s/flex-shrink: 0;/flex-shrink: 1;/' ui/src/styles/components.css",
       "waiver": null
     }
   ]
