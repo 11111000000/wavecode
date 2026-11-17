@@ -27,5 +27,9 @@ test('Eval button plays audio without errors', { tag: '@smoke' }, async ({ page 
   expect(errors).toHaveLength(0);
   // After Eval, status should be either «играет» or «ошибка»
   // (if Strudel failed to load). Статусы переведены (фаза 6).
-  expect(['▶ играет', '⚠ ошибка']).toContain(audioStatus.trim());
+  //
+  // wavecode-mobile-topbar: в тексте больше нет глифа («▶ играет» →
+  // «играет»): точку рисует `::before` у `.wc-led`, а слово называет
+  // состояние. Иначе строка статуса показывала две точки подряд.
+  expect(['играет', 'ошибка']).toContain(audioStatus.trim());
 });
