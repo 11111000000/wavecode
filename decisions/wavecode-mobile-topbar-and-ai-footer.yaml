@@ -1,0 +1,338 @@
+---
+schema: math-coding/3.3
+id: wavecode-mobile-topbar-and-ai-footer
+revision: "1"
+state: active
+body_sha: "sha256:b9d547a44d66542b551ebd28f2c447bc2163f47db4166d2fb4e15ca30aac29ed"
+yaml_sha: "sha256:b9d547a44d66542b551ebd28f2c447bc2163f47db4166d2fb4e15ca30aac29ed"
+
+intent: |
+  Владелец (2026-11-17) прислал два скриншота с телефона (390×844) и
+  описал три дефекта:
+
+    * «На верхней границе в заголовке есть отступ… если открываешь нижнюю
+      панель (любую из нижних кнопок), появляется отступ от верхнего меню»;
+    * «на Верхнем меню настраиваются друг на друга кнопки которые создать
+      новую композицию и Что сейчас играет — явно не хватает места на
+      мобильном»;
+    * «в нижней панели… поле ввода маленькая, сверху какая-то длинная
+      надпись, она должна быть мельче, снизу вообще свободное место, а
+      кнопка отправить как-то криво расположена и выпадает из дизайна».
+
+  Замеры вживую (Chromium, 390×844) подтвердили все три и добавили
+  четвёртый, который владелец увидел как «накладываются»:
+
+    * **Отступ между шапкой и полосой транспорта.** Шапка жила в
+      flex-колонке с дефолтным `flex-shrink: 1`. Когда открывался нижний
+      лист, `.app-body` переполнялся, и шапка сжималась с 56px до 45px
+      (в покое — до 53.84px), а полоса транспорта оставалась на
+      `top: var(--header-h)` = 56px. Зазор: 2.16px в покое и 11px при
+      открытом листе. Это ровно тот «отступ от верхнего меню».
+    * **Наложение в шапке.** Естественная ширина содержимого шапки —
+      526px при доступных 390px, дефицит 136px. Шапка сжимала сама
+      себя: `.wc-topbar__title` — до 10.4px (на экране «W…»),
+      `.wc-status` — до 17.6px при `scrollWidth` 103px и
+      `overflow: visible`. Слово «остановлен» физически вылезало из
+      своего бокса и ложилось поверх кнопки «Новая композиция» (на
+      скриншоте владельца кнопка стоит прямо на слове «остановлен»).
+      Рядом с этим в строке статуса стояли ДВЕ точки: `::before` у
+      `.wc-led` и собственный глиф «●» в тексте.
+    * **Лист ИИ.** `.ai-footer` занимал 231px, из них 72px — мёртвый
+      резерв `padding-bottom: calc(space-md + tabbar-h + safe-bottom)` от
+      старой overlay-раскладки (лист и так в-flow, его низ упирается в
+      верх рельса). Кнопка «Применить» висела сиротой справа
+      (`margin-left: auto`) на отдельной строке, поле ввода было 56px, а
+      надпись пустого состояния занимала пять строк кеглем `--fs-md`.
+    * **Перекрытый пункт меню «Ещё» (не в жалобе, найдено при правке).**
+      Поповер меню живёт внутри stacking-контекста шапки, а полоса
+      транспорта — её сосед в дереве с `z-index` 52. Поэтому транспорт
+      перекрывал верх поповера: `elementFromPoint` в центре первого
+      пункта отдавал `app-transport-bar__strip`, а не сам пункт. Первый
+      пункт меню не получал ни клика, ни hover.
+
+  Решение фиксирует четыре исправления: несжимаемая шапка, статус,
+  который умеет сжаться до многоточия и не вылезает, компактный
+  мобильный бюджет шапки, переиспользованный футер листа ИИ — и
+  корректный порядок слоёв, без которого третье из них не работает.
+
+commitment: |
+  1. **Шапка не сжимается.** `.wc-topbar` имеет `flex-shrink: 0`, а
+     `.wc-topbar__actions` — `flex-shrink: 0`: место под кнопки забирает
+     строка статуса, а не сами кнопки. Высота шапки постоянна (56px), и
+     зазор до полосы транспорта равен нулю — в покое и при открытом
+     нижнем листе.
+  2. **Статус не вылезает и не наезжает.** `.wc-status` и
+     `.wc-status__led` имеют `overflow: hidden`, вся цепочка
+     (`.wc-led` → `.wc-led__label`) — `min-width: 0`, а надпись —
+     `text-overflow: ellipsis`. Правый край статуса не заходит за левый
+     край блока кнопок ни на 360px, ни на 390px, ни на 412px. Плашки
+     «офлайн» и счётчик сэмплов получили `flex-shrink: 0` — ужимается
+     строка состояния, а не сигнал.
+  3. **Одна точка, а не две.** Глиф (`●` / `▶` / `⚠`) убран из текста
+     строки состояния: точку рисует `::before` у `.wc-led` (несёт тон и
+     ореол), а слово («остановлен» / «играет» / «ошибка») называет
+     состояние. В шапке больше нет «● ● остановлен». Состояние аудио
+     остаётся доступным и для скринридера: `aria-label="Звук: …"`.
+  4. **Компактный бюджет шапки на ≤520px.** Скрываются: слово «wavecode»
+     (рядом логотип) и кнопки «Поделиться» и «Консоль» — они уезжают в
+     меню «Ещё», где на десктопе их нет (там обе кнопки есть прямо в
+     шапке, и два входа в одну поверхность проект уже убирал — кнопка
+     «Инструменты»). `gap` 8→6px, `padding` 12→8px. Итог 335px: запас
+     55px на 390px и 25px на 360px.
+  5. **Значок непрочитанных ошибок не потерян.** Он переезжает с кнопки
+     консоли на кнопку «Ещё» (`data-testid="overflow-error-badge"`),
+     потому что кнопка консоли на узком экране уходит в меню.
+  6. **«Поделиться» — одна поверхность из двух точек.** Модалка
+     вынесена из кнопки в отдельный компонент `ShareDialog` с общим
+     состоянием `shareState.isOpen`; её открывают и кнопка шапки, и
+     пункт меню «Ещё».
+  7. **Поповер шапки не перекрывается полосой транспорта.** Шапка
+     поднята на `z-index: calc(var(--z-sheet) + 14)` = 54: выше
+     транспорта (52), ниже листа (53), тоста (80) и модалки (60).
+  8. **Футер листа ИИ ужат.** Мёртвый резерв `padding-bottom: 72px`
+     удалён; низ футера совпадает с низом листа, а низ листа — с верхом
+     рельса.
+  9. **«Применить» — полноширинная кнопка под чипами.** На ≤720px
+     `.ai-apply-btn` получает `flex: 1 0 100%` и `margin-left: 0`:
+     кнопка занимает всю ширину футера (366px при 390px экрана) и
+     стоит в ряду с чипами, а не висит сиротой справа.
+  10. **Поле ввода выше.** На ≤720px `textarea.ai-textarea` получает
+      `min-height: 72px` (было 56px).
+  11. **Надпись пустого состояния мельче.** `.ai-messages-empty` —
+      `var(--fs-xs)` с `line-height: var(--lh-base)`, копия сокращена,
+      а подсказка вынесена в `<small>` (`--fs-3xs`, `--fg-ghost`).
+  12. **Убраны мёртвые правила и дубли.** Из `components.css` удалены
+      несуществующие в разметке `.wc-topbar__logo`, `.wc-topbar__led`,
+      `.app-header`, `.app-title`, `.app-header h1`, `.app-subtitle`,
+      `.app-header-row1`. Из `index.html` удалены un-layered дубли
+      правил шапки (`.wc-topbar`, `.wc-topbar__title`,
+      `.wc-topbar__actions`, `.wc-icon-btn`): они перебивали
+      `@layer components` и молча убивали мобильные правила.
+  13. **Инварианты закреплены тестом.** `ui/tests/e2e/mobile-topbar-and-ai.spec.ts`
+      проверяет зазор, отсутствие наложения, мобильный бюджет шапки,
+      доступность «Поделиться» из меню и геометрию футера листа ИИ.
+
+axiom_link:
+  - A0
+  - A1
+  - A3
+scope:
+  paths:
+    - ui/index.html
+    - ui/src/presentation/components/ConsoleButton.tsx
+    - ui/src/presentation/components/ShareButton.tsx
+    - ui/src/presentation/components/ShareDialog.tsx
+    - ui/src/presentation/components/app/OverflowMenu.tsx
+    - ui/src/presentation/components/app/StatusStrip.tsx
+    - ui/src/presentation/components/app/TopBar.tsx
+    - ui/src/presentation/panels/AIEditPanel.tsx
+    - ui/src/presentation/state/shareState.ts
+    - ui/src/styles/components.css
+    - ui/src/styles/zen.css
+    - ui/tests/e2e/mobile-topbar-and-ai.spec.ts
+    - decisions/wavecode-mobile-topbar-and-ai-footer.yaml
+    - README.md
+  capabilities:
+    - ui-mobile-topbar
+    - ui-status-strip
+    - ui-ai-sheet-footer
+    - ui-layering-order
+  exclusions:
+    - ui/src/infrastructure
+    - ui/src/domain
+    - ui/src/application
+    - bin
+    - .github
+    - .gitverse
+outcomes:
+  - id: wavecode-mobile-topbar-gap-outcome
+    statement: |
+      Между шапкой и полосой транспорта нет зазора ни в покое, ни при
+      открытом нижнем листе: шапка не сжимается, её высота постоянна, а
+      полоса транспорта начинается ровно под ней.
+  - id: wavecode-mobile-topbar-overlap-outcome
+    statement: |
+      Строка состояния не наезжает на кнопки шапки на 360px, 390px и
+      412px: она умеет сжиматься до многоточия, а её бокс физически
+      ограничен. Точка в строке одна, состояние читается и глазом, и
+      скринридером.
+  - id: wavecode-mobile-topbar-budget-outcome
+    statement: |
+      На узком экране шапка умещается целиком: слово «wavecode» скрыто,
+      «Поделиться» и «Консоль» доступны в меню «Ещё» (вместе со значком
+      непрочитанных ошибок), и каждый пункт меню кликабелен — полоса
+      транспорта его не перекрывает.
+  - id: wavecode-mobile-ai-footer-outcome
+    statement: |
+      Лист ИИ на телефоне не тратит место впустую: подпись пустого
+      состояния мелкая, поле ввода выше, «Применить» занимает всю ширину
+      футера и стоит в ряду с чипами, а под листом нет мёртвого
+      72-пиксельного резерва.
+obligations:
+  - id: wavecode-mobile-topbar-and-ai-footer-e2e
+    claim: |
+      The e2e suite pins the three complaints: the gap between the topbar
+      and the transport strip is zero in idle state and with the AI sheet
+      open, the status never reaches the action buttons, the narrow
+      topbar hides the word and the two buttons that moved into the
+      "Ещё" menu, "Поделиться" from that menu opens the share modal, and
+      the AI footer has no dead space under the full-width send button.
+    acceptance:
+      all:
+        - verifier: "cd ui && npx playwright test tests/e2e/mobile-topbar-and-ai.spec.ts"
+          result: pass
+  - id: wavecode-mobile-topbar-and-ai-footer-unit
+    claim: |
+      The AI panel still renders its empty-state placeholder when there
+      are no messages, so shortening the caption did not remove the
+      placeholder.
+    acceptance:
+      all:
+        - verifier: "cd ui && npx vitest run src/presentation/panels/AIEditPanel.test.tsx"
+          result: pass
+  - id: wavecode-mobile-topbar-and-ai-footer-quality-gate
+    claim: |
+      The repository quality gate is green: typecheck, unit tests,
+      console lint and preset validation.
+    acceptance:
+      all:
+        - verifier: "cd ui && npm run test:precommit"
+          result: pass
+  - id: wavecode-mobile-topbar-and-ai-footer-zen-guard
+    claim: |
+      The zen guard reports no regression against the recorded baseline:
+      the stylesheet does not grow, no new surface class is introduced,
+      and the focus-visible count does not shrink.
+    acceptance:
+      all:
+        - verifier: "node scripts/check-zen-ui.mjs --targets"
+          result: pass
+  - id: wavecode-mobile-topbar-and-ai-footer-invariants
+    claim: |
+      The repository invariants hold: the four layers keep their
+      boundaries, every decision file keeps its readable keys, and the
+      recorded visual baseline is still reproducible.
+    acceptance:
+      all:
+        - verifier: "node scripts/check-invariants.mjs layering && node scripts/check-invariants.mjs decisions && node scripts/capture-baseline.mjs --check"
+          result: pass
+  - id: wavecode-mobile-topbar-and-ai-footer-kernel-validates
+    claim: |
+      The decision file is structurally valid under the math-coding 3.3
+      schema and keeps the keys the kernel reads.
+    acceptance:
+      all:
+        - verifier: "mathc validate"
+          result: pass
+negative_control: |
+  The checks have teeth in every direction the change could go wrong. If
+  the topbar started shrinking again, the e2e assertion that the gap to
+  the transport strip is exactly 0 (in idle state and with the AI sheet
+  open) fails, and so does the assertion that the topbar height does not
+  change between the two states. If the status overflowed its box again,
+  the e2e check that `overflow` is `hidden` on `.wc-status` and
+  `.wc-status__led`, and that the right edge of the status does not pass
+  the left edge of the action buttons, fails — at 360px as well as at
+  390px. If a mobile rule stopped applying (for example because an
+  un-layered duplicate returned to `index.html`), the assertions that
+  `.wc-topbar__title`, `.wc-topbar__share` and `.wc-topbar__console` are
+  hidden fail, and so does the count of two mobile items in the "Ещё"
+  menu. If the dead 72px reserve came back, the e2e check that the space
+  under "Применить" is at most 24px and that the footer bottom equals
+  the sheet bottom fails. If the send button went back to being an
+  orphan, the check that its width exceeds the footer width minus 32
+  fails. If the transport bar covered the overflow menu again, the
+  "Поделиться" click in the menu would land on the transport strip and
+  the share modal would never open — the e2e test fails on the missing
+  `.share-modal`. If the empty-state caption grew back, the check that
+  its font size is at most 12px fails.
+counterexample: |
+  The strongest objection is that the topbar now hides things that used
+  to be one tap away: "Поделиться" and "Консоль" are two levels deep
+  (tap "Ещё", then the item), and the word "wavecode" is gone entirely,
+  so the brand is only the logo glyph. The objection is accepted as a
+  real cost and bounded by three rules. First, the two hidden buttons
+  are exactly the two that are not needed to work — the play button and
+  the composition tools stay on the first tap. Second, the console
+  signal is not lost: the unread-error badge moves onto the "Ещё"
+  button, so the moment when a person needs the console is still
+  visible from the top bar. Third, hiding the word is not a loss of
+  branding but of redundancy: the logo already carries the waveform
+  mark, and on a 390px screen the truncated word was rendering as
+  "W…" — less legible than no word at all. The alternative — keeping
+  all six buttons and shrinking the status to an icon — was rejected
+  because an icon-only status is unreadable, and the status is the one
+  thing the owner asked not to break.
+antithesis: |
+  The coherent alternative was to treat the topbar as a desktop layout
+  that simply scales down: keep all six buttons, let the status shrink
+  to an icon, and let the word truncate to "W…". It was rejected
+  because a phone is not a small desktop — at 390px the topbar was
+  136px short, so something had to give, and the two things that gave
+  were the ones a phone user needs least. A second alternative was to
+  move the whole overflow menu into a bottom sheet on mobile (which is
+  what the component's own docstring already promised). It was
+  rejected for this change because the panel is the same markup that
+  works as an anchored popover, the transport-bar overlap is fixed at
+  its root (stacking order), and a new sheet surface would add a layer
+  the owner did not ask for. The third alternative — shrink the AI
+  sheet's dead reserve only — was rejected because it left the orphan
+  button and the oversized caption untouched, which is two thirds of
+  the third complaint.
+assumptions:
+  - id: wavecode-mobile-topbar-and-ai-footer-assumption-narrow
+    state: assumed
+    statement: |
+      The narrow-screen budget is decided at 520px, and a phone in the
+      owner's hands is 360–412px wide. The status word and the two
+      secondary buttons fit inside that budget, so the compact topbar
+      is not a special case but the normal case on a phone.
+    owner: human:operator
+    consequence_if_false: |
+      If wider phones need the full topbar, the breakpoint moves and the
+      mobile-only menu entries disappear at the new threshold — the
+      rules live in one media query, so the change is local. If even
+      360px is not enough, the status becomes an icon, which is the
+      alternative already considered and rejected.
+  - id: wavecode-mobile-topbar-and-ai-footer-assumption-stacking
+    state: assumed
+    statement: |
+      The transport strip and the topbar are siblings in the tree, and
+      the transport strip is meant to be above ordinary page content but
+      below anything the topbar opens. The topbar's own popovers must
+      therefore be above the transport strip, not below it.
+    owner: human:operator
+    consequence_if_false: |
+      If a future change moves the transport bar into the topbar's
+      subtree, the raised topbar z-index becomes harmless and the
+      popover can rely on its own z-index again; the hit-test in the
+      e2e suite (a click on the menu item must open the modal) still
+      catches a regression either way.
+risk:
+  declared_triggers:
+    - topbar-gap-returns
+    - status-overlaps-actions
+    - overflow-menu-item-unreachable
+    - ai-sheet-footer-wastes-space
+  owner: human:operator
+reversal:
+  - signal: |
+      The gap between the topbar and the transport strip appears again
+      when a bottom sheet is opened.
+    action: rework
+  - signal: |
+      The status word again reaches the action buttons on a phone.
+    action: rework
+  - signal: |
+      A popover of the topbar is again covered by the transport strip.
+    action: review
+  - signal: |
+      People complain that "Поделиться" or the console is now too hard
+      to reach on a phone.
+    action: review
+relations:
+  implements:
+    - wavecode-zen-minimal-ui@2
+    - wavecode-unified-input-entry@1
+  refines:
+    - wavecode-sound-choice-and-rhythm-feedback@1

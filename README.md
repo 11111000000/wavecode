@@ -115,7 +115,7 @@ npm run build               # → ui/dist/
 
 ## Архитектурные решения
 
-Полная traceability — каждое решение зафиксировано как YAML в `decisions/` по схеме **math-coding 3.3** (ядро math-coding 3.7, см. [AGENTS.md § math-coding](AGENTS.md)). 136 решений покрывают всё: от выбора стека до throttle log-источника.
+Полная traceability — каждое решение зафиксировано как YAML в `decisions/` по схеме **math-coding 3.3** (ядро math-coding 3.7, см. [AGENTS.md § math-coding](AGENTS.md)). 137 решений покрывают всё: от выбора стека до throttle log-источника.
 
 **Базовые 16** (см. [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) для деталей):
 
@@ -140,7 +140,7 @@ npm run build               # → ui/dist/
 | `wavecode-test-strategy` | draft | Тестовая стратегия wavecode — пирамида: много unit-тестов на domain и application (vitest, без моков), умеренно на infrastructure (vitest с моками Layer), немного e2e на Playwright для critical user-… |
 <!-- END decisions-table -->
 
-> **Полный список (136 решений):** `ls decisions/*.yaml` или `python3 scripts/build-readme-decisions.py`. О состояниях `draft`/`active` — см. [math-coding SKILL.md](../math-coding/adoption/SKILL.md): `state: active` присваивается явно, мигрированные v1.0 пакеты остаются `draft` до следующей ревизии. Это **не означает, что они не действуют** — все они применены в коде и подтверждены attestations.
+> **Полный список (137 решений):** `ls decisions/*.yaml` или `python3 scripts/build-readme-decisions.py`. О состояниях `draft`/`active` — см. [math-coding SKILL.md](../math-coding/adoption/SKILL.md): `state: active` присваивается явно, мигрированные v1.0 пакеты остаются `draft` до следующей ревизии. Это **не означает, что они не действуют** — все они применены в коде и подтверждены attestations.
 
 ---
 
@@ -178,7 +178,7 @@ wavecode/
 ├── .github/               GitHub-specific: workflows, issue/PR templates, CODEOWNERS
 ├── .gitverse/             GitVerse Actions: только math-coding gate (деплоя нет)
 ├── bin/                   deploy.sh, check-llm-key.sh
-├── decisions/             135 архитектурных решений (math-coding 3.3 schema, ядро 3.7)
+├── decisions/             137 архитектурных решений (math-coding 3.3 schema, ядро 3.7)
 ├── attestations/          evidence store для math-coding self-check
 ├── schemas/               JSON-schema для math-coding (ядро 3.7, family 3.3)
 ├── scripts/               утилиты: pre-commit, validate:presets, build-readme-decisions

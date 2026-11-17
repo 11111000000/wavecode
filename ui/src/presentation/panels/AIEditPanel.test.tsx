@@ -98,8 +98,11 @@ afterEach(() => {
 
 describe('AIEditPanel — happy path streaming', () => {
   it('renders the empty-state placeholder when there are no messages', () => {
-    const { queryByText } = render(() => <AIEditPanel />);
-    expect(queryByText(/Здесь будет диалог/)).toBeTruthy();
+    const { container } = render(() => <AIEditPanel />);
+    // Проверяем сам блок-заглушку, а не конкретную формулировку:
+    // wavecode-mobile-topbar сократил копию пустого состояния, и
+    // тест на текст ломался от каждой правки формулировки.
+    expect(container.querySelector('.ai-messages-empty')).toBeTruthy();
   });
 
   it('offers an instrument picker with only REAL sounds', () => {
