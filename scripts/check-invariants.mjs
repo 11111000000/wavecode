@@ -22,6 +22,7 @@
  *   spec       — spec.json (math-coding v5) цел и связан с живыми файлами
  *   gate       — CI-гейт math-coding использует ядро v5
  *   term       — термин-бокс раскладывает жесты по разным строкам сетки
+ *   mobile     — мобильная раскладка шапки и листа ИИ не разъезжается
  */
 
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
@@ -381,6 +382,206 @@ const checkTerm = () => {
   return violations;
 };
 
+// ── mobile ──────────────────────────────────────────────────────────────────
+
+/**
+ * Мобильная раскладка: шапка не сжимается и не перекрывает транспорт,
+ * строка состояния умеет сжиматься многоточием, а лист ИИ не оставляет
+ * под кнопкой «Применить» мёртвого места.
+ *
+ * Проверка живёт в исходниках (CSS/TSX), а не в скриншотах: она должна
+ * ловить возврат дефекта в том же коммите, где его вносят.
+ */
+
+/** Убрать CSS-комментарии — правила читаем по коду, а не по прозе. */
+const stripCssComments = (text) => text.replace(/\/\*[\s\S]*?\*\//g, '');
+
+/** Блок CSS по селектору: от селектора до его закрывающей скобки. */
+const cssBlock = (text, selector) => {
+  const start = text.indexOf(selector);
+  if (start === -1) return null;
+  const end = text.indexOf('}', start);
+  if (end === -1) return null;
+  return text.slice(start, end);
+};
+
+/** Все медиа-блоки с указанным условием (скобки считаем вручную). */
+const mediaBlocks = (text, condition) => {
+  const marker = `@media (${condition})`;
+  const blocks = [];
+  let from = 0;
+  for (;;) {
+    const start = text.indexOf(marker, from);
+    if (start === -1) return blocks;
+    let depth = 0;
+    let end = -1;
+    for (let i = start + marker.length; i < text.length; i += 1) {
+      if (text[i] === '{') depth += 1;
+      else if (text[i] === '}') {
+        depth -= 1;
+        if (depth === 0) {
+          end = i;
+          break;
+        }
+      }
+    }
+    if (end === -1) return blocks;
+    blocks.push(text.slice(start, end));
+    from = end + 1;
+  }
+};
+
+/** Смещение z-слоя вида `calc(var(--z-sheet) + 14)`. */
+const zOffset = (text, selector) => {
+  const block = cssBlock(text, selector);
+  if (block === null) return null;
+  const match = /z-index:\s*calc\(var\(--z-sheet\)\s*\+\s*(\d+)\)/.exec(block);
+  return match === null ? null : Number(match[1]);
+};
+
+/** Абсолютное значение z-токена (`--z-sheet: 40`). */
+const zToken = (text, token) => {
+  const match = new RegExp(`${token}:\\s*(\\d+)`).exec(text);
+  return match === null ? null : Number(match[1]);
+};
+
+/** Глифы состояния — их рисует CSS, а не текст. */
+const STATUS_GLYPHS = ['●', '▶', '⚠'];
+
+const checkMobile = () => {
+  const violations = [];
+  const components = stripCssComments(read('ui/src/styles/components.css'));
+  const zen = stripCssComments(read('ui/src/styles/zen.css'));
+  const tokens = read('ui/src/styles/tokens.css');
+
+  // ── шапка не сжимается ────────────────────────────────────────────────
+  // Иначе при открытом листе .app-body переполняется, шапка сжимается, а
+  // полоса транспорта остаётся на `top: var(--header-h)` — между ними
+  // появляется зазор.
+  const topbar = cssBlock(components, '.wc-topbar {');
+  if (topbar === null) {
+    violations.push('components.css: нет правила .wc-topbar');
+  } else if (!/flex-shrink:\s*0/.test(topbar)) {
+    violations.push('.wc-topbar: нет flex-shrink: 0 — шапка сожмётся и оторвётся от полосы транспорта');
+  }
+
+  // ── кнопки шапки не ужимаются ─────────────────────────────────────────
+  const actions = cssBlock(components, '.wc-topbar__actions {');
+  if (actions === null) {
+    violations.push('components.css: нет правила .wc-topbar__actions');
+  } else if (!/flex-shrink:\s*0/.test(actions)) {
+    violations.push('.wc-topbar__actions: нет flex-shrink: 0 — кнопки шапки начнут сжиматься');
+  }
+
+  // ── слой шапки: выше транспорта, ниже модалки и тоста ─────────────────
+  // Поповер меню «Ещё» открывается вниз в полосу транспорта; транспорт —
+  // сосед шапки в дереве, поэтому перекрывал всё поддерево шапки.
+  const topbarZ = zOffset(components, '.wc-topbar {');
+  const transportZ = zOffset(components, '.app-transport-bar {');
+  const sheetBase = zToken(tokens, '--z-sheet');
+  const modalZ = zToken(tokens, '--z-modal');
+  const toastZ = zToken(tokens, '--z-toast');
+  if (topbarZ === null) {
+    violations.push('.wc-topbar: нет z-index с calc(var(--z-sheet) + N)');
+  } else if (transportZ === null) {
+    violations.push('.app-transport-bar: нет z-index с calc(var(--z-sheet) + N)');
+  } else if (topbarZ <= transportZ) {
+    violations.push(
+      `.wc-topbar (z-sheet+${topbarZ}) не выше транспорта (z-sheet+${transportZ}) — поповер шапки перекроет полоса транспорта`,
+    );
+  }
+  if (topbarZ !== null && sheetBase !== null && modalZ !== null && toastZ !== null) {
+    const absolute = sheetBase + topbarZ;
+    if (absolute >= modalZ) violations.push(`.wc-topbar (${absolute}) не ниже модалки (${modalZ})`);
+    if (absolute >= toastZ) violations.push(`.wc-topbar (${absolute}) не ниже тоста (${toastZ})`);
+  }
+
+  // ── строка состояния умеет сжиматься ───────────────────────────────────
+  const status = cssBlock(zen, '.wc-status {');
+  if (status === null) {
+    violations.push('zen.css: нет правила .wc-status');
+  } else if (!/overflow:\s*hidden/.test(status)) {
+    violations.push('.wc-status: нет overflow: hidden — статус вылезет за свою полосу на кнопки');
+  }
+
+  const led = cssBlock(components, '.wc-led {');
+  if (led === null) {
+    violations.push('components.css: нет правила .wc-led');
+  } else {
+    if (!/min-width:\s*0/.test(led)) violations.push('.wc-led: нет min-width: 0 — слово состояния не сможет сжаться');
+    if (!/overflow:\s*hidden/.test(led)) violations.push('.wc-led: нет overflow: hidden');
+  }
+
+  const ledLabel = cssBlock(components, '.wc-led__label {');
+  if (ledLabel === null) {
+    violations.push('components.css: нет правила .wc-led__label');
+  } else {
+    if (!/min-width:\s*0/.test(ledLabel)) violations.push('.wc-led__label: нет min-width: 0');
+    if (!/overflow:\s*hidden/.test(ledLabel)) violations.push('.wc-led__label: нет overflow: hidden');
+    if (!/text-overflow:\s*ellipsis/.test(ledLabel)) {
+      violations.push('.wc-led__label: нет text-overflow: ellipsis — длинное состояние вылезет за бокс');
+    }
+  }
+
+  const chip = cssBlock(zen, '.wc-status__chip {');
+  if (chip === null) {
+    violations.push('zen.css: нет правила .wc-status__chip');
+  } else if (!/flex-shrink:\s*0/.test(chip)) {
+    violations.push('.wc-status__chip: нет flex-shrink: 0 — плашки («офлайн», «12/143») начнут сжиматься');
+  }
+
+  // ── слово состояния без глифа ──────────────────────────────────────────
+  // Точку рисует `.wc-led::before`; глиф в тексте давал две точки подряд.
+  const labels = read('ui/src/presentation/state/labels.ts');
+  const labelBlock = /AUDIO_STATUS_LABEL[\s\S]*?\};/.exec(labels);
+  if (labelBlock === null) {
+    violations.push('labels.ts: нет AUDIO_STATUS_LABEL');
+  } else {
+    for (const glyph of STATUS_GLYPHS) {
+      if (labelBlock[0].includes(glyph)) {
+        violations.push(`labels.ts: AUDIO_STATUS_LABEL содержит глиф "${glyph}" — точка рисуется CSS, а не текстом`);
+      }
+    }
+  }
+
+  // ── лист ИИ: кнопка во всю ширину, поле выше, мёртвого места нет ─────
+  const narrow = mediaBlocks(components, 'max-width: 720px');
+  if (narrow.length === 0) {
+    violations.push('components.css: нет медиа-блока max-width: 720px');
+  } else {
+    const apply = narrow.some((block) => /\.ai-apply-btn\s*\{[^}]*flex:\s*1 0 100%/.test(block));
+    if (!apply) {
+      violations.push('@media (max-width: 720px): .ai-apply-btn не во всю ширину (flex: 1 0 100%)');
+    }
+    const applyMargin = narrow.some((block) => /\.ai-apply-btn\s*\{[^}]*margin-left:\s*0/.test(block));
+    if (!applyMargin) {
+      violations.push('@media (max-width: 720px): .ai-apply-btn не сброшен margin-left: 0');
+    }
+    const textarea = narrow.some((block) => /textarea\.ai-textarea\s*\{[^}]*min-height:\s*72px/.test(block));
+    if (!textarea) {
+      violations.push('@media (max-width: 720px): у textarea.ai-textarea нет min-height: 72px');
+    }
+    // Мёртвый резерв под таббар: лист — обычный flex-child, таббар его
+    // не перекрывает, значит пустота под кнопкой ни к чему.
+    const dead = narrow.find((block) => /\.ai-footer[^{]*\{[^}]*padding-bottom/.test(block));
+    if (dead !== undefined) {
+      violations.push('@media (max-width: 720px): у .ai-footer остался padding-bottom — под кнопкой зияет пустота');
+    }
+  }
+
+  // ── оболочка не перекрывает слоевую таблицу стилей ─────────────────────
+  // Un-layered inline имеет приоритет над @layer components: копия правил
+  // шапки в index.html молча убивала мобильные правки.
+  const shell = stripCssComments(read('ui/index.html'));
+  for (const selector of ['.wc-topbar {', '.wc-topbar__title {', '.wc-topbar__actions {', '.wc-icon-btn {']) {
+    if (shell.includes(selector)) {
+      violations.push(`ui/index.html: неслойная копия "${selector.trim()}" перекрывает @layer components`);
+    }
+  }
+
+  return violations;
+};
+
 // ── точка входа ─────────────────────────────────────────────────────────────
 
 const MODES = {
@@ -393,6 +594,7 @@ const MODES = {
   spec: checkSpec,
   gate: checkGate,
   term: checkTerm,
+  mobile: checkMobile,
 };
 
 const mode = process.argv[2];
