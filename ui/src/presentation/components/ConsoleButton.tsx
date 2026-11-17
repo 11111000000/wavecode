@@ -50,7 +50,7 @@ export function ConsoleButton(): JSX.Element {
   return (
     <button
       type="button"
-      class={`wc-icon-btn console-btn ${consoleStore.unreadErrors() > 0 ? 'has-errors' : ''}`}
+      class={`wc-icon-btn console-btn wc-topbar__console ${consoleStore.unreadErrors() > 0 ? 'has-errors' : ''}`}
       aria-label="Открыть консоль"
       title={CONSOLE_BUTTON_TITLE}
       data-testid="console-btn"

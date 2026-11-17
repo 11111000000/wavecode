@@ -696,11 +696,16 @@
   align-items: center;
   gap: var(--space-xs);
   min-width: 0;
+  /* wavecode-mobile-topbar: статус не имеет права вылезать из своей
+   * полосы — раньше он рисовался поверх кнопок шапки. */
+  overflow: hidden;
 }
 
 .wc-status__led {
   display: inline-flex;
   align-items: center;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .wc-status__chip {
@@ -715,6 +720,9 @@
   font-size: var(--fs-2xs);
   letter-spacing: var(--ls-wide);
   white-space: nowrap;
+  /* Плашки («офлайн», «12/143 сэмплов») короткие и важные — ужиматься
+   * должна строка состояния звука, а не они. */
+  flex-shrink: 0;
 }
 
 .wc-status__chip[data-tone='warn'] {

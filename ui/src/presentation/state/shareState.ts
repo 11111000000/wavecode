@@ -12,6 +12,9 @@ import { encodeSnippet, decodeSnippet, SHARE_URL_LIMIT } from '~/domain/urlCodec
  *   modal closing).
  * `hasIdbScore` — set by App after `repo.loadScore()` resolves, used to decide
  *   whether to surface the "Load shared snippet" choice.
+ * `isOpen` — открыта ли модалка «Поделиться». Живёт здесь, потому что
+ *   открыть её можно из двух мест (кнопка в шапке и пункт меню «Ещё»
+ *   на мобиле), а модалка одна.
  */
 
 const [shareUrl, setShareUrl] = createSignal<string | null>(null);
@@ -20,6 +23,11 @@ const [shareSizeLimit] = createSignal<number>(SHARE_URL_LIMIT);
 const [pendingEncoded, setPendingEncoded] = createSignal<string | null>(null);
 const [isLoadingShared, setIsLoadingShared] = createSignal(false);
 const [hasIdbScore, setHasIdbScore] = createSignal(false);
+/* wavecode-mobile-topbar: открытость модалки — в общем состоянии,
+ * а не в локальном сигнале кнопки. На телефоне «Поделиться» живёт в
+ * меню «Ещё», то есть вызывается ДРУГИМ компонентом, — с локальным
+ * сигналом модалка просто не открывалась бы. */
+const [isOpen, setIsOpen] = createSignal(false);
 
 export const shareState = {
   shareUrl,
@@ -28,9 +36,10 @@ export const shareState = {
   pendingEncoded,
   isLoadingShared,
   hasIdbScore,
+  isOpen,
 };
 
-export const openShareModal = (score: string): void => {
+export const openShareDialog = (score: string): void => {
   const result = encodeSnippet(score);
   if (result.ok) {
     setShareUrl(result.url);
@@ -39,10 +48,12 @@ export const openShareModal = (score: string): void => {
     setShareUrl(null);
     setShareSize(result.size);
   }
+  setIsOpen(true);
 };
 
-export const closeShareModal = (): void => {
+export const closeShareDialog = (): void => {
   setShareUrl(null);
+  setIsOpen(false);
 };
 
 export const setPendingShare = (encoded: string | null): void => {

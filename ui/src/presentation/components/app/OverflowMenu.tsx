@@ -2,7 +2,10 @@ import { Show, createSignal, onMount, onCleanup, For, type JSX } from 'solid-js'
 import { MOBILE_MODES, type MobileMode } from '~/presentation/state/uiState';
 import {
   SaveIcon, TrashIcon, ResetIcon, PhoneIcon, WrenchIcon, DotsVIcon, PencilIcon,
+  ShareIcon, ConsoleIcon,
 } from '~/presentation/icons';
+import { consoleStore } from '~/presentation/components/consoleStore';
+import { openShare } from '~/presentation/components/ShareDialog';
 
 export type OverflowMenuProps = {
   presetId: string;
@@ -23,6 +26,14 @@ export type OverflowMenuProps = {
  *
  * Backdrop-close, Esc-close, click-outside-close.
  * Mobile (<640px) — full-width bottom sheet; desktop — anchored popover.
+ *
+ * wavecode-mobile-topbar: на узких экранах сюда переезжают «Поделиться»
+ * и «Консоль» — в шапке на 390px шесть кнопок не помещались, и строка
+ * статуса наезжала на «Новую композицию». Эти два пункта на десктопе
+ * не показываются: там обе кнопки есть прямо в шапке, а два входа в
+ * одну поверхность — это ровно то, что проект уже убирал (см.
+ * «Инструменты»). Значок непрочитанных ошибок переезжает на кнопку
+ * `⋯`, чтобы сигнал об ошибке не потерялся.
  */
 export function OverflowMenu(props: OverflowMenuProps): JSX.Element {
   const [open, setOpen] = createSignal(false);
@@ -63,9 +74,39 @@ export function OverflowMenu(props: OverflowMenuProps): JSX.Element {
         title="Ещё"
       >
         <DotsVIcon size={18} />
+        <Show when={consoleStore.unreadErrors() > 0}>
+          <span
+            class="console-btn-badge wc-overflow-menu__badge"
+            data-testid="overflow-error-badge"
+            aria-label={`${consoleStore.unreadErrors()} непрочитанных ошибок — откройте консоль`}
+          >
+            {consoleStore.unreadErrors() > 99 ? '99+' : consoleStore.unreadErrors()}
+          </span>
+        </Show>
       </button>
       <Show when={open()}>
         <div class="wc-overflow-menu__panel" role="menu">
+          {/* Только для узких экранов — на десктопе эти действия есть
+              в самой шапке (см. комментарий выше). */}
+          <button
+            type="button"
+            class="wc-overflow-item wc-overflow-item--mobile"
+            role="menuitem"
+            onClick={() => { close(); openShare(); }}
+          >
+            <ShareIcon size={14} />
+            <span>Поделиться</span>
+          </button>
+          <button
+            type="button"
+            class="wc-overflow-item wc-overflow-item--mobile"
+            role="menuitem"
+            onClick={() => { close(); consoleStore.setConsoleOpen(true); }}
+          >
+            <ConsoleIcon size={14} />
+            <span>Консоль</span>
+          </button>
+
           <button
             type="button"
             class="wc-overflow-item"
